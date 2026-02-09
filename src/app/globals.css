@@ -1,26 +1,43 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-nrl-bg: #0b1020;
+  --color-nrl-panel: #161c32;
+  --color-nrl-panel-2: #1e2542;
+  --color-nrl-accent: #c9f500;
+  --color-nrl-text: #f5f7ff;
+  --color-nrl-muted: #9aa4bf;
+  --color-nrl-border: #2a3356;
+
+  --color-chart-primary: #A8FF00;
+  --color-chart-secondary: #41d6f4;
+  --color-chart-tertiary: #FFB347;
+  --color-chart-trendline: #FF4D7D;
+
+  --color-percentile-top: #A8FF00;
+  --color-percentile-high: #FFD700;
+  --color-percentile-mid: #FF8C00;
+  --color-percentile-low: #FF4D7D;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background: radial-gradient(1200px 600px at 15% 10%, #141a33 0%, #0b1020 55%, #070b16 100%);
+  color: var(--color-nrl-text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* In fullscreen chart view, grow chart height so plots don't become thin and wide. */
+.chart-fullscreen .h-56,
+.chart-fullscreen .h-64 {
+  height: min(72vh, 760px) !important;
+}
+
+/* Clerk theme overrides */
+.cl-card {
+  background: var(--color-nrl-panel) !important;
+  border: 1px solid var(--color-nrl-border) !important;
 }

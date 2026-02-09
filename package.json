@@ -9,7 +9,16 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.37.3",
+    "@clerk/themes": "^2.4.51",
+    "@nivo/core": "^0.99.0",
+    "@nivo/line": "^0.99.0",
+    "@nivo/scatterplot": "^0.99.0",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.95.3",
+    "@tanstack/react-query": "^5.90.20",
     "next": "16.1.6",
+    "nuqs": "^2.8.8",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

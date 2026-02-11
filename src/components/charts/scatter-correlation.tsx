@@ -36,7 +36,7 @@ function recencyColor(t: number): string {
     { t: 0, r: 128, g: 0, b: 255 },   // purple (first / oldest)
     { t: 0.33, r: 0, g: 100, b: 220 }, // blue
     { t: 0.55, r: 0, g: 200, b: 180 }, // teal
-    { t: 0.78, r: 80, g: 220, b: 80 }, // green
+    { t: 0.78, r: 0, g: 245, b: 138 }, // accent green
     { t: 1, r: 230, g: 240, b: 0 },    // yellow (last / most recent)
   ];
   const clamped = Math.max(0, Math.min(1, t));

@@ -116,11 +116,14 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
       const scale = window.devicePixelRatio > 1 ? 2 : 1;
       const width = Math.max(1, Math.round(img.width));
       const height = Math.max(1, Math.round(img.height));
-      const titlePaddingX = 20;
-      const titlePaddingTop = 16;
-      const titlePaddingBottom = 10;
-      const titleLineHeight = 20;
+      const titleFontSize = Math.max(10, Math.min(14, Math.round(width * 0.024)));
+      const titlePaddingX = Math.max(12, Math.round(width * 0.028));
+      const titlePaddingTop = Math.max(8, Math.round(titleFontSize * 0.65));
+      const titlePaddingBottom = Math.max(6, Math.round(titleFontSize * 0.45));
+      const titleLineHeight = Math.max(12, Math.round(titleFontSize * 1.22));
       const maxTitleWidth = Math.max(1, width - titlePaddingX * 2);
+      const maxTitleLines = width < 700 ? 1 : 2;
+      const titleFont = `600 ${titleFontSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
 
       const measureCanvas = document.createElement("canvas");
       const measureCtx = measureCanvas.getContext("2d");
@@ -128,8 +131,8 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
         URL.revokeObjectURL(url);
         return;
       }
-      measureCtx.font = "600 18px system-ui, -apple-system, Segoe UI, sans-serif";
-      const titleLines = wrapTitleLines(measureCtx, title, maxTitleWidth, 2);
+      measureCtx.font = titleFont;
+      const titleLines = wrapTitleLines(measureCtx, title, maxTitleWidth, maxTitleLines);
       const titleBlockHeight =
         titleLines.length > 0
           ? titlePaddingTop + titleLines.length * titleLineHeight + titlePaddingBottom
@@ -149,7 +152,7 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
       ctx.fillRect(0, 0, width, outputHeight);
 
       if (titleLines.length > 0) {
-        ctx.font = "600 18px system-ui, -apple-system, Segoe UI, sans-serif";
+        ctx.font = titleFont;
         ctx.textBaseline = "top";
         ctx.fillStyle = "#d9def1";
         titleLines.forEach((line, idx) => {

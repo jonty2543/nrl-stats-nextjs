@@ -61,8 +61,8 @@ export const nrlChartTheme = {
 };
 
 export const CHART_COLORS = {
-  primary: "#A8FF00",
-  secondary: "#41d6f4",
+  primary: "#00f58a",
+  secondary: "#a78bfa",
   tertiary: "#FFB347",
   trendline: "#FF4D7D",
 } as const;

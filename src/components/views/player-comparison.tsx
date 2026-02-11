@@ -114,8 +114,8 @@ export function PlayerComparison({
   );
 
   // Player selections
-  const [player1, setPlayer1] = useState("");
-  const [player2, setPlayer2] = useState("None");
+  const [player1, setPlayer1] = useState("Reece Walsh");
+  const [player2, setPlayer2] = useState("Kalyn Ponga");
   const [player1Position, setPlayer1Position] = useState("All");
   const [player2Position, setPlayer2Position] = useState("All");
   const [teammate1, setTeammate1] = useState("None");
@@ -124,8 +124,8 @@ export function PlayerComparison({
   const [teammate2Position, setTeammate2Position] = useState("All");
   const [teammateMode1, setTeammateMode1] = useState<TeammateMode>("both");
   const [teammateMode2, setTeammateMode2] = useState<TeammateMode>("both");
-  const [stat1, setStat1] = useState("Tackles Made");
-  const [stat2, setStat2] = useState("None");
+  const [stat1, setStat1] = useState("Fantasy");
+  const [stat2, setStat2] = useState("All Runs");
   const [wwYear, setWwYear] = useState(selectedYears[0] ?? "");
   const [roundYear, setRoundYear] = useState(selectedYears[0] ?? "");
 
@@ -453,14 +453,14 @@ export function PlayerComparison({
     const stat1Series = [
       { label: effectiveP1, values: p1Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null) },
       ...(hasTwoPlayers
-        ? [{ label: player2, values: p2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "#41d6f4" }]
+        ? [{ label: player2, values: p2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "#a78bfa" }]
         : []),
     ];
     const stat2Series = hasTwoStats
       ? [
           { label: effectiveP1, values: p1Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null) },
           ...(hasTwoPlayers
-            ? [{ label: player2, values: p2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "#41d6f4" }]
+            ? [{ label: player2, values: p2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "#a78bfa" }]
             : []),
         ]
       : [];
@@ -750,6 +750,7 @@ export function PlayerComparison({
         summaryRows={summaryRows}
         percentileResults={percentileResults}
         recentFormResults={recentFormResults}
+        rankingMode="percentile"
         percentileScope={percentileScope}
         onPercentileScopeChange={setPercentileScope}
       />

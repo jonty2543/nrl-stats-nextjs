@@ -236,7 +236,7 @@ export function TeamComparison({
           series={[
             { label: effectiveT1, values: t1Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null) },
             ...(hasTwoTeams
-              ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "#41d6f4" }]
+              ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "#a78bfa" }]
               : []),
           ]}
         />
@@ -253,7 +253,7 @@ export function TeamComparison({
             series={[
               { label: effectiveT1, values: t1Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null) },
               ...(hasTwoTeams
-                ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "#41d6f4" }]
+                ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "#a78bfa" }]
                 : []),
             ]}
           />
@@ -360,9 +360,11 @@ export function TeamComparison({
         onMinutesThresholdChange={setMinMinutes}
         minutesMode={minutesMode}
         onMinutesModeChange={setMinutesMode}
+        showPosition={false}
+        showMinutes={false}
       />
 
-      <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
+      <div className="rounded-md border border-nrl-border bg-nrl-panel p-2">
         <TeamSelectors
           teamList={teamList}
           team1={effectiveT1}
@@ -383,6 +385,7 @@ export function TeamComparison({
         summaryRows={summaryRows}
         percentileResults={percentileResults}
         recentFormResults={recentFormResults}
+        rankingMode="rank"
       />
 
       <ChartPanelGrid panels={chartPanels} />

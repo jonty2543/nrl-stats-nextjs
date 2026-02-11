@@ -158,6 +158,8 @@ export interface PercentileResult {
   stat: string;
   value: number;
   percentile: number;
+  rank: number;
+  total: number;
 }
 
 export function computePercentileRanks(
@@ -167,25 +169,7 @@ export function computePercentileRanks(
   stats: string[],
   groupCol: "Name" | "Team" = "Name"
 ): PercentileResult[] {
-  // Compute per-entity averages
-  const avgsByEntity = new Map<string, Map<string, number>>();
-  for (const row of allRows) {
-    const key = row[groupCol] as string;
-    if (!avgsByEntity.has(key)) avgsByEntity.set(key, new Map());
-    const m = avgsByEntity.get(key)!;
-    for (const stat of stats) {
-      const val = toFiniteNumber(row[stat]);
-      if (val === null) continue;
-      const existing = m.get(stat);
-      if (existing === undefined) {
-        m.set(stat, val);
-      } else {
-        // We'll fix this with a proper average below
-      }
-    }
-  }
-
-  // Actually compute proper averages by entity
+  // Compute proper averages by entity
   const entitySums = new Map<string, Map<string, { sum: number; count: number }>>();
   for (const row of allRows) {
     const key = row[groupCol] as string;
@@ -222,19 +206,35 @@ export function computePercentileRanks(
     if (vals.length === 0) continue;
 
     const playerAvg = mean(vals);
-
-    // All entity averages for this stat
     const allAvgs: number[] = [];
     for (const avgs of entityAvgs.values()) {
-      const a = avgs.get(stat);
-      if (a !== undefined) allAvgs.push(a);
+      const avg = avgs.get(stat);
+      if (avg !== undefined) allAvgs.push(avg);
     }
+
+    const ranked = [...entityAvgs.entries()]
+      .map(([entity, avgs]) => ({
+        entity,
+        avg: avgs.get(stat),
+      }))
+      .filter((row): row is { entity: string; avg: number } => row.avg !== undefined)
+      .sort((a, b) => {
+        if (b.avg !== a.avg) return b.avg - a.avg;
+        return a.entity.localeCompare(b.entity);
+      });
+
+    const total = ranked.length;
+    const rankIdx = ranked.findIndex((row) => row.entity === name);
+    if (rankIdx === -1 || total === 0) continue;
+    const rank = rankIdx + 1;
 
     results.push({
       entity: name,
       stat,
       value: playerAvg,
       percentile: percentileRank(playerAvg, allAvgs),
+      rank,
+      total,
     });
   }
 

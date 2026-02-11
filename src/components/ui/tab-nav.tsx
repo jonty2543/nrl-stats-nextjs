@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 const tabs = [
   { label: "Players", href: "/dashboard/players" },
@@ -10,16 +11,25 @@ const tabs = [
 
 export function TabNav() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    tabs.forEach((tab) => {
+      router.prefetch(tab.href);
+    });
+  }, [router]);
 
   return (
     <nav className="flex gap-1">
       {tabs.map((tab) => {
-        const active = pathname.startsWith(tab.href);
+        const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
         return (
           <Link
             key={tab.href}
             href={tab.href}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            prefetch
+            aria-current={active ? "page" : undefined}
+            className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               active
                 ? "bg-nrl-accent/15 text-nrl-accent"
                 : "text-nrl-muted hover:text-nrl-text hover:bg-nrl-panel-2"

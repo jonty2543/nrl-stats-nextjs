@@ -83,8 +83,8 @@ export function PlayerSelectors({
   return (
     <div className="space-y-3">
       {/* Player 1 row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px] gap-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_170px]">
           <SearchableSelect
             label="Player 1"
             value={player1}
@@ -98,7 +98,7 @@ export function PlayerSelectors({
             onChange={onPlayer1PositionChange}
           />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px_auto] gap-3 items-end">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_170px_auto] items-end">
           <div className="sm:col-span-2">
             <SearchableSelect
               label="Teammate"
@@ -131,8 +131,8 @@ export function PlayerSelectors({
       </div>
 
       {/* Player 2 row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px] gap-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_170px]">
           <SearchableSelect
             label="Player 2 (Optional)"
             value={player2}
@@ -146,7 +146,7 @@ export function PlayerSelectors({
             onChange={onPlayer2PositionChange}
           />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px_auto] gap-3 items-end">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_170px_auto] items-end">
           <div className="sm:col-span-2">
             <SearchableSelect
               label="Teammate"
@@ -179,7 +179,7 @@ export function PlayerSelectors({
       </div>
 
       {/* Stat selectors */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <SearchableSelect
           label="Stat 1"
           value={stat1}

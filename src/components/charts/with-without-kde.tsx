@@ -23,7 +23,7 @@ export function WithWithoutKDE({
         {
           label: "With",
           values: withValues,
-          color: "#A8FF00",
+          color: "#00f58a",
         },
         {
           label: "Without",

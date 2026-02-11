@@ -94,9 +94,9 @@ export function LineRound({
           colors={nivoData.map((d) => d.color)}
           lineWidth={2.4}
           pointSize={6}
-          pointColor={{ theme: "background" }}
-          pointBorderWidth={2}
-          pointBorderColor={{ from: "serieColor" }}
+          pointColor={{ from: "color" }}
+          pointBorderWidth={1}
+          pointBorderColor={{ from: "color" }}
           tooltip={({ point }) => {
             const round =
               typeof point.data.x === "number"

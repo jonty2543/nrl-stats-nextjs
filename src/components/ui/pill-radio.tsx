@@ -10,7 +10,7 @@ interface PillRadioProps {
 export function PillRadio({ options, value, onChange, disabled = false }: PillRadioProps) {
   return (
     <div
-      className={`inline-flex gap-1 rounded-xl border border-nrl-border bg-nrl-panel p-1 ${
+      className={`inline-flex gap-0.5 rounded-lg border border-nrl-border bg-nrl-panel p-0.5 ${
         disabled ? "pointer-events-none opacity-50" : ""
       }`}
       aria-disabled={disabled}
@@ -23,9 +23,9 @@ export function PillRadio({ options, value, onChange, disabled = false }: PillRa
             type="button"
             disabled={disabled}
             onClick={() => onChange(opt)}
-            className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-wide transition-all ${
+            className={`rounded-md px-2 py-1 text-[9px] font-bold uppercase tracking-wide transition-all ${
               active
-                ? "bg-gradient-to-br from-nrl-accent to-[#a0e800] text-black font-extrabold"
+                ? "bg-gradient-to-br from-nrl-accent to-nrl-accent text-black font-extrabold"
                 : "text-nrl-muted hover:bg-nrl-panel-2 hover:text-nrl-text"
             }`}
           >

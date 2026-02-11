@@ -39,8 +39,8 @@ export function MultiSelect({ label, value, options, onChange }: MultiSelectProp
   };
 
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-semibold uppercase tracking-wide text-nrl-muted">
+    <div className="flex flex-col gap-0.5">
+      <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
         {label}
       </label>
       <div ref={containerRef} className="relative">
@@ -48,17 +48,17 @@ export function MultiSelect({ label, value, options, onChange }: MultiSelectProp
           type="button"
           onClick={() => setOpen((prev) => !prev)}
           aria-expanded={open}
-          className="w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 min-h-[40px] text-left"
+          className="w-full rounded-md border border-nrl-border bg-nrl-panel-2 p-1 min-h-[22px] text-left"
         >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-1">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex flex-wrap gap-0.5">
               {selectedOptions.length === 0 ? (
-                <span className="text-sm text-nrl-muted">Select year(s)</span>
+                <span className="text-[10px] text-nrl-muted">Select year(s)</span>
               ) : (
                 selectedOptions.map((opt) => (
                   <span
                     key={opt}
-                    className="rounded-md px-2 py-0.5 text-xs font-semibold bg-nrl-accent/20 text-nrl-accent border border-nrl-accent/30"
+                    className="rounded-sm px-1.5 py-[1px] text-[9px] font-semibold bg-nrl-accent/20 text-nrl-accent border border-nrl-accent/30"
                   >
                     {opt}
                   </span>
@@ -66,7 +66,7 @@ export function MultiSelect({ label, value, options, onChange }: MultiSelectProp
               )}
             </div>
             <span
-              className={`text-xs text-nrl-muted transition-transform ${
+              className={`text-[9px] text-nrl-muted transition-transform ${
                 open ? "rotate-180" : ""
               }`}
             >
@@ -76,8 +76,8 @@ export function MultiSelect({ label, value, options, onChange }: MultiSelectProp
         </button>
 
         {open && (
-          <div className="absolute z-20 mt-1 w-full rounded-lg border border-nrl-border bg-nrl-panel p-2 shadow-lg">
-            <div className="flex flex-wrap gap-1">
+          <div className="absolute z-20 mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel p-1 shadow-lg">
+            <div className="flex flex-wrap gap-0.5">
               {options.map((opt) => {
                 const selected = value.includes(opt);
                 return (
@@ -85,7 +85,7 @@ export function MultiSelect({ label, value, options, onChange }: MultiSelectProp
                     key={opt}
                     type="button"
                     onClick={() => toggle(opt)}
-                    className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
+                    className={`rounded-sm px-1.5 py-[1px] text-[9px] font-semibold transition-colors ${
                       selected
                         ? "bg-nrl-accent/20 text-nrl-accent border border-nrl-accent/30"
                         : "bg-nrl-panel-2 text-nrl-muted border border-nrl-border hover:text-nrl-text"

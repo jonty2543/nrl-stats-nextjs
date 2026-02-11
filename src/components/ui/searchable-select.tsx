@@ -74,8 +74,8 @@ export function SearchableSelect({
   };
 
   return (
-    <div className="flex flex-col gap-1" ref={containerRef}>
-      <label className="text-xs font-semibold uppercase tracking-wide text-nrl-muted">
+    <div className="flex flex-col gap-0.5" ref={containerRef}>
+      <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
         {label}
       </label>
       <div className="relative">
@@ -120,13 +120,13 @@ export function SearchableSelect({
               }
             }
           }}
-          className="w-full rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-50"
         />
 
         {open && !disabled && (
-          <div className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-nrl-border bg-nrl-panel shadow-lg">
+          <div className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-md border border-nrl-border bg-nrl-panel shadow-lg">
             {filtered.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-nrl-muted">No matches</div>
+              <div className="px-2 py-1 text-[10px] text-nrl-muted">No matches</div>
             ) : (
               filtered.map((opt) => (
                 <button
@@ -136,7 +136,7 @@ export function SearchableSelect({
                     e.preventDefault();
                     selectOption(opt);
                   }}
-                  className={`block w-full px-3 py-2 text-left text-sm transition-colors ${
+                  className={`block w-full px-2 py-1 text-left text-[10px] transition-colors ${
                     opt === value
                       ? "bg-nrl-accent/15 text-nrl-accent"
                       : "text-nrl-text hover:bg-nrl-panel-2"

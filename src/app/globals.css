@@ -4,17 +4,17 @@
   --color-nrl-bg: #0b1020;
   --color-nrl-panel: #161c32;
   --color-nrl-panel-2: #1e2542;
-  --color-nrl-accent: #c9f500;
+  --color-nrl-accent: #00f58a;
   --color-nrl-text: #f5f7ff;
   --color-nrl-muted: #9aa4bf;
   --color-nrl-border: #2a3356;
 
-  --color-chart-primary: #A8FF00;
-  --color-chart-secondary: #41d6f4;
+  --color-chart-primary: #00f58a;
+  --color-chart-secondary: #a78bfa;
   --color-chart-tertiary: #FFB347;
   --color-chart-trendline: #FF4D7D;
 
-  --color-percentile-top: #A8FF00;
+  --color-percentile-top: #00f58a;
   --color-percentile-high: #FFD700;
   --color-percentile-mid: #FF8C00;
   --color-percentile-low: #FF4D7D;
@@ -28,6 +28,10 @@ body {
   color: var(--color-nrl-text);
   font-family: var(--font-sans);
   min-height: 100vh;
+}
+
+html {
+  font-size: 90%;
 }
 
 /* In fullscreen chart view, grow chart height so plots don't become thin and wide. */

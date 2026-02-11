@@ -19,6 +19,7 @@ interface SummaryPanelProps {
   summaryRows: SummaryRow[];
   percentileResults: PercentileResult[];
   recentFormResults: RecentFormResult[];
+  rankingMode?: "percentile" | "rank";
   percentileScope?: "Position" | "All Players";
   onPercentileScopeChange?: (scope: "Position" | "All Players") => void;
 }
@@ -29,6 +30,7 @@ export function SummaryPanel({
   summaryRows,
   percentileResults,
   recentFormResults,
+  rankingMode = "percentile",
   percentileScope,
   onPercentileScopeChange,
 }: SummaryPanelProps) {
@@ -49,11 +51,12 @@ export function SummaryPanel({
           <StatsTable rows={summaryRows} />
         </div>
 
-        {/* Middle: Percentile Ranks + Recent Form */}
+        {/* Middle: Ranks + Recent Form */}
         <div>
           <PercentileRanks
             results={percentileResults}
             single={single}
+            mode={rankingMode}
             percentileScope={percentileScope}
             onPercentileScopeChange={onPercentileScopeChange}
           />

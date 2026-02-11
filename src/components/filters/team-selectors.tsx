@@ -28,8 +28,8 @@ export function TeamSelectors({
   onStat2Change,
 }: TeamSelectorsProps) {
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-2 gap-1.5">
         <SearchableSelect
           label="Team 1"
           value={team1}
@@ -43,7 +43,7 @@ export function TeamSelectors({
           onChange={onTeam2Change}
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-1.5">
         <SearchableSelect
           label="Stat 1"
           value={stat1}

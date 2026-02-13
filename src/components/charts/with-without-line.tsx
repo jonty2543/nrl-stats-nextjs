@@ -4,6 +4,7 @@ import { ResponsiveLine } from "@nivo/line";
 import { nrlChartTheme, CHART_COLORS } from "./chart-theme";
 import { mean } from "@/lib/data/stats";
 import type { RoundDataPoint } from "@/lib/data/transform";
+import { useEffect, useMemo, useState } from "react";
 
 interface WithWithoutLineProps {
   title: string;
@@ -19,6 +20,16 @@ export function WithWithoutLine({
   withoutData,
 }: WithWithoutLineProps) {
   void _title;
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const onChange = () => setIsMobile(mediaQuery.matches);
+    onChange();
+    mediaQuery.addEventListener("change", onChange);
+    return () => mediaQuery.removeEventListener("change", onChange);
+  }, []);
+
   const formatOpponent = (opponent: unknown): string =>
     typeof opponent === "string" && opponent.trim().length > 0
       ? opponent
@@ -36,9 +47,22 @@ export function WithWithoutLine({
 
   const wAvg = hasWithData ? mean(wFiltered.map((d) => d.value)) : null;
   const woAvg = hasWithoutData ? mean(woFiltered.map((d) => d.value)) : null;
-  const roundTicks = [...new Set([...wFiltered, ...woFiltered].map((d) => d.round))].sort((a, b) => a - b);
+  const roundTicks = useMemo(
+    () => [...new Set([...wFiltered, ...woFiltered].map((d) => d.round))].sort((a, b) => a - b),
+    [wFiltered, woFiltered]
+  );
   const xMin = roundTicks.length > 0 ? roundTicks[0] : 1;
   const xMax = roundTicks.length > 0 ? roundTicks[roundTicks.length - 1] : 27;
+  const displayRoundTicks = useMemo(() => {
+    if (!isMobile || roundTicks.length <= 8) return roundTicks;
+    const step = Math.max(1, Math.ceil(roundTicks.length / 7));
+    const compactTicks = roundTicks.filter((_, idx) => idx % step === 0);
+    const lastTick = roundTicks[roundTicks.length - 1];
+    if (compactTicks[compactTicks.length - 1] !== lastTick) {
+      compactTicks.push(lastTick);
+    }
+    return compactTicks;
+  }, [isMobile, roundTicks]);
 
   const nivoData = [
     {
@@ -168,7 +192,7 @@ export function WithWithoutLine({
             legend: "Round",
             legendPosition: "middle",
             legendOffset: 40,
-            tickValues: roundTicks,
+            tickValues: displayRoundTicks,
             format: (v) => Number.isInteger(v as number) ? String(v) : "",
           }}
           axisLeft={{

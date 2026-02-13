@@ -5,6 +5,7 @@ import type { PlayerStat } from "@/lib/data/types";
 import { PLAYER_STATS } from "@/lib/data/constants";
 import {
   filterByMinutes,
+  filterByFinals,
   filterByYear,
   filterByTeammate,
   getTeammateOptions,
@@ -80,6 +81,7 @@ export function PlayerComparison({
       setLoading(false);
     }
   }, []);
+  const [finalsMode, setFinalsMode] = useState("All");
   const [minMinutes, setMinMinutes] = useState(0);
   const [minutesMode, setMinutesMode] = useState("All");
   const [percentileScope, setPercentileScope] = useState<PercentileScope>("Position");
@@ -89,18 +91,22 @@ export function PlayerComparison({
     () => filterByYear(allData, selectedYears),
     [allData, selectedYears]
   );
+  const dfYearFinals = useMemo(
+    () => filterByFinals(dfYear, finalsMode as "All" | "Yes" | "No"),
+    [dfYear, finalsMode]
+  );
   const df = useMemo(
-    () => filterByMinutes(dfYear, minMinutes, minutesMode as "All" | "Over" | "Under"),
-    [dfYear, minMinutes, minutesMode]
+    () => filterByMinutes(dfYearFinals, minMinutes, minutesMode as "All" | "Over" | "Under"),
+    [dfYearFinals, minMinutes, minutesMode]
   );
   const dfAllPositions = useMemo(
-    () => filterByMinutes(dfYear, minMinutes, minutesMode as "All" | "Over" | "Under"),
-    [dfYear, minMinutes, minutesMode]
+    () => filterByMinutes(dfYearFinals, minMinutes, minutesMode as "All" | "Over" | "Under"),
+    [dfYearFinals, minMinutes, minutesMode]
   );
 
   const positions = useMemo(
-    () => [...new Set(dfYear.map((r) => r.Position))].filter(Boolean).sort(),
-    [dfYear]
+    () => [...new Set(dfYearFinals.map((r) => r.Position))].filter(Boolean).sort(),
+    [dfYearFinals]
   );
 
   const fantasyRank = useMemo(() => buildFantasyRank(allData), [allData]);
@@ -175,16 +181,16 @@ export function PlayerComparison({
   const tm1Options = useMemo(
     () =>
       hasPlayer1 && player1
-        ? getTeammateOptions(player1, dfYear, fantasyRank)
+        ? getTeammateOptions(player1, dfYearFinals, fantasyRank)
         : [],
-    [hasPlayer1, player1, dfYear, fantasyRank]
+    [hasPlayer1, player1, dfYearFinals, fantasyRank]
   );
   const tm2Options = useMemo(
     () =>
       hasPlayer2
-        ? getTeammateOptions(player2, dfYear, fantasyRank)
+        ? getTeammateOptions(player2, dfYearFinals, fantasyRank)
         : [],
-    [hasPlayer2, player2, dfYear, fantasyRank]
+    [hasPlayer2, player2, dfYearFinals, fantasyRank]
   );
 
   useEffect(() => {
@@ -308,10 +314,10 @@ export function PlayerComparison({
       p1BaseRows,
       effectiveP1Teammate,
       effectiveP1TeammateMode === "with",
-      dfYear,
+      dfYearFinals,
       effectiveP1TeammatePosition
     );
-  }, [p1BaseRows, effectiveP1Teammate, effectiveP1TeammateMode, dfYear, effectiveP1TeammatePosition]);
+  }, [p1BaseRows, effectiveP1Teammate, effectiveP1TeammateMode, dfYearFinals, effectiveP1TeammatePosition]);
 
   const p2Rows = useMemo(() => {
     if (!hasTwoPlayers) return [];
@@ -320,10 +326,10 @@ export function PlayerComparison({
       p2BaseRows,
       teammate2,
       teammateMode2 === "with",
-      dfYear,
+      dfYearFinals,
       teammate2Position
     );
-  }, [hasTwoPlayers, p2BaseRows, teammate2, teammateMode2, dfYear, teammate2Position]);
+  }, [hasTwoPlayers, p2BaseRows, teammate2, teammateMode2, dfYearFinals, teammate2Position]);
 
   // Stats
   const statsToShow = useMemo(
@@ -564,7 +570,7 @@ export function PlayerComparison({
     }
 
     const effectiveWwYear = wwYear || selectedYears[0] || "";
-    const wwLookup = dfYear.filter((r) => r.Year === effectiveWwYear);
+    const wwLookup = dfYearFinals.filter((r) => r.Year === effectiveWwYear);
     const wwYearPicker = selectedYears.length > 1 ? (
       <div className="mb-3">
         <PillRadio options={selectedYears} value={effectiveWwYear} onChange={setWwYear} />
@@ -582,8 +588,8 @@ export function PlayerComparison({
       const wwYearRows = baseRows.filter((r) => r.Year === effectiveWwYear);
       const withRowsYear = filterByTeammate(wwYearRows, teammateName, true, wwLookup, teammatePosition);
       const withoutRowsYear = filterByTeammate(wwYearRows, teammateName, false, wwLookup, teammatePosition);
-      const withRowsAllYears = filterByTeammate(baseRows, teammateName, true, dfYear, teammatePosition);
-      const withoutRowsAllYears = filterByTeammate(baseRows, teammateName, false, dfYear, teammatePosition);
+      const withRowsAllYears = filterByTeammate(baseRows, teammateName, true, dfYearFinals, teammatePosition);
+      const withoutRowsAllYears = filterByTeammate(baseRows, teammateName, false, dfYearFinals, teammatePosition);
 
       panels.push({
         id: `${prefix}ww_round_1`,
@@ -676,7 +682,7 @@ export function PlayerComparison({
     effectiveP1, effectiveP1Label, player2, player2Label, stat1, stat2, p1Rows, p2Rows,
     p1RoundData, p2RoundData,
     p1RoundRows, p2RoundRows, effectiveRoundYear, setRoundYear,
-    hasTwoPlayers, effectiveP1Teammate, teammate1Label, teammate2, teammate2Label, effectiveP1TeammatePosition, teammate2Position, dfYear, wwYear, selectedYears,
+    hasTwoPlayers, effectiveP1Teammate, teammate1Label, teammate2, teammate2Label, effectiveP1TeammatePosition, teammate2Position, dfYearFinals, wwYear, selectedYears,
     p1BaseRows, p2BaseRows,
   ]);
 
@@ -702,6 +708,8 @@ export function PlayerComparison({
         years={availableYears}
         selectedYears={selectedYears}
         onYearsChange={handleYearsChange}
+        finalsMode={finalsMode}
+        onFinalsModeChange={setFinalsMode}
         minutesThreshold={minMinutes}
         onMinutesThresholdChange={setMinMinutes}
         minutesMode={minutesMode}

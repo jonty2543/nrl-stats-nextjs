@@ -10,11 +10,14 @@ interface FilterBarProps {
   positions?: string[];
   selectedPosition?: string;
   onPositionChange?: (position: string) => void;
+  finalsMode: string;
+  onFinalsModeChange: (mode: string) => void;
   minutesThreshold: number;
   onMinutesThresholdChange: (value: number) => void;
   minutesMode: string;
   onMinutesModeChange: (mode: string) => void;
   showPosition?: boolean;
+  showFinals?: boolean;
   showMinutes?: boolean;
 }
 
@@ -25,11 +28,14 @@ export function FilterBar({
   positions,
   selectedPosition,
   onPositionChange,
+  finalsMode,
+  onFinalsModeChange,
   minutesThreshold,
   onMinutesThresholdChange,
   minutesMode,
   onMinutesModeChange,
   showPosition = true,
+  showFinals = true,
   showMinutes = true,
 }: FilterBarProps) {
   const canShowPosition =
@@ -37,13 +43,21 @@ export function FilterBar({
     Array.isArray(positions) &&
     typeof selectedPosition === "string" &&
     typeof onPositionChange === "function";
+  const canShowFinals =
+    showFinals &&
+    typeof finalsMode === "string" &&
+    typeof onFinalsModeChange === "function";
   const canShowMinutes = showMinutes;
+  const fieldCount =
+    1 + Number(canShowPosition) + Number(canShowFinals) + Number(canShowMinutes);
   const gridColumns =
-    canShowPosition && canShowMinutes
-      ? "sm:grid-cols-2 lg:grid-cols-3"
-      : canShowPosition || canShowMinutes
-        ? "sm:grid-cols-2 lg:grid-cols-2"
-        : "sm:grid-cols-1 lg:grid-cols-1";
+    fieldCount >= 4
+      ? "sm:grid-cols-2 lg:grid-cols-4"
+      : fieldCount === 3
+        ? "sm:grid-cols-2 lg:grid-cols-3"
+        : fieldCount === 2
+          ? "sm:grid-cols-2 lg:grid-cols-2"
+          : "sm:grid-cols-1 lg:grid-cols-1";
 
   return (
     <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4 mb-4">
@@ -60,6 +74,14 @@ export function FilterBar({
             value={selectedPosition}
             options={["All", ...positions]}
             onChange={onPositionChange}
+          />
+        )}
+        {canShowFinals && (
+          <Select
+            label="Finals"
+            value={finalsMode}
+            options={["All", "Yes", "No"]}
+            onChange={onFinalsModeChange}
           />
         )}
         {canShowMinutes && (

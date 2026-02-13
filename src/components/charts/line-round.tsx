@@ -3,6 +3,7 @@
 import { ResponsiveLine } from "@nivo/line";
 import { nrlChartTheme, CHART_COLORS } from "./chart-theme";
 import type { RoundDataPoint } from "@/lib/data/transform";
+import { useEffect, useMemo, useState } from "react";
 
 interface LineRoundProps {
   title: string;
@@ -28,7 +29,28 @@ export function LineRound({
   void _title;
   const ROUND_MIN = 1;
   const ROUND_MAX = 27;
-  const roundTicks = Array.from({ length: ROUND_MAX - ROUND_MIN + 1 }, (_, i) => ROUND_MIN + i);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const onChange = () => setIsMobile(mediaQuery.matches);
+    onChange();
+    mediaQuery.addEventListener("change", onChange);
+    return () => mediaQuery.removeEventListener("change", onChange);
+  }, []);
+
+  const roundTicks = useMemo(() => {
+    const allTicks = Array.from({ length: ROUND_MAX - ROUND_MIN + 1 }, (_, i) => ROUND_MIN + i);
+    if (!isMobile) return allTicks;
+
+    const maxTicks = 8;
+    const step = Math.max(1, Math.ceil(allTicks.length / (maxTicks - 1)));
+    const compactTicks = allTicks.filter((_, idx) => idx % step === 0);
+    if (compactTicks[compactTicks.length - 1] !== ROUND_MAX) {
+      compactTicks.push(ROUND_MAX);
+    }
+    return compactTicks;
+  }, [isMobile]);
 
   const formatOpponent = (opponent: unknown): string =>
     typeof opponent === "string" && opponent.trim().length > 0

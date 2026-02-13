@@ -6,6 +6,7 @@ import { TEAM_STATS } from "@/lib/data/constants";
 import {
   filterByPosition,
   filterByMinutes,
+  filterByFinals,
   filterByYear,
   aggregateTeamStats,
   computeSummary,
@@ -69,6 +70,7 @@ export function TeamComparison({
     }
   }, []);
   const [position, setPosition] = useState("All");
+  const [finalsMode, setFinalsMode] = useState("All");
   const [minMinutes, setMinMinutes] = useState(0);
   const [minutesMode, setMinutesMode] = useState("All");
 
@@ -76,9 +78,13 @@ export function TeamComparison({
     () => filterByYear(allData, selectedYears),
     [allData, selectedYears]
   );
+  const dfYearFinals = useMemo(
+    () => filterByFinals(dfYear, finalsMode as "All" | "Yes" | "No"),
+    [dfYear, finalsMode]
+  );
   const dfPosition = useMemo(
-    () => filterByPosition(dfYear, position),
-    [dfYear, position]
+    () => filterByPosition(dfYearFinals, position),
+    [dfYearFinals, position]
   );
   const df = useMemo(
     () => filterByMinutes(dfPosition, minMinutes, minutesMode as "All" | "Over" | "Under"),
@@ -88,8 +94,8 @@ export function TeamComparison({
   const teamDf = useMemo(() => aggregateTeamStats(df), [df]);
 
   const positions = useMemo(
-    () => [...new Set(dfYear.map((r) => r.Position))].filter(Boolean).sort(),
-    [dfYear]
+    () => [...new Set(dfYearFinals.map((r) => r.Position))].filter(Boolean).sort(),
+    [dfYearFinals]
   );
 
   const teamList = useMemo(
@@ -356,6 +362,8 @@ export function TeamComparison({
         positions={positions}
         selectedPosition={position}
         onPositionChange={setPosition}
+        finalsMode={finalsMode}
+        onFinalsModeChange={setFinalsMode}
         minutesThreshold={minMinutes}
         onMinutesThresholdChange={setMinMinutes}
         minutesMode={minutesMode}

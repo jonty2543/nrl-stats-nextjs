@@ -8,8 +8,20 @@ interface StatsTableProps {
 export function StatsTable({ rows, showLabel = true }: StatsTableProps) {
   if (rows.length === 0) return null;
 
+  const labelOrder = Array.from(new Set(rows.map((r) => r.label)));
+  const statOrder = Array.from(new Set(rows.map((r) => r.stat)));
+  const sortedRows = [...rows].sort((a, b) => {
+    const statA = statOrder.indexOf(a.stat);
+    const statB = statOrder.indexOf(b.stat);
+    if (statA !== statB) return statA - statB;
+
+    const labelA = labelOrder.indexOf(a.label);
+    const labelB = labelOrder.indexOf(b.label);
+    return labelA - labelB;
+  });
+
   // Check if all labels are the same (single entity)
-  const labels = new Set(rows.map((r) => r.label));
+  const labels = new Set(sortedRows.map((r) => r.label));
   const hideLabelCol = labels.size <= 1;
 
   return (
@@ -39,7 +51,7 @@ export function StatsTable({ rows, showLabel = true }: StatsTableProps) {
         </tr>
       </thead>
       <tbody>
-        {rows.map((row, i) => (
+        {sortedRows.map((row, i) => (
           <tr key={i}>
             {showLabel && !hideLabelCol && (
               <td className="p-1 text-[0.75rem] text-nrl-text">{row.label}</td>

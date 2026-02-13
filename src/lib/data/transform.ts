@@ -24,6 +24,12 @@ function hasPositiveMinutes(row: PlayerStat): boolean {
   return mins !== null && mins > 0;
 }
 
+function isFinalsGame(row: PlayerStat): boolean {
+  if (row.Round >= 28) return true;
+  const roundLabel = (row.Round_Label ?? "").toString().toUpperCase();
+  return roundLabel === "GF" || roundLabel.startsWith("FW") || roundLabel.includes("FINAL");
+}
+
 // ---------------------------------------------------------------------------
 // Filtering
 // ---------------------------------------------------------------------------
@@ -59,6 +65,15 @@ export function filterByYear(
   if (years.length === 0) return rows.filter(hasPositiveMinutes);
   const set = new Set(years);
   return rows.filter((r) => set.has(r.Year) && hasPositiveMinutes(r));
+}
+
+/** Filter rows by finals flag */
+export function filterByFinals(
+  rows: PlayerStat[],
+  mode: "All" | "Yes" | "No"
+): PlayerStat[] {
+  if (mode === "All") return rows;
+  return rows.filter((row) => (mode === "Yes" ? isFinalsGame(row) : !isFinalsGame(row)));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,37 +1,37 @@
 export const nrlChartTheme = {
-  background: "#0b1020",
+  background: "var(--color-nrl-bg)",
   text: {
     fontSize: 11,
-    fill: "#e5e7eb",
+    fill: "var(--color-nrl-text)",
   },
   axis: {
     domain: {
       line: {
-        stroke: "#2a3356",
+        stroke: "var(--color-nrl-border)",
         strokeWidth: 1,
       },
     },
     ticks: {
       text: {
         fontSize: 10,
-        fill: "#c7d2fe",
+        fill: "var(--color-nrl-muted)",
       },
       line: {
-        stroke: "#2a3356",
+        stroke: "var(--color-nrl-border)",
         strokeWidth: 1,
       },
     },
     legend: {
       text: {
         fontSize: 12,
-        fill: "#cbd5e1",
+        fill: "var(--color-nrl-text)",
         fontWeight: 600,
       },
     },
   },
   grid: {
     line: {
-      stroke: "#2a3356",
+      stroke: "var(--color-nrl-border)",
       strokeWidth: 1,
       strokeDasharray: "4 4",
     },
@@ -39,21 +39,21 @@ export const nrlChartTheme = {
   legends: {
     text: {
       fontSize: 11,
-      fill: "#e5e7eb",
+      fill: "var(--color-nrl-text)",
     },
   },
   tooltip: {
     container: {
-      background: "#161c32",
-      color: "#e5e7eb",
+      background: "var(--color-nrl-panel)",
+      color: "var(--color-nrl-text)",
       fontSize: 12,
       borderRadius: 6,
-      border: "1px solid #2a3356",
+      border: "1px solid var(--color-nrl-border)",
     },
   },
   crosshair: {
     line: {
-      stroke: "#9aa4bf",
+      stroke: "var(--color-nrl-muted)",
       strokeWidth: 1,
       strokeOpacity: 0.5,
     },
@@ -61,8 +61,8 @@ export const nrlChartTheme = {
 };
 
 export const CHART_COLORS = {
-  primary: "#00f58a",
-  secondary: "#a78bfa",
-  tertiary: "#FFB347",
-  trendline: "#FF4D7D",
+  primary: "var(--color-chart-primary)",
+  secondary: "var(--color-chart-secondary)",
+  tertiary: "var(--color-chart-tertiary)",
+  trendline: "var(--color-chart-trendline)",
 } as const;

@@ -149,7 +149,7 @@ export function ScatterCorrelation({
           style={{
             color: CHART_COLORS.primary,
             borderColor: CHART_COLORS.primary,
-            background: "#0A1020",
+            background: "var(--color-nrl-panel)",
           }}
         >
           r = {r >= 0 ? "+" : ""}{r.toFixed(2)} | games = {points.length}
@@ -189,17 +189,17 @@ export function ScatterCorrelation({
             rx={3}
             fill={`url(#${gradientId})`}
           />
-          <text x={500 - margin.right + 19} y={margin.top + 6} textAnchor="middle" fill="#9aa4bf" fontSize={8} fontWeight="bold">Last</text>
-          <text x={500 - margin.right + 19} y={224 - margin.bottom + 2} textAnchor="middle" fill="#9aa4bf" fontSize={8} fontWeight="bold">First</text>
+          <text x={500 - margin.right + 19} y={margin.top + 6} textAnchor="middle" fill="var(--color-nrl-muted)" fontSize={8} fontWeight="bold">Last</text>
+          <text x={500 - margin.right + 19} y={224 - margin.bottom + 2} textAnchor="middle" fill="var(--color-nrl-muted)" fontSize={8} fontWeight="bold">First</text>
         </svg>
         {/* Tooltip overlay */}
         {hovered && (
           <div
             className="absolute pointer-events-none z-10 rounded px-2 py-1 text-xs font-medium"
             style={{
-              background: "#161c32ee",
-              border: "1px solid #2a3356",
-              color: "#f5f7ff",
+              background: "var(--color-nrl-panel)",
+              border: "1px solid var(--color-nrl-border)",
+              color: "var(--color-nrl-text)",
               left: `${scaleX(hovered.x, xDomain, margin, 500) / 500 * 100}%`,
               top: `${scaleY(hovered.y, yDomain, margin, 224) / 224 * 100}%`,
               transform: "translate(-50%, -130%)",
@@ -262,8 +262,8 @@ function ChartArea({
   const xTicks = niceTickValues(xDomain[0], xDomain[1], 6);
   const yTicks = niceTickValues(yDomain[0], yDomain[1], 5);
 
-  const gridColor = theme?.grid?.line?.stroke ?? "#2a3356";
-  const textColor = theme?.axis?.ticks?.text?.fill ?? "#9aa4bf";
+  const gridColor = theme?.grid?.line?.stroke ?? "var(--color-nrl-border)";
+  const textColor = theme?.axis?.ticks?.text?.fill ?? "var(--color-nrl-muted)";
 
   return (
     <g>
@@ -314,7 +314,7 @@ function ChartArea({
           r={hoveredIdx === i ? 7 : 5}
           fill={p.color}
           opacity={hoveredIdx !== null && hoveredIdx !== i ? 0.4 : 0.9}
-          stroke={hoveredIdx === i ? "#fff" : "none"}
+          stroke={hoveredIdx === i ? "var(--color-nrl-text)" : "none"}
           strokeWidth={hoveredIdx === i ? 1.5 : 0}
           onMouseEnter={() => onHover(i)}
           onMouseLeave={() => onHover(null)}

@@ -236,7 +236,7 @@ export function TeamComparison({
           series={[
             { label: effectiveT1, values: t1Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null) },
             ...(hasTwoTeams
-              ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "#a78bfa" }]
+              ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "var(--color-chart-secondary)" }]
               : []),
           ]}
         />
@@ -253,7 +253,7 @@ export function TeamComparison({
             series={[
               { label: effectiveT1, values: t1Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null) },
               ...(hasTwoTeams
-                ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "#a78bfa" }]
+                ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "var(--color-chart-secondary)" }]
                 : []),
             ]}
           />

@@ -1,7 +1,8 @@
-import { UserButton } from "@clerk/nextjs";
+import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
 import { TabNav } from "@/components/ui/tab-nav";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function DashboardLayout({
   children,
@@ -27,13 +28,28 @@ export default function DashboardLayout({
               </Link>
               <TabNav />
             </div>
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: "h-8 w-8",
-                },
-              }}
-            />
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <SignedIn>
+                <UserButton
+                  appearance={{
+                    elements: {
+                      avatarBox: "h-8 w-8",
+                    },
+                  }}
+                />
+              </SignedIn>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                  >
+                    Sign in
+                  </button>
+                </SignInButton>
+              </SignedOut>
+            </div>
           </div>
         </div>
       </header>

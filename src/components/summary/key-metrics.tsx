@@ -136,7 +136,7 @@ export function KeyMetrics({
 
                 if (avg === null) {
                   return (
-                    <td className="p-0.5 text-right text-[0.72rem] text-[#4a5070]">
+                    <td className="p-0.5 text-right text-[0.72rem] text-nrl-muted">
                       {"\u2014"}
                     </td>
                   );

@@ -453,14 +453,14 @@ export function PlayerComparison({
     const stat1Series = [
       { label: effectiveP1, values: p1Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null) },
       ...(hasTwoPlayers
-        ? [{ label: player2, values: p2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "#a78bfa" }]
+        ? [{ label: player2, values: p2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "var(--color-chart-secondary)" }]
         : []),
     ];
     const stat2Series = hasTwoStats
       ? [
           { label: effectiveP1, values: p1Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null) },
           ...(hasTwoPlayers
-            ? [{ label: player2, values: p2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "#a78bfa" }]
+            ? [{ label: player2, values: p2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "var(--color-chart-secondary)" }]
             : []),
         ]
       : [];

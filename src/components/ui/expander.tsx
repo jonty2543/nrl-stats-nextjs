@@ -107,6 +107,9 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
   const downloadPng = () => {
     const svg = getActiveSvg();
     if (!svg) return;
+    const rootStyles = getComputedStyle(document.documentElement);
+    const panelColor = rootStyles.getPropertyValue("--color-nrl-panel").trim() || "#161c32";
+    const textColor = rootStyles.getPropertyValue("--color-nrl-text").trim() || "#d9def1";
     const svgText = serializeSvg(svg);
     const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -148,13 +151,13 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
       }
 
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
-      ctx.fillStyle = "#161c32";
+      ctx.fillStyle = panelColor;
       ctx.fillRect(0, 0, width, outputHeight);
 
       if (titleLines.length > 0) {
         ctx.font = titleFont;
         ctx.textBaseline = "top";
-        ctx.fillStyle = "#d9def1";
+        ctx.fillStyle = textColor;
         titleLines.forEach((line, idx) => {
           ctx.fillText(line, titlePaddingX, titlePaddingTop + idx * titleLineHeight);
         });
@@ -173,7 +176,7 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
   };
 
   const iconButtonClass =
-    "inline-flex h-7 w-7 items-center justify-center rounded-md border border-nrl-border bg-[#121a33cc] text-nrl-muted hover:text-nrl-text hover:border-nrl-accent";
+    "inline-flex h-7 w-7 items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:text-nrl-text hover:border-nrl-accent hover:bg-nrl-panel";
 
   return (
     <>

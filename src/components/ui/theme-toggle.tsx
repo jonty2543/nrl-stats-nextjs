@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 type AppTheme = "dark" | "light";
 
@@ -64,7 +65,10 @@ function applyTheme(theme: AppTheme) {
 }
 
 export function ThemeToggle() {
+  const { isLoaded, userId } = useAuth();
   const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const [isRemoteReady, setIsRemoteReady] = useState(false);
+  const lastSavedThemeRef = useRef<AppTheme | null>(null);
 
   useEffect(() => {
     const preferred = getPreferredTheme();
@@ -72,6 +76,77 @@ export function ThemeToggle() {
       applyTheme(preferred);
     }
   }, [theme]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (!userId) {
+      setIsRemoteReady(true);
+      return;
+    }
+
+    setIsRemoteReady(false);
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch("/api/user/theme-preference", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) return;
+        const data = (await response.json()) as { theme?: AppTheme | null };
+
+        if (cancelled) return;
+        if (data.theme === "dark" || data.theme === "light") {
+          lastSavedThemeRef.current = data.theme;
+          const currentTheme = getSnapshot();
+          if (data.theme !== currentTheme) {
+            applyTheme(data.theme);
+          }
+        }
+      } catch {
+        // Ignore network issues and keep local theme.
+      } finally {
+        if (!cancelled) {
+          setIsRemoteReady(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, userId]);
+
+  useEffect(() => {
+    if (!isLoaded || !userId || !isRemoteReady) return;
+    if (lastSavedThemeRef.current === theme) return;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/user/theme-preference", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ theme }),
+        });
+
+        if (!response.ok) {
+          const bodyText = await response.text();
+          console.error("Failed to persist theme preference:", response.status, bodyText);
+          return;
+        }
+
+        lastSavedThemeRef.current = theme;
+      } catch (error) {
+        console.error("Failed to persist theme preference:", error);
+      }
+    })();
+  }, [isLoaded, isRemoteReady, theme, userId]);
 
   const toggleTheme = () => {
     const nextTheme: AppTheme = theme === "dark" ? "light" : "dark";

@@ -78,9 +78,9 @@ export function FilterBar({
         )}
         {canShowFinals && (
           <Select
-            label="Finals"
+            label="Include Finals"
             value={finalsMode}
-            options={["All", "Yes", "No"]}
+            options={["Yes", "No"]}
             onChange={onFinalsModeChange}
           />
         )}

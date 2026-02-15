@@ -1,8 +1,6 @@
 "use client";
 
-import { ResponsiveLine } from "@nivo/line";
-import { nrlChartTheme, CHART_COLORS } from "./chart-theme";
-import { gaussianKDE } from "@/lib/data/kde";
+import { CHART_COLORS } from "./chart-theme";
 import { mean } from "@/lib/data/stats";
 
 interface KDEDistributionProps {
@@ -187,7 +185,7 @@ function StripDistribution({
         n ≤ 20 — showing boxplot + raw values (mean/IQR)
       </div>
       <div className="h-64">
-        <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+        <svg className="distribution-svg" width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
           {visibleSeries.map((s, index) => {
             const y = yForIndex(index);
             return (
@@ -243,6 +241,251 @@ function StripDistribution({
   );
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function buildHistogramDensities(
+  values: number[],
+  domain: [number, number],
+  binCount: number
+): { start: number; end: number; density: number }[] {
+  const [xMin, xMax] = domain;
+  const safeBinCount = Math.max(1, binCount);
+  const range = xMax - xMin;
+  const binWidth = range > 0 ? range / safeBinCount : 1;
+  const counts = new Array(safeBinCount).fill(0);
+
+  values.forEach((value) => {
+    if (!Number.isFinite(value)) return;
+    const rawIndex = Math.floor((value - xMin) / binWidth);
+    const index = clamp(rawIndex, 0, safeBinCount - 1);
+    counts[index] += 1;
+  });
+
+  return counts.map((count, index) => {
+    const start = xMin + index * binWidth;
+    const end = index === safeBinCount - 1 ? xMax : start + binWidth;
+    const density = values.length > 0 ? count / (values.length * binWidth) : 0;
+    return { start, end, density };
+  });
+}
+
+function HistogramDistribution({
+  stat,
+  series,
+  colors,
+}: {
+  stat: string;
+  series: { label: string; values: number[]; color?: string }[];
+  colors: readonly string[];
+}) {
+  const visibleSeries = series
+    .filter((s) => s.values.length >= 2)
+    .map((s, i) => ({
+      ...s,
+      color: s.color ?? colors[i % colors.length],
+    }));
+
+  if (visibleSeries.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-nrl-muted text-sm">
+        Not enough data for distribution plot.
+      </div>
+    );
+  }
+
+  const domain = valueDomain(visibleSeries.map((s) => s.values));
+  const [xMin, xMax] = domain;
+  const maxSample = Math.max(...visibleSeries.map((s) => s.values.length));
+  const binCount = clamp(Math.round(Math.sqrt(maxSample)), 8, 18);
+
+  const histSeries = visibleSeries.map((s) => ({
+    ...s,
+    bins: buildHistogramDensities(s.values, domain, binCount),
+    avg: mean(s.values),
+  }));
+
+  const yMax = Math.max(
+    0.05,
+    ...histSeries.flatMap((s) => s.bins.map((b) => b.density))
+  ) * 1.1;
+
+  const width = 500;
+  const height = 224;
+  const margin = { top: 34, right: 20, bottom: 44, left: 60 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const xScale = (value: number): number =>
+    margin.left + ((value - xMin) / (xMax - xMin)) * innerWidth;
+  const yScale = (value: number): number =>
+    margin.top + innerHeight - (value / yMax) * innerHeight;
+
+  const xTicks = Array.from({ length: 5 }, (_, i) => xMin + ((xMax - xMin) * i) / 4);
+  const yTicks = Array.from({ length: 6 }, (_, i) => (yMax * i) / 5);
+
+  return (
+    <div>
+      <div className="mb-1 text-xs font-semibold text-nrl-muted">
+        n &gt; 20 — showing histogram + mean
+      </div>
+      <div className="h-64">
+        <svg className="distribution-svg" width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
+          {yTicks.map((tick, index) => {
+            const y = yScale(tick);
+            return (
+              <g key={`y-tick-${index}`}>
+                <line
+                  x1={margin.left}
+                  y1={y}
+                  x2={width - margin.right}
+                  y2={y}
+                  stroke={AXIS_COLOR}
+                  strokeDasharray="4 4"
+                />
+                <text
+                  x={margin.left - 8}
+                  y={y + 3}
+                  fill={TICK_TEXT_COLOR}
+                  fontSize={9}
+                  textAnchor="end"
+                >
+                  {tick.toFixed(2)}
+                </text>
+              </g>
+            );
+          })}
+
+          {histSeries.map((s) =>
+            s.bins.map((bin, index) => {
+              if (bin.density <= 0) return null;
+              const left = xScale(bin.start);
+              const right = xScale(bin.end);
+              const barWidth = Math.max(1, right - left - 1);
+              const top = yScale(bin.density);
+              return (
+                <rect
+                  key={`${s.label}-${index}`}
+                  x={left + 0.5}
+                  y={top}
+                  width={barWidth}
+                  height={Math.max(1, margin.top + innerHeight - top)}
+                  fill={toRgba(s.color, 0.22)}
+                  stroke={s.color}
+                  strokeWidth={0.8}
+                />
+              );
+            })
+          )}
+
+          {histSeries.map((s) => {
+            const x = xScale(s.avg);
+            return (
+              <g key={`${s.label}-mean`}>
+                <line
+                  x1={x}
+                  y1={margin.top}
+                  x2={x}
+                  y2={margin.top + innerHeight}
+                  stroke={s.color}
+                  strokeWidth={1.6}
+                  strokeDasharray="6 3"
+                  opacity={0.9}
+                />
+                <text
+                  x={x + 4}
+                  y={margin.top + 11}
+                  fill={s.color}
+                  fontSize={10}
+                  fontWeight={700}
+                >
+                  {s.avg.toFixed(1)}
+                </text>
+              </g>
+            );
+          })}
+
+          <line
+            x1={margin.left}
+            y1={height - margin.bottom}
+            x2={width - margin.right}
+            y2={height - margin.bottom}
+            stroke={AXIS_COLOR}
+          />
+          <line
+            x1={margin.left}
+            y1={margin.top}
+            x2={margin.left}
+            y2={height - margin.bottom}
+            stroke={AXIS_COLOR}
+          />
+
+          {xTicks.map((tick, index) => {
+            const x = xScale(tick);
+            return (
+              <g key={`x-tick-${index}`}>
+                <line
+                  x1={x}
+                  y1={height - margin.bottom}
+                  x2={x}
+                  y2={height - margin.bottom + 5}
+                  stroke={AXIS_COLOR}
+                />
+                <text
+                  x={x}
+                  y={height - margin.bottom + 18}
+                  fill={TICK_TEXT_COLOR}
+                  fontSize={9}
+                  textAnchor="middle"
+                >
+                  {formatTick(tick, domain)}
+                </text>
+              </g>
+            );
+          })}
+
+          <text
+            x={(margin.left + width - margin.right) / 2}
+            y={height - 6}
+            fill={LABEL_COLOR}
+            fontSize={11}
+            textAnchor="middle"
+            fontWeight={600}
+          >
+            {stat}
+          </text>
+
+          <text
+            x={14}
+            y={margin.top + innerHeight / 2}
+            fill={LABEL_COLOR}
+            fontSize={11}
+            textAnchor="middle"
+            fontWeight={600}
+            transform={`rotate(-90 14 ${margin.top + innerHeight / 2})`}
+          >
+            Density
+          </text>
+
+          {histSeries.map((s, index) => {
+            const x = width - margin.right - 165;
+            const y = 9 + index * 16;
+            return (
+              <g key={`${s.label}-legend`}>
+                <rect x={x} y={y - 9} width={10} height={10} fill={s.color} />
+                <text x={x + 16} y={y} fill={LABEL_COLOR} fontSize={10.5}>
+                  {`${s.label} (n=${s.values.length})`}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 export function KDEDistribution({ title: _title, stat, series }: KDEDistributionProps) {
   void _title;
   const colors = [CHART_COLORS.primary, CHART_COLORS.secondary, CHART_COLORS.tertiary];
@@ -261,142 +504,5 @@ export function KDEDistribution({ title: _title, stat, series }: KDEDistribution
     return <StripDistribution stat={stat} series={series} colors={colors} />;
   }
 
-  const densitySeries = series
-    .filter((s) => s.values.length >= 2)
-    .map((s, i) => {
-      const kde = gaussianKDE(s.values);
-      if (kde.length === 0) {
-        return null;
-      }
-
-      const start = kde[0];
-      const end = kde[kde.length - 1];
-
-      return {
-        id: `${s.label} (n=${s.values.length})`,
-        color: s.color ?? colors[i % colors.length],
-        data: kde.map((p) => ({ x: p.x, y: p.y })),
-        leftEdge: start.x,
-        rightEdge: end.x,
-        leftEdgeY: start.y,
-        rightEdgeY: end.y,
-      };
-    })
-    .filter((d): d is NonNullable<typeof d> => d !== null);
-
-  const nivoData = densitySeries.map((d) => ({
-    id: d.id,
-    color: d.color,
-    data: d.data,
-  }));
-
-  if (nivoData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-nrl-muted text-sm">
-        Not enough data for distribution plot.
-      </div>
-    );
-  }
-
-  // Mean markers as custom layers
-  const MeanMarkers = ({
-    xScale,
-    innerHeight,
-  }: {
-    xScale: (v: number) => number;
-    innerHeight: number;
-  }) => {
-    const markers = series
-      .filter((s) => s.values.length >= 2)
-      .map((s, i) => {
-        const avg = mean(s.values);
-        return {
-          avg,
-          x: xScale(avg),
-          color: s.color ?? colors[i % colors.length],
-        };
-      });
-
-    return (
-      <>
-        {markers.map((m, i) => {
-          const nearRightEdge = m.x > 455;
-          const textAnchor: "start" | "end" = nearRightEdge ? "end" : "start";
-          const textX = nearRightEdge ? m.x - 4 : m.x + 4;
-
-          return (
-            <g key={i}>
-              <line
-                x1={m.x}
-                y1={0}
-                x2={m.x}
-                y2={innerHeight}
-                stroke={m.color}
-                strokeWidth={1.6}
-                strokeDasharray="6 3"
-                opacity={0.85}
-              />
-              <text
-                x={textX}
-                y={12}
-                textAnchor={textAnchor}
-                fill={m.color}
-                fontSize={10}
-                fontWeight="bold"
-              >
-                {m.avg.toFixed(1)}
-              </text>
-            </g>
-          );
-        })}
-      </>
-    );
-  };
-
-  return (
-    <div>
-      <div className="h-64">
-        <ResponsiveLine
-          data={nivoData}
-          theme={nrlChartTheme}
-          margin={{ top: 10, right: 20, bottom: 50, left: 60 }}
-          xScale={{ type: "linear", min: "auto", max: "auto" }}
-          yScale={{ type: "linear", min: 0, max: "auto", stacked: false }}
-          axisBottom={{
-            legend: stat,
-            legendPosition: "middle",
-            legendOffset: 40,
-            tickValues: 5,
-          }}
-          axisLeft={{
-            legend: "Density",
-            legendPosition: "middle",
-            legendOffset: -50,
-            tickValues: 5,
-          }}
-          colors={nivoData.map((d) => d.color)}
-          curve="monotoneX"
-          lineWidth={2.4}
-          enableArea={false}
-          enablePoints={false}
-          enableGridX={false}
-          enableGridY={true}
-          useMesh={false}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          layers={["grid", "axes", "areas", "lines", MeanMarkers as any, "legends"]}
-          legends={[
-            {
-              anchor: "top-right",
-              direction: "column",
-              translateX: 0,
-              translateY: 0,
-              itemWidth: 150,
-              itemHeight: 20,
-              symbolSize: 10,
-            },
-          ]}
-        />
-      </div>
-    </div>
-  );
+  return <HistogramDistribution stat={stat} series={series} colors={colors} />;
 }

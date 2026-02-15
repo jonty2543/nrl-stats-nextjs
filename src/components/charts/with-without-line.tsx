@@ -13,6 +13,17 @@ interface WithWithoutLineProps {
   withoutData: RoundDataPoint[];
 }
 
+const FINALS_ROUND_LABELS: Record<number, string> = {
+  28: "FW1",
+  29: "FW2",
+  30: "FW3",
+  31: "GF",
+};
+
+function formatRoundTick(round: number): string {
+  return FINALS_ROUND_LABELS[round] ?? String(round);
+}
+
 export function WithWithoutLine({
   title: _title,
   stat,
@@ -37,7 +48,7 @@ export function WithWithoutLine({
 
   const filterRounds = (data: RoundDataPoint[]) =>
     data
-      .filter((d) => d.round >= 1 && d.round <= 27)
+      .filter((d) => d.round >= 1)
       .sort((a, b) => a.round - b.round);
 
   const wFiltered = filterRounds(withData);
@@ -55,13 +66,26 @@ export function WithWithoutLine({
   const xMax = roundTicks.length > 0 ? roundTicks[roundTicks.length - 1] : 27;
   const displayRoundTicks = useMemo(() => {
     if (!isMobile || roundTicks.length <= 8) return roundTicks;
-    const step = Math.max(1, Math.ceil(roundTicks.length / 7));
-    const compactTicks = roundTicks.filter((_, idx) => idx % step === 0);
-    const lastTick = roundTicks[roundTicks.length - 1];
-    if (compactTicks[compactTicks.length - 1] !== lastTick) {
-      compactTicks.push(lastTick);
+    const hasFinals = roundTicks.some((tick) => tick >= 28);
+    if (!hasFinals) {
+      const step = Math.max(1, Math.ceil(roundTicks.length / 7));
+      const compactTicks = roundTicks.filter((_, idx) => idx % step === 0);
+      const lastTick = roundTicks[roundTicks.length - 1];
+      if (compactTicks[compactTicks.length - 1] !== lastTick) {
+        compactTicks.push(lastTick);
+      }
+      return compactTicks;
     }
-    return compactTicks;
+
+    const regularTicks = roundTicks.filter((tick) => tick <= 27);
+    const finalsTicks = roundTicks.filter((tick) => tick >= 28);
+    const step = Math.max(1, Math.ceil(regularTicks.length / 6));
+    const compactRegular = regularTicks.filter((_, idx) => idx % step === 0);
+    const regularLast = regularTicks[regularTicks.length - 1];
+    if (regularLast !== undefined && compactRegular[compactRegular.length - 1] !== regularLast) {
+      compactRegular.push(regularLast);
+    }
+    return Array.from(new Set([...compactRegular, ...finalsTicks])).sort((a, b) => a - b);
   }, [isMobile, roundTicks]);
 
   const nivoData = [
@@ -193,7 +217,10 @@ export function WithWithoutLine({
             legendPosition: "middle",
             legendOffset: 40,
             tickValues: displayRoundTicks,
-            format: (v) => Number.isInteger(v as number) ? String(v) : "",
+            format: (v) =>
+              Number.isInteger(v as number)
+                ? formatRoundTick(Number(v))
+                : "",
           }}
           axisLeft={{
             legend: stat,
@@ -203,9 +230,9 @@ export function WithWithoutLine({
           colors={[CHART_COLORS.primary, CHART_COLORS.trendline]}
           lineWidth={2.4}
           pointSize={6}
-          pointColor={{ theme: "background" }}
-          pointBorderWidth={2}
-          pointBorderColor={{ from: "serieColor" }}
+          pointColor={{ from: "series.color" }}
+          pointBorderWidth={1}
+          pointBorderColor={{ from: "color" }}
           tooltip={({ point }) => {
             const round =
               typeof point.data.x === "number"
@@ -216,7 +243,9 @@ export function WithWithoutLine({
               typeof point.data.y === "number"
                 ? point.data.y.toFixed(1)
                 : String(point.data.y);
-            const roundText = Number.isFinite(round) ? `Rd ${round}` : `Rd ${String(point.data.x)}`;
+            const roundText = Number.isFinite(round)
+              ? (round >= 28 ? formatRoundTick(round) : `Rd ${round}`)
+              : `Rd ${String(point.data.x)}`;
             return (
               <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-xs text-nrl-text">
                 <div>{`${roundText} vs ${opponent}: ${value}`}</div>

@@ -10,7 +10,7 @@ export function createServerSupabaseClient() {
 
 export function createBrowserSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  return createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  return createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     db: { schema: "nrl" },
   });
 }

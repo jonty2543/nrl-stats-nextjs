@@ -81,7 +81,7 @@ export function PlayerComparison({
       setLoading(false);
     }
   }, []);
-  const [finalsMode, setFinalsMode] = useState("All");
+  const [finalsMode, setFinalsMode] = useState("Yes");
   const [minMinutes, setMinMinutes] = useState(0);
   const [minutesMode, setMinutesMode] = useState("All");
   const [percentileScope, setPercentileScope] = useState<PercentileScope>("Position");
@@ -92,7 +92,7 @@ export function PlayerComparison({
     [allData, selectedYears]
   );
   const dfYearFinals = useMemo(
-    () => filterByFinals(dfYear, finalsMode as "All" | "Yes" | "No"),
+    () => filterByFinals(dfYear, finalsMode as "Yes" | "No"),
     [dfYear, finalsMode]
   );
   const df = useMemo(

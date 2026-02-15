@@ -19,12 +19,15 @@ export default function DashboardLayout({
               <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold text-nrl-accent">
                 <Image
                   src="/logo-mark.svg"
-                  alt="NRL Stats logo"
+                  alt="Short Side Stats logo"
                   width={28}
                   height={28}
                   priority
                 />
-                <span>NRL Stats</span>
+                <span>
+                  <span>Short Side</span>{" "}
+                  <span className="font-mono font-normal text-nrl-text">Stats</span>
+                </span>
               </Link>
               <TabNav />
             </div>

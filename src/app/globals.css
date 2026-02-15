@@ -65,8 +65,14 @@ html {
   height: min(72vh, 760px) !important;
 }
 
+/* Scale in-plot distribution SVG content down in fullscreen. */
+.chart-fullscreen .distribution-svg {
+  transform: scale(0.92);
+  transform-origin: center center;
+}
+
 /* Clerk theme overrides */
 .cl-card {
-  background: var(--color-nrl-panel) !important;
-  border: 1px solid var(--color-nrl-border) !important;
+  background: #161c32 !important;
+  border: 1px solid #2a3356 !important;
 }

@@ -70,7 +70,7 @@ export function TeamComparison({
     }
   }, []);
   const [position, setPosition] = useState("All");
-  const [finalsMode, setFinalsMode] = useState("All");
+  const [finalsMode, setFinalsMode] = useState("Yes");
   const [minMinutes, setMinMinutes] = useState(0);
   const [minutesMode, setMinutesMode] = useState("All");
 
@@ -79,7 +79,7 @@ export function TeamComparison({
     [allData, selectedYears]
   );
   const dfYearFinals = useMemo(
-    () => filterByFinals(dfYear, finalsMode as "All" | "Yes" | "No"),
+    () => filterByFinals(dfYear, finalsMode as "Yes" | "No"),
     [dfYear, finalsMode]
   );
   const dfPosition = useMemo(

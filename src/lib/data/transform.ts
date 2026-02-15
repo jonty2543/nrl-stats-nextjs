@@ -30,6 +30,23 @@ function isFinalsGame(row: PlayerStat): boolean {
   return roundLabel === "GF" || roundLabel.startsWith("FW") || roundLabel.includes("FINAL");
 }
 
+const LOWER_IS_BETTER_STATS = new Set([
+  "Errors",
+  "Sin Bins",
+  "Send Offs",
+  "Penalties",
+  "Ruck Infringements",
+  "One on One Lost",
+  "Handling Errors",
+  "Kicked Dead",
+  "Missed Tackles",
+  "Ineffective Tackles",
+]);
+
+function isLowerBetterStat(stat: string): boolean {
+  return LOWER_IS_BETTER_STATS.has(stat);
+}
+
 // ---------------------------------------------------------------------------
 // Filtering
 // ---------------------------------------------------------------------------
@@ -70,10 +87,10 @@ export function filterByYear(
 /** Filter rows by finals flag */
 export function filterByFinals(
   rows: PlayerStat[],
-  mode: "All" | "Yes" | "No"
+  mode: "Yes" | "No"
 ): PlayerStat[] {
-  if (mode === "All") return rows;
-  return rows.filter((row) => (mode === "Yes" ? isFinalsGame(row) : !isFinalsGame(row)));
+  if (mode === "Yes") return rows;
+  return rows.filter((row) => !isFinalsGame(row));
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +232,7 @@ export function computePercentileRanks(
 
   const results: PercentileResult[] = [];
   for (const stat of stats) {
+    const lowerIsBetter = isLowerBetterStat(stat);
     const vals = entityValues
       .map((r) => toFiniteNumber(r[stat]))
       .filter((v): v is number => v !== null);
@@ -234,7 +252,9 @@ export function computePercentileRanks(
       }))
       .filter((row): row is { entity: string; avg: number } => row.avg !== undefined)
       .sort((a, b) => {
-        if (b.avg !== a.avg) return b.avg - a.avg;
+        if (a.avg !== b.avg) {
+          return lowerIsBetter ? a.avg - b.avg : b.avg - a.avg;
+        }
         return a.entity.localeCompare(b.entity);
       });
 
@@ -242,12 +262,15 @@ export function computePercentileRanks(
     const rankIdx = ranked.findIndex((row) => row.entity === name);
     if (rankIdx === -1 || total === 0) continue;
     const rank = rankIdx + 1;
+    const percentile = lowerIsBetter
+      ? (allAvgs.filter((v) => v > playerAvg).length / allAvgs.length) * 100
+      : percentileRank(playerAvg, allAvgs);
 
     results.push({
       entity: name,
       stat,
       value: playerAvg,
-      percentile: percentileRank(playerAvg, allAvgs),
+      percentile,
       rank,
       total,
     });

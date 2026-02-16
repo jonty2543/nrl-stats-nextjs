@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 interface ExpanderProps {
   title: string;
@@ -13,15 +13,6 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
   const [fullscreen, setFullscreen] = useState(false);
   const inlineContentRef = useRef<HTMLDivElement>(null);
   const modalContentRef = useRef<HTMLDivElement>(null);
-
-  const filenameBase = useMemo(
-    () =>
-      title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "chart",
-    [title]
-  );
 
   useEffect(() => {
     if (!fullscreen) return;
@@ -36,144 +27,6 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [fullscreen]);
-
-  const getActiveSvg = (): SVGSVGElement | null => {
-    const host = fullscreen ? modalContentRef.current : inlineContentRef.current;
-    if (!host) return null;
-    return host.querySelector("svg");
-  };
-
-  const serializeSvg = (svg: SVGSVGElement): string => {
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    const bounds = svg.getBoundingClientRect();
-    if (!clone.getAttribute("xmlns")) {
-      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    }
-    if (!clone.getAttribute("xmlns:xlink")) {
-      clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
-    }
-    if (!clone.getAttribute("width")) {
-      clone.setAttribute("width", `${Math.max(1, Math.round(bounds.width))}`);
-    }
-    if (!clone.getAttribute("height")) {
-      clone.setAttribute("height", `${Math.max(1, Math.round(bounds.height))}`);
-    }
-    return new XMLSerializer().serializeToString(clone);
-  };
-
-  const wrapTitleLines = (
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    maxWidth: number,
-    maxLines = 2
-  ): string[] => {
-    const words = text.trim().split(/\s+/).filter(Boolean);
-    if (words.length === 0) return [];
-
-    const lines: string[] = [];
-    let current = "";
-
-    for (const word of words) {
-      const next = current ? `${current} ${word}` : word;
-      if (ctx.measureText(next).width <= maxWidth) {
-        current = next;
-        continue;
-      }
-
-      if (current) {
-        lines.push(current);
-        current = word;
-      } else {
-        lines.push(word);
-        current = "";
-      }
-
-      if (lines.length === maxLines) break;
-    }
-
-    if (lines.length < maxLines && current) {
-      lines.push(current);
-    } else if (current && lines.length > 0) {
-      let last = lines[lines.length - 1];
-      while (last.length > 0 && ctx.measureText(`${last}...`).width > maxWidth) {
-        last = last.slice(0, -1);
-      }
-      lines[lines.length - 1] = `${last}...`;
-    }
-
-    return lines.slice(0, maxLines);
-  };
-
-  const downloadPng = () => {
-    const svg = getActiveSvg();
-    if (!svg) return;
-    const rootStyles = getComputedStyle(document.documentElement);
-    const panelColor = rootStyles.getPropertyValue("--color-nrl-panel").trim() || "#161c32";
-    const textColor = rootStyles.getPropertyValue("--color-nrl-text").trim() || "#d9def1";
-    const svgText = serializeSvg(svg);
-    const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const scale = window.devicePixelRatio > 1 ? 2 : 1;
-      const width = Math.max(1, Math.round(img.width));
-      const height = Math.max(1, Math.round(img.height));
-      const titleFontSize = Math.max(10, Math.min(14, Math.round(width * 0.024)));
-      const titlePaddingX = Math.max(12, Math.round(width * 0.028));
-      const titlePaddingTop = Math.max(8, Math.round(titleFontSize * 0.65));
-      const titlePaddingBottom = Math.max(6, Math.round(titleFontSize * 0.45));
-      const titleLineHeight = Math.max(12, Math.round(titleFontSize * 1.22));
-      const maxTitleWidth = Math.max(1, width - titlePaddingX * 2);
-      const maxTitleLines = width < 700 ? 1 : 2;
-      const titleFont = `600 ${titleFontSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
-
-      const measureCanvas = document.createElement("canvas");
-      const measureCtx = measureCanvas.getContext("2d");
-      if (!measureCtx) {
-        URL.revokeObjectURL(url);
-        return;
-      }
-      measureCtx.font = titleFont;
-      const titleLines = wrapTitleLines(measureCtx, title, maxTitleWidth, maxTitleLines);
-      const titleBlockHeight =
-        titleLines.length > 0
-          ? titlePaddingTop + titleLines.length * titleLineHeight + titlePaddingBottom
-          : 0;
-
-      const outputHeight = height + titleBlockHeight;
-      canvas.width = width * scale;
-      canvas.height = outputHeight * scale;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        URL.revokeObjectURL(url);
-        return;
-      }
-
-      ctx.setTransform(scale, 0, 0, scale, 0, 0);
-      ctx.fillStyle = panelColor;
-      ctx.fillRect(0, 0, width, outputHeight);
-
-      if (titleLines.length > 0) {
-        ctx.font = titleFont;
-        ctx.textBaseline = "top";
-        ctx.fillStyle = textColor;
-        titleLines.forEach((line, idx) => {
-          ctx.fillText(line, titlePaddingX, titlePaddingTop + idx * titleLineHeight);
-        });
-      }
-
-      ctx.drawImage(img, 0, titleBlockHeight, width, height);
-      const pngUrl = canvas.toDataURL("image/png");
-      const a = document.createElement("a");
-      a.href = pngUrl;
-      a.download = `${filenameBase}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = () => URL.revokeObjectURL(url);
-    img.src = url;
-  };
 
   const iconButtonClass =
     "inline-flex h-7 w-7 items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:text-nrl-text hover:border-nrl-accent hover:bg-nrl-panel";
@@ -194,19 +47,6 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
         <div ref={inlineContentRef} className="px-4 pb-4">
           {children}
           <div className="mt-2 flex items-center justify-end gap-1">
-            <button
-              type="button"
-              className={iconButtonClass}
-              onClick={downloadPng}
-              title="Download PNG"
-              aria-label="Download PNG"
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 3v11" />
-                <path d="m8 10 4 4 4-4" />
-                <path d="M4 20h16" />
-              </svg>
-            </button>
             <button
               type="button"
               className={iconButtonClass}
@@ -238,19 +78,6 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  className={iconButtonClass}
-                  onClick={downloadPng}
-                  title="Download PNG"
-                  aria-label="Download PNG"
-                >
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M12 3v11" />
-                    <path d="m8 10 4 4 4-4" />
-                    <path d="M4 20h16" />
-                  </svg>
-                </button>
                 <button
                   type="button"
                   className={iconButtonClass}

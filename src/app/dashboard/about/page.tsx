@@ -33,6 +33,36 @@ export default function AboutPage() {
           you can translate your footy IQ to numbers and help contribute to the
           evolving landscape of data in the NRL.
         </p>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <a
+            href="https://x.com/shortsidenrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-1.5 text-sm font-semibold text-nrl-text transition-colors hover:border-nrl-accent hover:text-nrl-accent"
+            aria-label="Short Side on X"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+              <path d="M18.244 2H21l-6.558 7.495L22.164 22h-6.05l-4.74-6.204L5.95 22H3.19l7.014-8.01L2 2h6.205l4.285 5.67L18.244 2Zm-2.12 18h1.676L7.295 3.894H5.496L16.124 20Z" />
+            </svg>
+            <span>X</span>
+          </a>
+
+          <a
+            href="https://www.instagram.com/shortside.nrl/?hl=en"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-1.5 text-sm font-semibold text-nrl-text transition-colors hover:border-nrl-accent hover:text-nrl-accent"
+            aria-label="Short Side on Instagram"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="5" />
+              <circle cx="12" cy="12" r="4" />
+              <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+            </svg>
+            <span>Instagram</span>
+          </a>
+        </div>
       </div>
     </div>
   );

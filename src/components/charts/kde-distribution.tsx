@@ -60,6 +60,12 @@ function formatTick(value: number, domain: [number, number]): string {
   return Math.round(value).toString();
 }
 
+function formatDensityTick(value: number, max: number): string {
+  if (max < 0.02) return value.toFixed(3);
+  if (max < 0.2) return value.toFixed(2);
+  return value.toFixed(1);
+}
+
 function StripDistribution({
   stat,
   series,
@@ -306,10 +312,11 @@ function HistogramDistribution({
     avg: mean(s.values),
   }));
 
-  const yMax = Math.max(
-    0.05,
+  const peakDensity = Math.max(
+    0,
     ...histSeries.flatMap((s) => s.bins.map((b) => b.density))
-  ) * 1.1;
+  );
+  const yMax = peakDensity > 0 ? peakDensity * 1.12 : 1;
 
   const width = 500;
   const height = 224;
@@ -324,6 +331,23 @@ function HistogramDistribution({
 
   const xTicks = Array.from({ length: 5 }, (_, i) => xMin + ((xMax - xMin) * i) / 4);
   const yTicks = Array.from({ length: 6 }, (_, i) => (yMax * i) / 5);
+  const meanMarkers = histSeries
+    .map((s) => ({
+      label: s.label,
+      avg: s.avg,
+      x: xScale(s.avg),
+      color: s.color,
+      y: margin.top + 11,
+    }))
+    .sort((a, b) => a.x - b.x);
+
+  const minLabelGap = 36;
+  for (let i = 1; i < meanMarkers.length; i++) {
+    if (meanMarkers[i].x - meanMarkers[i - 1].x < minLabelGap) {
+      meanMarkers[i - 1].y = margin.top + 10;
+      meanMarkers[i].y = margin.top + 22;
+    }
+  }
 
   return (
     <div>
@@ -351,7 +375,7 @@ function HistogramDistribution({
                   fontSize={9}
                   textAnchor="end"
                 >
-                  {tick.toFixed(2)}
+                  {formatDensityTick(tick, yMax)}
                 </text>
               </g>
             );
@@ -379,28 +403,34 @@ function HistogramDistribution({
             })
           )}
 
-          {histSeries.map((s) => {
-            const x = xScale(s.avg);
+          {meanMarkers.map((marker) => {
+            const nearRightEdge = marker.x > width - margin.right - 18;
+            const textAnchor: "start" | "end" = nearRightEdge ? "end" : "start";
+            const textX = nearRightEdge ? marker.x - 4 : marker.x + 4;
             return (
-              <g key={`${s.label}-mean`}>
+              <g key={`${marker.label}-mean`}>
                 <line
-                  x1={x}
+                  x1={marker.x}
                   y1={margin.top}
-                  x2={x}
+                  x2={marker.x}
                   y2={margin.top + innerHeight}
-                  stroke={s.color}
+                  stroke={marker.color}
                   strokeWidth={1.6}
                   strokeDasharray="6 3"
                   opacity={0.9}
                 />
                 <text
-                  x={x + 4}
-                  y={margin.top + 11}
-                  fill={s.color}
+                  x={textX}
+                  y={marker.y}
+                  textAnchor={textAnchor}
+                  fill={marker.color}
                   fontSize={10}
                   fontWeight={700}
+                  stroke={POINT_STROKE}
+                  strokeWidth={1.5}
+                  paintOrder="stroke"
                 >
-                  {s.avg.toFixed(1)}
+                  {marker.avg.toFixed(1)}
                 </text>
               </g>
             );

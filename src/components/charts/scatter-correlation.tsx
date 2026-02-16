@@ -137,6 +137,11 @@ export function ScatterCorrelation({
   const yDomain = [yMin - yPad, yMax + yPad];
 
   const margin = { top: 10, right: 50, bottom: 50, left: 60 };
+  const innerWidth = 500 - margin.left - margin.right;
+  const innerHeight = 224 - margin.top - margin.bottom;
+  const watermarkSize = Math.min(innerWidth, innerHeight) * 0.55;
+  const watermarkX = margin.left + (innerWidth - watermarkSize) / 2;
+  const watermarkY = margin.top + (innerHeight - watermarkSize) / 2;
 
   const hovered = hoveredIdx !== null ? points[hoveredIdx] : null;
 
@@ -155,6 +160,16 @@ export function ScatterCorrelation({
       )}
       <div className="relative h-56">
         <svg width="100%" height="100%" viewBox="0 0 500 224" preserveAspectRatio="xMidYMid meet">
+          <image
+            href="/logo-mark.svg"
+            x={watermarkX}
+            y={watermarkY}
+            width={watermarkSize}
+            height={watermarkSize}
+            opacity={0.08}
+            preserveAspectRatio="xMidYMid meet"
+            pointerEvents="none"
+          />
           <ChartArea
             points={points}
             reg={reg}

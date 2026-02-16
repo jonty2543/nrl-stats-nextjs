@@ -195,6 +195,28 @@ export function LineRound({
     </>
   );
 
+  const WatermarkLayer = ({
+    innerWidth,
+    innerHeight,
+  }: {
+    innerWidth: number;
+    innerHeight: number;
+  }) => {
+    const size = Math.min(innerWidth, innerHeight) * 0.55;
+    return (
+      <g opacity={0.08} pointerEvents="none">
+        <image
+          href="/logo-mark.svg"
+          x={(innerWidth - size) / 2}
+          y={(innerHeight - size) / 2}
+          width={size}
+          height={size}
+          preserveAspectRatio="xMidYMid meet"
+        />
+      </g>
+    );
+  };
+
   return (
     <div>
       <div className="h-64">
@@ -252,7 +274,7 @@ export function LineRound({
           enableGridY={true}
           useMesh={true}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          layers={["grid", "markers", "axes", "areas", AvgLines as any, "crosshair", "lines", "points", "slices", "mesh", "legends"]}
+          layers={["grid", "markers", "axes", WatermarkLayer as any, "areas", AvgLines as any, "crosshair", "lines", "points", "slices", "mesh", "legends"]}
           legends={
             series.length > 1 || mode === "dual"
               ? [

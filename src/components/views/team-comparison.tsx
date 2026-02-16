@@ -123,6 +123,8 @@ export function TeamComparison({
   useEffect(() => {
     if (teamList.length === 0) return;
 
+    const hasTeam = (value: string) => teamList.some((team) => team === value);
+
     const findTeam = (candidates: string[]) => {
       for (const candidate of candidates) {
         const exact = teamList.find(
@@ -143,7 +145,7 @@ export function TeamComparison({
 
     const defaultTeam1 = findTeam(DEFAULT_TEAM_1_CANDIDATES) ?? teamList[0];
 
-    if (!team1 || !teamList.includes(team1)) {
+    if (!team1 || !hasTeam(team1)) {
       setTeam1(defaultTeam1);
     }
 
@@ -155,7 +157,7 @@ export function TeamComparison({
       return;
     }
 
-    if (!teamList.includes(team2) || team2 === defaultTeam1) {
+    if (!hasTeam(team2) || team2 === defaultTeam1) {
       const defaultTeam2 = findTeam(DEFAULT_TEAM_2_CANDIDATES);
       if (defaultTeam2 && defaultTeam2 !== defaultTeam1) {
         setTeam2(defaultTeam2);

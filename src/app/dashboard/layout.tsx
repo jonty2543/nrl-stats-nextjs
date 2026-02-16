@@ -2,6 +2,7 @@ import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
 import { TabNav } from "@/components/ui/tab-nav";
+import { ToolNav } from "@/components/ui/tool-nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function DashboardLayout({
@@ -15,7 +16,7 @@ export default function DashboardLayout({
       <header className="border-b border-nrl-border bg-nrl-panel/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-14 items-center justify-between">
-            <div className="flex items-center gap-8">
+            <div className="flex items-center gap-3">
               <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold text-nrl-accent">
                 <Image
                   src="/logo-mark.svg"
@@ -24,11 +25,9 @@ export default function DashboardLayout({
                   height={28}
                   priority
                 />
-                <span>
-                  <span>Short Side</span>{" "}
-                  <span className="font-mono font-normal text-nrl-text">Stats</span>
-                </span>
+                <span>Short Side</span>
               </Link>
+              <ToolNav />
               <TabNav />
             </div>
             <div className="flex items-center gap-2">

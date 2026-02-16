@@ -135,6 +135,134 @@ export function PlayerComparison({
   const [wwYear, setWwYear] = useState(selectedYears[0] ?? "");
   const [roundYear, setRoundYear] = useState(selectedYears[0] ?? "");
 
+  const presetPayload = useMemo<Record<string, unknown>>(
+    () => ({
+      selectedYears,
+      finalsMode,
+      minMinutes,
+      minutesMode,
+      percentileScope,
+      player1,
+      player2,
+      player1Position,
+      player2Position,
+      teammate1,
+      teammate2,
+      teammate1Position,
+      teammate2Position,
+      teammateMode1,
+      teammateMode2,
+      stat1,
+      stat2,
+      wwYear,
+      roundYear,
+    }),
+    [
+      selectedYears,
+      finalsMode,
+      minMinutes,
+      minutesMode,
+      percentileScope,
+      player1,
+      player2,
+      player1Position,
+      player2Position,
+      teammate1,
+      teammate2,
+      teammate1Position,
+      teammate2Position,
+      teammateMode1,
+      teammateMode2,
+      stat1,
+      stat2,
+      wwYear,
+      roundYear,
+    ]
+  );
+
+  const applyPreset = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const validYears = Array.isArray(payload.selectedYears)
+        ? payload.selectedYears
+            .filter((value): value is string => typeof value === "string")
+            .filter((year) => availableYears.includes(year))
+        : [];
+
+      if (validYears.length > 0) {
+        await handleYearsChange(validYears);
+      }
+
+      const fallbackYear = validYears[0] ?? selectedYears[0] ?? "";
+
+      if (payload.finalsMode === "Yes" || payload.finalsMode === "No") {
+        setFinalsMode(payload.finalsMode);
+      }
+      if (
+        payload.minutesMode === "All" ||
+        payload.minutesMode === "Over" ||
+        payload.minutesMode === "Under"
+      ) {
+        setMinutesMode(payload.minutesMode);
+      }
+      if (
+        typeof payload.minMinutes === "number" &&
+        Number.isFinite(payload.minMinutes)
+      ) {
+        setMinMinutes(Math.max(0, payload.minMinutes));
+      }
+      if (
+        payload.percentileScope === "Position" ||
+        payload.percentileScope === "All Players"
+      ) {
+        setPercentileScope(payload.percentileScope);
+      }
+
+      if (typeof payload.player1 === "string") setPlayer1(payload.player1);
+      if (typeof payload.player2 === "string") setPlayer2(payload.player2);
+      if (typeof payload.player1Position === "string") {
+        setPlayer1Position(payload.player1Position);
+      }
+      if (typeof payload.player2Position === "string") {
+        setPlayer2Position(payload.player2Position);
+      }
+      if (typeof payload.teammate1 === "string") setTeammate1(payload.teammate1);
+      if (typeof payload.teammate2 === "string") setTeammate2(payload.teammate2);
+      if (typeof payload.teammate1Position === "string") {
+        setTeammate1Position(payload.teammate1Position);
+      }
+      if (typeof payload.teammate2Position === "string") {
+        setTeammate2Position(payload.teammate2Position);
+      }
+      if (
+        payload.teammateMode1 === "both" ||
+        payload.teammateMode1 === "with" ||
+        payload.teammateMode1 === "without"
+      ) {
+        setTeammateMode1(payload.teammateMode1);
+      }
+      if (
+        payload.teammateMode2 === "both" ||
+        payload.teammateMode2 === "with" ||
+        payload.teammateMode2 === "without"
+      ) {
+        setTeammateMode2(payload.teammateMode2);
+      }
+      if (typeof payload.stat1 === "string") setStat1(payload.stat1);
+      if (typeof payload.stat2 === "string") setStat2(payload.stat2);
+      if (typeof payload.wwYear === "string") {
+        setWwYear(payload.wwYear);
+      } else if (fallbackYear) {
+        setWwYear(fallbackYear);
+      }
+      if (typeof payload.roundYear === "string") {
+        setRoundYear(payload.roundYear);
+      } else if (fallbackYear) {
+        setRoundYear(fallbackYear);
+      }
+    },
+    [availableYears, handleYearsChange, selectedYears]
+  );
+
   const sortPlayersByRank = useCallback((names: string[]) => {
     return [...names].sort((a, b) => {
       const ra = -(fantasyRank.get(a) ?? -Infinity);
@@ -714,6 +842,9 @@ export function PlayerComparison({
         onMinutesThresholdChange={setMinMinutes}
         minutesMode={minutesMode}
         onMinutesModeChange={setMinutesMode}
+        presetsScope="player"
+        presetPayload={presetPayload}
+        onApplyPreset={applyPreset}
         showPosition={false}
       />
 

@@ -21,9 +21,7 @@ function getStoredTheme(): AppTheme | null {
 function getPreferredTheme(): AppTheme {
   const saved = getStoredTheme();
   if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia("(prefers-color-scheme: light)").matches
-    ? "light"
-    : "dark";
+  return "dark";
 }
 
 function getSnapshot(): AppTheme {
@@ -40,17 +38,14 @@ function getServerSnapshot(): AppTheme {
 function subscribe(onStoreChange: () => void): () => void {
   if (typeof window === "undefined") return () => {};
 
-  const media = window.matchMedia("(prefers-color-scheme: light)");
   const handler = () => onStoreChange();
 
   window.addEventListener(THEME_EVENT, handler);
   window.addEventListener("storage", handler);
-  media.addEventListener("change", handler);
 
   return () => {
     window.removeEventListener(THEME_EVENT, handler);
     window.removeEventListener("storage", handler);
-    media.removeEventListener("change", handler);
   };
 }
 

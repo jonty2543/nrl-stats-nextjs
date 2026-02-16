@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import type { PlayerStat, TeamStat } from "@/lib/data/types";
 import { TEAM_STATS } from "@/lib/data/constants";
 import {
@@ -28,6 +28,9 @@ interface TeamComparisonProps {
   availableYears: string[];
   defaultYears: string[];
 }
+
+const DEFAULT_TEAM_1_CANDIDATES = ["Broncos", "Brisbane Broncos"];
+const DEFAULT_TEAM_2_CANDIDATES = ["Storm", "Melbourne Storm"];
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number") {
@@ -114,8 +117,124 @@ export function TeamComparison({
   const [team1, setTeam1] = useState("");
   const [team2, setTeam2] = useState("None");
   const [stat1, setStat1] = useState("Points");
-  const [stat2, setStat2] = useState("None");
+  const [stat2, setStat2] = useState("All Run Metres");
   const [roundYear, setRoundYear] = useState(defaultYears[0] ?? "");
+
+  useEffect(() => {
+    if (teamList.length === 0) return;
+
+    const findTeam = (candidates: string[]) => {
+      for (const candidate of candidates) {
+        const exact = teamList.find(
+          (team) => team.toLowerCase() === candidate.toLowerCase()
+        );
+        if (exact) return exact;
+      }
+
+      for (const candidate of candidates) {
+        const partial = teamList.find((team) =>
+          team.toLowerCase().includes(candidate.toLowerCase())
+        );
+        if (partial) return partial;
+      }
+
+      return null;
+    };
+
+    const defaultTeam1 = findTeam(DEFAULT_TEAM_1_CANDIDATES) ?? teamList[0];
+
+    if (!team1 || !teamList.includes(team1)) {
+      setTeam1(defaultTeam1);
+    }
+
+    if (team2 === "None") {
+      const defaultTeam2 = findTeam(DEFAULT_TEAM_2_CANDIDATES);
+      if (defaultTeam2 && defaultTeam2 !== defaultTeam1) {
+        setTeam2(defaultTeam2);
+      }
+      return;
+    }
+
+    if (!teamList.includes(team2) || team2 === defaultTeam1) {
+      const defaultTeam2 = findTeam(DEFAULT_TEAM_2_CANDIDATES);
+      if (defaultTeam2 && defaultTeam2 !== defaultTeam1) {
+        setTeam2(defaultTeam2);
+      } else {
+        setTeam2("None");
+      }
+    }
+  }, [team1, team2, teamList]);
+
+  const presetPayload = useMemo<Record<string, unknown>>(
+    () => ({
+      selectedYears,
+      position,
+      finalsMode,
+      minMinutes,
+      minutesMode,
+      team1,
+      team2,
+      stat1,
+      stat2,
+      roundYear,
+    }),
+    [
+      selectedYears,
+      position,
+      finalsMode,
+      minMinutes,
+      minutesMode,
+      team1,
+      team2,
+      stat1,
+      stat2,
+      roundYear,
+    ]
+  );
+
+  const applyPreset = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const validYears = Array.isArray(payload.selectedYears)
+        ? payload.selectedYears
+            .filter((value): value is string => typeof value === "string")
+            .filter((year) => availableYears.includes(year))
+        : [];
+
+      if (validYears.length > 0) {
+        await handleYearsChange(validYears);
+      }
+
+      const fallbackYear = validYears[0] ?? selectedYears[0] ?? "";
+
+      if (typeof payload.position === "string") setPosition(payload.position);
+      if (payload.finalsMode === "Yes" || payload.finalsMode === "No") {
+        setFinalsMode(payload.finalsMode);
+      }
+      if (
+        payload.minutesMode === "All" ||
+        payload.minutesMode === "Over" ||
+        payload.minutesMode === "Under"
+      ) {
+        setMinutesMode(payload.minutesMode);
+      }
+      if (
+        typeof payload.minMinutes === "number" &&
+        Number.isFinite(payload.minMinutes)
+      ) {
+        setMinMinutes(Math.max(0, payload.minMinutes));
+      }
+      if (typeof payload.team1 === "string") setTeam1(payload.team1);
+      if (typeof payload.team2 === "string") setTeam2(payload.team2);
+      if (typeof payload.stat1 === "string") setStat1(payload.stat1);
+      if (typeof payload.stat2 === "string") setStat2(payload.stat2);
+      if (typeof payload.roundYear === "string") {
+        setRoundYear(payload.roundYear);
+      } else if (fallbackYear) {
+        setRoundYear(fallbackYear);
+      }
+    },
+    [availableYears, handleYearsChange, selectedYears]
+  );
 
   const effectiveT1 = team1 || teamList[0] || "";
 
@@ -368,6 +487,9 @@ export function TeamComparison({
         onMinutesThresholdChange={setMinMinutes}
         minutesMode={minutesMode}
         onMinutesModeChange={setMinutesMode}
+        presetsScope="team"
+        presetPayload={presetPayload}
+        onApplyPreset={applyPreset}
         showPosition={false}
         showMinutes={false}
       />

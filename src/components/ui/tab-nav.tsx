@@ -13,11 +13,21 @@ export function TabNav() {
   const pathname = usePathname();
   const router = useRouter();
 
+  const inStatsSection =
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/players") ||
+    pathname.startsWith("/dashboard/teams");
+
   useEffect(() => {
+    if (!inStatsSection) return;
     tabs.forEach((tab) => {
       router.prefetch(tab.href);
     });
-  }, [router]);
+  }, [inStatsSection, router]);
+
+  if (!inStatsSection) {
+    return null;
+  }
 
   return (
     <nav className="flex gap-1">

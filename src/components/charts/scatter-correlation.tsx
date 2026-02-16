@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { nrlChartTheme, CHART_COLORS } from "./chart-theme";
 import { pearsonR, linearRegression } from "@/lib/data/stats";
 import type { PlayerStat } from "@/lib/data/types";
@@ -70,15 +70,13 @@ export function ScatterCorrelation({
   title,
 }: ScatterCorrelationProps) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
-  const instanceId = useId();
   const gradientId = useMemo(() => {
-    const safeTitle = title
+    const safeSeed = `${title}-${statX}-${statY}`
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
-    const safeInstance = instanceId.replace(/[^a-z0-9]+/gi, "");
-    return `recency-grad-${safeTitle || "chart"}-${safeInstance || "id"}`;
-  }, [title, instanceId]);
+    return `recency-grad-${safeSeed || "chart"}`;
+  }, [statX, statY, title]);
 
   const { points, r, reg } = useMemo(() => {
     // Sort rows by year+round (chronological) to assign recency

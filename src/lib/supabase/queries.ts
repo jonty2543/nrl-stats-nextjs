@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "./client";
+import { unstable_cache } from "next/cache";
 import {
   COLUMN_RENAME_MAP,
   FINALS_MAP,
@@ -259,7 +260,7 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
 // ---------------------------------------------------------------------------
 // fetchAvailableYears — lightweight query for year list
 // ---------------------------------------------------------------------------
-export async function fetchAvailableYears(): Promise<string[]> {
+async function fetchAvailableYearsUncached(): Promise<string[]> {
   const supabase = createServerSupabaseClient();
   // Get distinct years by fetching min and max dates
   const { data: minRow } = await supabase
@@ -282,6 +283,16 @@ export async function fetchAvailableYears(): Promise<string[]> {
     years.push(String(y));
   }
   return years;
+}
+
+const fetchAvailableYearsCached = unstable_cache(
+  async (): Promise<string[]> => fetchAvailableYearsUncached(),
+  ["available-years-v1"],
+  { revalidate: 3600 }
+);
+
+export async function fetchAvailableYears(): Promise<string[]> {
+  return fetchAvailableYearsCached();
 }
 
 export async function fetchMatches(years?: string[]): Promise<Match[]> {

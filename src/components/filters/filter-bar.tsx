@@ -2,8 +2,14 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useState } from "react";
+import { SignInButton } from "@clerk/nextjs";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Select } from "@/components/ui/select";
+import {
+  getSeasonLockReason,
+  hasProLockedHistoricalSeasons,
+  requiresLoginFor2024,
+} from "@/lib/access/season-access";
 
 type PresetScope = "player" | "team";
 
@@ -56,6 +62,23 @@ export function FilterBar({
   showMinutes = true,
 }: FilterBarProps) {
   const { isLoaded, userId } = useAuth();
+  const canAccessLoginSeason = Boolean(userId);
+  const disabledYearReasons = years.reduce<Record<string, string>>((acc, year) => {
+    const reason = getSeasonLockReason(year, canAccessLoginSeason);
+    if (reason) {
+      acc[year] = reason;
+    }
+    return acc;
+  }, {});
+  const hasHistoricalYearsLocked = hasProLockedHistoricalSeasons(years);
+  const shouldPromptLoginFor2024 = requiresLoginFor2024(
+    years,
+    canAccessLoginSeason
+  );
+  const shouldShowYearFooter = shouldPromptLoginFor2024 || hasHistoricalYearsLocked;
+  const safeSelectedYears = selectedYears.filter((year) =>
+    !disabledYearReasons[year]
+  );
   const [presets, setPresets] = useState<SavedPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [presetName, setPresetName] = useState("");
@@ -63,12 +86,14 @@ export function FilterBar({
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isApplyingPreset, setIsApplyingPreset] = useState(false);
   const [isDeletingPreset, setIsDeletingPreset] = useState(false);
+  const [isPresetsExpanded, setIsPresetsExpanded] = useState(false);
 
   const canUsePresets =
     typeof presetsScope === "string" &&
     typeof onApplyPreset === "function" &&
     typeof presetPayload === "object" &&
     presetPayload !== null;
+  const isPresetsLocked = !isLoaded || !userId;
 
   const loadPresets = useCallback(async () => {
     if (!canUsePresets || !userId || !presetsScope) return;
@@ -214,12 +239,39 @@ export function FilterBar({
   return (
     <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4 mb-4">
       <div className={`grid grid-cols-1 ${gridColumns} gap-5`}>
-        <MultiSelect
-          label="Year"
-          value={selectedYears}
-          options={years}
-          onChange={onYearsChange}
-        />
+        <div className="flex flex-col gap-1">
+          <MultiSelect
+            label="Year"
+            value={safeSelectedYears}
+            options={years}
+            disabledOptions={disabledYearReasons}
+            openFooter={
+              shouldShowYearFooter ? (
+                <div className="space-y-1">
+                  {shouldPromptLoginFor2024 && (
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[9px] text-nrl-muted">Log in to access 2024 data</p>
+                      <SignInButton mode="modal">
+                        <button
+                          type="button"
+                          className="cursor-pointer rounded border border-nrl-accent/45 px-1.5 py-0.5 text-[8px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10"
+                        >
+                          Sign in
+                        </button>
+                      </SignInButton>
+                    </div>
+                  )}
+                  {hasHistoricalYearsLocked && (
+                    <p className="text-[9px] text-nrl-muted">
+                      Access historical seasons with Pro, coming soon
+                    </p>
+                  )}
+                </div>
+              ) : null
+            }
+            onChange={onYearsChange}
+          />
+        </div>
         {canShowPosition && (
           <Select
             label="Position"
@@ -267,60 +319,102 @@ export function FilterBar({
           </div>
         )}
       </div>
-      {canUsePresets && isLoaded && userId && (
+      {canUsePresets && (
         <div className="mt-4 border-t border-nrl-border pt-3">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
-            Saved Presets
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(170px,240px)_1fr_auto_auto]">
-            <input
-              type="text"
-              value={presetName}
-              onChange={(e) => setPresetName(e.target.value)}
-              placeholder="Preset name"
-              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-            />
-            <select
-              value={selectedPresetId}
-              onChange={(e) => setSelectedPresetId(e.target.value)}
-              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+          <button
+            type="button"
+            onClick={() => setIsPresetsExpanded((prev) => !prev)}
+            aria-expanded={isPresetsExpanded}
+            className="mb-2 flex w-full items-center justify-between rounded-md border border-transparent px-1 py-1 text-left transition-colors hover:border-nrl-border/70"
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+              Saved Presets
+            </span>
+            <span
+              className={`text-[10px] text-nrl-muted transition-transform ${
+                isPresetsExpanded ? "rotate-180" : ""
+              }`}
             >
-              <option value="">Select preset...</option>
-              {presets.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleSavePreset}
-              disabled={isSavingPreset}
-              className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Save
-            </button>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleApplyPreset}
-                disabled={!selectedPresetId || isApplyingPreset}
-                className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-60"
+              v
+            </span>
+          </button>
+          {isPresetsExpanded && (
+            <>
+              <div
+                className={`grid grid-cols-1 gap-2 sm:grid-cols-[minmax(170px,240px)_1fr_auto_auto] ${
+                  isPresetsLocked ? "opacity-60" : ""
+                }`}
               >
-                Apply
-              </button>
-              <button
-                type="button"
-                onClick={handleDeletePreset}
-                disabled={!selectedPresetId || isDeletingPreset}
-                className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-semibold text-nrl-muted transition-colors hover:border-[#ff4d7d] hover:text-[#ff4d7d] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-          {presetStatus && (
-            <div className="mt-2 text-[10px] text-nrl-muted">{presetStatus}</div>
+                <input
+                  type="text"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  placeholder="Preset name"
+                  disabled={isPresetsLocked}
+                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed"
+                />
+                <select
+                  value={selectedPresetId}
+                  onChange={(e) => setSelectedPresetId(e.target.value)}
+                  disabled={isPresetsLocked}
+                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed"
+                >
+                  <option value="">Select preset...</option>
+                  {isPresetsLocked && (
+                    <option value="" disabled>
+                      Sign in to use presets
+                    </option>
+                  )}
+                  {presets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleSavePreset}
+                  disabled={isPresetsLocked || isSavingPreset}
+                  className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Save
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleApplyPreset}
+                    disabled={isPresetsLocked || !selectedPresetId || isApplyingPreset}
+                    className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeletePreset}
+                    disabled={isPresetsLocked || !selectedPresetId || isDeletingPreset}
+                    className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-semibold text-nrl-muted transition-colors hover:border-[#ff4d7d] hover:text-[#ff4d7d] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+              {isPresetsLocked && (
+                <div className="mt-2 flex items-center gap-2 text-[10px] text-nrl-muted">
+                  <span>Sign in to save and apply presets.</span>
+                  <SignInButton mode="modal">
+                    <button
+                      type="button"
+                      className="cursor-pointer rounded border border-nrl-accent/45 px-1.5 py-0.5 text-[9px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10"
+                    >
+                      Sign in
+                    </button>
+                  </SignInButton>
+                </div>
+              )}
+              {presetStatus && (
+                <div className="mt-2 text-[10px] text-nrl-muted">{presetStatus}</div>
+              )}
+            </>
           )}
         </div>
       )}

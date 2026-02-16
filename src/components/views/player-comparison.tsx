@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import { PLAYER_STATS } from "@/lib/data/constants";
@@ -25,6 +26,7 @@ import { KDEDistribution } from "@/components/charts/kde-distribution";
 import { WithWithoutLine } from "@/components/charts/with-without-line";
 import { WithWithoutKDE } from "@/components/charts/with-without-kde";
 import { PillRadio } from "@/components/ui/pill-radio";
+import { isAccessibleSeason } from "@/lib/access/season-access";
 
 interface PlayerComparisonProps {
   initialData: PlayerStat[];
@@ -61,18 +63,42 @@ export function PlayerComparison({
 }: PlayerComparisonProps) {
   type TeammateMode = "both" | "with" | "without";
   type PercentileScope = "Position" | "All Players";
+  const { userId } = useAuth();
+  const canAccessLoginSeason = Boolean(userId);
 
   const [allData, setAllData] = useState<PlayerStat[]>(initialData);
-  const [selectedYears, setSelectedYears] = useState<string[]>(defaultYears);
+  const unlockedYears = useMemo(
+    () =>
+      availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason)),
+    [availableYears, canAccessLoginSeason]
+  );
+  const initialYears = useMemo(() => {
+    const validDefaultYears = defaultYears.filter((year) => unlockedYears.includes(year));
+    if (validDefaultYears.length > 0) return validDefaultYears;
+    return unlockedYears.slice(0, 1);
+  }, [defaultYears, unlockedYears]);
+  const [selectedYears, setSelectedYears] = useState<string[]>(initialYears);
   const [loading, setLoading] = useState(false);
+  const filterUnlockedYears = useCallback(
+    (years: string[]) => years.filter((year) => unlockedYears.includes(year)),
+    [unlockedYears]
+  );
+  const ensureAtLeastOneUnlockedYear = useCallback(
+    (years: string[]) => (years.length > 0 ? years : unlockedYears.slice(0, 1)),
+    [unlockedYears]
+  );
 
   // Re-fetch when years change
   const handleYearsChange = useCallback(async (years: string[]) => {
-    setSelectedYears(years);
-    if (years.length === 0) return;
+    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    setSelectedYears(validYears);
+    if (validYears.length === 0) {
+      setAllData([]);
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch(`/api/player-stats?years=${years.join(",")}`);
+      const res = await fetch(`/api/player-stats?years=${validYears.join(",")}`);
       if (res.ok) {
         const data = await res.json();
         setAllData(data);
@@ -80,7 +106,7 @@ export function PlayerComparison({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minMinutes, setMinMinutes] = useState(0);
   const [minutesMode, setMinutesMode] = useState("All");
@@ -185,7 +211,7 @@ export function PlayerComparison({
       const validYears = Array.isArray(payload.selectedYears)
         ? payload.selectedYears
             .filter((value): value is string => typeof value === "string")
-            .filter((year) => availableYears.includes(year))
+            .filter((year) => unlockedYears.includes(year))
         : [];
 
       if (validYears.length > 0) {
@@ -260,8 +286,27 @@ export function PlayerComparison({
         setRoundYear(fallbackYear);
       }
     },
-    [availableYears, handleYearsChange, selectedYears]
+    [handleYearsChange, selectedYears, unlockedYears]
   );
+
+  useEffect(() => {
+    const validYears = selectedYears.filter((year) => unlockedYears.includes(year));
+    const hasChanged =
+      validYears.length !== selectedYears.length ||
+      validYears.some((year, index) => year !== selectedYears[index]);
+    if (!hasChanged) return;
+    void handleYearsChange(validYears);
+  }, [handleYearsChange, selectedYears, unlockedYears]);
+
+  useEffect(() => {
+    if (selectedYears.length === 0) return;
+    if (!selectedYears.includes(roundYear)) {
+      setRoundYear(selectedYears[0]);
+    }
+    if (!selectedYears.includes(wwYear)) {
+      setWwYear(selectedYears[0]);
+    }
+  }, [roundYear, selectedYears, wwYear]);
 
   const sortPlayersByRank = useCallback((names: string[]) => {
     return [...names].sort((a, b) => {

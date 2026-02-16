@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import type { PlayerStat, TeamStat } from "@/lib/data/types";
 import { TEAM_STATS } from "@/lib/data/constants";
@@ -22,6 +23,7 @@ import { ScatterCorrelation } from "@/components/charts/scatter-correlation";
 import { LineRound } from "@/components/charts/line-round";
 import { KDEDistribution } from "@/components/charts/kde-distribution";
 import { PillRadio } from "@/components/ui/pill-radio";
+import { isAccessibleSeason } from "@/lib/access/season-access";
 
 interface TeamComparisonProps {
   initialData: PlayerStat[];
@@ -54,16 +56,40 @@ export function TeamComparison({
   availableYears,
   defaultYears,
 }: TeamComparisonProps) {
+  const { userId } = useAuth();
+  const canAccessLoginSeason = Boolean(userId);
   const [allData, setAllData] = useState<PlayerStat[]>(initialData);
-  const [selectedYears, setSelectedYears] = useState<string[]>(defaultYears);
+  const unlockedYears = useMemo(
+    () =>
+      availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason)),
+    [availableYears, canAccessLoginSeason]
+  );
+  const initialYears = useMemo(() => {
+    const validDefaultYears = defaultYears.filter((year) => unlockedYears.includes(year));
+    if (validDefaultYears.length > 0) return validDefaultYears;
+    return unlockedYears.slice(0, 1);
+  }, [defaultYears, unlockedYears]);
+  const [selectedYears, setSelectedYears] = useState<string[]>(initialYears);
   const [loading, setLoading] = useState(false);
+  const filterUnlockedYears = useCallback(
+    (years: string[]) => years.filter((year) => unlockedYears.includes(year)),
+    [unlockedYears]
+  );
+  const ensureAtLeastOneUnlockedYear = useCallback(
+    (years: string[]) => (years.length > 0 ? years : unlockedYears.slice(0, 1)),
+    [unlockedYears]
+  );
 
   const handleYearsChange = useCallback(async (years: string[]) => {
-    setSelectedYears(years);
-    if (years.length === 0) return;
+    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    setSelectedYears(validYears);
+    if (validYears.length === 0) {
+      setAllData([]);
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch(`/api/player-stats?years=${years.join(",")}`);
+      const res = await fetch(`/api/player-stats?years=${validYears.join(",")}`);
       if (res.ok) {
         const data = await res.json();
         setAllData(data);
@@ -71,7 +97,7 @@ export function TeamComparison({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
   const [position, setPosition] = useState("All");
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minMinutes, setMinMinutes] = useState(0);
@@ -199,7 +225,7 @@ export function TeamComparison({
       const validYears = Array.isArray(payload.selectedYears)
         ? payload.selectedYears
             .filter((value): value is string => typeof value === "string")
-            .filter((year) => availableYears.includes(year))
+            .filter((year) => unlockedYears.includes(year))
         : [];
 
       if (validYears.length > 0) {
@@ -235,8 +261,24 @@ export function TeamComparison({
         setRoundYear(fallbackYear);
       }
     },
-    [availableYears, handleYearsChange, selectedYears]
+    [handleYearsChange, selectedYears, unlockedYears]
   );
+
+  useEffect(() => {
+    const validYears = selectedYears.filter((year) => unlockedYears.includes(year));
+    const hasChanged =
+      validYears.length !== selectedYears.length ||
+      validYears.some((year, index) => year !== selectedYears[index]);
+    if (!hasChanged) return;
+    void handleYearsChange(validYears);
+  }, [handleYearsChange, selectedYears, unlockedYears]);
+
+  useEffect(() => {
+    if (selectedYears.length === 0) return;
+    if (!selectedYears.includes(roundYear)) {
+      setRoundYear(selectedYears[0]);
+    }
+  }, [roundYear, selectedYears]);
 
   const effectiveT1 = team1 || teamList[0] || "";
 

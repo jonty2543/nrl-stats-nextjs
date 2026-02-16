@@ -15,9 +15,12 @@ export default function DashboardLayout({
       {/* Header */}
       <header className="border-b border-nrl-border bg-nrl-panel/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-14 items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold text-nrl-accent">
+          <div className="flex items-center justify-between py-2 sm:h-14 sm:py-0">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Link
+                href="/dashboard"
+                className="flex shrink-0 items-center gap-2 whitespace-nowrap text-base font-bold text-nrl-accent sm:text-lg"
+              >
                 <Image
                   src="/logo-mark.svg"
                   alt="Short Side Stats logo"
@@ -28,7 +31,9 @@ export default function DashboardLayout({
                 <span>Short Side</span>
               </Link>
               <ToolNav />
-              <TabNav />
+              <div className="hidden sm:block">
+                <TabNav />
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
@@ -51,6 +56,11 @@ export default function DashboardLayout({
                   </button>
                 </SignInButton>
               </SignedOut>
+            </div>
+          </div>
+          <div className="pb-2 sm:hidden">
+            <div className="overflow-x-auto">
+              <TabNav />
             </div>
           </div>
         </div>

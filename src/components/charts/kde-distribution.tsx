@@ -187,9 +187,6 @@ function StripDistribution({
 
   return (
     <div>
-      <div className="mb-1 text-xs font-semibold text-nrl-muted">
-        n ≤ 20 — showing boxplot + raw values (mean/IQR)
-      </div>
       <div className="h-64">
         <svg className="distribution-svg" width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
           {visibleSeries.map((s, index) => {

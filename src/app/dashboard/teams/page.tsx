@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { fetchPlayerStats, fetchAvailableYears } from "@/lib/supabase/queries";
+import { fetchAvailableYears } from "@/lib/supabase/queries";
 import { TeamComparison } from "@/components/views/team-comparison";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
@@ -13,11 +13,10 @@ export default async function TeamsPage() {
     isAccessibleSeason(year, canAccessLoginSeason)
   );
   const defaultYears = unlockedYears.slice(0, 1);
-  const data = defaultYears.length > 0 ? await fetchPlayerStats(defaultYears) : [];
 
   return (
     <TeamComparison
-      initialData={data}
+      initialData={[]}
       availableYears={availableYears}
       defaultYears={defaultYears}
     />

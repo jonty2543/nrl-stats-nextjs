@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import { PLAYER_STATS } from "@/lib/data/constants";
 import {
@@ -78,7 +78,10 @@ export function PlayerComparison({
     return unlockedYears.slice(0, 1);
   }, [defaultYears, unlockedYears]);
   const [selectedYears, setSelectedYears] = useState<string[]>(initialYears);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(
+    initialData.length === 0 && initialYears.length > 0
+  );
+  const hasBootstrappedFetch = useRef(false);
   const filterUnlockedYears = useCallback(
     (years: string[]) => years.filter((year) => unlockedYears.includes(year)),
     [unlockedYears]
@@ -288,6 +291,22 @@ export function PlayerComparison({
     },
     [handleYearsChange, selectedYears, unlockedYears]
   );
+
+  useEffect(() => {
+    if (selectedYears.length > 0 || unlockedYears.length === 0) return;
+    setSelectedYears(unlockedYears.slice(0, 1));
+  }, [selectedYears.length, unlockedYears]);
+
+  useEffect(() => {
+    if (hasBootstrappedFetch.current) return;
+    if (initialData.length > 0 || allData.length > 0) {
+      hasBootstrappedFetch.current = true;
+      return;
+    }
+    if (selectedYears.length === 0) return;
+    hasBootstrappedFetch.current = true;
+    void handleYearsChange(selectedYears);
+  }, [allData.length, handleYearsChange, initialData.length, selectedYears]);
 
   useEffect(() => {
     const validYears = selectedYears.filter((year) => unlockedYears.includes(year));
@@ -859,24 +878,8 @@ export function PlayerComparison({
     p1BaseRows, p2BaseRows,
   ]);
 
-  if (allData.length === 0 && !loading) {
-    return (
-      <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-center text-nrl-muted">
-        No data available.
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
-      {loading && (
-        <div className="rounded-lg border border-nrl-accent/30 bg-nrl-panel p-3 text-center text-sm text-nrl-accent">
-          <div className="inline-flex items-center gap-2">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-nrl-accent/30 border-t-nrl-accent" />
-            <span>Loading data...</span>
-          </div>
-        </div>
-      )}
       <FilterBar
         years={availableYears}
         selectedYears={selectedYears}
@@ -892,7 +895,6 @@ export function PlayerComparison({
         onApplyPreset={applyPreset}
         showPosition={false}
       />
-
       <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
         <PlayerSelectors
           positions={positions}
@@ -927,19 +929,35 @@ export function PlayerComparison({
           onStat2Change={setStat2}
         />
       </div>
+      {loading && (
+        <div className="rounded-lg border border-nrl-accent/30 bg-nrl-panel p-3 text-center text-sm text-nrl-accent">
+          <div className="inline-flex items-center gap-2">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-nrl-accent/30 border-t-nrl-accent" />
+            <span>Loading section...</span>
+          </div>
+        </div>
+      )}
+      {!loading && allData.length === 0 && (
+        <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-center text-nrl-muted">
+          <div>No data available for the selected season.</div>
+        </div>
+      )}
+      {allData.length > 0 && (
+        <>
+          <SummaryPanel
+            entities={entities}
+            entity="player"
+            summaryRows={summaryRows}
+            percentileResults={percentileResults}
+            recentFormResults={recentFormResults}
+            rankingMode="percentile"
+            percentileScope={percentileScope}
+            onPercentileScopeChange={setPercentileScope}
+          />
 
-      <SummaryPanel
-        entities={entities}
-        entity="player"
-        summaryRows={summaryRows}
-        percentileResults={percentileResults}
-        recentFormResults={recentFormResults}
-        rankingMode="percentile"
-        percentileScope={percentileScope}
-        onPercentileScopeChange={setPercentileScope}
-      />
-
-      <ChartPanelGrid panels={chartPanels} />
+          <ChartPanelGrid panels={chartPanels} />
+        </>
+      )}
     </div>
   );
 }

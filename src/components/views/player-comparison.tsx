@@ -384,14 +384,17 @@ export function PlayerComparison({
         : [],
     [hasPlayer2, player2, dfYearFinals, fantasyRank]
   );
+  const hasLoadedData = allData.length > 0;
 
   useEffect(() => {
+    if (!hasLoadedData) return;
     if (!player1 && p1PlayerOptions.length > 0) {
       setPlayer1(p1PlayerOptions[0]);
     }
-  }, [player1, p1PlayerOptions]);
+  }, [hasLoadedData, player1, p1PlayerOptions]);
 
   useEffect(() => {
+    if (!hasLoadedData) return;
     if (!player1) return;
 
     if (player1 === "None") {
@@ -411,27 +414,30 @@ export function PlayerComparison({
         setPlayer1(p1PlayerOptions[0] || "");
       }
     }
-  }, [player1, p1PlayerOptions, hasPlayer2, teammate1, teammate1Position, teammateMode1]);
+  }, [hasLoadedData, player1, p1PlayerOptions, hasPlayer2, teammate1, teammate1Position, teammateMode1]);
 
   useEffect(() => {
+    if (!hasLoadedData) return;
     if (hasPlayer2 && !p2PlayerOptions.includes(player2)) {
       setPlayer2("None");
       setTeammate2("None");
       setTeammate2Position("All");
       setTeammateMode2("both");
     }
-  }, [hasPlayer2, player2, p2PlayerOptions]);
+  }, [hasLoadedData, hasPlayer2, player2, p2PlayerOptions]);
 
   // Keep teammate selections valid when player choices change.
   useEffect(() => {
+    if (!hasLoadedData) return;
     if (teammate1 !== "None" && !tm1Options.includes(teammate1)) {
       setTeammate1("None");
       setTeammate1Position("All");
       setTeammateMode1("both");
     }
-  }, [teammate1, tm1Options]);
+  }, [hasLoadedData, teammate1, tm1Options]);
 
   useEffect(() => {
+    if (!hasLoadedData) return;
     if (!hasPlayer2) {
       if (teammate2 !== "None") setTeammate2("None");
       if (teammate2Position !== "All") setTeammate2Position("All");
@@ -444,7 +450,7 @@ export function PlayerComparison({
       setTeammate2Position("All");
       setTeammateMode2("both");
     }
-  }, [hasPlayer2, teammate2, teammate2Position, tm2Options, teammateMode2]);
+  }, [hasLoadedData, hasPlayer2, teammate2, teammate2Position, tm2Options, teammateMode2]);
 
   const handleTeammate1Change = useCallback((value: string) => {
     setTeammate1(value);

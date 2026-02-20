@@ -77,14 +77,20 @@ export function WithWithoutLine({
       return compactTicks;
     }
 
-    const regularTicks = roundTicks.filter((tick) => tick <= 27);
-    const finalsTicks = roundTicks.filter((tick) => tick >= 28);
-    const step = Math.max(1, Math.ceil(regularTicks.length / 6));
+    const regularTicks = roundTicks.filter((tick) => tick <= 24);
+    const step = Math.max(1, Math.ceil(regularTicks.length / 5));
     const compactRegular = regularTicks.filter((_, idx) => idx % step === 0);
     const regularLast = regularTicks[regularTicks.length - 1];
     if (regularLast !== undefined && compactRegular[compactRegular.length - 1] !== regularLast) {
       compactRegular.push(regularLast);
     }
+    const finalsLast = roundTicks[roundTicks.length - 1];
+    const finalsTicks =
+      finalsLast >= 31
+        ? [28, 31]
+        : finalsLast >= 28
+          ? [finalsLast]
+          : [];
     return Array.from(new Set([...compactRegular, ...finalsTicks])).sort((a, b) => a - b);
   }, [isMobile, roundTicks]);
 

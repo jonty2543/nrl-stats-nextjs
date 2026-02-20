@@ -119,20 +119,17 @@ export function LineRound({
       return compactTicks;
     }
 
-    const regularMax = Math.min(27, xMax);
+    const regularMax = Math.min(24, xMax);
     const regularTicks = Array.from(
       { length: Math.max(1, regularMax - xMin + 1) },
       (_, i) => xMin + i
     );
-    const regularStep = Math.max(1, Math.ceil(regularTicks.length / 6));
+    const regularStep = Math.max(1, Math.ceil(regularTicks.length / 5));
     const regularCompact = regularTicks.filter((_, idx) => idx % regularStep === 0);
-    if (regularCompact[regularCompact.length - 1] !== regularMax) {
+    if (regularMax >= xMin && regularCompact[regularCompact.length - 1] !== regularMax) {
       regularCompact.push(regularMax);
     }
-    const finalsTicks = Array.from(
-      { length: Math.max(0, xMax - 27) },
-      (_, i) => 28 + i
-    );
+    const finalsTicks = xMax >= 31 ? [28, 31] : [xMax];
     return Array.from(new Set([...regularCompact, ...finalsTicks])).sort((a, b) => a - b);
   }, [hasFinalsRounds, isMobile, xMax]);
 

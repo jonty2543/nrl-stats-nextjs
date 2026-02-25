@@ -253,9 +253,21 @@ export function PlayerImageCard({
     };
 
     const normalizeRemoteAxd = (value: string): string[] => {
-      const variants = [value];
+      const variants: string[] = [];
+      const seenVariants = new Set<string>();
+      const pushVariant = (candidate: string | null | undefined) => {
+        if (!candidate) return;
+        const trimmed = candidate.trim();
+        if (!trimmed || seenVariants.has(trimmed)) return;
+        seenVariants.add(trimmed);
+        variants.push(trimmed);
+      };
+
+      if (value.startsWith("http://")) {
+        pushVariant(`https://${value.slice("http://".length)}`);
+      }
       if (value.includes("/remote.axd?http://")) {
-        variants.push(value.replace("/remote.axd?http://", "/remote.axd?https://"));
+        pushVariant(value.replace("/remote.axd?http://", "/remote.axd?https://"));
       }
       const marker = "/remote.axd?";
       const idx = value.indexOf(marker);
@@ -265,9 +277,10 @@ export function PlayerImageCard({
           const httpsNested = nested.startsWith("http://")
             ? `https://${nested.slice("http://".length)}`
             : nested;
-          variants.push(httpsNested);
+          pushVariant(httpsNested);
         }
       }
+      pushVariant(value);
       return variants;
     };
 
@@ -430,7 +443,7 @@ export function PlayerImageCard({
                 src={imageUrl}
                 alt={`${playerName} player image`}
                 className={frameless ? "relative z-10 max-h-[99%] w-auto object-contain" : "relative z-10 max-h-[94%] w-auto object-contain"}
-                loading="lazy"
+                loading="eager"
                 referrerPolicy="no-referrer"
                 onError={() => {
                   setImageAttemptState((prev) => ({

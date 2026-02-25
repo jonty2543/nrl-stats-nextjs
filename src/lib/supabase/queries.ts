@@ -370,30 +370,24 @@ export async function fetchFantasyPlayerStatsAllYears(
 // fetchAvailableYears — lightweight query for year list
 // ---------------------------------------------------------------------------
 export async function fetchAvailableYearsFromSupabase(): Promise<string[]> {
-  const supabase = createServerSupabaseClient();
-  // Get distinct years by fetching min and max dates
-  const { data: minRow, error: minError } = await supabase
-    .from("player_stats")
-    .select("match_date")
-    .order("match_date", { ascending: true })
-    .limit(1);
-  const { data: maxRow, error: maxError } = await supabase
-    .from("player_stats")
-    .select("match_date")
-    .order("match_date", { ascending: false })
-    .limit(1);
+  // Avoid expensive min/max scans on the large player_stats table.
+  // matches is much smaller and still covers the available season range.
+  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches");
+  if (rawMatches.length === 0) return [];
 
-  if (minError) throw new Error(`Supabase fetch player_stats min(match_date): ${minError.message}`);
-  if (maxError) throw new Error(`Supabase fetch player_stats max(match_date): ${maxError.message}`);
+  const years = Array.from(
+    new Set(
+      rawMatches
+        .map((row) => {
+          const value = String(row.match_date ?? "");
+          if (!value) return null;
+          const year = new Date(value).getFullYear();
+          return Number.isFinite(year) ? String(year) : null;
+        })
+        .filter((year): year is string => Boolean(year))
+    )
+  ).sort((a, b) => b.localeCompare(a));
 
-  if (!minRow?.[0] || !maxRow?.[0]) return [];
-
-  const minYear = new Date(String(minRow[0].match_date)).getFullYear();
-  const maxYear = new Date(String(maxRow[0].match_date)).getFullYear();
-  const years: string[] = [];
-  for (let y = maxYear; y >= minYear; y--) {
-    years.push(String(y));
-  }
   return years;
 }
 

@@ -549,11 +549,11 @@ export function FantasyDashboard({
 
   const navigateToPlayer = useCallback(
     (name: string) => {
-      setSelectedFantasyName(name)
       if (playerRouteBasePath) {
         router.push(`${playerRouteBasePath}/${encodeURIComponent(fantasyPlayerSlug(name))}`)
         return
       }
+      setSelectedFantasyName(name)
       scrollToPlayerDetails()
     },
     [playerRouteBasePath, router, scrollToPlayerDetails]

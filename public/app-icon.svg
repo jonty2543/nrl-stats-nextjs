@@ -1,0 +1,32 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- iOS rounded rect background -->
+  <rect width="1024" height="1024" rx="224" fill="#1B2B49"/>
+  
+  <!-- Subtle inner border -->
+  <rect x="6" y="6" width="1012" height="1012" rx="220" stroke="#2B3F62" stroke-width="12"/>
+
+  <!-- Subtle radial glow behind circle -->
+  <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#00F58A" stop-opacity="0.12"/>
+    <stop offset="100%" stop-color="#00F58A" stop-opacity="0"/>
+  </radialGradient>
+  <rect width="1024" height="1024" rx="224" fill="url(#glow)"/>
+
+  <!-- Outer ring -->
+  <circle cx="512" cy="512" r="420" stroke="#00F58A" stroke-width="22"/>
+
+  <!-- Main graphic scaled from original 512 viewBox to 1024 (×2) -->
+  <g stroke="#00F58A" stroke-width="28" stroke-linecap="round">
+    <!-- Two vertical bars -->
+    <line x1="340" y1="292" x2="340" y2="732"/>
+    <line x1="684" y1="292" x2="684" y2="732"/>
+    <!-- Horizontal crossbar -->
+    <line x1="340" y1="512" x2="684" y2="512"/>
+    <!-- Five descending lines -->
+    <line x1="384" y1="724" x2="384" y2="850"/>
+    <line x1="448" y1="684" x2="448" y2="850"/>
+    <line x1="512" y1="632" x2="512" y2="850"/>
+    <line x1="576" y1="664" x2="576" y2="850"/>
+    <line x1="640" y1="704" x2="640" y2="850"/>
+  </g>
+</svg>

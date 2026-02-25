@@ -19,6 +19,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Short Side Stats",
   description: "NRL player and team statistics dashboard",
+  icons: {
+    icon: "/app-icon.svg",
+    shortcut: "/app-icon.svg",
+    apple: "/app-icon.svg",
+  },
 };
 
 export default function RootLayout({

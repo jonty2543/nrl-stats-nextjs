@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import type { TeammateLookupRow } from "@/lib/data/types";
 import { isAccessibleSeason } from "@/lib/access/season-access";
-import { fetchAvailableYears, fetchPlayerStats } from "@/lib/supabase/queries";
+import { fetchAvailableYears, fetchTeammateLookupRows } from "@/lib/supabase/queries";
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,16 +26,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
 
-    const rows = await fetchPlayerStats(allowedYears);
-    const teammateRows: TeammateLookupRow[] = rows.map((row) => ({
-      Name: row.Name,
-      Team: row.Team,
-      Year: row.Year,
-      Round: row.Round,
-      Position: row.Position,
-      Fantasy: row.Fantasy,
-    }));
-
+    const teammateRows = await fetchTeammateLookupRows(allowedYears);
     return NextResponse.json(teammateRows);
   } catch (error) {
     console.error("Error fetching teammate lookup rows:", error);

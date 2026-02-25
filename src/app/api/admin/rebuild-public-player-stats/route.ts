@@ -18,6 +18,9 @@ async function rebuild() {
     years: result.years,
     updatedAt: new Date().toISOString(),
     path: result.path,
+    storageBucket: result.storageBucket ?? null,
+    storagePrefix: result.storagePrefix ?? null,
+    storageChunkCount: result.storageChunkCount ?? 0,
   };
 }
 

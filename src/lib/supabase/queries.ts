@@ -5,11 +5,11 @@ import {
   FINALS_MAP,
   FINALS_LABEL_MAP,
 } from "@/lib/data/constants";
-import type { PlayerStat, Match } from "@/lib/data/types";
+import type { PlayerStat, Match, TeammateLookupRow } from "@/lib/data/types";
 import {
-  availableYearsFromPlayerStatsRows,
   filterPlayerStatsRowsByYears,
   readPlayerStatsServerCache,
+  readPlayerStatsServerCacheMetadata,
 } from "@/lib/data/player-stats-server-cache";
 
 const PAGE_SIZE = 1000;
@@ -66,6 +66,67 @@ async function fetchAllRows<T extends Record<string, unknown>>(
 
     if (error) throw new Error(`Supabase fetch ${table}: ${error.message}`);
     const rows = (data ?? []) as T[];
+    if (rows.length === 0) break;
+    allRows.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
+async function fetchPlayerStatsRowsForPlayerFromSupabase(
+  playerName: string
+): Promise<Record<string, unknown>[]> {
+  const supabase = createServerSupabaseClient();
+  const allRows: Record<string, unknown>[] = [];
+  let start = 0;
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("player_stats")
+      .select("*")
+      .eq("player", playerName)
+      .range(start, end);
+
+    if (error) throw new Error(`Supabase fetch player_stats for player ${playerName}: ${error.message}`);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    if (rows.length === 0) break;
+    allRows.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
+async function fetchTeammateLookupRowsFromSupabaseRaw(
+  years?: string[]
+): Promise<Record<string, unknown>[]> {
+  const supabase = createServerSupabaseClient();
+  const allRows: Record<string, unknown>[] = [];
+  let start = 0;
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    let query = supabase
+      .from("player_stats")
+      .select("player,team,position,match_date,round,total_points,mins_played");
+
+    if (years && years.length > 0) {
+      const sorted = [...years].sort();
+      const minYear = parseInt(sorted[0], 10);
+      const maxYear = parseInt(sorted[sorted.length - 1], 10);
+      query = query
+        .gte("match_date", `${minYear}-01-01`)
+        .lt("match_date", `${maxYear + 1}-01-01`);
+    }
+
+    const { data, error } = await query.range(start, end);
+
+    if (error) throw new Error(`Supabase fetch player_stats teammate lookup: ${error.message}`);
+    const rows = (data ?? []) as Record<string, unknown>[];
     if (rows.length === 0) break;
     allRows.push(...rows);
     if (rows.length < PAGE_SIZE) break;
@@ -251,16 +312,10 @@ function cleanPlayerRow(row: Record<string, unknown>): Record<string, unknown> {
   return row;
 }
 
-// ---------------------------------------------------------------------------
-// fetchPlayerStats — main entry point
-// ---------------------------------------------------------------------------
-export async function fetchPlayerStatsFromSupabase(years?: string[]): Promise<PlayerStat[]> {
-  const opts = years && years.length > 0 ? { years } : undefined;
-  const [rawPlayers, rawMatches] = await Promise.all([
-    fetchAllRows<Record<string, unknown>>("player_stats", opts),
-    fetchAllRows<Record<string, unknown>>("matches", opts),
-  ]);
-
+function buildPlayerStatsRows(
+  rawPlayers: Record<string, unknown>[],
+  rawMatches: Record<string, unknown>[]
+): PlayerStat[] {
   if (rawPlayers.length === 0) return [];
 
   // Build opponent lookup from matches
@@ -325,11 +380,61 @@ export async function fetchPlayerStatsFromSupabase(years?: string[]): Promise<Pl
   return rows;
 }
 
+function buildTeammateLookupRows(rawPlayers: Record<string, unknown>[]): TeammateLookupRow[] {
+  const seen = new Set<string>();
+  const rows: TeammateLookupRow[] = [];
+
+  for (const raw of rawPlayers) {
+    const renamed = renameRow(raw);
+    const matchDate = String(raw.match_date ?? "");
+    const year = matchDate ? new Date(matchDate).getFullYear().toString() : "";
+    const round = roundToSort(raw.round as string) ?? 0;
+
+    renamed["Year"] = year;
+    renamed["Round"] = round;
+
+    const cleaned = cleanPlayerRow(renamed);
+    if ((cleaned["Mins Played"] as number) <= 0) continue;
+
+    const name = String(cleaned["Name"] ?? "");
+    const team = String(cleaned["Team"] ?? "");
+    const position = String(cleaned["Position"] ?? "");
+    if (!name || !team || !year) continue;
+
+    const dedupeKey = `${name}|${round}|${year}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    rows.push({
+      Name: name,
+      Team: team as TeammateLookupRow["Team"],
+      Year: year,
+      Round: round,
+      Position: position,
+      Fantasy: typeof cleaned["Fantasy"] === "number" ? cleaned["Fantasy"] : 0,
+    });
+  }
+
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// fetchPlayerStats — main entry point
+// ---------------------------------------------------------------------------
+export async function fetchPlayerStatsFromSupabase(years?: string[]): Promise<PlayerStat[]> {
+  const opts = years && years.length > 0 ? { years } : undefined;
+  const [rawPlayers, rawMatches] = await Promise.all([
+    fetchAllRows<Record<string, unknown>>("player_stats", opts),
+    fetchAllRows<Record<string, unknown>>("matches", opts),
+  ]);
+  return buildPlayerStatsRows(rawPlayers, rawMatches);
+}
+
 export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> {
   const normalizedYears = (years ?? []).filter(Boolean).sort();
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
-  const serverCache = await readPlayerStatsServerCache();
+  const serverCache = await readPlayerStatsServerCache(normalizedArg);
 
   if (serverCache) {
     return filterPlayerStatsRowsByYears(serverCache.rows, normalizedArg);
@@ -348,19 +453,82 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
   return fetchCached();
 }
 
+export async function fetchTeammateLookupRowsFromSupabase(
+  years?: string[]
+): Promise<TeammateLookupRow[]> {
+  const rawPlayers = await fetchTeammateLookupRowsFromSupabaseRaw(years);
+  return buildTeammateLookupRows(rawPlayers);
+}
+
+export async function fetchTeammateLookupRows(
+  years?: string[]
+): Promise<TeammateLookupRow[]> {
+  const normalizedYears = (years ?? []).filter(Boolean).sort();
+  const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
+  const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
+  const serverCache = await readPlayerStatsServerCache(normalizedArg);
+
+  if (serverCache) {
+    return buildTeammateLookupRows(
+      filterPlayerStatsRowsByYears(serverCache.rows, normalizedArg).map((row) => ({
+        player: row.Name,
+        team: row.Team,
+        position: row.Position,
+        match_date: `${row.Year}-01-01`,
+        round: row.Round_Label || row.Round,
+        total_points: row.Fantasy,
+        mins_played: row["Mins Played"],
+      }))
+    );
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return fetchTeammateLookupRowsFromSupabase(normalizedArg);
+  }
+
+  const fetchCached = unstable_cache(
+    async () => fetchTeammateLookupRowsFromSupabase(normalizedArg),
+    ["teammate-lookup-v1", key],
+    { revalidate: 3600 }
+  );
+
+  return fetchCached();
+}
+
+async function fetchPlayerStatsForLocalNameAllYearsFromSupabase(
+  localPlayerName: string
+): Promise<PlayerStat[]> {
+  const [rawPlayers, rawMatches] = await Promise.all([
+    fetchPlayerStatsRowsForPlayerFromSupabase(localPlayerName),
+    fetchAllRows<Record<string, unknown>>("matches"),
+  ]);
+  return buildPlayerStatsRows(rawPlayers, rawMatches);
+}
+
 export async function fetchFantasyPlayerStatsAllYears(
   fantasyName: string
 ): Promise<PlayerStat[]> {
   if (!fantasyName.trim()) return [];
+  const serverCache = await readPlayerStatsServerCache();
 
-  const allRows = await fetchPlayerStats();
-  if (allRows.length === 0) return [];
+  if (serverCache) {
+    const allRows = serverCache.rows;
+    if (allRows.length === 0) return [];
 
-  const localNames = Array.from(new Set(allRows.map((row) => row.Name))).sort();
+    const localNames = Array.from(new Set(allRows.map((row) => row.Name))).sort();
+    const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
+    if (!matchedLocalName) return [];
+
+    return allRows.filter((row) => row.Name === matchedLocalName);
+  }
+
+  const teammateRows = await fetchTeammateLookupRows();
+  if (teammateRows.length === 0) return [];
+  const localNames = Array.from(new Set(teammateRows.map((row) => row.Name))).sort();
   const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
   if (!matchedLocalName) return [];
 
-  return allRows.filter((row) => row.Name === matchedLocalName);
+  return fetchPlayerStatsForLocalNameAllYearsFromSupabase(matchedLocalName);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,11 +566,9 @@ const fetchAvailableYearsCached = unstable_cache(
 );
 
 export async function fetchAvailableYears(): Promise<string[]> {
-  const serverCache = await readPlayerStatsServerCache();
-  if (serverCache) {
-    return serverCache.years.length > 0
-      ? serverCache.years
-      : availableYearsFromPlayerStatsRows(serverCache.rows);
+  const serverCacheMeta = await readPlayerStatsServerCacheMetadata();
+  if (serverCacheMeta) {
+    return serverCacheMeta.years;
   }
 
   if (process.env.NODE_ENV !== "production") {

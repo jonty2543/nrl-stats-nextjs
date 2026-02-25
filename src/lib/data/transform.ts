@@ -1,4 +1,4 @@
-import type { PlayerStat, TeamStat } from "./types";
+import type { PlayerStat, TeamStat, TeammateLookupRow } from "./types";
 import { mean, median, min, max, percentileRank } from "./stats";
 import { TEAM_STATS } from "./constants";
 
@@ -105,7 +105,7 @@ export function filterByTeammate(
   playerRows: PlayerStat[],
   teammateName: string,
   withTeammate: boolean,
-  lookupDf: PlayerStat[],
+  lookupDf: Array<Pick<TeammateLookupRow, "Name" | "Team" | "Round" | "Year" | "Position">>,
   teammatePosition: string = "All"
 ): PlayerStat[] {
   if (teammateName === "None") return playerRows;
@@ -128,7 +128,7 @@ export function filterByTeammate(
 /** Get teammate options for a given player */
 export function getTeammateOptions(
   playerName: string,
-  sourceDf: PlayerStat[],
+  sourceDf: Array<Pick<TeammateLookupRow, "Name" | "Team">>,
   fantasyRank: Map<string, number>
 ): string[] {
   const teams = new Set(
@@ -424,7 +424,9 @@ export function aggregateTeamStats(playerRows: PlayerStat[]): TeamStat[] {
 // Fantasy rank map
 // ---------------------------------------------------------------------------
 
-export function buildFantasyRank(rows: PlayerStat[]): Map<string, number> {
+export function buildFantasyRank(
+  rows: Array<Pick<TeammateLookupRow, "Name" | "Fantasy">>
+): Map<string, number> {
   const sums = new Map<string, { total: number; count: number }>();
   for (const row of rows) {
     const val = toFiniteNumber(row.Fantasy);

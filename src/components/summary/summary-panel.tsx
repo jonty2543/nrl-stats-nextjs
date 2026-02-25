@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { PlayerStat, TeamStat } from "@/lib/data/types";
 import type { SummaryRow, PercentileResult, RecentFormResult } from "@/lib/data/transform";
 import { ProfileCard } from "./profile-card";
@@ -22,6 +23,8 @@ interface SummaryPanelProps {
   rankingMode?: "percentile" | "rank";
   percentileScope?: "Position" | "All Players";
   onPercentileScopeChange?: (scope: "Position" | "All Players") => void;
+  rightPanelContent?: ReactNode;
+  moveAnalyticsBelowTable?: boolean;
 }
 
 export function SummaryPanel({
@@ -33,8 +36,23 @@ export function SummaryPanel({
   rankingMode = "percentile",
   percentileScope,
   onPercentileScopeChange,
+  rightPanelContent,
+  moveAnalyticsBelowTable = false,
 }: SummaryPanelProps) {
   const single = entities.length === 1;
+  const analyticsSection = (
+    <>
+      <PercentileRanks
+        results={percentileResults}
+        single={single}
+        mode={rankingMode}
+        percentileScope={percentileScope}
+        onPercentileScopeChange={onPercentileScopeChange}
+      />
+      <SectionDivider />
+      <RecentForm results={recentFormResults} single={single} />
+    </>
+  );
 
   return (
     <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
@@ -49,19 +67,17 @@ export function SummaryPanel({
           ))}
           <SectionDivider />
           <StatsTable rows={summaryRows} />
+          {moveAnalyticsBelowTable && (
+            <>
+              <SectionDivider />
+              {analyticsSection}
+            </>
+          )}
         </div>
 
-        {/* Middle: Ranks + Recent Form */}
+        {/* Right: analytics (default) or custom content */}
         <div>
-          <PercentileRanks
-            results={percentileResults}
-            single={single}
-            mode={rankingMode}
-            percentileScope={percentileScope}
-            onPercentileScopeChange={onPercentileScopeChange}
-          />
-          <SectionDivider />
-          <RecentForm results={recentFormResults} single={single} />
+          {rightPanelContent ?? (!moveAnalyticsBelowTable ? analyticsSection : null)}
         </div>
       </div>
     </div>

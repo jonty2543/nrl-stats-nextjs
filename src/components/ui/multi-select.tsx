@@ -63,7 +63,7 @@ export function MultiSelect({
   };
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className={`relative flex flex-col gap-0.5 ${open ? "z-[320]" : "z-0"}`}>
       <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
         {label}
       </label>
@@ -108,7 +108,7 @@ export function MultiSelect({
         </button>
 
         {open && (
-          <div className="absolute z-20 mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel p-1 shadow-lg">
+          <div className="absolute left-0 top-full z-[220] mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel p-1 shadow-lg">
             <div className="flex flex-wrap gap-0.5">
               {options.map((opt) => {
                 const disabledReason = disabledOptions?.[opt];

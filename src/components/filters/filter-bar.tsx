@@ -36,9 +36,13 @@ interface FilterBarProps {
   presetsScope?: PresetScope;
   presetPayload?: Record<string, unknown>;
   onApplyPreset?: (payload: Record<string, unknown>) => void | Promise<void>;
+  showYear?: boolean;
   showPosition?: boolean;
   showFinals?: boolean;
   showMinutes?: boolean;
+  showPresets?: boolean;
+  embedded?: boolean;
+  mobileColumns?: 1 | 2 | 3 | 4;
 }
 
 export function FilterBar({
@@ -57,9 +61,13 @@ export function FilterBar({
   presetsScope,
   presetPayload,
   onApplyPreset,
+  showYear = true,
   showPosition = true,
   showFinals = true,
   showMinutes = true,
+  showPresets = true,
+  embedded = false,
+  mobileColumns = 1,
 }: FilterBarProps) {
   const { isLoaded, userId } = useAuth();
   const canAccessLoginSeason = Boolean(userId);
@@ -215,6 +223,7 @@ export function FilterBar({
     }
   };
 
+  const canShowYear = showYear;
   const canShowPosition =
     showPosition &&
     Array.isArray(positions) &&
@@ -226,7 +235,15 @@ export function FilterBar({
     typeof onFinalsModeChange === "function";
   const canShowMinutes = showMinutes;
   const fieldCount =
-    1 + Number(canShowPosition) + Number(canShowFinals) + Number(canShowMinutes);
+    Number(canShowYear) + Number(canShowPosition) + Number(canShowFinals) + Number(canShowMinutes);
+  const mobileGridColumns =
+    mobileColumns === 4
+      ? "grid-cols-4"
+      : mobileColumns === 3
+        ? "grid-cols-3"
+        : mobileColumns === 2
+          ? "grid-cols-2"
+          : "grid-cols-1";
   const gridColumns =
     fieldCount >= 4
       ? "sm:grid-cols-2 lg:grid-cols-4"
@@ -237,90 +254,94 @@ export function FilterBar({
           : "sm:grid-cols-1 lg:grid-cols-1";
 
   return (
-    <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4 mb-4">
-      <div className={`grid grid-cols-1 ${gridColumns} gap-5`}>
-        <div className="flex flex-col gap-1">
-          <MultiSelect
-            label="Year"
-            value={safeSelectedYears}
-            options={years}
-            disabledOptions={disabledYearReasons}
-            openFooter={
-              shouldShowYearFooter ? (
-                <div className="space-y-1">
-                  {shouldPromptLoginFor2024 && (
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[9px] text-nrl-muted">Log in to access 2024 data</p>
-                      <SignInButton mode="modal">
-                        <button
-                          type="button"
-                          className="cursor-pointer rounded border border-nrl-accent/45 px-1.5 py-0.5 text-[8px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10"
-                        >
-                          Sign in
-                        </button>
-                      </SignInButton>
+    <div className={embedded ? undefined : "rounded-xl border border-nrl-border bg-nrl-panel p-4 mb-4"}>
+      {fieldCount > 0 && (
+        <div className={`grid ${mobileGridColumns} ${gridColumns} gap-5`}>
+          {canShowYear && (
+            <div className="flex flex-col gap-1">
+              <MultiSelect
+                label="Year"
+                value={safeSelectedYears}
+                options={years}
+                disabledOptions={disabledYearReasons}
+                openFooter={
+                  shouldShowYearFooter ? (
+                    <div className="space-y-1">
+                      {shouldPromptLoginFor2024 && (
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[9px] text-nrl-muted">Log in to access pre-2025 data</p>
+                          <SignInButton mode="modal">
+                            <button
+                              type="button"
+                              className="cursor-pointer rounded border border-nrl-accent/45 px-1.5 py-0.5 text-[8px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10"
+                            >
+                              Sign in
+                            </button>
+                          </SignInButton>
+                        </div>
+                      )}
+                      {hasHistoricalYearsLocked && (
+                        <p className="text-[9px] text-nrl-muted">
+                          Historical seasons are currently unavailable
+                        </p>
+                      )}
                     </div>
-                  )}
-                  {hasHistoricalYearsLocked && (
-                    <p className="text-[9px] text-nrl-muted">
-                      Access historical seasons with Pro, coming soon
-                    </p>
-                  )}
-                </div>
-              ) : null
-            }
-            onChange={onYearsChange}
-          />
-        </div>
-        {canShowPosition && (
-          <Select
-            label="Position"
-            value={selectedPosition}
-            options={["All", ...positions]}
-            onChange={onPositionChange}
-          />
-        )}
-        {canShowFinals && (
-          <Select
-            label="Include Finals"
-            value={finalsMode}
-            options={["Yes", "No"]}
-            onChange={onFinalsModeChange}
-          />
-        )}
-        {canShowMinutes && (
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
-              Minutes
-            </label>
-            <div className="grid grid-cols-[minmax(80px,110px)_1fr] gap-1.5">
-              <select
-                value={minutesMode}
-                onChange={(e) => onMinutesModeChange(e.target.value)}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-              >
-                {["All", "Over", "Under"].map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                value={minutesThreshold}
-                onChange={(e) => onMinutesThresholdChange(parseFloat(e.target.value) || 0)}
-                min={0}
-                max={80}
-                step={5}
-                disabled={minutesMode === "All"}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  ) : null
+                }
+                onChange={onYearsChange}
               />
             </div>
-          </div>
-        )}
-      </div>
-      {canUsePresets && (
-        <div className="mt-4 border-t border-nrl-border pt-3">
+          )}
+          {canShowPosition && (
+            <Select
+              label="Position"
+              value={selectedPosition}
+              options={["All", ...positions]}
+              onChange={onPositionChange}
+            />
+          )}
+          {canShowFinals && (
+            <Select
+              label="Include Finals"
+              value={finalsMode}
+              options={["Yes", "No"]}
+              onChange={onFinalsModeChange}
+            />
+          )}
+          {canShowMinutes && (
+            <div className="flex flex-col gap-0.5">
+              <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
+                Minutes
+              </label>
+              <div className="grid grid-cols-[minmax(80px,110px)_1fr] gap-1.5">
+                <select
+                  value={minutesMode}
+                  onChange={(e) => onMinutesModeChange(e.target.value)}
+                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                >
+                  {["All", "Over", "Under"].map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  value={minutesThreshold}
+                  onChange={(e) => onMinutesThresholdChange(parseFloat(e.target.value) || 0)}
+                  min={0}
+                  max={80}
+                  step={5}
+                  disabled={minutesMode === "All"}
+                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {showPresets && canUsePresets && (
+        <div className={`${fieldCount > 0 ? "mt-4 border-t border-nrl-border pt-3" : "pt-1"}`}>
           <button
             type="button"
             onClick={() => setIsPresetsExpanded((prev) => !prev)}

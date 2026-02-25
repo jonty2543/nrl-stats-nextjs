@@ -81,10 +81,10 @@ export function PlayerSelectors({
   const player1Options = canSetPlayer1None ? ["None", ...playerList] : playerList;
 
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-3 gap-3 lg:block lg:space-y-3">
       {/* Player 1 row */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_170px]">
+      <div className="col-span-3 contents lg:grid lg:grid-cols-2 lg:gap-4">
+        <div className="contents lg:grid lg:grid-cols-[1fr_170px] lg:gap-4">
           <SearchableSelect
             label="Player 1"
             value={player1}
@@ -98,8 +98,8 @@ export function PlayerSelectors({
             onChange={onPlayer1PositionChange}
           />
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_170px_auto] items-end">
-          <div className="sm:col-span-2">
+        <div className="contents lg:grid lg:grid-cols-[1fr_170px_auto] lg:gap-4 lg:items-end">
+          <div className="lg:col-span-2">
             <SearchableSelect
               label="Teammate"
               value={teammate1}
@@ -118,21 +118,28 @@ export function PlayerSelectors({
             />
           )}
           {teammate1 !== "None" && (
-            <div className="pb-0.5">
-              <PillRadio
-                options={teammateModeOptions.map(toDisplay)}
-                value={toDisplay(teammateMode1)}
-                onChange={(v) => onTeammateMode1Change(fromDisplay(v))}
-                disabled={player1 === "None"}
-              />
+            <div className="col-span-2 pb-0.5 lg:col-span-1">
+              <div className="flex flex-col gap-0.5">
+                <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
+                  With / Without
+                </div>
+                <div className="min-h-[30px] flex items-center -mt-0.5 lg:-mt-1">
+                  <PillRadio
+                    options={teammateModeOptions.map(toDisplay)}
+                    value={toDisplay(teammateMode1)}
+                    onChange={(v) => onTeammateMode1Change(fromDisplay(v))}
+                    disabled={player1 === "None"}
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>
       </div>
 
       {/* Player 2 row */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_170px]">
+      <div className="col-span-3 contents lg:grid lg:grid-cols-2 lg:gap-4">
+        <div className="contents lg:grid lg:grid-cols-[1fr_170px] lg:gap-4">
           <SearchableSelect
             label="Player 2 (Optional)"
             value={player2}
@@ -146,8 +153,8 @@ export function PlayerSelectors({
             onChange={onPlayer2PositionChange}
           />
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_170px_auto] items-end">
-          <div className="sm:col-span-2">
+        <div className="contents lg:grid lg:grid-cols-[1fr_170px_auto] lg:gap-4 lg:items-end">
+          <div className="lg:col-span-2">
             <SearchableSelect
               label="Teammate"
               value={teammate2}
@@ -166,20 +173,27 @@ export function PlayerSelectors({
             />
           )}
           {teammate2 !== "None" && (
-            <div className="pb-0.5">
-              <PillRadio
-                options={teammateModeOptions.map(toDisplay)}
-                value={toDisplay(teammateMode2)}
-                onChange={(v) => onTeammateMode2Change(fromDisplay(v))}
-                disabled={player2 === "None"}
-              />
+            <div className="col-span-2 pb-0.5 lg:col-span-1">
+              <div className="flex flex-col gap-0.5">
+                <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
+                  With / Without
+                </div>
+                <div className="min-h-[30px] flex items-center -mt-0.5 lg:-mt-1">
+                  <PillRadio
+                    options={teammateModeOptions.map(toDisplay)}
+                    value={toDisplay(teammateMode2)}
+                    onChange={(v) => onTeammateMode2Change(fromDisplay(v))}
+                    disabled={player2 === "None"}
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>
       </div>
 
       {/* Stat selectors */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="col-span-3 mt-3 grid grid-cols-2 gap-3 lg:mt-4 lg:gap-4">
         <SearchableSelect
           label="Stat 1"
           value={stat1}

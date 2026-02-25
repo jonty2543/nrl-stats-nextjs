@@ -4,6 +4,7 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/dashboard(.*)",
   "/api/player-stats(.*)",
+  "/api/admin/rebuild-public-player-stats(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
 ]);

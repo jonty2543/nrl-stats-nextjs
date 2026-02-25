@@ -3,9 +3,9 @@
 import { useAuth } from "@clerk/nextjs";
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import type { PlayerStat } from "@/lib/data/types";
+import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import { PLAYER_STATS } from "@/lib/data/constants";
 import {
-  filterByMinutes,
   filterByFinals,
   filterByYear,
   filterByTeammate,
@@ -18,7 +18,10 @@ import {
 } from "@/lib/data/transform";
 import { FilterBar } from "@/components/filters/filter-bar";
 import { PlayerSelectors } from "@/components/filters/player-selectors";
-import { SummaryPanel } from "@/components/summary/summary-panel";
+import { ProfileCard } from "@/components/summary/profile-card";
+import { StatsTable } from "@/components/summary/stats-table";
+import { PercentileRanks } from "@/components/summary/percentile-ranks";
+import { RecentForm } from "@/components/summary/recent-form";
 import { ChartPanelGrid } from "@/components/charts/chart-panel-grid";
 import { ScatterCorrelation } from "@/components/charts/scatter-correlation";
 import { LineRound } from "@/components/charts/line-round";
@@ -26,13 +29,29 @@ import { KDEDistribution } from "@/components/charts/kde-distribution";
 import { WithWithoutLine } from "@/components/charts/with-without-line";
 import { WithWithoutKDE } from "@/components/charts/with-without-kde";
 import { PillRadio } from "@/components/ui/pill-radio";
+import { Select } from "@/components/ui/select";
+import { SectionDivider } from "@/components/ui/section-divider";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
 interface PlayerComparisonProps {
   initialData: PlayerStat[];
+  playerImages: PlayerImageRecord[];
+  teamLogos: Record<string, string>;
   availableYears: string[];
   defaultYears: string[];
 }
+
+const MINUTES_FILTER_OPTIONS = [
+  "Any",
+  "10 Mins",
+  "20 Mins",
+  "30 Mins",
+  "40 Mins",
+  "50 Mins",
+  "60 Mins",
+  "70 Mins",
+  "80 Mins",
+] as const;
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number") {
@@ -56,8 +75,434 @@ function withPositionLabel(name: string, position: string): string {
   return `${name} (${position})`;
 }
 
+function parseMinutesFilterOption(value: string): number {
+  if (!value || value === "Any") return 0;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalisePersonName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function normaliseTeamKey(value: string | null | undefined): string {
+  return String(value ?? "")
+    .replace(/-/g, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function resolveTeamLogoUrl(
+  teamName: string | null | undefined,
+  teamLogos: Record<string, string>
+): string | null {
+  const key = normaliseTeamKey(teamName);
+  if (!key) return null;
+  if (teamLogos[key]) return teamLogos[key];
+
+  const aliases: Record<string, string[]> = {
+    broncos: ["brisbane broncos"],
+    bulldogs: ["canterbury bulldogs", "canterbury bankstown bulldogs"],
+    raiders: ["canberra raiders"],
+    sharks: ["cronulla sharks", "cronulla sutherland sharks"],
+    titans: ["gold coast titans"],
+    "sea eagles": ["manly sea eagles", "manly warringah sea eagles"],
+    storm: ["melbourne storm"],
+    knights: ["newcastle knights"],
+    cowboys: ["north queensland cowboys"],
+    eels: ["parramatta eels"],
+    panthers: ["penrith panthers"],
+    rabbitohs: ["south sydney rabbitohs"],
+    dragons: ["st george illawarra dragons", "st george dragons"],
+    roosters: ["sydney roosters", "eastern suburbs roosters"],
+    warriors: ["new zealand warriors"],
+    tigers: ["wests tigers"],
+    dolphins: ["the dolphins", "dolphins"],
+  };
+
+  for (const alias of aliases[key] ?? []) {
+    if (teamLogos[alias]) return teamLogos[alias];
+  }
+
+  const entries = Object.entries(teamLogos);
+  const partial = entries.find(([logoKey]) => logoKey.endsWith(` ${key}`) || logoKey.includes(key));
+  return partial?.[1] ?? null;
+}
+
+function parsePersonName(value: string): { first: string; last: string } {
+  const parts = normalisePersonName(value).split(" ").filter(Boolean);
+  if (parts.length === 0) return { first: "", last: "" };
+  return { first: parts[0], last: parts[parts.length - 1] };
+}
+
+export function resolvePlayerImage(
+  playerName: string,
+  teamHint: string | null,
+  rows: PlayerImageRecord[]
+): PlayerImageRecord | null {
+  if (!playerName) return null;
+  const targetNorm = normalisePersonName(playerName);
+  const targetParsed = parsePersonName(playerName);
+  const teamNorm = teamHint ? normalisePersonName(teamHint) : "";
+
+  const candidates = rows.filter((row) => {
+    const rowName = row.player ?? "";
+    if (!rowName) return false;
+    const rowNorm = normalisePersonName(rowName);
+    if (rowNorm === targetNorm) return true;
+    const parsed = parsePersonName(rowName);
+    return (
+      parsed.last &&
+      parsed.last === targetParsed.last &&
+      parsed.first[0] &&
+      parsed.first[0] === targetParsed.first[0]
+    );
+  });
+
+  if (candidates.length === 0) return null;
+
+  const sorted = [...candidates].sort((a, b) => {
+    const aTeamMatch = teamNorm && a.team ? normalisePersonName(a.team) === teamNorm : false;
+    const bTeamMatch = teamNorm && b.team ? normalisePersonName(b.team) === teamNorm : false;
+    if (aTeamMatch !== bTeamMatch) return aTeamMatch ? -1 : 1;
+
+    const aImg = Boolean(a.body_image || a.head_image);
+    const bImg = Boolean(b.body_image || b.head_image);
+    if (aImg !== bImg) return aImg ? -1 : 1;
+
+    const aDate = a.last_seen_match_date ?? "";
+    const bDate = b.last_seen_match_date ?? "";
+    return bDate.localeCompare(aDate);
+  });
+
+  return sorted[0] ?? null;
+}
+
+export function primaryTeamForRows(rows: PlayerStat[]): string | null {
+  if (rows.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const team = typeof row.Team === "string" ? row.Team : "";
+    if (!team) continue;
+    counts.set(team, (counts.get(team) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+export function primaryPositionForRows(rows: PlayerStat[]): string | null {
+  if (rows.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const position = typeof row.Position === "string" ? row.Position : "";
+    if (!position) continue;
+    counts.set(position, (counts.get(position) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+function formatFantasyPositionBadge(value: string | null | undefined): string {
+  const raw = (value ?? "").trim();
+  if (!raw) return "POS";
+  const lower = raw.toLowerCase();
+  if (lower.includes("fullback")) return "WFB";
+  if (lower.includes("wing")) return "WFB";
+  if (lower.includes("centre") || lower.includes("center")) return "CTR";
+  if (lower.includes("five")) return "HLF";
+  if (lower.includes("half")) return "HLF";
+  if (lower.includes("hooker")) return "HOK";
+  if (lower.includes("prop")) return "MID";
+  if (lower.includes("lock")) return "MID";
+  if (lower.includes("2nd")) return "EDG";
+  if (lower.includes("2rf")) return "EDG";
+  if (lower.includes("back row")) return "EDG";
+  if (lower.includes("second")) return "EDG";
+  if (lower.includes("edge")) return "EDG";
+  if (lower.includes("interchange")) return "INT";
+  if (raw.length <= 4) return raw.toUpperCase();
+  return raw.toUpperCase().slice(0, 4);
+}
+
+export function PlayerImageCard({
+  title,
+  playerName,
+  imageRow,
+  teamLogoUrl,
+  fantasyPosition,
+  compact = false,
+  frameless = false,
+}: {
+  title?: string;
+  playerName: string;
+  imageRow: PlayerImageRecord | null;
+  teamLogoUrl?: string | null;
+  fantasyPosition?: string | null;
+  compact?: boolean;
+  frameless?: boolean;
+}) {
+  const imageCandidates = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+
+    const push = (value: string | null | undefined) => {
+      if (!value || typeof value !== "string") return;
+      const trimmed = value.trim();
+      if (!trimmed || seen.has(trimmed)) return;
+      seen.add(trimmed);
+      out.push(trimmed);
+    };
+
+    const normalizeRemoteAxd = (value: string): string[] => {
+      const variants = [value];
+      if (value.includes("/remote.axd?http://")) {
+        variants.push(value.replace("/remote.axd?http://", "/remote.axd?https://"));
+      }
+      const marker = "/remote.axd?";
+      const idx = value.indexOf(marker);
+      if (idx >= 0) {
+        const nested = value.slice(idx + marker.length);
+        if (nested) {
+          const httpsNested = nested.startsWith("http://")
+            ? `https://${nested.slice("http://".length)}`
+            : nested;
+          variants.push(httpsNested);
+        }
+      }
+      return variants;
+    };
+
+    for (const source of [imageRow?.body_image, imageRow?.head_image]) {
+      if (!source) continue;
+      for (const variant of normalizeRemoteAxd(source)) {
+        push(variant);
+      }
+    }
+
+    return out;
+  }, [imageRow?.body_image, imageRow?.head_image]);
+  const imageCandidatesKey = imageCandidates.join("|");
+  const [imageAttemptState, setImageAttemptState] = useState<{ key: string; index: number }>({
+    key: "",
+    index: 0,
+  });
+  const imageIndex =
+    imageAttemptState.key === imageCandidatesKey ? imageAttemptState.index : 0;
+  const imageUrl = imageCandidates[imageIndex] ?? null;
+  const showStats = !frameless;
+  const statSlots = [
+    { key: "PAC", value: "--" },
+    { key: "DRI", value: "--" },
+    { key: "SHO", value: "--" },
+    { key: "DEF", value: "--" },
+    { key: "PAS", value: "--" },
+    { key: "PHY", value: "--" },
+  ] as const;
+  const positionBadge = formatFantasyPositionBadge(fantasyPosition ?? imageRow?.position);
+  const isFramelessCompact = frameless && compact;
+  const isFramelessScale = frameless && !compact;
+  const nameTextClass = compact
+    ? isFramelessCompact
+      ? "text-[10.2px]"
+      : "text-[10px]"
+    : isFramelessScale
+      ? "text-[clamp(7.8px,0.6vw,9.8px)]"
+      : "text-[clamp(11px,1.4vw,15px)]";
+  const teamTextClass = compact
+    ? isFramelessCompact
+      ? "text-[6.2px] tracking-[0.12em]"
+      : "text-[6px] tracking-[0.12em]"
+    : isFramelessScale
+      ? "text-[4.5px] tracking-[0.1em]"
+      : "text-[8px] tracking-[0.15em]";
+  const statGridClass = compact
+    ? isFramelessCompact
+      ? "mt-0.5 grid grid-cols-2 gap-x-3 gap-y-0.5"
+      : "mt-1 grid grid-cols-2 gap-x-2 gap-y-0"
+    : isFramelessScale
+      ? "mt-0.5 grid grid-cols-2 gap-x-3 gap-y-0.5"
+      : "mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5";
+  const statLabelClass = compact
+    ? isFramelessCompact
+      ? "text-[7.6px] tracking-[0.08em]"
+      : "text-[6.5px] tracking-[0.08em]"
+    : isFramelessScale
+      ? "text-[5.2px] tracking-[0.08em] md:text-[5.8px] xl:text-[6.1px]"
+      : "text-[9px] tracking-[0.1em]";
+  const statValueClass = compact
+    ? isFramelessCompact
+      ? "text-[7.6px]"
+      : "text-[6.5px]"
+    : isFramelessScale
+      ? "text-[5.2px] md:text-[5.8px] xl:text-[6.1px]"
+      : "text-[9px]";
+  const panelPaddingClass = compact
+    ? isFramelessCompact
+      ? "px-2.5 py-1.5"
+      : "px-2 pt-1.5 pb-1"
+    : isFramelessScale
+      ? "px-3 py-2"
+      : "px-3 pt-2 pb-1.5";
+  const teamRowMarginClass = frameless ? "mt-0" : "mt-0.5";
+  const positionTextClass = compact
+    ? isFramelessCompact
+      ? "text-[10.4px]"
+      : "text-[10px]"
+    : isFramelessScale
+      ? "text-[9px]"
+      : "text-[14px]";
+  const positionMinWidthClass = compact
+    ? isFramelessCompact
+      ? "min-w-[1.65rem]"
+      : "min-w-[1.8rem]"
+    : isFramelessScale
+      ? "min-w-[1.95rem]"
+      : "min-w-[2.2rem]";
+  const infoPanelBoundsClass = isFramelessCompact
+    ? "absolute inset-x-[21%] top-[60.2%] bottom-[22.8%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62"
+    : isFramelessScale
+      ? "absolute inset-x-[21.2%] top-[60.4%] bottom-[23%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62"
+      : "absolute inset-x-[20%] top-[47.8%] bottom-[23%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62";
+  const positionRowClass = isFramelessCompact
+    ? "absolute inset-x-0 bottom-[8.8%] z-50 flex justify-center pointer-events-none"
+    : isFramelessScale
+      ? "absolute inset-x-0 bottom-[8.6%] z-50 flex justify-center pointer-events-none"
+      : "absolute inset-x-0 bottom-[8.1%] z-50 flex justify-center pointer-events-none";
+  const frameAssetClass = frameless
+    ? "absolute inset-[4%] z-20 h-[92%] w-[92%] object-contain pointer-events-none"
+    : "absolute inset-[12%] z-20 h-[76%] w-[76%] object-contain pointer-events-none";
+  const frameContentClass = frameless
+    ? "absolute inset-[4%] z-30"
+    : "absolute inset-[12%] z-30";
+  const cardVisual = (
+    <div
+      className={
+        frameless
+          ? "mx-auto aspect-square w-full max-w-[26rem] xl:max-w-[30rem]"
+          : `mx-auto w-full ${compact ? "max-w-[430px]" : "max-w-[430px]"}`
+      }
+    >
+      <div
+        className={
+          frameless
+            ? "relative h-full w-full"
+            : "relative aspect-square rounded-xl border border-nrl-border/60 bg-[#071224]"
+        }
+      >
+        {!frameless ? <div className="absolute inset-4 rounded-xl bg-[#041022]" /> : null}
+
+        {/* frame asset */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/backgrounds_21_TT_A4.png"
+          alt=""
+          aria-hidden="true"
+          className={frameAssetClass}
+        />
+
+        {/* Keep all content locked to the card frame bounds */}
+        <div className={frameContentClass}>
+          {teamLogoUrl ? (
+            <div className="absolute left-[22%] top-[11.5%] z-[60] flex h-[8.5%] w-[8.5%] min-h-5 min-w-5 items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={teamLogoUrl}
+                alt=""
+                aria-hidden="true"
+                className="h-full w-full object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          ) : null}
+
+          {/* player photo */}
+          <div
+            className={
+              frameless
+                ? "absolute inset-x-[10.5%] top-[2.5%] h-[58%] z-50 flex items-end justify-center overflow-hidden rounded-md"
+                : "absolute inset-x-[13%] top-[4%] h-[44%] z-50 flex items-end justify-center overflow-hidden rounded-md"
+            }
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(29,255,143,0.14),rgba(0,0,0,0)_72%)]" />
+            {imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imageUrl}
+                alt={`${playerName} player image`}
+                className={frameless ? "relative z-10 max-h-[99%] w-auto object-contain" : "relative z-10 max-h-[94%] w-auto object-contain"}
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={() => {
+                  setImageAttemptState((prev) => ({
+                    key: imageCandidatesKey,
+                    index: (prev.key === imageCandidatesKey ? prev.index : 0) + 1,
+                  }));
+                }}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-xs text-nrl-muted">
+                Image unavailable
+              </div>
+            )}
+          </div>
+
+          {/* Combined name/team + stats panel */}
+          <div
+            className={`${infoPanelBoundsClass} ${panelPaddingClass}`}
+          >
+            <div className={showStats ? undefined : "flex h-full flex-col items-center justify-center"}>
+              <div className={`truncate text-center font-extrabold tracking-wide text-white ${nameTextClass}`}>
+                {(playerName || "No player selected").toUpperCase()}
+              </div>
+              <div className={`${teamRowMarginClass} truncate text-center font-semibold text-[#a9f5cf]/90 ${teamTextClass}`}>
+                {(imageRow?.team ?? "").toUpperCase()}
+              </div>
+              {showStats ? (
+                <div className={statGridClass}>
+                  {statSlots.map((stat) => (
+                    <div key={stat.key} className="flex items-center justify-between gap-2">
+                      <span className={`font-bold text-[#b8ffe0] drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)] ${statLabelClass}`}>
+                        {stat.key}
+                      </span>
+                      <span className={`font-semibold text-white/95 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] ${statValueClass}`}>
+                        {stat.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Primary fantasy position in the frame's bottom hexagon */}
+          <div className={positionRowClass}>
+            <div
+              className={`text-center font-extrabold tracking-[0.08em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${positionMinWidthClass} ${positionTextClass}`}
+            >
+              {positionBadge}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (frameless) return cardVisual;
+
+  return (
+    <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
+      <div className="border-b border-nrl-border bg-nrl-panel-2 px-4 py-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">{title}</div>
+      </div>
+      <div className="p-4">{cardVisual}</div>
+    </div>
+  );
+}
+
 export function PlayerComparison({
   initialData,
+  playerImages,
+  teamLogos,
   availableYears,
   defaultYears,
 }: PlayerComparisonProps) {
@@ -111,8 +556,8 @@ export function PlayerComparison({
     }
   }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
   const [finalsMode, setFinalsMode] = useState("Yes");
-  const [minMinutes, setMinMinutes] = useState(0);
-  const [minutesMode, setMinutesMode] = useState("All");
+  const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any");
+  const [minutesUnderFilter, setMinutesUnderFilter] = useState<string>("Any");
   const [percentileScope, setPercentileScope] = useState<PercentileScope>("Position");
 
   // Filter pipeline
@@ -124,14 +569,18 @@ export function PlayerComparison({
     () => filterByFinals(dfYear, finalsMode as "Yes" | "No"),
     [dfYear, finalsMode]
   );
-  const df = useMemo(
-    () => filterByMinutes(dfYearFinals, minMinutes, minutesMode as "All" | "Over" | "Under"),
-    [dfYearFinals, minMinutes, minutesMode]
-  );
-  const dfAllPositions = useMemo(
-    () => filterByMinutes(dfYearFinals, minMinutes, minutesMode as "All" | "Over" | "Under"),
-    [dfYearFinals, minMinutes, minutesMode]
-  );
+  const filteredByMinutes = useMemo(() => {
+    const overThreshold = parseMinutesFilterOption(minutesOverFilter);
+    const underThreshold = parseMinutesFilterOption(minutesUnderFilter);
+    return dfYearFinals.filter((row) => {
+      const mins = toFiniteNumber(row["Mins Played"]) ?? 0;
+      if (overThreshold > 0 && mins < overThreshold) return false;
+      if (underThreshold > 0 && mins > underThreshold) return false;
+      return true;
+    });
+  }, [dfYearFinals, minutesOverFilter, minutesUnderFilter]);
+  const df = useMemo(() => filteredByMinutes, [filteredByMinutes]);
+  const dfAllPositions = useMemo(() => filteredByMinutes, [filteredByMinutes]);
 
   const positions = useMemo(
     () => [...new Set(dfYearFinals.map((r) => r.Position))].filter(Boolean).sort(),
@@ -168,8 +617,8 @@ export function PlayerComparison({
     () => ({
       selectedYears,
       finalsMode,
-      minMinutes,
-      minutesMode,
+      minutesOverFilter,
+      minutesUnderFilter,
       percentileScope,
       player1,
       player2,
@@ -189,8 +638,8 @@ export function PlayerComparison({
     [
       selectedYears,
       finalsMode,
-      minMinutes,
-      minutesMode,
+      minutesOverFilter,
+      minutesUnderFilter,
       percentileScope,
       player1,
       player2,
@@ -226,18 +675,37 @@ export function PlayerComparison({
       if (payload.finalsMode === "Yes" || payload.finalsMode === "No") {
         setFinalsMode(payload.finalsMode);
       }
-      if (
-        payload.minutesMode === "All" ||
-        payload.minutesMode === "Over" ||
-        payload.minutesMode === "Under"
-      ) {
-        setMinutesMode(payload.minutesMode);
+      if (typeof payload.minutesOverFilter === "string") {
+        setMinutesOverFilter(payload.minutesOverFilter);
       }
+      if (typeof payload.minutesUnderFilter === "string") {
+        setMinutesUnderFilter(payload.minutesUnderFilter);
+      }
+      // Backward compatibility for older presets using single minutes mode/threshold.
       if (
         typeof payload.minMinutes === "number" &&
-        Number.isFinite(payload.minMinutes)
+        Number.isFinite(payload.minMinutes) &&
+        (payload.minutesMode === "All" || payload.minutesMode === "Over" || payload.minutesMode === "Under")
       ) {
-        setMinMinutes(Math.max(0, payload.minMinutes));
+        const legacyMinutes = Math.max(0, Math.round(payload.minMinutes));
+        const legacyValue =
+          legacyMinutes <= 0
+            ? "Any"
+            : [...MINUTES_FILTER_OPTIONS]
+                .filter((opt) => opt !== "Any")
+                .reduce((best, opt) => {
+                  const current = parseMinutesFilterOption(opt);
+                  const bestValue = parseMinutesFilterOption(best);
+                  return Math.abs(current - legacyMinutes) < Math.abs(bestValue - legacyMinutes) ? opt : best;
+                }, "10 Mins");
+        if (payload.minutesMode === "All") {
+          setMinutesOverFilter("Any");
+          setMinutesUnderFilter("Any");
+        } else if (payload.minutesMode === "Over") {
+          setMinutesOverFilter(legacyValue);
+        } else if (payload.minutesMode === "Under") {
+          setMinutesUnderFilter(legacyValue);
+        }
       }
       if (
         payload.percentileScope === "Position" ||
@@ -548,6 +1016,36 @@ export function PlayerComparison({
     if (hasTwoPlayers) e.push({ name: player2Label, rows: p2Rows as (PlayerStat)[] });
     return e;
   }, [effectiveP1Label, p1Rows, hasTwoPlayers, player2Label, p2Rows]);
+
+  const p1CardTeam = useMemo(() => primaryTeamForRows(p1AllRows), [p1AllRows]);
+  const p2CardTeam = useMemo(
+    () => (hasTwoPlayers ? primaryTeamForRows(p2AllRows) : null),
+    [hasTwoPlayers, p2AllRows]
+  );
+  const p1CardImage = useMemo(
+    () => resolvePlayerImage(effectiveP1, p1CardTeam, playerImages),
+    [effectiveP1, p1CardTeam, p1AllRows, playerImages]
+  );
+  const p1CardPosition = useMemo(() => primaryPositionForRows(p1AllRows), [p1AllRows]);
+  const p2CardImage = useMemo(
+    () => (hasTwoPlayers ? resolvePlayerImage(player2, p2CardTeam, playerImages) : null),
+    [hasTwoPlayers, player2, p2CardTeam, p2AllRows, playerImages]
+  );
+  const p2CardPosition = useMemo(
+    () => (hasTwoPlayers ? primaryPositionForRows(p2AllRows) : null),
+    [hasTwoPlayers, p2AllRows]
+  );
+  const p1CardLogoUrl = useMemo(
+    () => resolveTeamLogoUrl(p1CardImage?.team ?? p1CardTeam, teamLogos),
+    [p1CardImage?.team, p1CardTeam, teamLogos]
+  );
+  const p2CardLogoUrl = useMemo(
+    () =>
+      hasTwoPlayers
+        ? resolveTeamLogoUrl(p2CardImage?.team ?? p2CardTeam, teamLogos)
+        : null,
+    [hasTwoPlayers, p2CardImage?.team, p2CardTeam, teamLogos]
+  );
 
   const percentileResults = useMemo(() => {
     const primaryPosition = (rows: PlayerStat[]): string | null => {
@@ -886,54 +1384,97 @@ export function PlayerComparison({
 
   return (
     <div className="space-y-4">
-      <FilterBar
-        years={availableYears}
-        selectedYears={selectedYears}
-        onYearsChange={handleYearsChange}
-        finalsMode={finalsMode}
-        onFinalsModeChange={setFinalsMode}
-        minutesThreshold={minMinutes}
-        onMinutesThresholdChange={setMinMinutes}
-        minutesMode={minutesMode}
-        onMinutesModeChange={setMinutesMode}
-        presetsScope="player"
-        presetPayload={presetPayload}
-        onApplyPreset={applyPreset}
-        showPosition={false}
-      />
       <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
-        <PlayerSelectors
-          positions={positions}
-          playerList={p1PlayerOptions}
-          player1={player1 || p1PlayerOptions[0] || ""}
-          onPlayer1Change={setPlayer1}
-          player1Position={player1Position}
-          onPlayer1PositionChange={setPlayer1Position}
-          teammate1Options={tm1Options}
-          teammate1={teammate1}
-          onTeammate1Change={handleTeammate1Change}
-          teammate1Position={teammate1Position}
-          onTeammate1PositionChange={setTeammate1Position}
-          teammateMode1={teammateMode1}
-          onTeammateMode1Change={setTeammateMode1}
-          player2Options={p2PlayerOptions}
-          player2={player2}
-          onPlayer2Change={setPlayer2}
-          player2Position={player2Position}
-          onPlayer2PositionChange={setPlayer2Position}
-          teammate2Options={tm2Options}
-          teammate2={teammate2}
-          onTeammate2Change={handleTeammate2Change}
-          teammate2Position={teammate2Position}
-          onTeammate2PositionChange={setTeammate2Position}
-          teammateMode2={teammateMode2}
-          onTeammateMode2Change={setTeammateMode2}
-          statList={statList}
-          stat1={stat1}
-          onStat1Change={setStat1}
-          stat2={stat2}
-          onStat2Change={setStat2}
+        <FilterBar
+          years={availableYears}
+          selectedYears={selectedYears}
+          onYearsChange={handleYearsChange}
+          finalsMode={finalsMode}
+          onFinalsModeChange={setFinalsMode}
+          minutesThreshold={0}
+          onMinutesThresholdChange={() => {}}
+          minutesMode="All"
+          onMinutesModeChange={() => {}}
+          showPosition={false}
+          showMinutes={false}
+          showPresets={false}
+          embedded
+          showYear
+          showFinals
+          mobileColumns={2}
         />
+
+        <div className="mt-4 grid grid-cols-2 gap-4">
+          <Select
+            label="Minutes Over"
+            value={minutesOverFilter}
+            options={[...MINUTES_FILTER_OPTIONS]}
+            onChange={setMinutesOverFilter}
+          />
+          <Select
+            label="Minutes Under"
+            value={minutesUnderFilter}
+            options={[...MINUTES_FILTER_OPTIONS]}
+            onChange={setMinutesUnderFilter}
+          />
+        </div>
+
+        <div className="mt-6">
+          <PlayerSelectors
+            positions={positions}
+            playerList={p1PlayerOptions}
+            player1={player1 || p1PlayerOptions[0] || ""}
+            onPlayer1Change={setPlayer1}
+            player1Position={player1Position}
+            onPlayer1PositionChange={setPlayer1Position}
+            teammate1Options={tm1Options}
+            teammate1={teammate1}
+            onTeammate1Change={handleTeammate1Change}
+            teammate1Position={teammate1Position}
+            onTeammate1PositionChange={setTeammate1Position}
+            teammateMode1={teammateMode1}
+            onTeammateMode1Change={setTeammateMode1}
+            player2Options={p2PlayerOptions}
+            player2={player2}
+            onPlayer2Change={setPlayer2}
+            player2Position={player2Position}
+            onPlayer2PositionChange={setPlayer2Position}
+            teammate2Options={tm2Options}
+            teammate2={teammate2}
+            onTeammate2Change={handleTeammate2Change}
+            teammate2Position={teammate2Position}
+            onTeammate2PositionChange={setTeammate2Position}
+            teammateMode2={teammateMode2}
+            onTeammateMode2Change={setTeammateMode2}
+            statList={statList}
+            stat1={stat1}
+            onStat1Change={setStat1}
+            stat2={stat2}
+            onStat2Change={setStat2}
+          />
+        </div>
+
+        <div className="mt-6 border-t border-nrl-border pt-3">
+          <FilterBar
+            years={availableYears}
+            selectedYears={selectedYears}
+            onYearsChange={handleYearsChange}
+            finalsMode={finalsMode}
+            onFinalsModeChange={setFinalsMode}
+            minutesThreshold={0}
+            onMinutesThresholdChange={() => {}}
+            minutesMode="All"
+            onMinutesModeChange={() => {}}
+            presetsScope="player"
+            presetPayload={presetPayload}
+            onApplyPreset={applyPreset}
+            showYear={false}
+            showPosition={false}
+            showFinals={false}
+            showMinutes={false}
+            embedded
+          />
+        </div>
       </div>
       {loading && (
         <div className="rounded-lg border border-nrl-accent/30 bg-nrl-panel p-3 text-center text-sm text-nrl-accent">
@@ -950,16 +1491,63 @@ export function PlayerComparison({
       )}
       {allData.length > 0 && (
         <>
-          <SummaryPanel
-            entities={entities}
-            entity="player"
-            summaryRows={summaryRows}
-            percentileResults={percentileResults}
-            recentFormResults={recentFormResults}
-            rankingMode="percentile"
-            percentileScope={percentileScope}
-            onPercentileScopeChange={setPercentileScope}
-          />
+          <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="flex h-full flex-col">
+                {entities.map((e, i) => (
+                  <div key={e.name}>
+                    {i > 0 && <SectionDivider />}
+                    <ProfileCard name={e.name} rows={e.rows} entity="player" />
+                  </div>
+                ))}
+                <SectionDivider />
+                <div
+                  className={`mt-2 grid items-center justify-items-center gap-3 ${
+                    hasTwoPlayers ? "grid-cols-2" : "grid-cols-1"
+                  }`}
+                >
+                  <div
+                    className={`flex h-full w-full items-center justify-center ${
+                      hasTwoPlayers ? "" : "mx-auto max-w-[14rem] xl:max-w-[16rem]"
+                    }`}
+                  >
+                    <PlayerImageCard
+                      playerName={effectiveP1}
+                      imageRow={p1CardImage}
+                      teamLogoUrl={p1CardLogoUrl}
+                      fantasyPosition={p1CardPosition}
+                      frameless
+                    />
+                  </div>
+                  {hasTwoPlayers ? (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <PlayerImageCard
+                        playerName={player2}
+                        imageRow={p2CardImage}
+                        teamLogoUrl={p2CardLogoUrl}
+                        fantasyPosition={p2CardPosition}
+                        frameless
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div>
+                <StatsTable rows={summaryRows} />
+                <SectionDivider />
+                <PercentileRanks
+                  results={percentileResults}
+                  single={!hasTwoPlayers}
+                  mode="percentile"
+                  percentileScope={percentileScope}
+                  onPercentileScopeChange={setPercentileScope}
+                />
+                <SectionDivider />
+                <RecentForm results={recentFormResults} single={!hasTwoPlayers} />
+              </div>
+            </div>
+          </div>
 
           <ChartPanelGrid panels={chartPanels} />
         </>

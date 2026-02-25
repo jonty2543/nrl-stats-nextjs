@@ -1,5 +1,4 @@
-const PRO_SEASON_CUTOFF_YEAR = 2024;
-const LOGIN_REQUIRED_SEASON = 2024;
+const FREE_ACCESS_START_YEAR = 2025;
 
 export const TEMP_ALLOW_HISTORICAL_TESTING = false;
 
@@ -10,8 +9,7 @@ export function isAccessibleSeason(
   const parsedYear = Number.parseInt(year, 10);
   if (Number.isNaN(parsedYear)) return false;
   if (TEMP_ALLOW_HISTORICAL_TESTING) return true;
-  if (parsedYear < PRO_SEASON_CUTOFF_YEAR) return false;
-  if (parsedYear === LOGIN_REQUIRED_SEASON && !canAccessLoginSeason) return false;
+  if (parsedYear < FREE_ACCESS_START_YEAR && !canAccessLoginSeason) return false;
   return true;
 }
 
@@ -22,17 +20,13 @@ export function getSeasonLockReason(
   const parsedYear = Number.parseInt(year, 10);
   if (Number.isNaN(parsedYear)) return null;
   if (TEMP_ALLOW_HISTORICAL_TESTING) return null;
-  if (parsedYear < PRO_SEASON_CUTOFF_YEAR) return "Pro";
-  if (parsedYear === LOGIN_REQUIRED_SEASON && !canAccessLoginSeason) return "Login";
+  if (parsedYear < FREE_ACCESS_START_YEAR && !canAccessLoginSeason) return "Login";
   return null;
 }
 
 export function hasProLockedHistoricalSeasons(years: string[]): boolean {
-  if (TEMP_ALLOW_HISTORICAL_TESTING) return false;
-  return years.some((year) => {
-    const parsedYear = Number.parseInt(year, 10);
-    return !Number.isNaN(parsedYear) && parsedYear < PRO_SEASON_CUTOFF_YEAR;
-  });
+  void years;
+  return false;
 }
 
 export function requiresLoginFor2024(
@@ -40,5 +34,8 @@ export function requiresLoginFor2024(
   canAccessLoginSeason: boolean
 ): boolean {
   if (TEMP_ALLOW_HISTORICAL_TESTING) return false;
-  return !canAccessLoginSeason && years.includes(String(LOGIN_REQUIRED_SEASON));
+  return !canAccessLoginSeason && years.some((year) => {
+    const parsedYear = Number.parseInt(year, 10);
+    return !Number.isNaN(parsedYear) && parsedYear < FREE_ACCESS_START_YEAR;
+  });
 }

@@ -74,6 +74,11 @@ export interface PlayerStat {
   [key: string]: string | number | null;
 }
 
+export type TeammateLookupRow = Pick<
+  PlayerStat,
+  "Name" | "Team" | "Year" | "Round" | "Position" | "Fantasy"
+>;
+
 /** A single match row */
 export interface Match {
   Year: string;

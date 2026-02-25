@@ -74,14 +74,17 @@ export function SearchableSelect({
   };
 
   return (
-    <div className="flex flex-col gap-0.5" ref={containerRef}>
-      <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
-        {label}
-      </label>
+    <div className={`relative flex flex-col gap-0.5 ${open ? "z-[300]" : "z-0"}`} ref={containerRef}>
+      {label ? (
+        <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
+          {label}
+        </label>
+      ) : null}
       <div className="relative">
         <input
           ref={inputRef}
           value={query}
+          aria-label={label || placeholder}
           placeholder={placeholder}
           disabled={disabled}
           onFocus={() => {
@@ -124,7 +127,7 @@ export function SearchableSelect({
         />
 
         {open && !disabled && (
-          <div className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-md border border-nrl-border bg-nrl-panel shadow-lg">
+          <div className="absolute left-0 top-full z-[200] mt-1 max-h-56 w-full overflow-auto rounded-md border border-nrl-border bg-nrl-panel shadow-lg">
             {filtered.length === 0 ? (
               <div className="px-2 py-1 text-[10px] text-nrl-muted">No matches</div>
             ) : (

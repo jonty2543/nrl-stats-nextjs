@@ -18,7 +18,7 @@ export default function DashboardLayout({
           <div className="flex items-center justify-between py-2 sm:h-14 sm:py-0">
             <div className="flex items-center gap-2 sm:gap-3">
               <Link
-                href="/dashboard"
+                href="/dashboard/fantasy"
                 className="flex shrink-0 items-center gap-2 whitespace-nowrap text-base font-bold text-nrl-accent sm:text-lg"
               >
                 <Image

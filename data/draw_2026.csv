@@ -1,0 +1,205 @@
+round,kickoff,matchCentreUrl,home,away
+1,2026-03-01T02:15:00Z,/draw/nrl-premiership/2026/round-1/knights-v-cowboys/,Knights,Cowboys
+1,2026-03-01T04:30:00Z,/draw/nrl-premiership/2026/round-1/bulldogs-v-dragons/,Bulldogs,Dragons
+1,2026-03-05T09:00:00Z,/draw/nrl-premiership/2026/round-1/storm-v-eels/,Storm,Eels
+1,2026-03-06T07:00:00Z,/draw/nrl-premiership/2026/round-1/warriors-v-roosters/,Warriors,Roosters
+1,2026-03-06T09:00:00Z,/draw/nrl-premiership/2026/round-1/broncos-v-panthers/,Broncos,Panthers
+1,2026-03-07T06:30:00Z,/draw/nrl-premiership/2026/round-1/sharks-v-titans/,Sharks,Titans
+1,2026-03-07T08:35:00Z,/draw/nrl-premiership/2026/round-1/sea-eagles-v-raiders/,Sea Eagles,Raiders
+1,2026-03-08T05:05:00Z,/draw/nrl-premiership/2026/round-1/dolphins-v-rabbitohs/,Dolphins,Rabbitohs
+2,2026-03-12T09:00:00Z,/draw/nrl-premiership/2026/round-2/broncos-v-eels/,Broncos,Eels
+2,2026-03-13T07:00:00Z,/draw/nrl-premiership/2026/round-2/warriors-v-raiders/,Warriors,Raiders
+2,2026-03-13T09:00:00Z,/draw/nrl-premiership/2026/round-2/roosters-v-rabbitohs/,Roosters,Rabbitohs
+2,2026-03-14T04:00:00Z,/draw/nrl-premiership/2026/round-2/wests-tigers-v-cowboys/,Wests Tigers,Cowboys
+2,2026-03-14T06:30:00Z,/draw/nrl-premiership/2026/round-2/dragons-v-storm/,Dragons,Storm
+2,2026-03-14T08:35:00Z,/draw/nrl-premiership/2026/round-2/panthers-v-sharks/,Panthers,Sharks
+2,2026-03-15T05:05:00Z,/draw/nrl-premiership/2026/round-2/sea-eagles-v-knights/,Sea Eagles,Knights
+2,2026-03-15T07:15:00Z,/draw/nrl-premiership/2026/round-2/dolphins-v-titans/,Dolphins,Titans
+3,2026-03-19T09:00:00Z,/draw/nrl-premiership/2026/round-3/raiders-v-bulldogs/,Raiders,Bulldogs
+3,2026-03-20T07:00:00Z,/draw/nrl-premiership/2026/round-3/roosters-v-panthers/,Roosters,Panthers
+3,2026-03-20T09:00:00Z,/draw/nrl-premiership/2026/round-3/storm-v-broncos/,Storm,Broncos
+3,2026-03-21T04:00:00Z,/draw/nrl-premiership/2026/round-3/knights-v-warriors/,Knights,Warriors
+3,2026-03-21T06:30:00Z,/draw/nrl-premiership/2026/round-3/sharks-v-dolphins/,Sharks,Dolphins
+3,2026-03-21T08:35:00Z,/draw/nrl-premiership/2026/round-3/rabbitohs-v-wests-tigers/,Rabbitohs,Wests Tigers
+3,2026-03-22T05:05:00Z,/draw/nrl-premiership/2026/round-3/eels-v-dragons/,Eels,Dragons
+3,2026-03-22T07:15:00Z,/draw/nrl-premiership/2026/round-3/cowboys-v-titans/,Cowboys,Titans
+4,2026-03-26T09:00:00Z,/draw/nrl-premiership/2026/round-4/sea-eagles-v-roosters/,Sea Eagles,Roosters
+4,2026-03-27T07:00:00Z,/draw/nrl-premiership/2026/round-4/warriors-v-wests-tigers/,Warriors,Wests Tigers
+4,2026-03-27T09:00:00Z,/draw/nrl-premiership/2026/round-4/broncos-v-dolphins/,Broncos,Dolphins
+4,2026-03-28T04:00:00Z,/draw/nrl-premiership/2026/round-4/bulldogs-v-knights/,Bulldogs,Knights
+4,2026-03-28T06:30:00Z,/draw/nrl-premiership/2026/round-4/panthers-v-eels/,Panthers,Eels
+4,2026-03-28T08:35:00Z,/draw/nrl-premiership/2026/round-4/cowboys-v-storm/,Cowboys,Storm
+4,2026-03-29T05:05:00Z,/draw/nrl-premiership/2026/round-4/raiders-v-sharks/,Raiders,Sharks
+4,2026-03-29T07:15:00Z,/draw/nrl-premiership/2026/round-4/titans-v-dragons/,Titans,Dragons
+5,2026-04-02T09:00:00Z,/draw/nrl-premiership/2026/round-5/dolphins-v-sea-eagles/,Dolphins,Sea Eagles
+5,2026-04-03T05:05:00Z,/draw/nrl-premiership/2026/round-5/rabbitohs-v-bulldogs/,Rabbitohs,Bulldogs
+5,2026-04-03T09:00:00Z,/draw/nrl-premiership/2026/round-5/panthers-v-storm/,Panthers,Storm
+5,2026-04-04T06:30:00Z,/draw/nrl-premiership/2026/round-5/dragons-v-cowboys/,Dragons,Cowboys
+5,2026-04-04T08:35:00Z,/draw/nrl-premiership/2026/round-5/titans-v-broncos/,Titans,Broncos
+5,2026-04-05T04:00:00Z,/draw/nrl-premiership/2026/round-5/sharks-v-warriors/,Sharks,Warriors
+5,2026-04-05T06:05:00Z,/draw/nrl-premiership/2026/round-5/knights-v-raiders/,Knights,Raiders
+5,2026-04-06T06:05:00Z,/draw/nrl-premiership/2026/round-5/eels-v-wests-tigers/,Eels,Wests Tigers
+6,2026-04-09T09:50:00Z,/draw/nrl-premiership/2026/round-6/bulldogs-v-panthers/,Bulldogs,Panthers
+6,2026-04-10T08:00:00Z,/draw/nrl-premiership/2026/round-6/dragons-v-sea-eagles/,Dragons,Sea Eagles
+6,2026-04-10T10:00:00Z,/draw/nrl-premiership/2026/round-6/broncos-v-cowboys/,Broncos,Cowboys
+6,2026-04-11T05:00:00Z,/draw/nrl-premiership/2026/round-6/rabbitohs-v-raiders/,Rabbitohs,Raiders
+6,2026-04-11T07:30:00Z,/draw/nrl-premiership/2026/round-6/sharks-v-roosters/,Sharks,Roosters
+6,2026-04-11T09:35:00Z,/draw/nrl-premiership/2026/round-6/storm-v-warriors/,Storm,Warriors
+6,2026-04-12T04:00:00Z,/draw/nrl-premiership/2026/round-6/eels-v-titans/,Eels,Titans
+6,2026-04-12T06:05:00Z,/draw/nrl-premiership/2026/round-6/wests-tigers-v-knights/,Wests Tigers,Knights
+7,2026-04-16T09:50:00Z,/draw/nrl-premiership/2026/round-7/cowboys-v-sea-eagles/,Cowboys,Sea Eagles
+7,2026-04-17T08:00:00Z,/draw/nrl-premiership/2026/round-7/raiders-v-storm/,Raiders,Storm
+7,2026-04-17T10:00:00Z,/draw/nrl-premiership/2026/round-7/dolphins-v-panthers/,Dolphins,Panthers
+7,2026-04-18T05:00:00Z,/draw/nrl-premiership/2026/round-7/warriors-v-titans/,Warriors,Titans
+7,2026-04-18T07:30:00Z,/draw/nrl-premiership/2026/round-7/rabbitohs-v-dragons/,Rabbitohs,Dragons
+7,2026-04-18T09:35:00Z,/draw/nrl-premiership/2026/round-7/wests-tigers-v-broncos/,Wests Tigers,Broncos
+7,2026-04-19T04:00:00Z,/draw/nrl-premiership/2026/round-7/roosters-v-knights/,Roosters,Knights
+7,2026-04-19T06:05:00Z,/draw/nrl-premiership/2026/round-7/eels-v-bulldogs/,Eels,Bulldogs
+8,2026-04-23T09:50:00Z,/draw/nrl-premiership/2026/round-8/wests-tigers-v-raiders/,Wests Tigers,Raiders
+8,2026-04-24T08:00:00Z,/draw/nrl-premiership/2026/round-8/cowboys-v-sharks/,Cowboys,Sharks
+8,2026-04-24T10:00:00Z,/draw/nrl-premiership/2026/round-8/broncos-v-bulldogs/,Broncos,Bulldogs
+8,2026-04-25T06:00:00Z,/draw/nrl-premiership/2026/round-8/dragons-v-roosters/,Dragons,Roosters
+8,2026-04-25T08:05:00Z,/draw/nrl-premiership/2026/round-8/warriors-v-dolphins/,Warriors,Dolphins
+8,2026-04-25T10:10:00Z,/draw/nrl-premiership/2026/round-8/storm-v-rabbitohs/,Storm,Rabbitohs
+8,2026-04-26T04:00:00Z,/draw/nrl-premiership/2026/round-8/knights-v-panthers/,Knights,Panthers
+8,2026-04-26T06:05:00Z,/draw/nrl-premiership/2026/round-8/sea-eagles-v-eels/,Sea Eagles,Eels
+9,2026-05-01T08:00:00Z,/draw/nrl-premiership/2026/round-9/bulldogs-v-cowboys/,Bulldogs,Cowboys
+9,2026-05-01T10:00:00Z,/draw/nrl-premiership/2026/round-9/dolphins-v-storm/,Dolphins,Storm
+9,2026-05-02T05:00:00Z,/draw/nrl-premiership/2026/round-9/titans-v-raiders/,Titans,Raiders
+9,2026-05-02T07:30:00Z,/draw/nrl-premiership/2026/round-9/eels-v-warriors/,Eels,Warriors
+9,2026-05-02T09:35:00Z,/draw/nrl-premiership/2026/round-9/roosters-v-broncos/,Roosters,Broncos
+9,2026-05-03T04:00:00Z,/draw/nrl-premiership/2026/round-9/knights-v-rabbitohs/,Knights,Rabbitohs
+9,2026-05-03T06:05:00Z,/draw/nrl-premiership/2026/round-9/sharks-v-wests-tigers/,Sharks,Wests Tigers
+9,2026-05-03T08:15:00Z,/draw/nrl-premiership/2026/round-9/panthers-v-sea-eagles/,Panthers,Sea Eagles
+10,2026-05-07T09:50:00Z,/draw/nrl-premiership/2026/round-10/dolphins-v-bulldogs/,Dolphins,Bulldogs
+10,2026-05-08T08:00:00Z,/draw/nrl-premiership/2026/round-10/roosters-v-titans/,Roosters,Titans
+10,2026-05-08T10:00:00Z,/draw/nrl-premiership/2026/round-10/cowboys-v-eels/,Cowboys,Eels
+10,2026-05-09T05:00:00Z,/draw/nrl-premiership/2026/round-10/dragons-v-knights/,Dragons,Knights
+10,2026-05-09T07:30:00Z,/draw/nrl-premiership/2026/round-10/rabbitohs-v-sharks/,Rabbitohs,Sharks
+10,2026-05-09T09:35:00Z,/draw/nrl-premiership/2026/round-10/sea-eagles-v-broncos/,Sea Eagles,Broncos
+10,2026-05-10T04:00:00Z,/draw/nrl-premiership/2026/round-10/storm-v-wests-tigers/,Storm,Wests Tigers
+10,2026-05-10T06:05:00Z,/draw/nrl-premiership/2026/round-10/raiders-v-panthers/,Raiders,Panthers
+11,2026-05-15T08:00:00Z,/draw/nrl-premiership/2026/round-11/sharks-v-bulldogs/,Sharks,Bulldogs
+11,2026-05-15T10:00:00Z,/draw/nrl-premiership/2026/round-11/rabbitohs-v-dolphins/,Rabbitohs,Dolphins
+11,2026-05-16T05:00:00Z,/draw/nrl-premiership/2026/round-11/wests-tigers-v-sea-eagles/,Wests Tigers,Sea Eagles
+11,2026-05-16T07:30:00Z,/draw/nrl-premiership/2026/round-11/roosters-v-cowboys/,Roosters,Cowboys
+11,2026-05-16T09:45:00Z,/draw/nrl-premiership/2026/round-11/eels-v-storm/,Eels,Storm
+11,2026-05-17T04:00:00Z,/draw/nrl-premiership/2026/round-11/titans-v-knights/,Titans,Knights
+11,2026-05-17T06:05:00Z,/draw/nrl-premiership/2026/round-11/warriors-v-broncos/,Warriors,Broncos
+11,2026-05-17T08:25:00Z,/draw/nrl-premiership/2026/round-11/panthers-v-dragons/,Panthers,Dragons
+12,2026-05-21T09:50:00Z,/draw/nrl-premiership/2026/round-12/raiders-v-dolphins/,Raiders,Dolphins
+12,2026-05-22T10:00:00Z,/draw/nrl-premiership/2026/round-12/bulldogs-v-storm/,Bulldogs,Storm
+12,2026-05-23T07:30:00Z,/draw/nrl-premiership/2026/round-12/dragons-v-warriors/,Dragons,Warriors
+12,2026-05-23T09:35:00Z,/draw/nrl-premiership/2026/round-12/sea-eagles-v-titans/,Sea Eagles,Titans
+12,2026-05-24T06:05:00Z,/draw/nrl-premiership/2026/round-12/cowboys-v-rabbitohs/,Cowboys,Rabbitohs
+13,2026-05-29T10:00:00Z,/draw/nrl-premiership/2026/round-13/sharks-v-sea-eagles/,Sharks,Sea Eagles
+13,2026-05-30T05:00:00Z,/draw/nrl-premiership/2026/round-13/knights-v-eels/,Knights,Eels
+13,2026-05-30T07:30:00Z,/draw/nrl-premiership/2026/round-13/wests-tigers-v-bulldogs/,Wests Tigers,Bulldogs
+13,2026-05-30T09:35:00Z,/draw/nrl-premiership/2026/round-13/storm-v-roosters/,Storm,Roosters
+13,2026-05-31T04:00:00Z,/draw/nrl-premiership/2026/round-13/broncos-v-dragons/,Broncos,Dragons
+13,2026-05-31T06:05:00Z,/draw/nrl-premiership/2026/round-13/raiders-v-cowboys/,Raiders,Cowboys
+13,2026-05-31T08:15:00Z,/draw/nrl-premiership/2026/round-13/panthers-v-warriors/,Panthers,Warriors
+14,2026-06-04T09:50:00Z,/draw/nrl-premiership/2026/round-14/sea-eagles-v-rabbitohs/,Sea Eagles,Rabbitohs
+14,2026-06-05T08:00:00Z,/draw/nrl-premiership/2026/round-14/storm-v-knights/,Storm,Knights
+14,2026-06-05T10:00:00Z,/draw/nrl-premiership/2026/round-14/raiders-v-roosters/,Raiders,Roosters
+14,2026-06-06T07:30:00Z,/draw/nrl-premiership/2026/round-14/cowboys-v-dolphins/,Cowboys,Dolphins
+14,2026-06-06T09:35:00Z,/draw/nrl-premiership/2026/round-14/broncos-v-titans/,Broncos,Titans
+14,2026-06-07T04:00:00Z,/draw/nrl-premiership/2026/round-14/wests-tigers-v-panthers/,Wests Tigers,Panthers
+14,2026-06-07T06:05:00Z,/draw/nrl-premiership/2026/round-14/sharks-v-dragons/,Sharks,Dragons
+14,2026-06-08T06:00:00Z,/draw/nrl-premiership/2026/round-14/bulldogs-v-eels/,Bulldogs,Eels
+15,2026-06-11T09:50:00Z,/draw/nrl-premiership/2026/round-15/rabbitohs-v-broncos/,Rabbitohs,Broncos
+15,2026-06-12T10:00:00Z,/draw/nrl-premiership/2026/round-15/dolphins-v-roosters/,Dolphins,Roosters
+15,2026-06-13T07:30:00Z,/draw/nrl-premiership/2026/round-15/warriors-v-sharks/,Warriors,Sharks
+15,2026-06-13T09:35:00Z,/draw/nrl-premiership/2026/round-15/eels-v-raiders/,Eels,Raiders
+15,2026-06-14T06:05:00Z,/draw/nrl-premiership/2026/round-15/wests-tigers-v-titans/,Wests Tigers,Titans
+16,2026-06-19T10:00:00Z,/draw/nrl-premiership/2026/round-16/knights-v-dragons/,Knights,Dragons
+16,2026-06-20T05:00:00Z,/draw/nrl-premiership/2026/round-16/wests-tigers-v-dolphins/,Wests Tigers,Dolphins
+16,2026-06-20T07:30:00Z,/draw/nrl-premiership/2026/round-16/titans-v-panthers/,Titans,Panthers
+16,2026-06-20T09:35:00Z,/draw/nrl-premiership/2026/round-16/bulldogs-v-sea-eagles/,Bulldogs,Sea Eagles
+16,2026-06-21T04:00:00Z,/draw/nrl-premiership/2026/round-16/warriors-v-cowboys/,Warriors,Cowboys
+16,2026-06-21T06:05:00Z,/draw/nrl-premiership/2026/round-16/storm-v-raiders/,Storm,Raiders
+16,2026-06-21T08:15:00Z,/draw/nrl-premiership/2026/round-16/roosters-v-sharks/,Roosters,Sharks
+17,2026-06-25T09:50:00Z,/draw/nrl-premiership/2026/round-17/eels-v-rabbitohs/,Eels,Rabbitohs
+17,2026-06-26T08:00:00Z,/draw/nrl-premiership/2026/round-17/titans-v-bulldogs/,Titans,Bulldogs
+17,2026-06-26T10:00:00Z,/draw/nrl-premiership/2026/round-17/broncos-v-roosters/,Broncos,Roosters
+17,2026-06-27T05:00:00Z,/draw/nrl-premiership/2026/round-17/dolphins-v-warriors/,Dolphins,Warriors
+17,2026-06-27T07:30:00Z,/draw/nrl-premiership/2026/round-17/cowboys-v-panthers/,Cowboys,Panthers
+17,2026-06-27T09:35:00Z,/draw/nrl-premiership/2026/round-17/sea-eagles-v-storm/,Sea Eagles,Storm
+17,2026-06-28T04:00:00Z,/draw/nrl-premiership/2026/round-17/raiders-v-dragons/,Raiders,Dragons
+17,2026-06-28T06:05:00Z,/draw/nrl-premiership/2026/round-17/knights-v-wests-tigers/,Knights,Wests Tigers
+18,2026-07-03T10:00:00Z,/draw/nrl-premiership/2026/round-18/panthers-v-rabbitohs/,Panthers,Rabbitohs
+18,2026-07-04T07:30:00Z,/draw/nrl-premiership/2026/round-18/dragons-v-wests-tigers/,Dragons,Wests Tigers
+18,2026-07-04T09:35:00Z,/draw/nrl-premiership/2026/round-18/broncos-v-sharks/,Broncos,Sharks
+18,2026-07-05T04:00:00Z,/draw/nrl-premiership/2026/round-18/eels-v-sea-eagles/,Eels,Sea Eagles
+18,2026-07-05T06:05:00Z,/draw/nrl-premiership/2026/round-18/knights-v-dolphins/,Knights,Dolphins
+19,2026-07-10T10:00:00Z,/draw/nrl-premiership/2026/round-19/wests-tigers-v-warriors/,Wests Tigers,Warriors
+19,2026-07-11T05:00:00Z,/draw/nrl-premiership/2026/round-19/dolphins-v-sharks/,Dolphins,Sharks
+19,2026-07-11T07:30:00Z,/draw/nrl-premiership/2026/round-19/bulldogs-v-raiders/,Bulldogs,Raiders
+19,2026-07-11T09:35:00Z,/draw/nrl-premiership/2026/round-19/roosters-v-eels/,Roosters,Eels
+19,2026-07-12T04:00:00Z,/draw/nrl-premiership/2026/round-19/rabbitohs-v-knights/,Rabbitohs,Knights
+19,2026-07-12T06:05:00Z,/draw/nrl-premiership/2026/round-19/sea-eagles-v-cowboys/,Sea Eagles,Cowboys
+19,2026-07-12T08:15:00Z,/draw/nrl-premiership/2026/round-19/storm-v-titans/,Storm,Titans
+20,2026-07-16T09:50:00Z,/draw/nrl-premiership/2026/round-20/panthers-v-broncos/,Panthers,Broncos
+20,2026-07-17T08:00:00Z,/draw/nrl-premiership/2026/round-20/sharks-v-knights/,Sharks,Knights
+20,2026-07-17T10:00:00Z,/draw/nrl-premiership/2026/round-20/roosters-v-storm/,Roosters,Storm
+20,2026-07-18T05:00:00Z,/draw/nrl-premiership/2026/round-20/raiders-v-rabbitohs/,Raiders,Rabbitohs
+20,2026-07-18T07:30:00Z,/draw/nrl-premiership/2026/round-20/warriors-v-dragons/,Warriors,Dragons
+20,2026-07-18T09:35:00Z,/draw/nrl-premiership/2026/round-20/bulldogs-v-wests-tigers/,Bulldogs,Wests Tigers
+20,2026-07-19T04:00:00Z,/draw/nrl-premiership/2026/round-20/titans-v-sea-eagles/,Titans,Sea Eagles
+20,2026-07-19T06:05:00Z,/draw/nrl-premiership/2026/round-20/dolphins-v-cowboys/,Dolphins,Cowboys
+21,2026-07-23T09:50:00Z,/draw/nrl-premiership/2026/round-21/eels-v-panthers/,Eels,Panthers
+21,2026-07-24T08:00:00Z,/draw/nrl-premiership/2026/round-21/knights-v-roosters/,Knights,Roosters
+21,2026-07-24T10:00:00Z,/draw/nrl-premiership/2026/round-21/rabbitohs-v-storm/,Rabbitohs,Storm
+21,2026-07-25T05:00:00Z,/draw/nrl-premiership/2026/round-21/raiders-v-wests-tigers/,Raiders,Wests Tigers
+21,2026-07-25T07:30:00Z,/draw/nrl-premiership/2026/round-21/bulldogs-v-warriors/,Bulldogs,Warriors
+21,2026-07-25T09:35:00Z,/draw/nrl-premiership/2026/round-21/cowboys-v-broncos/,Cowboys,Broncos
+21,2026-07-26T04:00:00Z,/draw/nrl-premiership/2026/round-21/dragons-v-titans/,Dragons,Titans
+21,2026-07-26T06:05:00Z,/draw/nrl-premiership/2026/round-21/sea-eagles-v-sharks/,Sea Eagles,Sharks
+22,2026-07-30T09:50:00Z,/draw/nrl-premiership/2026/round-22/cowboys-v-roosters/,Cowboys,Roosters
+22,2026-07-31T08:00:00Z,/draw/nrl-premiership/2026/round-22/dragons-v-dolphins/,Dragons,Dolphins
+22,2026-07-31T10:00:00Z,/draw/nrl-premiership/2026/round-22/storm-v-bulldogs/,Storm,Bulldogs
+22,2026-08-01T05:00:00Z,/draw/nrl-premiership/2026/round-22/titans-v-warriors/,Titans,Warriors
+22,2026-08-01T07:30:00Z,/draw/nrl-premiership/2026/round-22/panthers-v-raiders/,Panthers,Raiders
+22,2026-08-01T09:35:00Z,/draw/nrl-premiership/2026/round-22/broncos-v-knights/,Broncos,Knights
+22,2026-08-02T04:00:00Z,/draw/nrl-premiership/2026/round-22/sharks-v-rabbitohs/,Sharks,Rabbitohs
+22,2026-08-02T06:05:00Z,/draw/nrl-premiership/2026/round-22/wests-tigers-v-eels/,Wests Tigers,Eels
+23,2026-08-06T09:50:00Z,/draw/nrl-premiership/2026/round-23/titans-v-cowboys/,Titans,Cowboys
+23,2026-08-07T08:00:00Z,/draw/nrl-premiership/2026/round-23/warriors-v-panthers/,Warriors,Panthers
+23,2026-08-07T10:00:00Z,/draw/nrl-premiership/2026/round-23/roosters-v-bulldogs/,Roosters,Bulldogs
+23,2026-08-08T05:00:00Z,/draw/nrl-premiership/2026/round-23/storm-v-sea-eagles/,Storm,Sea Eagles
+23,2026-08-08T07:30:00Z,/draw/nrl-premiership/2026/round-23/dolphins-v-broncos/,Dolphins,Broncos
+23,2026-08-08T09:35:00Z,/draw/nrl-premiership/2026/round-23/rabbitohs-v-eels/,Rabbitohs,Eels
+23,2026-08-09T04:00:00Z,/draw/nrl-premiership/2026/round-23/raiders-v-knights/,Raiders,Knights
+23,2026-08-09T06:05:00Z,/draw/nrl-premiership/2026/round-23/dragons-v-sharks/,Dragons,Sharks
+24,2026-08-13T09:50:00Z,/draw/nrl-premiership/2026/round-24/panthers-v-roosters/,Panthers,Roosters
+24,2026-08-14T08:00:00Z,/draw/nrl-premiership/2026/round-24/sea-eagles-v-dolphins/,Sea Eagles,Dolphins
+24,2026-08-14T10:00:00Z,/draw/nrl-premiership/2026/round-24/bulldogs-v-rabbitohs/,Bulldogs,Rabbitohs
+24,2026-08-15T05:00:00Z,/draw/nrl-premiership/2026/round-24/sharks-v-raiders/,Sharks,Raiders
+24,2026-08-15T07:30:00Z,/draw/nrl-premiership/2026/round-24/eels-v-cowboys/,Eels,Cowboys
+24,2026-08-15T09:35:00Z,/draw/nrl-premiership/2026/round-24/broncos-v-warriors/,Broncos,Warriors
+24,2026-08-16T04:00:00Z,/draw/nrl-premiership/2026/round-24/knights-v-titans/,Knights,Titans
+24,2026-08-16T06:05:00Z,/draw/nrl-premiership/2026/round-24/wests-tigers-v-dragons/,Wests Tigers,Dragons
+25,2026-08-20T09:50:00Z,/draw/nrl-premiership/2026/round-25/storm-v-panthers/,Storm,Panthers
+25,2026-08-21T08:00:00Z,/draw/nrl-premiership/2026/round-25/raiders-v-broncos/,Raiders,Broncos
+25,2026-08-21T10:00:00Z,/draw/nrl-premiership/2026/round-25/dolphins-v-eels/,Dolphins,Eels
+25,2026-08-22T05:00:00Z,/draw/nrl-premiership/2026/round-25/knights-v-sea-eagles/,Knights,Sea Eagles
+25,2026-08-22T07:30:00Z,/draw/nrl-premiership/2026/round-25/rabbitohs-v-warriors/,Rabbitohs,Warriors
+25,2026-08-22T09:35:00Z,/draw/nrl-premiership/2026/round-25/dragons-v-bulldogs/,Dragons,Bulldogs
+25,2026-08-23T04:00:00Z,/draw/nrl-premiership/2026/round-25/titans-v-sharks/,Titans,Sharks
+25,2026-08-23T06:05:00Z,/draw/nrl-premiership/2026/round-25/roosters-v-wests-tigers/,Roosters,Wests Tigers
+26,2026-08-27T09:50:00Z,/draw/nrl-premiership/2026/round-26/broncos-v-storm/,Broncos,Storm
+26,2026-08-28T08:00:00Z,/draw/nrl-premiership/2026/round-26/sea-eagles-v-dragons/,Sea Eagles,Dragons
+26,2026-08-28T10:00:00Z,/draw/nrl-premiership/2026/round-26/panthers-v-bulldogs/,Panthers,Bulldogs
+26,2026-08-29T05:00:00Z,/draw/nrl-premiership/2026/round-26/titans-v-rabbitohs/,Titans,Rabbitohs
+26,2026-08-29T07:30:00Z,/draw/nrl-premiership/2026/round-26/roosters-v-dolphins/,Roosters,Dolphins
+26,2026-08-29T09:35:00Z,/draw/nrl-premiership/2026/round-26/cowboys-v-wests-tigers/,Cowboys,Wests Tigers
+26,2026-08-30T04:00:00Z,/draw/nrl-premiership/2026/round-26/warriors-v-knights/,Warriors,Knights
+26,2026-08-30T06:05:00Z,/draw/nrl-premiership/2026/round-26/eels-v-sharks/,Eels,Sharks
+27,2026-09-03T09:50:00Z,/draw/nrl-premiership/2026/round-27/bulldogs-v-broncos/,Bulldogs,Broncos
+27,2026-09-04T08:00:00Z,/draw/nrl-premiership/2026/round-27/titans-v-dolphins/,Titans,Dolphins
+27,2026-09-04T10:00:00Z,/draw/nrl-premiership/2026/round-27/rabbitohs-v-roosters/,Rabbitohs,Roosters
+27,2026-09-05T05:00:00Z,/draw/nrl-premiership/2026/round-27/warriors-v-sea-eagles/,Warriors,Sea Eagles
+27,2026-09-05T07:30:00Z,/draw/nrl-premiership/2026/round-27/cowboys-v-raiders/,Cowboys,Raiders
+27,2026-09-05T09:35:00Z,/draw/nrl-premiership/2026/round-27/sharks-v-storm/,Sharks,Storm
+27,2026-09-06T04:00:00Z,/draw/nrl-premiership/2026/round-27/dragons-v-eels/,Dragons,Eels
+27,2026-09-06T06:05:00Z,/draw/nrl-premiership/2026/round-27/panthers-v-wests-tigers/,Panthers,Wests Tigers

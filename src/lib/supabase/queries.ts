@@ -6,8 +6,31 @@ import {
   FINALS_LABEL_MAP,
 } from "@/lib/data/constants";
 import type { PlayerStat, Match } from "@/lib/data/types";
+import {
+  availableYearsFromPlayerStatsRows,
+  filterPlayerStatsRowsByYears,
+  readPlayerStatsServerCache,
+} from "@/lib/data/player-stats-server-cache";
 
 const PAGE_SIZE = 1000;
+
+export interface PlayerImageRecord {
+  player: string;
+  team: string | null;
+  number: string | null;
+  position: string | null;
+  head_image: string | null;
+  body_image: string | null;
+  last_seen_match_date: string | null;
+}
+
+function normaliseTeamKey(value: unknown): string {
+  return String(value ?? "")
+    .replace(/-/g, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
 
 // ---------------------------------------------------------------------------
 // Generic paginated fetch
@@ -73,6 +96,54 @@ function roundToLabel(raw: string | null | undefined): string {
   }
   const m = s.match(/(\d+)/);
   return m ? m[1] : s;
+}
+
+// ---------------------------------------------------------------------------
+// Fantasy/local name matching helpers (mirrors client logic)
+// ---------------------------------------------------------------------------
+function normaliseNameForMatch(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function parseNameForMatch(value: string): { first: string; last: string } {
+  const parts = normaliseNameForMatch(value).split(" ").filter(Boolean);
+  if (parts.length === 0) return { first: "", last: "" };
+  return {
+    first: parts[0],
+    last: parts[parts.length - 1],
+  };
+}
+
+function findLocalPlayerMatchForFantasyName(
+  fantasyName: string,
+  localNames: string[]
+): string | null {
+  if (!fantasyName || localNames.length === 0) return null;
+
+  const exactMap = new Map(localNames.map((name) => [normaliseNameForMatch(name), name]));
+  const exact = exactMap.get(normaliseNameForMatch(fantasyName));
+  if (exact) return exact;
+
+  const target = parseNameForMatch(fantasyName);
+  const candidates = localNames.filter((name) => {
+    const parsed = parseNameForMatch(name);
+    return parsed.last && parsed.last === target.last;
+  });
+  if (candidates.length === 1) return candidates[0];
+
+  const initialMatches = candidates.filter((name) => {
+    const parsed = parseNameForMatch(name);
+    return parsed.first[0] && parsed.first[0] === target.first[0];
+  });
+  if (initialMatches.length === 1) return initialMatches[0];
+
+  const prefixMatches = candidates.filter((name) => {
+    const parsed = parseNameForMatch(name);
+    return parsed.first.startsWith(target.first) || target.first.startsWith(parsed.first);
+  });
+  if (prefixMatches.length === 1) return prefixMatches[0];
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +254,7 @@ function cleanPlayerRow(row: Record<string, unknown>): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 // fetchPlayerStats — main entry point
 // ---------------------------------------------------------------------------
-export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> {
+export async function fetchPlayerStatsFromSupabase(years?: string[]): Promise<PlayerStat[]> {
   const opts = years && years.length > 0 ? { years } : undefined;
   const [rawPlayers, rawMatches] = await Promise.all([
     fetchAllRows<Record<string, unknown>>("player_stats", opts),
@@ -254,25 +325,66 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
   return rows;
 }
 
+export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> {
+  const normalizedYears = (years ?? []).filter(Boolean).sort();
+  const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
+  const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
+  const serverCache = await readPlayerStatsServerCache();
+
+  if (serverCache) {
+    return filterPlayerStatsRowsByYears(serverCache.rows, normalizedArg);
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return fetchPlayerStatsFromSupabase(normalizedArg);
+  }
+
+  const fetchCached = unstable_cache(
+    async () => fetchPlayerStatsFromSupabase(normalizedArg),
+    ["player-stats-v1", key],
+    { revalidate: 3600 }
+  );
+
+  return fetchCached();
+}
+
+export async function fetchFantasyPlayerStatsAllYears(
+  fantasyName: string
+): Promise<PlayerStat[]> {
+  if (!fantasyName.trim()) return [];
+
+  const allRows = await fetchPlayerStats();
+  if (allRows.length === 0) return [];
+
+  const localNames = Array.from(new Set(allRows.map((row) => row.Name))).sort();
+  const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
+  if (!matchedLocalName) return [];
+
+  return allRows.filter((row) => row.Name === matchedLocalName);
+}
+
 // ---------------------------------------------------------------------------
 // fetchMatches
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // fetchAvailableYears — lightweight query for year list
 // ---------------------------------------------------------------------------
-async function fetchAvailableYearsUncached(): Promise<string[]> {
+export async function fetchAvailableYearsFromSupabase(): Promise<string[]> {
   const supabase = createServerSupabaseClient();
   // Get distinct years by fetching min and max dates
-  const { data: minRow } = await supabase
+  const { data: minRow, error: minError } = await supabase
     .from("player_stats")
     .select("match_date")
     .order("match_date", { ascending: true })
     .limit(1);
-  const { data: maxRow } = await supabase
+  const { data: maxRow, error: maxError } = await supabase
     .from("player_stats")
     .select("match_date")
     .order("match_date", { ascending: false })
     .limit(1);
+
+  if (minError) throw new Error(`Supabase fetch player_stats min(match_date): ${minError.message}`);
+  if (maxError) throw new Error(`Supabase fetch player_stats max(match_date): ${maxError.message}`);
 
   if (!minRow?.[0] || !maxRow?.[0]) return [];
 
@@ -286,12 +398,23 @@ async function fetchAvailableYearsUncached(): Promise<string[]> {
 }
 
 const fetchAvailableYearsCached = unstable_cache(
-  async (): Promise<string[]> => fetchAvailableYearsUncached(),
+  async (): Promise<string[]> => fetchAvailableYearsFromSupabase(),
   ["available-years-v1"],
   { revalidate: 3600 }
 );
 
 export async function fetchAvailableYears(): Promise<string[]> {
+  const serverCache = await readPlayerStatsServerCache();
+  if (serverCache) {
+    return serverCache.years.length > 0
+      ? serverCache.years
+      : availableYearsFromPlayerStatsRows(serverCache.rows);
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return fetchAvailableYearsFromSupabase();
+  }
+
   return fetchAvailableYearsCached();
 }
 
@@ -332,4 +455,70 @@ export async function fetchMatches(years?: string[]): Promise<Match[]> {
   }
 
   return matches;
+}
+
+export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord[]> {
+  const raw = await fetchAllRows<Record<string, unknown>>("player_images");
+  return raw.map((row) => ({
+    player: typeof row.player === "string" ? row.player : "",
+    team: typeof row.team === "string" ? row.team : null,
+    number: row.number == null ? null : String(row.number),
+    position: typeof row.position === "string" ? row.position : null,
+    head_image: typeof row.head_image === "string" ? row.head_image : null,
+    body_image: typeof row.body_image === "string" ? row.body_image : null,
+    last_seen_match_date:
+      typeof row.last_seen_match_date === "string" ? row.last_seen_match_date : null,
+  }));
+}
+
+const fetchPlayerImagesCached = unstable_cache(
+  async (): Promise<PlayerImageRecord[]> => fetchPlayerImagesFromSupabase(),
+  ["player-images-v1"],
+  { revalidate: 3600 }
+);
+
+export async function fetchPlayerImages(): Promise<PlayerImageRecord[]> {
+  if (process.env.NODE_ENV !== "production") {
+    return fetchPlayerImagesFromSupabase();
+  }
+  return fetchPlayerImagesCached();
+}
+
+export async function fetchTeamLogosFromSupabase(): Promise<Record<string, string>> {
+  const raw = await fetchAllRows<Record<string, unknown>>("team_logos");
+  const logos = new Map<string, string>();
+
+  for (const row of raw) {
+    const teamKey = normaliseTeamKey(row.team);
+    if (!teamKey) continue;
+
+    const candidates = [
+      row.short_side_logo_url,
+      row.side_logo_url,
+      row.short_logo_url,
+      row.logo_url,
+    ];
+    const logoUrl = candidates.find(
+      (value): value is string => typeof value === "string" && value.trim().length > 0
+    )?.trim();
+
+    if (logoUrl && !logos.has(teamKey)) {
+      logos.set(teamKey, logoUrl);
+    }
+  }
+
+  return Object.fromEntries(logos);
+}
+
+const fetchTeamLogosCached = unstable_cache(
+  async (): Promise<Record<string, string>> => fetchTeamLogosFromSupabase(),
+  ["team-logos-v1"],
+  { revalidate: 3600 }
+);
+
+export async function fetchTeamLogos(): Promise<Record<string, string>> {
+  if (process.env.NODE_ENV !== "production") {
+    return fetchTeamLogosFromSupabase();
+  }
+  return fetchTeamLogosCached();
 }

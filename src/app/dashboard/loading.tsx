@@ -1,11 +1,11 @@
 export default function DashboardLoading() {
   return (
-    <div className="rounded-lg border border-nrl-accent/30 bg-nrl-panel p-3 text-center text-sm text-nrl-accent">
-      <div className="inline-flex items-center gap-2">
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-nrl-accent/30 border-t-nrl-accent" />
-        <span>Loading section...</span>
-      </div>
+    <div className="flex justify-center pt-10 md:pt-14">
+      <span
+        aria-label="Loading"
+        role="status"
+        className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/25 border-t-nrl-accent"
+      />
     </div>
-  );
+  )
 }
-

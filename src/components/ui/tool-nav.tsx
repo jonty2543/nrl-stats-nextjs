@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 const tools = [
   { label: "Stats", href: "/dashboard/players" },
+  { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "About", href: "/dashboard/about" },
 ];
 
@@ -46,7 +47,11 @@ export function ToolNav() {
     };
   }, [isOpen]);
 
-  const currentLabel = pathname.startsWith("/dashboard/about") ? "About" : "Stats";
+  const currentLabel = pathname.startsWith("/dashboard/about")
+    ? "About"
+    : pathname.startsWith("/dashboard/fantasy")
+      ? "Fantasy"
+      : "Stats";
 
   return (
     <div className="relative" ref={menuRef}>

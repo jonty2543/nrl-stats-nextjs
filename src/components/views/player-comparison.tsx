@@ -201,6 +201,31 @@ export function primaryPositionForRows(rows: PlayerStat[]): string | null {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
+function sortYearsDesc(years: string[]): string[] {
+  return [...years].sort((a, b) => {
+    const aNum = Number.parseInt(a, 10);
+    const bNum = Number.parseInt(b, 10);
+    if (Number.isNaN(aNum) && Number.isNaN(bNum)) return b.localeCompare(a);
+    if (Number.isNaN(aNum)) return 1;
+    if (Number.isNaN(bNum)) return -1;
+    return bNum - aNum;
+  });
+}
+
+function primaryValueForLatestSelectedYear(
+  rows: PlayerStat[],
+  selectedYears: string[],
+  key: "Team" | "Position"
+): string | null {
+  if (rows.length === 0) return null;
+  for (const year of sortYearsDesc(selectedYears)) {
+    const yearRows = rows.filter((row) => row.Year === year);
+    if (yearRows.length === 0) continue;
+    return key === "Team" ? primaryTeamForRows(yearRows) : primaryPositionForRows(yearRows);
+  }
+  return key === "Team" ? primaryTeamForRows(rows) : primaryPositionForRows(rows);
+}
+
 function formatFantasyPositionBadge(value: string | null | undefined): string {
   const raw = (value ?? "").trim();
   if (!raw) return "POS";
@@ -1030,23 +1055,29 @@ export function PlayerComparison({
     return e;
   }, [effectiveP1Label, p1Rows, hasTwoPlayers, player2Label, p2Rows]);
 
-  const p1CardTeam = useMemo(() => primaryTeamForRows(p1AllRows), [p1AllRows]);
+  const p1CardTeam = useMemo(
+    () => primaryValueForLatestSelectedYear(p1AllRows, selectedYears, "Team"),
+    [p1AllRows, selectedYears]
+  );
   const p2CardTeam = useMemo(
-    () => (hasTwoPlayers ? primaryTeamForRows(p2AllRows) : null),
-    [hasTwoPlayers, p2AllRows]
+    () => (hasTwoPlayers ? primaryValueForLatestSelectedYear(p2AllRows, selectedYears, "Team") : null),
+    [hasTwoPlayers, p2AllRows, selectedYears]
   );
   const p1CardImage = useMemo(
     () => resolvePlayerImage(effectiveP1, p1CardTeam, playerImages),
     [effectiveP1, p1CardTeam, p1AllRows, playerImages]
   );
-  const p1CardPosition = useMemo(() => primaryPositionForRows(p1AllRows), [p1AllRows]);
+  const p1CardPosition = useMemo(
+    () => primaryValueForLatestSelectedYear(p1AllRows, selectedYears, "Position"),
+    [p1AllRows, selectedYears]
+  );
   const p2CardImage = useMemo(
     () => (hasTwoPlayers ? resolvePlayerImage(player2, p2CardTeam, playerImages) : null),
     [hasTwoPlayers, player2, p2CardTeam, p2AllRows, playerImages]
   );
   const p2CardPosition = useMemo(
-    () => (hasTwoPlayers ? primaryPositionForRows(p2AllRows) : null),
-    [hasTwoPlayers, p2AllRows]
+    () => (hasTwoPlayers ? primaryValueForLatestSelectedYear(p2AllRows, selectedYears, "Position") : null),
+    [hasTwoPlayers, p2AllRows, selectedYears]
   );
   const p1CardLogoUrl = useMemo(
     () => resolveTeamLogoUrl(p1CardImage?.team ?? p1CardTeam, teamLogos),
@@ -1490,11 +1521,12 @@ export function PlayerComparison({
         </div>
       </div>
       {loading && (
-        <div className="rounded-lg border border-nrl-accent/30 bg-nrl-panel p-3 text-center text-sm text-nrl-accent">
-          <div className="inline-flex items-center gap-2">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-nrl-accent/30 border-t-nrl-accent" />
-            <span>Loading section...</span>
-          </div>
+        <div className="flex justify-center py-6 md:py-8">
+          <span
+            aria-label="Loading"
+            role="status"
+            className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/25 border-t-nrl-accent"
+          />
         </div>
       )}
       {!loading && allData.length === 0 && (

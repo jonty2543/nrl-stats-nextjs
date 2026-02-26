@@ -1043,11 +1043,6 @@ export function FantasyDashboard({
                           </span>
                         ) : null}
                       </div>
-                      {!matchedLocalName ? (
-                        <p className="mt-2 text-xs text-amber-300">
-                          Fantasy player name could not be matched to your local stats dataset for game logs yet.
-                        </p>
-                      ) : null}
                     </div>
 
                     <div className="pt-6 grid grid-cols-[8rem_minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-[9rem_minmax(0,1fr)] xl:grid-cols-1">
@@ -1072,6 +1067,7 @@ export function FantasyDashboard({
                               fantasyPosition={fantasyCardPosition}
                               compact
                               frameless
+                              priority
                             />
                           </div>
                         </div>
@@ -1088,6 +1084,7 @@ export function FantasyDashboard({
                           teamLogoUrl={fantasyCardLogoUrl}
                           fantasyPosition={fantasyCardPosition}
                           frameless
+                          priority
                         />
                       </div>
                     </div>

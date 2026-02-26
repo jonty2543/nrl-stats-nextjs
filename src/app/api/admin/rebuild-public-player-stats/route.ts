@@ -29,8 +29,14 @@ export async function POST() {
     return NextResponse.json(await rebuild());
   } catch (error) {
     console.error("Rebuild player stats server cache failed:", error);
+    const details =
+      process.env.NODE_ENV !== "production"
+        ? error instanceof Error
+          ? error.message
+          : String(error)
+        : undefined;
     return NextResponse.json(
-      { ok: false, error: "Failed to rebuild player stats server cache" },
+      { ok: false, error: "Failed to rebuild player stats server cache", details },
       { status: 500 }
     );
   }

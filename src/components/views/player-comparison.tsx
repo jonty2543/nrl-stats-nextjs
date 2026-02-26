@@ -136,6 +136,8 @@ function parsePersonName(value: string): { first: string; last: string } {
   return { first: parts[0], last: parts[parts.length - 1] };
 }
 
+const preferredImageIndexByCandidatesKey = new Map<string, number>();
+
 export function resolvePlayerImage(
   playerName: string,
   teamHint: string | null,
@@ -166,6 +168,10 @@ export function resolvePlayerImage(
     const aTeamMatch = teamNorm && a.team ? normalisePersonName(a.team) === teamNorm : false;
     const bTeamMatch = teamNorm && b.team ? normalisePersonName(b.team) === teamNorm : false;
     if (aTeamMatch !== bTeamMatch) return aTeamMatch ? -1 : 1;
+
+    const aHasBody = Boolean(a.body_image);
+    const bHasBody = Boolean(b.body_image);
+    if (aHasBody !== bHasBody) return aHasBody ? -1 : 1;
 
     const aImg = Boolean(a.body_image || a.head_image);
     const bImg = Boolean(b.body_image || b.head_image);
@@ -256,6 +262,7 @@ export function PlayerImageCard({
   fantasyPosition,
   compact = false,
   frameless = false,
+  priority = false,
 }: {
   title?: string;
   playerName: string;
@@ -264,6 +271,7 @@ export function PlayerImageCard({
   fantasyPosition?: string | null;
   compact?: boolean;
   frameless?: boolean;
+  priority?: boolean;
 }) {
   const imageCandidates = useMemo(() => {
     const seen = new Set<string>();
@@ -323,9 +331,33 @@ export function PlayerImageCard({
     key: "",
     index: 0,
   });
+  const cachedPreferredIndex = preferredImageIndexByCandidatesKey.get(imageCandidatesKey) ?? 0;
+  const initialIndex = Math.max(0, Math.min(cachedPreferredIndex, Math.max(0, imageCandidates.length - 1)));
   const imageIndex =
-    imageAttemptState.key === imageCandidatesKey ? imageAttemptState.index : 0;
+    imageAttemptState.key === imageCandidatesKey ? imageAttemptState.index : initialIndex;
   const imageUrl = imageCandidates[imageIndex] ?? null;
+
+  useEffect(() => {
+    if (imageCandidates.length <= 1) return;
+    const preloadUrls = new Set<string>();
+    if (imageCandidates[0]) preloadUrls.add(imageCandidates[0]);
+    if (imageCandidates[1]) preloadUrls.add(imageCandidates[1]);
+    if (imageCandidates[initialIndex]) preloadUrls.add(imageCandidates[initialIndex]);
+
+    const preloaded: HTMLImageElement[] = [];
+    for (const url of preloadUrls) {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = url;
+      preloaded.push(image);
+    }
+
+    return () => {
+      for (const image of preloaded) {
+        image.src = "";
+      }
+    };
+  }, [imageCandidates, initialIndex]);
   const showStats = !frameless;
   const statSlots = [
     { key: "PAC", value: "--" },
@@ -469,7 +501,12 @@ export function PlayerImageCard({
                 alt={`${playerName} player image`}
                 className={frameless ? "relative z-10 max-h-[99%] w-auto object-contain" : "relative z-10 max-h-[94%] w-auto object-contain"}
                 loading="eager"
+                fetchPriority={priority ? "high" : "auto"}
+                decoding="async"
                 referrerPolicy="no-referrer"
+                onLoad={() => {
+                  preferredImageIndexByCandidatesKey.set(imageCandidatesKey, imageIndex);
+                }}
                 onError={() => {
                   setImageAttemptState((prev) => ({
                     key: imageCandidatesKey,
@@ -901,6 +938,7 @@ export function PlayerComparison({
 
   useEffect(() => {
     if (!hasLoadedData) return;
+    if (loading) return;
     if (!player1) return;
 
     if (player1 === "None") {
@@ -920,30 +958,33 @@ export function PlayerComparison({
         setPlayer1(p1PlayerOptions[0] || "");
       }
     }
-  }, [hasLoadedData, player1, p1PlayerOptions, hasPlayer2, teammate1, teammate1Position, teammateMode1]);
+  }, [hasLoadedData, loading, player1, p1PlayerOptions, hasPlayer2, teammate1, teammate1Position, teammateMode1]);
 
   useEffect(() => {
     if (!hasLoadedData) return;
+    if (loading) return;
     if (hasPlayer2 && !p2PlayerOptions.includes(player2)) {
       setPlayer2("None");
       setTeammate2("None");
       setTeammate2Position("All");
       setTeammateMode2("both");
     }
-  }, [hasLoadedData, hasPlayer2, player2, p2PlayerOptions]);
+  }, [hasLoadedData, loading, hasPlayer2, player2, p2PlayerOptions]);
 
   // Keep teammate selections valid when player choices change.
   useEffect(() => {
     if (!hasLoadedData) return;
+    if (loading) return;
     if (teammate1 !== "None" && !tm1Options.includes(teammate1)) {
       setTeammate1("None");
       setTeammate1Position("All");
       setTeammateMode1("both");
     }
-  }, [hasLoadedData, teammate1, tm1Options]);
+  }, [hasLoadedData, loading, teammate1, tm1Options]);
 
   useEffect(() => {
     if (!hasLoadedData) return;
+    if (loading) return;
     if (!hasPlayer2) {
       if (teammate2 !== "None") setTeammate2("None");
       if (teammate2Position !== "All") setTeammate2Position("All");
@@ -956,7 +997,7 @@ export function PlayerComparison({
       setTeammate2Position("All");
       setTeammateMode2("both");
     }
-  }, [hasLoadedData, hasPlayer2, teammate2, teammate2Position, tm2Options, teammateMode2]);
+  }, [hasLoadedData, loading, hasPlayer2, teammate2, teammate2Position, tm2Options, teammateMode2]);
 
   const handleTeammate1Change = useCallback((value: string) => {
     setTeammate1(value);
@@ -1562,6 +1603,7 @@ export function PlayerComparison({
                       teamLogoUrl={p1CardLogoUrl}
                       fantasyPosition={p1CardPosition}
                       frameless
+                      priority
                     />
                   </div>
                   {hasTwoPlayers ? (
@@ -1572,6 +1614,7 @@ export function PlayerComparison({
                         teamLogoUrl={p2CardLogoUrl}
                         fantasyPosition={p2CardPosition}
                         frameless
+                        priority
                       />
                     </div>
                   ) : null}

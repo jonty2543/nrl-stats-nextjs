@@ -220,17 +220,29 @@ async function readSupabaseStoragePlayerStatsServerCache(
     };
   }
 
-  const chunkBuffers = await Promise.all(
-    targetChunks.map(async (chunk) => {
-      const compressed = await downloadStorageObject(bucket, chunk.path);
-      if (!compressed) {
-        throw new Error(`Missing Supabase Storage cache chunk: ${chunk.path}`);
-      }
-      const uncompressed = gunzipSync(compressed);
-      const parsed = JSON.parse(uncompressed.toString("utf8")) as { rows?: PlayerStat[] };
-      return Array.isArray(parsed.rows) ? (parsed.rows as PlayerStat[]) : [];
-    })
-  );
+  let chunkBuffers: PlayerStat[][];
+  try {
+    chunkBuffers = await Promise.all(
+      targetChunks.map(async (chunk) => {
+        const compressed = await downloadStorageObject(bucket, chunk.path);
+        if (!compressed) {
+          throw new Error(`Missing Supabase Storage cache chunk: ${chunk.path}`);
+        }
+        const uncompressed = gunzipSync(compressed);
+        const parsed = JSON.parse(uncompressed.toString("utf8")) as { rows?: PlayerStat[] };
+        if (!Array.isArray(parsed.rows)) {
+          throw new Error(`Invalid Supabase Storage cache chunk format: ${chunk.path}`);
+        }
+        return parsed.rows as PlayerStat[];
+      })
+    );
+  } catch (error) {
+    console.warn(
+      "Unable to read Supabase Storage player stats cache; falling back to database.",
+      error
+    );
+    return null;
+  }
 
   return {
     version: 1,

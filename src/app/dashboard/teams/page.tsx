@@ -10,7 +10,7 @@ export default async function TeamsPage() {
   const canAccessLoginSeason = Boolean(userId);
   const availableYears = await fetchAvailableYears();
   const unlockedYears = availableYears.filter((year) =>
-    isAccessibleSeason(year, canAccessLoginSeason)
+    isAccessibleSeason(year, canAccessLoginSeason, "stats")
   );
   const defaultYears = unlockedYears.slice(0, 1);
   const initialData = defaultYears.length > 0 ? await fetchPlayerStats(defaultYears) : [];

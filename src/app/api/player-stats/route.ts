@@ -17,9 +17,9 @@ export async function GET(request: NextRequest) {
       : null;
 
     const allowedYears = requestedYears
-      ? requestedYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason))
+      ? requestedYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason, "stats"))
       : (await fetchAvailableYears()).filter((year) =>
-          isAccessibleSeason(year, canAccessLoginSeason)
+          isAccessibleSeason(year, canAccessLoginSeason, "stats")
         );
 
     if (allowedYears.length === 0) {

@@ -72,16 +72,17 @@ export function FilterBar({
   const { isLoaded, userId } = useAuth();
   const canAccessLoginSeason = Boolean(userId);
   const disabledYearReasons = years.reduce<Record<string, string>>((acc, year) => {
-    const reason = getSeasonLockReason(year, canAccessLoginSeason);
+    const reason = getSeasonLockReason(year, canAccessLoginSeason, "stats");
     if (reason) {
       acc[year] = reason;
     }
     return acc;
   }, {});
-  const hasHistoricalYearsLocked = hasProLockedHistoricalSeasons(years);
+  const hasHistoricalYearsLocked = hasProLockedHistoricalSeasons(years, "stats");
   const shouldPromptLoginFor2024 = requiresLoginFor2024(
     years,
-    canAccessLoginSeason
+    canAccessLoginSeason,
+    "stats"
   );
   const shouldShowYearFooter = shouldPromptLoginFor2024 || hasHistoricalYearsLocked;
   const safeSelectedYears = selectedYears.filter((year) =>
@@ -269,7 +270,7 @@ export function FilterBar({
                     <div className="space-y-1">
                       {shouldPromptLoginFor2024 && (
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[9px] text-nrl-muted">Log in to access pre-2025 data</p>
+                          <p className="text-[9px] text-nrl-muted">Log in to access 2024 data</p>
                           <SignInButton mode="modal">
                             <button
                               type="button"
@@ -281,9 +282,7 @@ export function FilterBar({
                         </div>
                       )}
                       {hasHistoricalYearsLocked && (
-                        <p className="text-[9px] text-nrl-muted">
-                          Historical seasons are currently unavailable
-                        </p>
+                        <p className="text-[9px] text-nrl-muted">Upgrade to Pro for pre-2024 data</p>
                       )}
                     </div>
                   ) : null

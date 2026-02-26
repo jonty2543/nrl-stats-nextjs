@@ -527,7 +527,7 @@ export function PlayerComparison({
   const [allData, setAllData] = useState<PlayerStat[]>(initialData);
   const unlockedYears = useMemo(
     () =>
-      availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason)),
+      availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason, "stats")),
     [availableYears, canAccessLoginSeason]
   );
   const initialYears = useMemo(() => {

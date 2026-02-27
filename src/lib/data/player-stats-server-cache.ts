@@ -220,10 +220,9 @@ async function readSupabaseStoragePlayerStatsServerCache(
     };
   }
 
-  let chunkBuffers: PlayerStat[][];
-  try {
-    chunkBuffers = await Promise.all(
-      targetChunks.map(async (chunk) => {
+  const chunkRowsByIndex = await Promise.all(
+    targetChunks.map(async (chunk) => {
+      try {
         const compressed = await downloadStorageObject(bucket, chunk.path);
         if (!compressed) {
           throw new Error(`Missing Supabase Storage cache chunk: ${chunk.path}`);
@@ -234,21 +233,40 @@ async function readSupabaseStoragePlayerStatsServerCache(
           throw new Error(`Invalid Supabase Storage cache chunk format: ${chunk.path}`);
         }
         return parsed.rows as PlayerStat[];
-      })
-    );
-  } catch (error) {
+      } catch (error) {
+        console.warn(
+          `Unable to read Supabase Storage player stats cache chunk ${chunk.path}; skipping chunk.`,
+          error
+        );
+        return null;
+      }
+    })
+  );
+
+  const loadedChunkRows = chunkRowsByIndex.filter(
+    (rows): rows is PlayerStat[] => Array.isArray(rows)
+  );
+
+  // If specific years were requested and any chunk is missing/broken,
+  // fall back so callers can fetch complete data from DB for those years.
+  if (allowedYears && loadedChunkRows.length !== targetChunks.length) {
     console.warn(
-      "Unable to read Supabase Storage player stats cache; falling back to database.",
-      error
+      "Incomplete Supabase Storage player stats cache for requested years; falling back to database."
     );
     return null;
   }
 
+  if (loadedChunkRows.length === 0) return null;
+
+  const loadedYears = targetChunks
+    .map((chunk, index) => (chunkRowsByIndex[index] ? chunk.year : null))
+    .filter((year): year is string => Boolean(year));
+
   return {
     version: 1,
     updatedAt: index.updatedAt,
-    years: index.years,
-    rows: chunkBuffers.flat(),
+    years: loadedYears.length > 0 ? sortYearsDesc(loadedYears) : index.years,
+    rows: loadedChunkRows.flat(),
   };
 }
 

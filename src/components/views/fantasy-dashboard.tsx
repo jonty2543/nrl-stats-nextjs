@@ -676,8 +676,6 @@ export function FantasyDashboard({
     [playerRowsForYear]
   )
 
-  const selectedYearsKey = useMemo(() => selectedYears.join(","), [selectedYears])
-
   useEffect(() => {
     if (!showPlayerDetails || !preloadedPlayerAllYears || !canAccessLoginSeason) return
     void loadTeammateLookupRows(selectedYears)
@@ -695,13 +693,7 @@ export function FantasyDashboard({
     setPositionFilter("All Positions")
     setTeammate("None")
     setTeammatePosition("All")
-  }, [selectedFantasyName, selectedYearsKey])
-
-  useEffect(() => {
-    if (teammate !== "None" && !teammateOptions.includes(teammate)) {
-      setTeammate("None")
-    }
-  }, [teammate, teammateOptions])
+  }, [selectedFantasyName])
 
   const filteredRows = useMemo(() => {
     let rows = [...playerRowsForYear]

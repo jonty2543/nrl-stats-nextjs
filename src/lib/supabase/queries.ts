@@ -509,26 +509,31 @@ export async function fetchFantasyPlayerStatsAllYears(
   fantasyName: string
 ): Promise<PlayerStat[]> {
   if (!fantasyName.trim()) return [];
-  const serverCache = await readPlayerStatsServerCache();
+  try {
+    const serverCache = await readPlayerStatsServerCache();
 
-  if (serverCache) {
-    const allRows = serverCache.rows;
-    if (allRows.length === 0) return [];
+    if (serverCache) {
+      const allRows = serverCache.rows;
+      if (allRows.length === 0) return [];
 
-    const localNames = Array.from(new Set(allRows.map((row) => row.Name))).sort();
+      const localNames = Array.from(new Set(allRows.map((row) => row.Name))).sort();
+      const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
+      if (!matchedLocalName) return [];
+
+      return allRows.filter((row) => row.Name === matchedLocalName);
+    }
+
+    const teammateRows = await fetchTeammateLookupRows();
+    if (teammateRows.length === 0) return [];
+    const localNames = Array.from(new Set(teammateRows.map((row) => row.Name))).sort();
     const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
     if (!matchedLocalName) return [];
 
-    return allRows.filter((row) => row.Name === matchedLocalName);
+    return fetchPlayerStatsForLocalNameAllYearsFromSupabase(matchedLocalName);
+  } catch (error) {
+    console.warn("Unable to fetch fantasy player stats all years; returning empty set.", error);
+    return [];
   }
-
-  const teammateRows = await fetchTeammateLookupRows();
-  if (teammateRows.length === 0) return [];
-  const localNames = Array.from(new Set(teammateRows.map((row) => row.Name))).sort();
-  const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
-  if (!matchedLocalName) return [];
-
-  return fetchPlayerStatsForLocalNameAllYearsFromSupabase(matchedLocalName);
 }
 
 // ---------------------------------------------------------------------------
@@ -638,10 +643,15 @@ const fetchPlayerImagesCached = unstable_cache(
 );
 
 export async function fetchPlayerImages(): Promise<PlayerImageRecord[]> {
-  if (process.env.NODE_ENV !== "production") {
-    return fetchPlayerImagesFromSupabase();
+  try {
+    if (process.env.NODE_ENV !== "production") {
+      return fetchPlayerImagesFromSupabase();
+    }
+    return fetchPlayerImagesCached();
+  } catch (error) {
+    console.warn("Unable to fetch player_images; using empty image list.", error);
+    return [];
   }
-  return fetchPlayerImagesCached();
 }
 
 export async function fetchTeamLogosFromSupabase(): Promise<Record<string, string>> {
@@ -677,8 +687,13 @@ const fetchTeamLogosCached = unstable_cache(
 );
 
 export async function fetchTeamLogos(): Promise<Record<string, string>> {
-  if (process.env.NODE_ENV !== "production") {
-    return fetchTeamLogosFromSupabase();
+  try {
+    if (process.env.NODE_ENV !== "production") {
+      return fetchTeamLogosFromSupabase();
+    }
+    return fetchTeamLogosCached();
+  } catch (error) {
+    console.warn("Unable to fetch team_logos; using empty logo map.", error);
+    return {};
   }
-  return fetchTeamLogosCached();
 }

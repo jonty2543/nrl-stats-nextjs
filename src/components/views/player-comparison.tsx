@@ -860,16 +860,6 @@ export function PlayerComparison({
     void handleYearsChange(validYears);
   }, [handleYearsChange, selectedYears, unlockedYears]);
 
-  useEffect(() => {
-    if (selectedYears.length === 0) return;
-    if (!selectedYears.includes(roundYear)) {
-      setRoundYear(selectedYears[0]);
-    }
-    if (!selectedYears.includes(wwYear)) {
-      setWwYear(selectedYears[0]);
-    }
-  }, [roundYear, selectedYears, wwYear]);
-
   const sortPlayersByRank = useCallback((names: string[]) => {
     return [...names].sort((a, b) => {
       const ra = -(fantasyRank.get(a) ?? -Infinity);
@@ -1120,7 +1110,8 @@ export function PlayerComparison({
   }, [effectiveP1, effectiveP1Label, p1Rows, hasTwoPlayers, player2, player2Label, p2Rows, statsToShow]);
 
   // Chart data — filtered to a single year for round charts
-  const effectiveRoundYear = roundYear || selectedYears[0] || "";
+  const effectiveRoundYear =
+    selectedYears.includes(roundYear) ? roundYear : (selectedYears[0] || "");
   const p1RoundRows = useMemo(
     () => p1Rows.filter((r) => r.Year === effectiveRoundYear),
     [p1Rows, effectiveRoundYear]
@@ -1287,7 +1278,8 @@ export function PlayerComparison({
       });
     }
 
-    const effectiveWwYear = wwYear || selectedYears[0] || "";
+    const effectiveWwYear =
+      selectedYears.includes(wwYear) ? wwYear : (selectedYears[0] || "");
     const wwLookup = dfYearFinals.filter((r) => r.Year === effectiveWwYear);
     const wwYearPicker = selectedYears.length > 1 ? (
       <div className="mb-3">

@@ -413,12 +413,10 @@ function OwnershipTableCard({
   title,
   rows,
   onSelectPlayer,
-  onHoverPlayer,
 }: {
   title: string
   rows: FantasyPlayerSnapshot[]
   onSelectPlayer?: (name: string) => void
-  onHoverPlayer?: (name: string) => void
 }) {
   return (
     <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
@@ -442,7 +440,6 @@ function OwnershipTableCard({
                   {onSelectPlayer ? (
                     <button
                       type="button"
-                      onMouseEnter={() => onHoverPlayer?.(player.name)}
                       onClick={() => onSelectPlayer(player.name)}
                       className="cursor-pointer text-left text-nrl-text hover:text-nrl-accent hover:underline"
                     >
@@ -557,14 +554,6 @@ export function FantasyDashboard({
       scrollToPlayerDetails()
     },
     [playerRouteBasePath, router, scrollToPlayerDetails]
-  )
-
-  const prefetchPlayerRoute = useCallback(
-    (name: string) => {
-      if (!playerRouteBasePath) return
-      router.prefetch(`${playerRouteBasePath}/${encodeURIComponent(fantasyPlayerSlug(name))}`)
-    },
-    [playerRouteBasePath, router]
   )
 
   const loadTeammateLookupRows = useCallback(async (years: string[]) => {
@@ -991,7 +980,6 @@ export function FantasyDashboard({
                 title={card.title}
                 rows={card.rows}
                 onSelectPlayer={navigateToPlayer}
-                onHoverPlayer={prefetchPlayerRoute}
               />
             ))}
           </div>

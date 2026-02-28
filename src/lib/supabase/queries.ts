@@ -645,9 +645,9 @@ const fetchPlayerImagesCached = unstable_cache(
 export async function fetchPlayerImages(): Promise<PlayerImageRecord[]> {
   try {
     if (process.env.NODE_ENV !== "production") {
-      return fetchPlayerImagesFromSupabase();
+      return await fetchPlayerImagesFromSupabase();
     }
-    return fetchPlayerImagesCached();
+    return await fetchPlayerImagesCached();
   } catch (error) {
     console.warn("Unable to fetch player_images; using empty image list.", error);
     return [];
@@ -689,9 +689,9 @@ const fetchTeamLogosCached = unstable_cache(
 export async function fetchTeamLogos(): Promise<Record<string, string>> {
   try {
     if (process.env.NODE_ENV !== "production") {
-      return fetchTeamLogosFromSupabase();
+      return await fetchTeamLogosFromSupabase();
     }
-    return fetchTeamLogosCached();
+    return await fetchTeamLogosCached();
   } catch (error) {
     console.warn("Unable to fetch team_logos; using empty logo map.", error);
     return {};

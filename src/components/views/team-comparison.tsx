@@ -292,13 +292,6 @@ export function TeamComparison({
     void handleYearsChange(validYears);
   }, [handleYearsChange, selectedYears, unlockedYears]);
 
-  useEffect(() => {
-    if (selectedYears.length === 0) return;
-    if (!selectedYears.includes(roundYear)) {
-      setRoundYear(selectedYears[0]);
-    }
-  }, [roundYear, selectedYears]);
-
   const effectiveT1 = team1 || teamList[0] || "";
 
   const t1Rows = useMemo(
@@ -352,7 +345,8 @@ export function TeamComparison({
   }, [effectiveT1, t1Rows, team2, t2Rows, statsToShow]);
 
   // Chart data — filtered to a single year for round charts
-  const effectiveRoundYear = roundYear || selectedYears[0] || "";
+  const effectiveRoundYear =
+    selectedYears.includes(roundYear) ? roundYear : (selectedYears[0] || "");
   const t1RoundRows = useMemo(
     () => (t1Rows as unknown as PlayerStat[]).filter((r) => r.Year === effectiveRoundYear),
     [t1Rows, effectiveRoundYear]

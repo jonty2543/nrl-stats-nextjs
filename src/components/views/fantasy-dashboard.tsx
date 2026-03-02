@@ -31,7 +31,7 @@ import {
 interface FantasyDashboardProps {
   fantasyPlayers: FantasyPlayerSnapshot[]
   availableYears: string[]
-  defaultYear: string
+  defaultYears: string[]
   initialPlayerStats: PlayerStat[]
   playerImages?: PlayerImageRecord[]
   teamLogos?: Record<string, string>
@@ -500,7 +500,7 @@ function MetricCard({
 export function FantasyDashboard({
   fantasyPlayers,
   availableYears,
-  defaultYear,
+  defaultYears,
   initialPlayerStats,
   playerImages = [],
   teamLogos = {},
@@ -514,8 +514,11 @@ export function FantasyDashboard({
 }: FantasyDashboardProps) {
   const router = useRouter()
   const initialSelectedYears = useMemo(
-    () => (defaultYear && availableYears.includes(defaultYear) ? [defaultYear] : availableYears.slice(0, 1)),
-    [availableYears, defaultYear]
+    () => {
+      const validDefaultYears = defaultYears.filter((year) => availableYears.includes(year))
+      return validDefaultYears.length > 0 ? validDefaultYears : availableYears.slice(0, 1)
+    },
+    [availableYears, defaultYears]
   )
   const [selectedYears, setSelectedYears] = useState<string[]>(initialSelectedYears)
   const [allData, setAllData] = useState<PlayerStat[]>(initialPlayerStats)

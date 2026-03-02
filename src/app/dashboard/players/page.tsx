@@ -4,6 +4,7 @@ import { PlayerComparison } from "@/components/views/player-comparison";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
 export const dynamic = "force-dynamic";
+const PREFERRED_DEFAULT_YEARS = ["2026", "2025"] as const;
 
 export default async function PlayersPage() {
   const { userId } = await auth();
@@ -16,8 +17,9 @@ export default async function PlayersPage() {
   const unlockedYears = availableYears.filter((year) =>
     isAccessibleSeason(year, canAccessLoginSeason, "stats")
   );
-  const defaultYears = unlockedYears.slice(0, 1);
-  const initialData = defaultYears.length > 0 ? await fetchPlayerStats(defaultYears) : [];
+  const defaultYears = PREFERRED_DEFAULT_YEARS.filter((year) => unlockedYears.includes(year));
+  const initialYears = defaultYears.length > 0 ? defaultYears : unlockedYears.slice(0, 1);
+  const initialData = initialYears.length > 0 ? await fetchPlayerStats(initialYears) : [];
 
   return (
     <PlayerComparison
@@ -25,7 +27,7 @@ export default async function PlayersPage() {
       playerImages={playerImages}
       teamLogos={teamLogos}
       availableYears={availableYears}
-      defaultYears={defaultYears}
+      defaultYears={initialYears}
     />
   );
 }

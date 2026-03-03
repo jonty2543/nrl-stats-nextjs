@@ -22,8 +22,6 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { PillRadio } from "@/components/ui/pill-radio"
 import {
   PlayerImageCard,
-  primaryPositionForRows,
-  primaryTeamForRows,
   resolvePlayerImage,
   resolveTeamLogoUrl,
 } from "@/components/views/player-comparison"
@@ -615,8 +613,8 @@ export function FantasyDashboard({
   )
 
   const allLocalNames = useMemo(
-    () => Array.from(new Set(selectedYearData.map((row) => row.Name))).sort(),
-    [selectedYearData]
+    () => Array.from(new Set(allData.map((row) => row.Name))).sort(),
+    [allData]
   )
 
   const matchedLocalName = useMemo(
@@ -631,6 +629,10 @@ export function FantasyDashboard({
     if (!matchedLocalName) return []
     return selectedYearData.filter((row) => row.Name === matchedLocalName)
   }, [matchedLocalName, selectedYearData])
+  const playerRowsAllYears = useMemo(() => {
+    if (!matchedLocalName) return []
+    return allData.filter((row) => row.Name === matchedLocalName)
+  }, [allData, matchedLocalName])
 
   const fantasyRank = useMemo(() => buildFantasyRank(teammateLookupSourceRows), [teammateLookupSourceRows])
   const teammateOptions = useMemo(
@@ -735,11 +737,15 @@ export function FantasyDashboard({
     teammatePosition,
   ])
 
-  const teamForDrawStrip = useMemo(() => {
-    const latestRow = [...playerRowsForYear].sort(sortRoundsDesc)[0] ?? null
-    const team = typeof latestRow?.Team === "string" ? latestRow.Team : null
+  const latestLocalRow = useMemo(
+    () => [...playerRowsAllYears].sort(sortRoundsDesc)[0] ?? null,
+    [playerRowsAllYears]
+  )
+  const latestLocalTeam = useMemo(() => {
+    const team = typeof latestLocalRow?.Team === "string" ? latestLocalRow.Team : null
     return team ? formatOpponent(team) : null
-  }, [playerRowsForYear])
+  }, [latestLocalRow])
+  const teamForDrawStrip = latestLocalTeam
 
   const draw2026StripRows = useMemo<PlayerDrawStripRound[]>(() => {
     if (!draw2026Data?.rows?.length || !teamForDrawStrip) return []
@@ -788,26 +794,22 @@ export function FantasyDashboard({
     return out
   }, [draw2026Data, teamForDrawStrip])
 
-  const latestLocalRow = useMemo(
-    () => [...playerRowsForYear].sort(sortRoundsDesc)[0] ?? null,
-    [playerRowsForYear]
-  )
-  const fantasyCardTeam = useMemo(
-    () => primaryTeamForRows(playerRowsForYear),
-    [playerRowsForYear]
-  )
   const fantasyCardPosition = useMemo(
-    () => primaryPositionForRows(playerRowsForYear),
-    [playerRowsForYear]
+    () =>
+      selectedFantasyPlayer?.positionLabels?.[0] ??
+      (selectedFantasyPlayer?.positions?.[0] != null
+        ? (FANTASY_POSITION_MAP[selectedFantasyPlayer.positions[0]] ?? null)
+        : null),
+    [selectedFantasyPlayer]
   )
   const fantasyCardPlayerName = matchedLocalName ?? selectedFantasyPlayer?.name ?? ""
   const fantasyCardImage = useMemo(
-    () => resolvePlayerImage(fantasyCardPlayerName, fantasyCardTeam, playerImages),
-    [fantasyCardPlayerName, fantasyCardTeam, playerImages]
+    () => resolvePlayerImage(fantasyCardPlayerName, latestLocalTeam, playerImages),
+    [fantasyCardPlayerName, latestLocalTeam, playerImages]
   )
   const fantasyCardLogoUrl = useMemo(
-    () => resolveTeamLogoUrl(fantasyCardImage?.team ?? fantasyCardTeam, teamLogos),
-    [fantasyCardImage?.team, fantasyCardTeam, teamLogos]
+    () => resolveTeamLogoUrl(fantasyCardImage?.team ?? latestLocalTeam, teamLogos),
+    [fantasyCardImage?.team, latestLocalTeam, teamLogos]
   )
 
   const overallTopOwned = useMemo(

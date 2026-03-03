@@ -13,6 +13,7 @@ interface ChartPanel {
 
 interface ChartPanelGridProps {
   panels: ChartPanel[];
+  unlockAll?: boolean;
 }
 
 function ProLockedChart({ children }: { children: ReactNode }) {
@@ -34,7 +35,7 @@ function isDistributionPanel(panel: ChartPanel) {
   return /distribution/i.test(panel.title);
 }
 
-export function ChartPanelGrid({ panels }: ChartPanelGridProps) {
+export function ChartPanelGrid({ panels, unlockAll = false }: ChartPanelGridProps) {
   const orderedPanels = [
     ...panels.filter(isDistributionPanel),
     ...panels.filter((panel) => !isDistributionPanel(panel)),
@@ -60,7 +61,7 @@ export function ChartPanelGrid({ panels }: ChartPanelGridProps) {
         >
           {row.map((panel) => (
             <Expander key={panel.id} title={panel.title}>
-              {panel.proLocked ?? !isDistributionPanel(panel) ? (
+              {(unlockAll ? false : (panel.proLocked ?? !isDistributionPanel(panel))) ? (
                 <ProLockedChart>{panel.content}</ProLockedChart>
               ) : (
                 panel.content
@@ -72,7 +73,7 @@ export function ChartPanelGrid({ panels }: ChartPanelGridProps) {
       {/* Wide panels always full-width */}
       {widePanels.map((panel) => (
         <Expander key={panel.id} title={panel.title}>
-          {panel.proLocked ?? !isDistributionPanel(panel) ? (
+          {(unlockAll ? false : (panel.proLocked ?? !isDistributionPanel(panel))) ? (
             <ProLockedChart>{panel.content}</ProLockedChart>
           ) : (
             panel.content

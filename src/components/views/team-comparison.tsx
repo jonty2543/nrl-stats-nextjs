@@ -29,6 +29,7 @@ interface TeamComparisonProps {
   initialData: PlayerStat[];
   availableYears: string[];
   defaultYears: string[];
+  canBypassPlotGate?: boolean;
 }
 
 const DEFAULT_TEAM_1_CANDIDATES = ["Broncos", "Brisbane Broncos"];
@@ -55,6 +56,7 @@ export function TeamComparison({
   initialData,
   availableYears,
   defaultYears,
+  canBypassPlotGate = false,
 }: TeamComparisonProps) {
   const { userId } = useAuth();
   const canAccessLoginSeason = Boolean(userId);
@@ -573,7 +575,7 @@ export function TeamComparison({
             rankingMode="rank"
           />
 
-          <ChartPanelGrid panels={chartPanels} />
+          <ChartPanelGrid panels={chartPanels} unlockAll={canBypassPlotGate} />
         </>
       )}
     </div>

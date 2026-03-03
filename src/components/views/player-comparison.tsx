@@ -39,6 +39,7 @@ interface PlayerComparisonProps {
   teamLogos: Record<string, string>;
   availableYears: string[];
   defaultYears: string[];
+  canBypassPlotGate?: boolean;
 }
 
 const MINUTES_FILTER_OPTIONS = [
@@ -580,6 +581,7 @@ export function PlayerComparison({
   teamLogos,
   availableYears,
   defaultYears,
+  canBypassPlotGate = false,
 }: PlayerComparisonProps) {
   type TeammateMode = "both" | "with" | "without";
   type PercentileScope = "Position" | "All Players";
@@ -1566,7 +1568,7 @@ export function PlayerComparison({
             </div>
           </div>
 
-          <ChartPanelGrid panels={chartPanels} />
+          <ChartPanelGrid panels={chartPanels} unlockAll={canBypassPlotGate} />
         </>
       )}
     </div>

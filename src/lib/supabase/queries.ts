@@ -11,8 +11,15 @@ import {
   readPlayerStatsServerCache,
   readPlayerStatsServerCacheMetadata,
 } from "@/lib/data/player-stats-server-cache";
+import type {
+  BettingMarket,
+  BettingOddsRow,
+  BettingOddsSnapshot,
+  BettingOddsTable,
+} from "@/lib/betting/types";
 
 const PAGE_SIZE = 1000;
+const DAILY_REVALIDATE_SECONDS = 86400;
 
 export interface PlayerImageRecord {
   player: string;
@@ -38,6 +45,29 @@ function normaliseTeamKey(value: unknown): string {
 interface FetchOptions {
   /** Filter by match_date year(s) — e.g. ["2025"] → gte 2025-01-01, lt 2026-01-01 */
   years?: string[];
+}
+
+async function fetchAllRowsFromSchema<T extends Record<string, unknown>>(
+  schema: string,
+  table: string
+): Promise<T[]> {
+  const supabase = createServerSupabaseClient(schema);
+  const allRows: T[] = [];
+  let start = 0;
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    const { data, error } = await supabase.from(table).select("*").range(start, end);
+
+    if (error) throw new Error(`Supabase fetch ${schema}.${table}: ${error.message}`);
+    const rows = (data ?? []) as T[];
+    if (rows.length === 0) break;
+    allRows.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  return allRows;
 }
 
 async function fetchAllRows<T extends Record<string, unknown>>(
@@ -242,6 +272,67 @@ function toNum(val: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
+function toNullableOdds(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return value > 1 ? value : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return null;
+    return parsed > 1 ? parsed : null;
+  }
+  return null;
+}
+
+function toNullableFinite(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function mapBettingMarket(table: BettingOddsTable, rawMarket: unknown): BettingMarket {
+  if (typeof rawMarket === "string") {
+    const normalized = rawMarket.trim().toLowerCase();
+    if (normalized === "line") return "Line";
+    if (normalized === "total") return "Total";
+    if (normalized === "h2h") return "H2H";
+  }
+  if (table === "NRL Line Odds") return "Line";
+  if (table === "NRL Total Odds") return "Total";
+  return "H2H";
+}
+
+function mapBettingRow(table: BettingOddsTable, raw: Record<string, unknown>): BettingOddsRow {
+  return {
+    table,
+    market: mapBettingMarket(table, raw.Market),
+    date: typeof raw.Date === "string" ? raw.Date : "",
+    match: typeof raw.Match === "string" ? raw.Match : "",
+    result: typeof raw.Result === "string" ? raw.Result : "",
+    value: toNullableFinite(raw.Value),
+    model: toNullableFinite(raw.Model),
+    bestBookie: typeof raw["Best Bookie"] === "string" ? raw["Best Bookie"] : null,
+    bestPrice: toNullableOdds(raw["Best Price"]),
+    marketPercentage: toNullableFinite(raw["Market %"]),
+    Sportsbet: toNullableOdds(raw.Sportsbet),
+    Pointsbet: toNullableOdds(raw.Pointsbet),
+    Unibet: toNullableOdds(raw.Unibet),
+    Palmerbet: toNullableOdds(raw.Palmerbet),
+    Betright: toNullableOdds(raw.Betright),
+    Betr: toNullableOdds(raw.Betr),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Rename columns on a raw row
 // ---------------------------------------------------------------------------
@@ -434,7 +525,14 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
   const normalizedYears = (years ?? []).filter(Boolean).sort();
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
-  const serverCache = await readPlayerStatsServerCache(normalizedArg);
+  const serverCache =
+    process.env.NODE_ENV !== "production"
+      ? await readPlayerStatsServerCache(normalizedArg)
+      : await unstable_cache(
+          async () => readPlayerStatsServerCache(normalizedArg),
+          ["player-stats-server-cache-v1", key],
+          { revalidate: DAILY_REVALIDATE_SECONDS }
+        )();
 
   if (serverCache) {
     return filterPlayerStatsRowsByYears(serverCache.rows, normalizedArg);
@@ -447,7 +545,7 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
   const fetchCached = unstable_cache(
     async () => fetchPlayerStatsFromSupabase(normalizedArg),
     ["player-stats-v1", key],
-    { revalidate: 3600 }
+    { revalidate: DAILY_REVALIDATE_SECONDS }
   );
 
   return fetchCached();
@@ -466,7 +564,14 @@ export async function fetchTeammateLookupRows(
   const normalizedYears = (years ?? []).filter(Boolean).sort();
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
-  const serverCache = await readPlayerStatsServerCache(normalizedArg);
+  const serverCache =
+    process.env.NODE_ENV !== "production"
+      ? await readPlayerStatsServerCache(normalizedArg)
+      : await unstable_cache(
+          async () => readPlayerStatsServerCache(normalizedArg),
+          ["teammate-server-cache-v1", key],
+          { revalidate: DAILY_REVALIDATE_SECONDS }
+        )();
 
   if (serverCache) {
     return buildTeammateLookupRows(
@@ -489,7 +594,7 @@ export async function fetchTeammateLookupRows(
   const fetchCached = unstable_cache(
     async () => fetchTeammateLookupRowsFromSupabase(normalizedArg),
     ["teammate-lookup-v1", key],
-    { revalidate: 3600 }
+    { revalidate: DAILY_REVALIDATE_SECONDS }
   );
 
   return fetchCached();
@@ -567,11 +672,18 @@ export async function fetchAvailableYearsFromSupabase(): Promise<string[]> {
 const fetchAvailableYearsCached = unstable_cache(
   async (): Promise<string[]> => fetchAvailableYearsFromSupabase(),
   ["available-years-v1"],
-  { revalidate: 3600 }
+  { revalidate: DAILY_REVALIDATE_SECONDS }
 );
 
 export async function fetchAvailableYears(): Promise<string[]> {
-  const serverCacheMeta = await readPlayerStatsServerCacheMetadata();
+  const serverCacheMeta =
+    process.env.NODE_ENV !== "production"
+      ? await readPlayerStatsServerCacheMetadata()
+      : await unstable_cache(
+          async () => readPlayerStatsServerCacheMetadata(),
+          ["available-years-server-cache-meta-v1"],
+          { revalidate: DAILY_REVALIDATE_SECONDS }
+        )();
   if (serverCacheMeta) {
     return serverCacheMeta.years;
   }
@@ -620,6 +732,56 @@ export async function fetchMatches(years?: string[]): Promise<Match[]> {
   }
 
   return matches;
+}
+
+async function fetchBettingOddsTableFromSupabase(table: BettingOddsTable): Promise<BettingOddsRow[]> {
+  const rawRows = await fetchAllRowsFromSchema<Record<string, unknown>>("public", table);
+  return rawRows
+    .map((row) => mapBettingRow(table, row))
+    .filter((row) => row.match.length > 0 && row.result.length > 0 && row.date.length > 0)
+    .sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      if (a.match !== b.match) return a.match.localeCompare(b.match);
+      return a.result.localeCompare(b.result);
+    });
+}
+
+export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
+  const [h2h, line, total] = await Promise.all([
+    fetchBettingOddsTableFromSupabase("NRL Odds"),
+    fetchBettingOddsTableFromSupabase("NRL Line Odds"),
+    fetchBettingOddsTableFromSupabase("NRL Total Odds"),
+  ]);
+
+  return {
+    h2h,
+    line,
+    total,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+const fetchBettingOddsSnapshotCached = unstable_cache(
+  async (): Promise<BettingOddsSnapshot> => fetchBettingOddsSnapshotFromSupabase(),
+  ["betting-odds-v1"],
+  { revalidate: 120 }
+);
+
+export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
+  try {
+    if (process.env.NODE_ENV !== "production") {
+      return await fetchBettingOddsSnapshotFromSupabase();
+    }
+    return await fetchBettingOddsSnapshotCached();
+  } catch (error) {
+    console.warn("Unable to fetch betting odds snapshot; using empty odds lists.", error);
+    return {
+      h2h: [],
+      line: [],
+      total: [],
+      generatedAt: new Date().toISOString(),
+    };
+  }
 }
 
 export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord[]> {

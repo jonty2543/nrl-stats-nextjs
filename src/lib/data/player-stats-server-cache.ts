@@ -1,5 +1,5 @@
 import "server-only";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { PlayerStat } from "@/lib/data/types";
@@ -39,6 +39,13 @@ interface PlayerStatsServerCacheMetadata {
   updatedAt: string;
   years: string[];
 }
+
+interface LocalServerCacheMemo {
+  mtimeMs: number;
+  payload: PlayerStatsServerCacheFile;
+}
+
+let localServerCacheMemo: LocalServerCacheMemo | null = null;
 
 function getCachePath(): string {
   return path.join(process.cwd(), SERVER_CACHE_RELATIVE_PATH);
@@ -104,15 +111,31 @@ async function readLocalPlayerStatsServerCache(
   years?: string[]
 ): Promise<PlayerStatsServerCacheFile | null> {
   try {
-    const raw = await readFile(getCachePath(), "utf8");
+    const cachePath = getCachePath();
+    const fileStats = await stat(cachePath);
+    if (localServerCacheMemo && localServerCacheMemo.mtimeMs === fileStats.mtimeMs) {
+      return {
+        ...localServerCacheMemo.payload,
+        rows: filterPlayerStatsRowsByYears(localServerCacheMemo.payload.rows, years),
+      };
+    }
+
+    const raw = await readFile(cachePath, "utf8");
     const parsed = JSON.parse(raw) as Partial<PlayerStatsServerCacheFile>;
     const normalized = normalizeCacheFile(parsed);
     if (!normalized) return null;
+
+    localServerCacheMemo = {
+      mtimeMs: fileStats.mtimeMs,
+      payload: normalized,
+    };
+
     return {
       ...normalized,
       rows: filterPlayerStatsRowsByYears(normalized.rows, years),
     };
   } catch {
+    localServerCacheMemo = null;
     return null;
   }
 }
@@ -316,6 +339,15 @@ export async function writePlayerStatsServerCache(rows: PlayerStat[]): Promise<{
   };
 
   await writeFile(cachePath, `${JSON.stringify(payload)}\n`, "utf8");
+  try {
+    const fileStats = await stat(cachePath);
+    localServerCacheMemo = {
+      mtimeMs: fileStats.mtimeMs,
+      payload,
+    };
+  } catch {
+    localServerCacheMemo = null;
+  }
 
   const storageBucket = getStorageBucket();
   let storageChunkCount = 0;

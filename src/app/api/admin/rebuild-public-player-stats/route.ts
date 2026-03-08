@@ -7,6 +7,14 @@ import { writePlayerStatsServerCache } from "@/lib/data/player-stats-server-cach
 
 export const dynamic = "force-dynamic";
 
+function isAuthorized(request: Request): boolean {
+  if (process.env.NODE_ENV !== "production") return true;
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) return false;
+  const authHeader = request.headers.get("authorization");
+  return authHeader === `Bearer ${secret}`;
+}
+
 async function rebuild() {
   const years = await fetchAvailableYearsFromSupabase();
   const rows = await fetchPlayerStatsFromSupabase(years);
@@ -24,7 +32,11 @@ async function rebuild() {
   };
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     return NextResponse.json(await rebuild());
   } catch (error) {
@@ -43,6 +55,6 @@ export async function POST() {
 }
 
 // Allow manual browser trigger in local dev for now.
-export async function GET() {
-  return POST();
+export async function GET(request: Request) {
+  return POST(request);
 }

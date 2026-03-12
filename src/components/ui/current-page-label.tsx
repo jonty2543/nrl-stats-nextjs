@@ -10,6 +10,7 @@ const LABELS: Record<string, string> = {
   dashboard: "Stats",
   players: "Stats",
   teams: "Stats",
+  betting: "Betting",
   about: "About",
 };
 

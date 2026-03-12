@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 const tools = [
   { label: "Stats", href: "/dashboard/players" },
   { label: "Fantasy", href: "/dashboard/fantasy" },
+  { label: "Betting", href: "/dashboard/betting" },
   { label: "About", href: "/dashboard/about" },
 ];
 
@@ -49,6 +50,8 @@ export function ToolNav() {
 
   const currentLabel = pathname.startsWith("/dashboard/about")
     ? "About"
+    : pathname.startsWith("/dashboard/betting")
+      ? "Betting"
     : pathname.startsWith("/dashboard/fantasy")
       ? "Fantasy"
       : "Stats";

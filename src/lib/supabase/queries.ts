@@ -20,6 +20,7 @@ import type {
 
 const PAGE_SIZE = 1000;
 const DAILY_REVALIDATE_SECONDS = 86400;
+const LINE_MARGIN_SIGMA = 16.85;
 
 export interface PlayerImageRecord {
   player: string;
@@ -298,6 +299,190 @@ function toNullableFinite(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function toNullableProbability(value: unknown): number | null {
+  const numeric = toNullableFinite(value);
+  if (numeric == null || numeric < 0) return null;
+  if (numeric <= 1) return numeric;
+  if (numeric <= 100) return numeric / 100;
+  return null;
+}
+
+function toIsoDate(value: unknown): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    return "";
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  return "";
+}
+
+function normaliseLookupKey(value: unknown): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function teamJoinKey(value: unknown): string {
+  const normalized = normaliseLookupKey(value);
+  if (!normalized) return "";
+  const parts = normalized.split(" ").filter(Boolean);
+  return parts[parts.length - 1] ?? "";
+}
+
+function matchKey(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const split = raw.split(/\s+v(?:s)?\.?\s+/i).map((part) => part.trim()).filter(Boolean);
+  if (split.length >= 2) {
+    const [teamA, teamB] = [teamJoinKey(split[0]), teamJoinKey(split[1])].sort();
+    return `${teamA}|${teamB}`;
+  }
+
+  return teamJoinKey(raw);
+}
+
+function normalCdf(z: number): number {
+  // Abramowitz and Stegun approximation for Phi(z).
+  const sign = z < 0 ? -1 : 1;
+  const x = Math.abs(z) / Math.sqrt(2);
+  const t = 1 / (1 + 0.3275911 * x);
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const erfApprox = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-(x * x));
+  return 0.5 * (1 + sign * erfApprox);
+}
+
+interface PredictionModelRow extends Record<string, unknown> {
+  match_date?: unknown;
+  match?: unknown;
+  team?: unknown;
+  win_prob?: unknown;
+  pred_margin?: unknown;
+  updated_at?: unknown;
+}
+
+interface PredictionLookupEntry {
+  winProb: number | null;
+  predMargin: number | null;
+  updatedAtMs: number;
+}
+
+interface PredictionLookupMaps {
+  byDateTeam: Map<string, PredictionLookupEntry>;
+  byDateMatchTeam: Map<string, PredictionLookupEntry>;
+}
+
+function toUpdatedAtMs(value: unknown): number {
+  if (typeof value !== "string") return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function choosePredictionEntry(
+  existing: PredictionLookupEntry | undefined,
+  next: PredictionLookupEntry
+): PredictionLookupEntry {
+  if (!existing) return next;
+  if (next.updatedAtMs > existing.updatedAtMs) return next;
+  if (next.updatedAtMs < existing.updatedAtMs) return existing;
+  const existingCompleteness = Number(existing.winProb != null) + Number(existing.predMargin != null);
+  const nextCompleteness = Number(next.winProb != null) + Number(next.predMargin != null);
+  return nextCompleteness >= existingCompleteness ? next : existing;
+}
+
+function buildPredictionLookup(rows: PredictionModelRow[]): PredictionLookupMaps {
+  const byDateTeam = new Map<string, PredictionLookupEntry>();
+  const byDateMatchTeam = new Map<string, PredictionLookupEntry>();
+
+  for (const raw of rows) {
+    const date = toIsoDate(raw.match_date);
+    const teamKey = teamJoinKey(raw.team);
+    if (!date || !teamKey) continue;
+
+    const entry: PredictionLookupEntry = {
+      winProb: toNullableProbability(raw.win_prob),
+      predMargin: toNullableFinite(raw.pred_margin),
+      updatedAtMs: toUpdatedAtMs(raw.updated_at),
+    };
+
+    const dateTeamKey = `${date}|${teamKey}`;
+    byDateTeam.set(dateTeamKey, choosePredictionEntry(byDateTeam.get(dateTeamKey), entry));
+
+    const normalizedMatchKey = matchKey(raw.match);
+    if (!normalizedMatchKey) continue;
+
+    const dateMatchTeamKey = `${date}|${normalizedMatchKey}|${teamKey}`;
+    byDateMatchTeam.set(
+      dateMatchTeamKey,
+      choosePredictionEntry(byDateMatchTeam.get(dateMatchTeamKey), entry)
+    );
+  }
+
+  return { byDateTeam, byDateMatchTeam };
+}
+
+function findPredictionForOddsRow(
+  row: BettingOddsRow,
+  lookup: PredictionLookupMaps
+): PredictionLookupEntry | null {
+  const date = toIsoDate(row.date);
+  const teamKey = teamJoinKey(row.result);
+  if (!date || !teamKey) return null;
+
+  const normalizedMatchKey = matchKey(row.match);
+  if (normalizedMatchKey) {
+    const byMatch = lookup.byDateMatchTeam.get(`${date}|${normalizedMatchKey}|${teamKey}`);
+    if (byMatch) return byMatch;
+  }
+
+  return lookup.byDateTeam.get(`${date}|${teamKey}`) ?? null;
+}
+
+function applyPredictionModelToRow(row: BettingOddsRow, lookup: PredictionLookupMaps): BettingOddsRow {
+  if (row.market !== "H2H" && row.market !== "Line") return row;
+
+  const prediction = findPredictionForOddsRow(row, lookup);
+  if (!prediction) {
+    return {
+      ...row,
+      model: null,
+    };
+  }
+
+  if (row.market === "H2H") {
+    return {
+      ...row,
+      model: prediction.winProb == null ? null : prediction.winProb * 100,
+    };
+  }
+
+  if (prediction.predMargin == null || row.value == null) {
+    return {
+      ...row,
+      model: null,
+    };
+  }
+
+  const z = (prediction.predMargin + row.value) / LINE_MARGIN_SIGMA;
+  const coverProbability = normalCdf(z);
+  return {
+    ...row,
+    model: coverProbability * 100,
+  };
 }
 
 function mapBettingMarket(table: BettingOddsTable, rawMarket: unknown): BettingMarket {
@@ -746,12 +931,21 @@ async function fetchBettingOddsTableFromSupabase(table: BettingOddsTable): Promi
     });
 }
 
+async function fetchPredictionModelRowsFromSupabase(): Promise<PredictionModelRow[]> {
+  const rawRows = await fetchAllRowsFromSchema<Record<string, unknown>>("nrl", "nrl_predictions");
+  return rawRows as PredictionModelRow[];
+}
+
 export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
-  const [h2h, line, total] = await Promise.all([
+  const [h2hRaw, lineRaw, total, predictionRows] = await Promise.all([
     fetchBettingOddsTableFromSupabase("NRL Odds"),
     fetchBettingOddsTableFromSupabase("NRL Line Odds"),
     fetchBettingOddsTableFromSupabase("NRL Total Odds"),
+    fetchPredictionModelRowsFromSupabase(),
   ]);
+  const predictionLookup = buildPredictionLookup(predictionRows);
+  const h2h = h2hRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
+  const line = lineRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
 
   return {
     h2h,
@@ -763,7 +957,7 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
 
 const fetchBettingOddsSnapshotCached = unstable_cache(
   async (): Promise<BettingOddsSnapshot> => fetchBettingOddsSnapshotFromSupabase(),
-  ["betting-odds-v1"],
+  ["betting-odds-v2"],
   { revalidate: 120 }
 );
 

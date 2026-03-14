@@ -15,6 +15,15 @@ interface BettingDashboardProps {
   snapshot: BettingOddsSnapshot;
 }
 
+interface BettingPreferences {
+  stakingMode: StakingMode;
+  bankroll: number;
+  percentageStakePct: number;
+  targetProfitPct: number;
+  kellyScale: number;
+  maxEdge: number;
+}
+
 interface OutcomeRow extends BettingOddsRow {
   bookiePrices: Record<BettingBookie, number | null>;
   bestPriceComputed: number | null;
@@ -60,13 +69,16 @@ interface BetDraft {
   lineValue: number | null;
   odds: number;
   stake: number;
+  status?: TrackedBetStatus;
   modelProb: number | null;
   impliedProb: number | null;
   edgePp: number | null;
 }
 
-const MARKET_TABS: BettingMarket[] = ["Line", "H2H", "Total"];
+const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total"];
 const LINE_CLOSE_DIFF = 2;
+const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
+const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const STAKING_OPTIONS: Array<{
   mode: StakingMode;
   label: string;
@@ -94,7 +106,6 @@ const BOOKIE_LOGO_PATHS: Record<BettingBookie, string> = {
   Unibet: "/logos/unibet.png",
   Palmerbet: "/logos/palmerbet.png",
   Betright: "/logos/betright.png",
-  Betr: "/logos/betr.png",
 };
 
 function formatPrice(value: number | null): string {
@@ -114,6 +125,20 @@ function formatPct(value: number | null): string {
 function formatMoney(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}$${value.toFixed(2)}`;
+}
+
+function parseLineValueFromSelection(selection: string): number | null {
+  const match = selection.trim().match(/([+-]?\d+(?:\.\d+)?)\s*$/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function computeBetProfit(status: TrackedBetStatus, stake: number, odds: number): number | null {
+  if (status === "pending") return null;
+  if (status === "push") return 0;
+  if (status === "won") return Number((stake * Math.max(0, odds - 1)).toFixed(2));
+  return Number((-stake).toFixed(2));
 }
 
 function betStatusClass(status: TrackedBetStatus): string {
@@ -285,18 +310,29 @@ function BookieLogo({
 
 export function BettingDashboard({ snapshot }: BettingDashboardProps) {
   const { isLoaded, userId } = useAuth();
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [bankroll, setBankroll] = useState(1000);
   const [stakingMode, setStakingMode] = useState<StakingMode>("percentage");
   const [percentageStakePct, setPercentageStakePct] = useState(2);
   const [targetProfitPct, setTargetProfitPct] = useState(2);
   const [kellyScale, setKellyScale] = useState(0.5);
   const [maxEdge, setMaxEdge] = useState(0.06);
-  const [selectedMarket, setSelectedMarket] = useState<BettingMarket>("Line");
+  const [selectedMarket, setSelectedMarket] = useState<BettingMarket>("H2H");
   const [stakeOverrides, setStakeOverrides] = useState<Record<string, number>>({});
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [bets, setBets] = useState<TrackedBet[]>([]);
   const [betsLoading, setBetsLoading] = useState(false);
   const [betsError, setBetsError] = useState<string | null>(null);
+  const [betAddedMessage, setBetAddedMessage] = useState<string | null>(null);
+  const [betRemovedMessage, setBetRemovedMessage] = useState<string | null>(null);
+  const [manualMatchDate, setManualMatchDate] = useState(todayIso);
+  const [manualMatchName, setManualMatchName] = useState("");
+  const [manualSelection, setManualSelection] = useState("");
+  const [manualOdds, setManualOdds] = useState("1.90");
+  const [manualStake, setManualStake] = useState("10");
+  const [manualStatus, setManualStatus] = useState<TrackedBetStatus>("pending");
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [preferencesHydrated, setPreferencesHydrated] = useState(false);
 
   const h2hGroups = useMemo(() => buildEventGroups(snapshot.h2h), [snapshot.h2h]);
   const lineGroups = useMemo(() => buildEventGroups(snapshot.line), [snapshot.line]);
@@ -319,10 +355,122 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
 
   useEffect(() => {
     if (!isLoaded) return;
+    let cancelled = false;
+
+    const applyPreferences = (preferences: BettingPreferences) => {
+      setStakingMode(preferences.stakingMode);
+      setBankroll(clamp(preferences.bankroll, 0, 1_000_000_000));
+      setPercentageStakePct(clamp(preferences.percentageStakePct, 0, 100));
+      setTargetProfitPct(clamp(preferences.targetProfitPct, 0, 100));
+      setKellyScale(clamp(preferences.kellyScale, 0, 1));
+      setMaxEdge(clamp(preferences.maxEdge, 0, 1));
+    };
 
     if (!userId) {
       try {
-        const raw = window.localStorage.getItem("bet-tracker-local-v1");
+        const raw = window.localStorage.getItem(BETTING_PREFERENCES_LOCAL_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<BettingPreferences>;
+          const mode = parsed.stakingMode;
+          applyPreferences({
+            stakingMode: mode === "percentage" || mode === "targetProfit" || mode === "kelly" ? mode : "percentage",
+            bankroll: Number(parsed.bankroll) || 1000,
+            percentageStakePct: Number(parsed.percentageStakePct) || 2,
+            targetProfitPct: Number(parsed.targetProfitPct) || 2,
+            kellyScale: Number(parsed.kellyScale) || 0.5,
+            maxEdge: Number(parsed.maxEdge) || 0.06,
+          });
+        }
+      } catch {
+        // Ignore preference storage failures.
+      } finally {
+        if (!cancelled) setPreferencesHydrated(true);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/user/betting-preferences", { method: "GET", cache: "no-store" });
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`Failed to load betting preferences (${response.status}): ${body}`);
+        }
+        const payload = (await response.json()) as { preferences?: Partial<BettingPreferences> | null };
+        if (!cancelled && payload.preferences) {
+          const mode = payload.preferences.stakingMode;
+          applyPreferences({
+            stakingMode: mode === "percentage" || mode === "targetProfit" || mode === "kelly" ? mode : "percentage",
+            bankroll: Number(payload.preferences.bankroll) || 1000,
+            percentageStakePct: Number(payload.preferences.percentageStakePct) || 2,
+            targetProfitPct: Number(payload.preferences.targetProfitPct) || 2,
+            kellyScale: Number(payload.preferences.kellyScale) || 0.5,
+            maxEdge: Number(payload.preferences.maxEdge) || 0.06,
+          });
+        }
+      } catch {
+        // Keep defaults if preference fetch fails.
+      } finally {
+        if (!cancelled) setPreferencesHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, userId]);
+
+  useEffect(() => {
+    if (!isLoaded || !preferencesHydrated) return;
+    const payload: BettingPreferences = {
+      stakingMode,
+      bankroll,
+      percentageStakePct,
+      targetProfitPct,
+      kellyScale,
+      maxEdge,
+    };
+
+    if (!userId) {
+      try {
+        window.localStorage.setItem(BETTING_PREFERENCES_LOCAL_KEY, JSON.stringify(payload));
+      } catch {
+        // Ignore preference storage failures.
+      }
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void fetch("/api/user/betting-preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => {
+        // Ignore transient save errors.
+      });
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    bankroll,
+    isLoaded,
+    kellyScale,
+    maxEdge,
+    percentageStakePct,
+    preferencesHydrated,
+    stakingMode,
+    targetProfitPct,
+    userId,
+  ]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (!userId) {
+      try {
+        const raw = window.localStorage.getItem(BET_TRACKER_LOCAL_KEY);
         if (!raw) {
           setBets([]);
           return;
@@ -373,11 +521,23 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
   useEffect(() => {
     if (!isLoaded || userId) return;
     try {
-      window.localStorage.setItem("bet-tracker-local-v1", JSON.stringify(bets));
+      window.localStorage.setItem(BET_TRACKER_LOCAL_KEY, JSON.stringify(bets));
     } catch {
       // Ignore storage failures.
     }
   }, [bets, isLoaded, userId]);
+
+  useEffect(() => {
+    if (!betAddedMessage) return;
+    const timeout = window.setTimeout(() => setBetAddedMessage(null), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [betAddedMessage]);
+
+  useEffect(() => {
+    if (!betRemovedMessage) return;
+    const timeout = window.setTimeout(() => setBetRemovedMessage(null), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [betRemovedMessage]);
 
   const handleStakeOverride = (key: string, value: number) => {
     setStakeOverrides((prev) => ({
@@ -388,17 +548,20 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
 
   const handleAddBet = async (draft: BetDraft) => {
     if (!Number.isFinite(draft.stake) || draft.stake <= 0) return;
+    if (!Number.isFinite(draft.odds) || draft.odds <= 1) return;
+    const status = draft.status ?? "pending";
 
     if (!userId) {
       const localBet: TrackedBet = {
         id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        status: "pending",
-        profit: null,
+        status,
+        profit: computeBetProfit(status, draft.stake, draft.odds),
         placedAt: new Date().toISOString(),
-        settledAt: null,
+        settledAt: status === "pending" ? null : new Date().toISOString(),
         ...draft,
       };
       setBets((prev) => [localBet, ...prev]);
+      setBetAddedMessage("Bet added to bet tracker");
       return;
     }
 
@@ -406,7 +569,7 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
       const response = await fetch("/api/user/bets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
+        body: JSON.stringify({ ...draft, status }),
       });
       if (!response.ok) {
         const body = await response.text();
@@ -415,10 +578,130 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
       const payload = (await response.json()) as { bet?: TrackedBet };
       if (payload.bet) {
         setBets((prev) => [payload.bet as TrackedBet, ...prev]);
+        setBetAddedMessage("Bet added to bet tracker");
       }
     } catch (error) {
       setBetsError(error instanceof Error ? error.message : "Failed to save bet");
     }
+  };
+
+  const handleUpdateBet = async (
+    betId: string,
+    updates: Partial<Pick<TrackedBet, "stake" | "odds" | "status">>
+  ) => {
+    if (!updates || Object.keys(updates).length === 0) return;
+
+    if (!userId) {
+      setBets((prev) =>
+        prev.map((bet) => {
+          if (bet.id !== betId) return bet;
+          const nextOdds = updates.odds ?? bet.odds;
+          const nextStake = updates.stake ?? bet.stake;
+          const nextStatus = updates.status ?? bet.status;
+          if (!Number.isFinite(nextOdds) || nextOdds <= 1) return bet;
+          if (!Number.isFinite(nextStake) || nextStake <= 0) return bet;
+          return {
+            ...bet,
+            odds: nextOdds,
+            stake: nextStake,
+            status: nextStatus,
+            profit: computeBetProfit(nextStatus, nextStake, nextOdds),
+            settledAt: nextStatus === "pending" ? null : (bet.settledAt ?? new Date().toISOString()),
+          };
+        })
+      );
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/user/bets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: betId, ...updates }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Failed to update bet (${response.status}): ${body}`);
+      }
+      const payload = (await response.json()) as { bet?: TrackedBet };
+      if (payload.bet) {
+        setBets((prev) => prev.map((bet) => (bet.id === payload.bet!.id ? payload.bet! : bet)));
+      }
+    } catch (error) {
+      setBetsError(error instanceof Error ? error.message : "Failed to update bet");
+    }
+  };
+
+  const handleDeleteBet = async (betId: string) => {
+    if (!userId) {
+      setBets((prev) => prev.filter((bet) => bet.id !== betId));
+      setBetRemovedMessage("Bet removed from bet tracker");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/user/bets", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: betId }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Failed to delete bet (${response.status}): ${body}`);
+      }
+      setBets((prev) => prev.filter((bet) => bet.id !== betId));
+      setBetRemovedMessage("Bet removed from bet tracker");
+    } catch (error) {
+      setBetsError(error instanceof Error ? error.message : "Failed to delete bet");
+    }
+  };
+
+  const handleManualAddBet = async () => {
+    setManualError(null);
+
+    if (!manualMatchDate.trim()) {
+      setManualError("Date is required.");
+      return;
+    }
+    if (!manualMatchName.trim()) {
+      setManualError("Match is required.");
+      return;
+    }
+    if (!manualSelection.trim()) {
+      setManualError("Selection is required.");
+      return;
+    }
+
+    const parsedOdds = Number(manualOdds);
+    const parsedStake = Number(manualStake);
+    if (!Number.isFinite(parsedOdds) || parsedOdds <= 1) {
+      setManualError("Odds must be greater than 1.");
+      return;
+    }
+    if (!Number.isFinite(parsedStake) || parsedStake <= 0) {
+      setManualError("Stake must be greater than 0.");
+      return;
+    }
+
+    await handleAddBet({
+      market: selectedMarket,
+      matchDate: manualMatchDate,
+      matchName: manualMatchName.trim(),
+      selection: manualSelection.trim(),
+      lineValue: parseLineValueFromSelection(manualSelection),
+      odds: parsedOdds,
+      stake: parsedStake,
+      status: manualStatus,
+      modelProb: null,
+      impliedProb: null,
+      edgePp: null,
+    });
+
+    setManualMatchName("");
+    setManualSelection("");
+    setManualOdds("1.90");
+    setManualStake("10");
+    setManualStatus("pending");
   };
 
   const settledBets = bets.filter((bet) => bet.status !== "pending");
@@ -430,163 +713,177 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
   const totalStake = bets.reduce((sum, bet) => sum + (Number.isFinite(bet.stake) ? bet.stake : 0), 0);
   const profitLoss = bets.reduce((sum, bet) => sum + (bet.profit ?? 0), 0);
   const profitMargin = totalStake > 0 ? (profitLoss / totalStake) * 100 : null;
+  const sortedBets = useMemo(
+    () => [...bets].sort((a, b) => b.placedAt.localeCompare(a.placedAt)),
+    [bets]
+  );
+  const stakingPreferencesReady = !isLoaded ? false : preferencesHydrated;
 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
         <h1 className="text-xl font-bold text-nrl-text">Betting</h1>
         <p className="mt-2 text-sm text-nrl-muted">
-          Best prices are recomputed from available bookie odds for each outcome. Market %
-          below is derived from those best selections.
-        </p>
-        <p className="mt-1 text-xs text-nrl-muted/80">
-          Snapshot generated: {formatDateLabel(snapshot.generatedAt)}
+          Customisable staking calculator, bet tracker and live odds for line, h2h and total NRL betting. Model
+          predictions are to be used as a guide, and a max edge is recommended as the model does not know about lineup
+          fluctuations and hence a large edge is likely incorrect.
         </p>
       </section>
 
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-nrl-text">Staking Calculator</h2>
-        <div className="mt-4 grid gap-2 md:grid-cols-3">
-          {STAKING_OPTIONS.map((option) => {
-            const active = option.mode === stakingMode;
-            return (
-              <button
-                key={option.mode}
-                type="button"
-                onClick={() => handleStakingModeChange(option.mode)}
-                className={`cursor-pointer rounded-md border px-3 py-2 text-left transition-colors ${
-                  active
-                    ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                    : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                }`}
-              >
-                <div className="text-xs font-bold uppercase tracking-wide">{option.label}</div>
-                <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Bankroll</span>
-            <input
-              type="number"
-              value={bankroll}
-              min={0}
-              step={10}
-              onChange={(event) => setBankroll(Math.max(0, Number(event.target.value) || 0))}
-              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-            />
-          </label>
-          {stakingMode === "percentage" ? (
-            <label className="flex flex-col gap-1">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Stake %</span>
-              <input
-                type="number"
-                value={percentageStakePct}
-                min={0}
-                max={100}
-                step={0.1}
-                onChange={(event) => setPercentageStakePct(clamp(Number(event.target.value) || 0, 0, 100))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-              />
-            </label>
-          ) : null}
-          {stakingMode === "targetProfit" ? (
-            <label className="flex flex-col gap-1">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Target Profit %</span>
-              <input
-                type="number"
-                value={targetProfitPct}
-                min={0}
-                max={100}
-                step={0.1}
-                onChange={(event) => setTargetProfitPct(clamp(Number(event.target.value) || 0, 0, 100))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-              />
-            </label>
-          ) : null}
-          {stakingMode === "kelly" ? (
-            <label className="flex flex-col gap-1">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Kelly Fraction</span>
-              <input
-                type="number"
-                value={kellyScale}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={(event) => setKellyScale(clamp(Number(event.target.value) || 0, 0, 1))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-              />
-            </label>
-          ) : null}
-          <label className="flex flex-col gap-1">
-            <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Max Edge</span>
-            <input
-              type="number"
-              value={maxEdge}
-              min={0}
-              max={1}
-              step={0.01}
-              onChange={(event) => setMaxEdge(clamp(Number(event.target.value) || 0, 0, 1))}
-              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-            />
-          </label>
-        </div>
+        {!stakingPreferencesReady ? (
+          <div className="mt-4 text-xs text-nrl-muted">Loading staking preferences...</div>
+        ) : (
+          <>
+            <div className="mt-4 grid gap-2 md:grid-cols-3">
+              {STAKING_OPTIONS.map((option) => {
+                const active = option.mode === stakingMode;
+                return (
+                  <button
+                    key={option.mode}
+                    type="button"
+                    onClick={() => handleStakingModeChange(option.mode)}
+                    className={`cursor-pointer rounded-md border px-3 py-2 text-left transition-colors ${
+                      active
+                        ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                        : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                    }`}
+                  >
+                    <div className="text-xs font-bold uppercase tracking-wide">{option.label}</div>
+                    <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Bankroll</span>
+                <input
+                  type="number"
+                  value={bankroll}
+                  min={0}
+                  step={10}
+                  onChange={(event) => setBankroll(Math.max(0, Number(event.target.value) || 0))}
+                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                />
+              </label>
+              {stakingMode === "percentage" ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Stake %</span>
+                  <input
+                    type="number"
+                    value={percentageStakePct}
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    onChange={(event) => setPercentageStakePct(clamp(Number(event.target.value) || 0, 0, 100))}
+                    className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                  />
+                </label>
+              ) : null}
+              {stakingMode === "targetProfit" ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Target Profit %</span>
+                  <input
+                    type="number"
+                    value={targetProfitPct}
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    onChange={(event) => setTargetProfitPct(clamp(Number(event.target.value) || 0, 0, 100))}
+                    className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                  />
+                </label>
+              ) : null}
+              {stakingMode === "kelly" ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Kelly Fraction</span>
+                  <input
+                    type="number"
+                    value={kellyScale}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    onChange={(event) => setKellyScale(clamp(Number(event.target.value) || 0, 0, 1))}
+                    className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                  />
+                </label>
+              ) : null}
+              <label className="flex flex-col gap-1">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Max Edge</span>
+                <input
+                  type="number"
+                  value={maxEdge}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(event) => setMaxEdge(clamp(Number(event.target.value) || 0, 0, 1))}
+                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                />
+              </label>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
-        <div className="rounded-md border border-nrl-border bg-nrl-panel-2">
-          <button
-            type="button"
-            onClick={() => setTrackerOpen((open) => !open)}
-            className="flex w-full cursor-pointer items-center justify-between px-3 py-2 text-left"
-          >
+        <div className="space-y-3 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-3">
+          <div className="flex items-center justify-between">
             <span className="text-sm font-semibold uppercase tracking-wide text-nrl-text">
               Bet Tracker ({bets.length})
             </span>
-            <span className="text-xs text-nrl-muted">{trackerOpen ? "Hide" : "Show"}</span>
-          </button>
-          {trackerOpen ? (
-            <div className="space-y-3 border-t border-nrl-border px-3 py-3">
-              <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                  <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Bets</div>
-                  <div className="text-sm font-semibold text-nrl-text">{bets.length}</div>
-                </div>
-                <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                  <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Win Rate</div>
-                  <div className="text-sm font-semibold text-nrl-text">{winRate == null ? "-" : `${winRate.toFixed(1)}%`}</div>
-                </div>
-                <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                  <div className="text-[10px] uppercase tracking-wide text-nrl-muted">P/L</div>
-                  <div className={`text-sm font-semibold ${profitLoss >= 0 ? "text-nrl-accent" : "text-red-500"}`}>{formatMoney(profitLoss)}</div>
-                </div>
-                <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                  <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Total Stake</div>
-                  <div className="text-sm font-semibold text-nrl-text">${totalStake.toFixed(2)}</div>
-                </div>
-                <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                  <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Profit Margin</div>
-                  <div className={`text-sm font-semibold ${profitMargin != null && profitMargin < 0 ? "text-red-500" : "text-nrl-text"}`}>
-                    {profitMargin == null ? "-" : `${profitMargin.toFixed(1)}%`}
-                  </div>
-                </div>
-                <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                  <div className="text-[10px] uppercase tracking-wide text-nrl-muted">W/L/P</div>
-                  <div className="text-sm font-semibold text-nrl-text">
-                    {winningBets}/{losingBets}/{pushedBets}
-                  </div>
-                </div>
+            <button
+              type="button"
+              onClick={() => setTrackerOpen((open) => !open)}
+              className="cursor-pointer text-xs text-nrl-muted hover:text-nrl-text"
+            >
+              {trackerOpen ? "Hide Bets" : "Show Bets"}
+            </button>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Bets</div>
+              <div className="text-sm font-semibold text-nrl-text">{bets.length}</div>
+            </div>
+            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Win Rate</div>
+              <div className="text-sm font-semibold text-nrl-text">{winRate == null ? "-" : `${winRate.toFixed(1)}%`}</div>
+            </div>
+            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">P/L</div>
+              <div className={`text-sm font-semibold ${profitLoss >= 0 ? "text-nrl-accent" : "text-red-500"}`}>{formatMoney(profitLoss)}</div>
+            </div>
+            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Total Stake</div>
+              <div className="text-sm font-semibold text-nrl-text">${totalStake.toFixed(2)}</div>
+            </div>
+            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Profit Margin</div>
+              <div className={`text-sm font-semibold ${profitMargin != null && profitMargin < 0 ? "text-red-500" : "text-nrl-text"}`}>
+                {profitMargin == null ? "-" : `${profitMargin.toFixed(1)}%`}
               </div>
-              {betsError ? (
-                <div className="text-xs text-red-500">{betsError}</div>
-              ) : null}
+            </div>
+            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">W/L/P</div>
+              <div className="text-sm font-semibold text-nrl-text">
+                {winningBets}/{losingBets}/{pushedBets}
+              </div>
+            </div>
+          </div>
+
+          {betsError ? (
+            <div className="text-xs text-red-500">{betsError}</div>
+          ) : null}
+
+          {trackerOpen ? (
+            <div className="space-y-3 border-t border-nrl-border pt-3">
               {betsLoading ? (
                 <div className="text-xs text-nrl-muted">Loading bets...</div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] border-collapse text-xs">
+                <div className="max-h-[460px] overflow-auto">
+                  <table className="w-full min-w-[960px] border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-nrl-border text-left text-nrl-muted">
                         <th className="py-2 pr-2 font-semibold">Date</th>
@@ -595,15 +892,101 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
                         <th className="py-2 pr-2 font-semibold">Odds</th>
                         <th className="py-2 pr-2 font-semibold">Stake</th>
                         <th className="py-2 pr-2 font-semibold">Status</th>
-                        <th className="py-2 pr-0 font-semibold">Profit</th>
+                        <th className="py-2 pr-2 font-semibold">Profit</th>
+                        <th className="py-2 pr-0 font-semibold">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {bets.length === 0 ? (
+                      <tr className="border-b border-nrl-border/60 bg-nrl-panel/70">
+                        <td className="py-2 pr-2">
+                          <input
+                            type="date"
+                            value={manualMatchDate}
+                            onChange={(event) => setManualMatchDate(event.target.value)}
+                            className="w-full rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="text"
+                            value={manualMatchName}
+                            onChange={(event) => setManualMatchName(event.target.value)}
+                            placeholder="Team A vs Team B"
+                            className="w-full rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="text"
+                            value={manualSelection}
+                            onChange={(event) => setManualSelection(event.target.value)}
+                            placeholder="Selection"
+                            className="w-full rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="number"
+                            value={manualOdds}
+                            min={1.01}
+                            step={0.01}
+                            onChange={(event) => setManualOdds(event.target.value)}
+                            className="w-24 rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <input
+                            type="number"
+                            value={manualStake}
+                            min={0}
+                            step={1}
+                            onChange={(event) => setManualStake(event.target.value)}
+                            className="w-24 rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <select
+                            value={manualStatus}
+                            onChange={(event) => setManualStatus(event.target.value as TrackedBetStatus)}
+                            className="rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] font-semibold text-nrl-text outline-none focus:border-nrl-accent"
+                          >
+                            <option value="pending">pending</option>
+                            <option value="won">won</option>
+                            <option value="lost">lost</option>
+                            <option value="push">push</option>
+                          </select>
+                        </td>
+                        <td className="py-2 pr-2 font-semibold text-nrl-text">
+                          {(() => {
+                            const odds = Number(manualOdds);
+                            const stake = Number(manualStake);
+                            if (!Number.isFinite(odds) || odds <= 1 || !Number.isFinite(stake) || stake <= 0) return "-";
+                            const profit = computeBetProfit(manualStatus, stake, odds);
+                            return profit == null ? "-" : formatMoney(profit);
+                          })()}
+                        </td>
+                        <td className="py-2 pr-0">
+                          <button
+                            type="button"
+                            onClick={() => void handleManualAddBet()}
+                            className="rounded border border-nrl-accent bg-nrl-accent/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-accent hover:bg-nrl-accent/25"
+                          >
+                            Add
+                          </button>
+                        </td>
+                      </tr>
+                      {manualError ? (
                         <tr>
-                          <td colSpan={7} className="py-3 text-nrl-muted">No bets yet.</td>
+                          <td colSpan={8} className="py-2 text-[10px] text-red-500">
+                            {manualError}
+                          </td>
                         </tr>
-                      ) : bets.map((bet) => (
+                      ) : null}
+                      {sortedBets.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-3 text-nrl-muted">No bets yet.</td>
+                        </tr>
+                      ) : sortedBets.map((bet) => (
                         <tr key={bet.id} className="border-b border-nrl-border/50">
                           <td className="py-2 pr-2 text-nrl-text">{formatDateLabel(bet.matchDate)}</td>
                           <td className="py-2 pr-2 text-nrl-text">{bet.matchName}</td>
@@ -611,11 +994,88 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
                             {bet.selection}
                             {bet.lineValue != null ? ` ${formatLineValue(bet.lineValue)}` : ""}
                           </td>
-                          <td className="py-2 pr-2 text-nrl-text">{bet.odds.toFixed(2)}</td>
-                          <td className="py-2 pr-2 text-nrl-text">${bet.stake.toFixed(2)}</td>
-                          <td className={`py-2 pr-2 font-semibold ${betStatusClass(bet.status)}`}>{bet.status}</td>
-                          <td className={`py-2 pr-0 font-semibold ${bet.profit != null && bet.profit < 0 ? "text-red-500" : "text-nrl-text"}`}>
+                          <td className="py-2 pr-2">
+                            <input
+                              type="number"
+                              min={1.01}
+                              step={0.01}
+                              defaultValue={bet.odds.toFixed(2)}
+                              onBlur={(event) => {
+                                const nextOdds = Number(event.target.value);
+                                if (!Number.isFinite(nextOdds) || nextOdds <= 1) {
+                                  event.target.value = bet.odds.toFixed(2);
+                                  return;
+                                }
+                                void handleUpdateBet(bet.id, { odds: nextOdds });
+                              }}
+                              className="w-20 rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                            />
+                          </td>
+                          <td className="py-2 pr-2">
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              defaultValue={bet.stake.toFixed(2)}
+                              onBlur={(event) => {
+                                const nextStake = Number(event.target.value);
+                                if (!Number.isFinite(nextStake) || nextStake <= 0) {
+                                  event.target.value = bet.stake.toFixed(2);
+                                  return;
+                                }
+                                void handleUpdateBet(bet.id, { stake: nextStake });
+                              }}
+                              className="w-20 rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                            />
+                          </td>
+                          <td className="py-2 pr-2">
+                            <select
+                              value={bet.status}
+                              onChange={(event) => void handleUpdateBet(bet.id, { status: event.target.value as TrackedBetStatus })}
+                              className={`rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] font-semibold outline-none focus:border-nrl-accent ${betStatusClass(bet.status)}`}
+                            >
+                              <option value="pending">pending</option>
+                              <option value="won">won</option>
+                              <option value="lost">lost</option>
+                              <option value="push">push</option>
+                            </select>
+                          </td>
+                          <td
+                            className={`py-2 pr-2 font-semibold ${
+                              bet.profit == null
+                                ? "text-nrl-text"
+                                : bet.profit < 0
+                                  ? "text-red-500"
+                                  : "text-nrl-accent"
+                            }`}
+                          >
                             {bet.profit == null ? "-" : formatMoney(bet.profit)}
+                          </td>
+                          <td className="py-2 pr-0">
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteBet(bet.id)}
+                              aria-label="Delete bet"
+                              title="Delete bet"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded border border-red-500/40 text-red-400 hover:bg-red-500/10"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                              </svg>
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -630,6 +1090,18 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
           ) : null}
         </div>
       </section>
+
+      {betAddedMessage ? (
+        <div className="fixed bottom-4 right-4 z-[120] rounded-md border border-nrl-accent/40 bg-nrl-panel px-3 py-2 text-xs font-semibold text-nrl-accent shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+          {betAddedMessage}
+        </div>
+      ) : null}
+
+      {betRemovedMessage ? (
+        <div className="fixed bottom-16 right-4 z-[120] rounded-md border border-red-500/40 bg-nrl-panel px-3 py-2 text-xs font-semibold text-red-400 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+          {betRemovedMessage}
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2">

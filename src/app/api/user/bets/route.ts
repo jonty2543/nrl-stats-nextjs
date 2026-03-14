@@ -45,6 +45,22 @@ function toFinite(value: unknown): number | null {
   return null;
 }
 
+function isBetStatus(value: unknown): value is BetStatus {
+  return value === "pending" || value === "won" || value === "lost" || value === "push";
+}
+
+function computeProfitForStatus(status: BetStatus, stake: number, odds: number): number | null {
+  if (status === "pending") return null;
+  if (status === "push") return 0;
+  if (status === "won") return Number((stake * Math.max(0, odds - 1)).toFixed(2));
+  return Number((-stake).toFixed(2));
+}
+
+function computeSettledAtForStatus(status: BetStatus, previousSettledAt?: string | null): string | null {
+  if (status === "pending") return null;
+  return previousSettledAt ?? new Date().toISOString();
+}
+
 function normaliseTeam(value: string): string {
   return value
     .replace(/-/g, " ")
@@ -79,6 +95,25 @@ function canonicalMatchKey(home: string, away: string): string {
   const a = normaliseTeam(home);
   const b = normaliseTeam(away);
   return [a, b].sort().join("|");
+}
+
+function teamsMatchByLastWord(
+  aHome: string,
+  aAway: string,
+  bHome: string,
+  bAway: string
+): boolean {
+  const aHomeLast = lastWord(aHome);
+  const aAwayLast = lastWord(aAway);
+  const bHomeLast = lastWord(bHome);
+  const bAwayLast = lastWord(bAway);
+
+  if (!aHomeLast || !aAwayLast || !bHomeLast || !bAwayLast) return false;
+
+  return (
+    (aHomeLast === bHomeLast && aAwayLast === bAwayLast) ||
+    (aHomeLast === bAwayLast && aAwayLast === bHomeLast)
+  );
 }
 
 function mapRowToResponse(row: UserBetRow) {
@@ -212,7 +247,11 @@ async function settlePendingBets(rows: UserBetRow[], userId: string): Promise<Us
     const teams = parseMatchTeams(row.match_name);
     if (!teams) continue;
     const key = `${row.match_date}|${canonicalMatchKey(teams.home, teams.away)}`;
-    const result = resultMap.get(key);
+    const directResult = resultMap.get(key);
+    const result = directResult ?? [...resultMap.values()].find((candidate) => (
+      candidate.date === row.match_date &&
+      teamsMatchByLastWord(teams.home, teams.away, candidate.home, candidate.away)
+    ));
     if (!result) continue;
 
     // Avoid settling clearly future fixtures with placeholder 0-0 scores.
@@ -327,6 +366,7 @@ export async function POST(request: NextRequest) {
   const modelProb = body.modelProb;
   const impliedProb = body.impliedProb;
   const edgePp = body.edgePp;
+  const status = body.status;
 
   if (market !== "H2H" && market !== "Line" && market !== "Total") {
     return NextResponse.json({ error: "market must be H2H, Line, or Total" }, { status: 400 });
@@ -343,6 +383,7 @@ export async function POST(request: NextRequest) {
 
   const parsedOdds = toFinite(odds);
   const parsedStake = toFinite(stake);
+  const parsedStatus: BetStatus = isBetStatus(status) ? status : "pending";
   if (parsedOdds == null || parsedOdds <= 1) {
     return NextResponse.json({ error: "odds must be > 1" }, { status: 400 });
   }
@@ -366,10 +407,10 @@ export async function POST(request: NextRequest) {
       model_prob: toFinite(modelProb),
       implied_prob: toFinite(impliedProb),
       edge_pp: toFinite(edgePp),
-      status: "pending",
-      profit: null,
+      status: parsedStatus,
+      profit: computeProfitForStatus(parsedStatus, parsedStake, parsedOdds),
       placed_at: new Date().toISOString(),
-      settled_at: null,
+      settled_at: computeSettledAtForStatus(parsedStatus),
     })
     .select("id, clerk_user_id, market, match_date, match_name, selection, line_value, odds, stake, model_prob, implied_prob, edge_pp, status, profit, placed_at, settled_at")
     .single();
@@ -382,4 +423,141 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ bet: mapRowToResponse(data as UserBetRow) });
+}
+
+export async function PATCH(request: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!isJsonObject(body)) {
+    return NextResponse.json({ error: "Body must be an object" }, { status: 400 });
+  }
+
+  const id = body.id;
+  const odds = body.odds;
+  const stake = body.stake;
+  const status = body.status;
+
+  if (typeof id !== "string" || id.trim().length === 0) {
+    return NextResponse.json({ error: "id is required" }, { status: 400 });
+  }
+
+  const parsedOdds = odds == null ? null : toFinite(odds);
+  const parsedStake = stake == null ? null : toFinite(stake);
+  const parsedStatus = status == null ? null : isBetStatus(status) ? status : null;
+
+  if (odds != null && (parsedOdds == null || parsedOdds <= 1)) {
+    return NextResponse.json({ error: "odds must be > 1" }, { status: 400 });
+  }
+  if (stake != null && (parsedStake == null || parsedStake <= 0)) {
+    return NextResponse.json({ error: "stake must be > 0" }, { status: 400 });
+  }
+  if (status != null && parsedStatus == null) {
+    return NextResponse.json({ error: "status must be pending, won, lost, or push" }, { status: 400 });
+  }
+  if (parsedOdds == null && parsedStake == null && parsedStatus == null) {
+    return NextResponse.json({ error: "No updatable fields provided" }, { status: 400 });
+  }
+
+  const supabase = createServerSupabaseClient();
+  const { data: existing, error: existingError } = await supabase
+    .schema("shortside")
+    .from("user_bets")
+    .select("id, clerk_user_id, market, match_date, match_name, selection, line_value, odds, stake, model_prob, implied_prob, edge_pp, status, profit, placed_at, settled_at")
+    .eq("id", id)
+    .eq("clerk_user_id", userId)
+    .maybeSingle();
+
+  if (existingError) {
+    return NextResponse.json(
+      { error: "Failed to load bet", details: existingError.message },
+      { status: 500 }
+    );
+  }
+  if (!existing) {
+    return NextResponse.json({ error: "Bet not found" }, { status: 404 });
+  }
+
+  const nextOdds = parsedOdds ?? Number(existing.odds);
+  const nextStake = parsedStake ?? Number(existing.stake);
+  const nextStatus = parsedStatus ?? (existing.status as BetStatus);
+  if (!Number.isFinite(nextOdds) || nextOdds <= 1) {
+    return NextResponse.json({ error: "odds must be > 1" }, { status: 400 });
+  }
+  if (!Number.isFinite(nextStake) || nextStake <= 0) {
+    return NextResponse.json({ error: "stake must be > 0" }, { status: 400 });
+  }
+
+  const { data, error } = await supabase
+    .schema("shortside")
+    .from("user_bets")
+    .update({
+      odds: nextOdds,
+      stake: nextStake,
+      status: nextStatus,
+      profit: computeProfitForStatus(nextStatus, nextStake, nextOdds),
+      settled_at: computeSettledAtForStatus(nextStatus, existing.settled_at),
+    })
+    .eq("id", id)
+    .eq("clerk_user_id", userId)
+    .select("id, clerk_user_id, market, match_date, match_name, selection, line_value, odds, stake, model_prob, implied_prob, edge_pp, status, profit, placed_at, settled_at")
+    .single();
+
+  if (error) {
+    return NextResponse.json(
+      { error: "Failed to update bet", details: error.message },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ bet: mapRowToResponse(data as UserBetRow) });
+}
+
+export async function DELETE(request: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!isJsonObject(body)) {
+    return NextResponse.json({ error: "Body must be an object" }, { status: 400 });
+  }
+
+  const id = body.id;
+  if (typeof id !== "string" || id.trim().length === 0) {
+    return NextResponse.json({ error: "id is required" }, { status: 400 });
+  }
+
+  const supabase = createServerSupabaseClient();
+  const { error } = await supabase
+    .schema("shortside")
+    .from("user_bets")
+    .delete()
+    .eq("id", id)
+    .eq("clerk_user_id", userId);
+
+  if (error) {
+    return NextResponse.json(
+      { error: "Failed to delete bet", details: error.message },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ ok: true });
 }

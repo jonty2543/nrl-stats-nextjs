@@ -46,6 +46,8 @@ function normaliseTeamKey(value: unknown): string {
 interface FetchOptions {
   /** Filter by match_date year(s) — e.g. ["2025"] → gte 2025-01-01, lt 2026-01-01 */
   years?: string[];
+  /** Optional projection columns for Supabase select(...) */
+  columns?: string;
 }
 
 async function fetchAllRowsFromSchema<T extends Record<string, unknown>>(
@@ -61,7 +63,7 @@ async function fetchAllRowsFromSchema<T extends Record<string, unknown>>(
     const { data, error } = await supabase.from(table).select("*").range(start, end);
 
     if (error) throw new Error(`Supabase fetch ${schema}.${table}: ${error.message}`);
-    const rows = (data ?? []) as T[];
+    const rows = (data ?? []) as unknown as T[];
     if (rows.length === 0) break;
     allRows.push(...rows);
     if (rows.length < PAGE_SIZE) break;
@@ -81,7 +83,7 @@ async function fetchAllRows<T extends Record<string, unknown>>(
 
   while (true) {
     const end = start + PAGE_SIZE - 1;
-    let query = supabase.from(table).select("*");
+    let query = supabase.from(table).select(options?.columns ?? "*");
 
     // Apply year filter if provided
     if (options?.years && options.years.length > 0) {
@@ -96,7 +98,7 @@ async function fetchAllRows<T extends Record<string, unknown>>(
     const { data, error } = await query.range(start, end);
 
     if (error) throw new Error(`Supabase fetch ${table}: ${error.message}`);
-    const rows = (data ?? []) as T[];
+    const rows = (data ?? []) as unknown as T[];
     if (rows.length === 0) break;
     allRows.push(...rows);
     if (rows.length < PAGE_SIZE) break;
@@ -699,10 +701,11 @@ function buildTeammateLookupRows(rawPlayers: Record<string, unknown>[]): Teammat
 // ---------------------------------------------------------------------------
 export async function fetchPlayerStatsFromSupabase(years?: string[]): Promise<PlayerStat[]> {
   const opts = years && years.length > 0 ? { years } : undefined;
-  const [rawPlayers, rawMatches] = await Promise.all([
-    fetchAllRows<Record<string, unknown>>("player_stats", opts),
-    fetchAllRows<Record<string, unknown>>("matches", opts),
-  ]);
+  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches", {
+    ...opts,
+    columns: "match_date,team,opponent_team,is_home",
+  });
+  const rawPlayers = await fetchAllRows<Record<string, unknown>>("player_stats", opts);
   return buildPlayerStatsRows(rawPlayers, rawMatches);
 }
 
@@ -790,7 +793,9 @@ async function fetchPlayerStatsForLocalNameAllYearsFromSupabase(
 ): Promise<PlayerStat[]> {
   const [rawPlayers, rawMatches] = await Promise.all([
     fetchPlayerStatsRowsForPlayerFromSupabase(localPlayerName),
-    fetchAllRows<Record<string, unknown>>("matches"),
+    fetchAllRows<Record<string, unknown>>("matches", {
+      columns: "match_date,team,opponent_team,is_home",
+    }),
   ]);
   return buildPlayerStatsRows(rawPlayers, rawMatches);
 }
@@ -835,7 +840,9 @@ export async function fetchFantasyPlayerStatsAllYears(
 export async function fetchAvailableYearsFromSupabase(): Promise<string[]> {
   // Avoid expensive min/max scans on the large player_stats table.
   // matches is much smaller and still covers the available season range.
-  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches");
+  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches", {
+    columns: "match_date",
+  });
   if (rawMatches.length === 0) return [];
 
   const years = Array.from(
@@ -881,7 +888,10 @@ export async function fetchAvailableYears(): Promise<string[]> {
 }
 
 export async function fetchMatches(years?: string[]): Promise<Match[]> {
-  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches");
+  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches", {
+    years,
+    columns: "match_date,round,team,opponent_team,is_home,score,opponent_score",
+  });
   if (rawMatches.length === 0) return [];
 
   // Only home rows to build match pairs
@@ -892,8 +902,6 @@ export async function fetchMatches(years?: string[]): Promise<Match[]> {
   for (const m of homeRows) {
     const matchDate = String(m.match_date ?? "");
     const year = matchDate ? new Date(matchDate).getFullYear().toString() : "";
-    if (years && years.length > 0 && !years.includes(year)) continue;
-
     const round = roundToSort(m.round as string);
     const roundLabel = roundToLabel(m.round as string);
     const home = String(m.team ?? "").replace(/-/g, " ");

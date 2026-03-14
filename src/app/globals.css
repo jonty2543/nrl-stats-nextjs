@@ -29,19 +29,19 @@
 
 html[data-theme="light"] {
   color-scheme: light;
-  --color-nrl-bg: #dce5f4;
+  --color-nrl-bg: #c9d1de;
   --color-nrl-panel: #ecf1fb;
   --color-nrl-panel-2: #e3ebf8;
   --color-nrl-accent: #00b765;
   --color-percentile-top: var(--color-nrl-accent);
-  --color-nrl-text: #16213d;
-  --color-nrl-muted: #5b6886;
+  --color-nrl-text: #111418;
+  --color-nrl-muted: #2f3642;
   --color-nrl-border: #b9c7e3;
   --color-chart-primary: #00be6a;
   --color-chart-secondary: #8c6cf0;
   --color-chart-tertiary: #f3a23d;
   --color-chart-trendline: #e94b82;
-  --app-bg-gradient: radial-gradient(1200px 600px at 15% 10%, #eef3fc 0%, #dce5f4 55%, #d0dbef 100%);
+  --app-bg-gradient: radial-gradient(1200px 600px at 15% 10%, #d7dee9 0%, #c9d1de 55%, #bcc5d3 100%);
 }
 
 html[data-theme="dark"] {
@@ -57,6 +57,14 @@ body {
 
 html {
   font-size: 90%;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
 }
 
 /* In fullscreen chart view, grow chart height so plots don't become thin and wide. */

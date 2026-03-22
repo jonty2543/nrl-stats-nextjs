@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation"
 import { SignInButton } from "@clerk/nextjs"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
 import type { Draw2026Data } from "@/lib/draw/types"
-import type { FantasyPlayerSnapshot } from "@/lib/fantasy/nrl"
+import type {
+  FantasyOwnershipBaselineSnapshot,
+  FantasyPlayerSnapshot,
+} from "@/lib/fantasy/nrl"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import { FANTASY_POSITION_MAP } from "@/lib/fantasy/nrl"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
@@ -28,6 +31,7 @@ import {
 
 interface FantasyDashboardProps {
   fantasyPlayers: FantasyPlayerSnapshot[]
+  ownershipBaselineSnapshot?: FantasyOwnershipBaselineSnapshot | null
   availableYears: string[]
   defaultYears: string[]
   initialPlayerStats: PlayerStat[]
@@ -227,6 +231,34 @@ function formatPercent(value: number | null): string {
   return `${value.toFixed(2)}%`
 }
 
+function formatOwnershipDelta(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "-"
+  const sign = value > 0 ? "+" : ""
+  return `${sign}${value.toFixed(2)}%`
+}
+
+function getOwnershipDeltaClass(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "text-nrl-muted"
+  if (value > 0) return "text-emerald-300"
+  if (value < 0) return "text-rose-300"
+  return "text-nrl-muted"
+}
+
+function formatBrisbaneDateTime(value: string | null): string {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString("en-AU", {
+    timeZone: "Australia/Brisbane",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+}
+
 function formatNumber(value: number | null, digits = 1): string {
   if (value === null) return "-"
   return value.toFixed(digits)
@@ -411,10 +443,12 @@ function OwnershipTableCard({
   title,
   rows,
   onSelectPlayer,
+  ownershipDeltaByPlayerId,
 }: {
   title: string
   rows: FantasyPlayerSnapshot[]
   onSelectPlayer?: (name: string) => void
+  ownershipDeltaByPlayerId?: Map<number, number | null>
 }) {
   return (
     <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
@@ -428,34 +462,41 @@ function OwnershipTableCard({
               <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wide text-nrl-muted">Player</th>
               <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wide text-nrl-muted">Pos</th>
               <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Own %</th>
+              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Delta</th>
               <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Price</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((player) => (
-              <tr key={player.id} className="border-t border-nrl-border/60">
-                <td className="px-3 py-2 text-xs text-nrl-text">
-                  {onSelectPlayer ? (
-                    <button
-                      type="button"
-                      onClick={() => onSelectPlayer(player.name)}
-                      className="cursor-pointer text-left text-nrl-text hover:text-nrl-accent hover:underline"
-                    >
-                      {player.name}
-                    </button>
-                  ) : (
-                    player.name
-                  )}
-                </td>
-                <td className="px-3 py-2 text-[10px] text-nrl-muted">{player.positionLabel}</td>
-                <td className="px-3 py-2 text-right text-xs font-semibold text-nrl-accent">
-                  {formatPercent(player.ownedBy)}
-                </td>
-                <td className="px-3 py-2 text-right text-xs text-nrl-text">
-                  {formatPrice(player.cost)}
-                </td>
-              </tr>
-            ))}
+            {rows.map((player) => {
+              const delta = ownershipDeltaByPlayerId?.get(player.id) ?? null
+              return (
+                <tr key={player.id} className="border-t border-nrl-border/60">
+                  <td className="px-3 py-2 text-xs text-nrl-text">
+                    {onSelectPlayer ? (
+                      <button
+                        type="button"
+                        onClick={() => onSelectPlayer(player.name)}
+                        className="cursor-pointer text-left text-nrl-text hover:text-nrl-accent hover:underline"
+                      >
+                        {player.name}
+                      </button>
+                    ) : (
+                      player.name
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-[10px] text-nrl-muted">{player.positionLabel}</td>
+                  <td className="px-3 py-2 text-right text-xs font-semibold text-nrl-accent">
+                    {formatPercent(player.ownedBy)}
+                  </td>
+                  <td className={`px-3 py-2 text-right text-xs font-semibold ${getOwnershipDeltaClass(delta)}`}>
+                    {formatOwnershipDelta(delta)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs text-nrl-text">
+                    {formatPrice(player.cost)}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -497,6 +538,7 @@ function MetricCard({
 
 export function FantasyDashboard({
   fantasyPlayers,
+  ownershipBaselineSnapshot = null,
   availableYears,
   defaultYears,
   initialPlayerStats,
@@ -832,6 +874,36 @@ export function FantasyDashboard({
     }))
   }, [fantasyPlayers])
 
+  const ownershipBaselineByPlayerId = useMemo(() => {
+    const map = new Map<number, number | null>()
+    for (const point of ownershipBaselineSnapshot?.points ?? []) {
+      map.set(point.playerId, point.ownedBy)
+    }
+    return map
+  }, [ownershipBaselineSnapshot])
+
+  const ownershipDeltaByPlayerId = useMemo(() => {
+    const map = new Map<number, number | null>()
+    for (const player of fantasyPlayers) {
+      const baseline = ownershipBaselineByPlayerId.get(player.id)
+      const current = player.ownedBy
+      if (baseline == null || current == null) {
+        map.set(player.id, null)
+      } else {
+        map.set(player.id, current - baseline)
+      }
+    }
+    return map
+  }, [fantasyPlayers, ownershipBaselineByPlayerId])
+
+  const selectedOwnershipDelta = useMemo(
+    () =>
+      selectedFantasyPlayer
+        ? (ownershipDeltaByPlayerId.get(selectedFantasyPlayer.id) ?? null)
+        : null,
+    [ownershipDeltaByPlayerId, selectedFantasyPlayer]
+  )
+
   const localPpm = useMemo(() => {
     const scores = playerRowsForYear
       .map((row) => toFiniteNumber(row.Fantasy))
@@ -985,6 +1057,7 @@ export function FantasyDashboard({
                 title={card.title}
                 rows={card.rows}
                 onSelectPlayer={navigateToPlayer}
+                ownershipDeltaByPlayerId={ownershipDeltaByPlayerId}
               />
             ))}
           </div>
@@ -1034,7 +1107,16 @@ export function FantasyDashboard({
                       <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
                         <MetricCard compact label="Price" value={formatPrice(selectedFantasyPlayer.cost)} />
                         <MetricCard compact label="PPM" value={formatNumber(localPpm, 2)} />
-                        <MetricCard compact label="Own %" value={formatPercent(selectedFantasyPlayer.ownedBy)} />
+                        <MetricCard
+                          compact
+                          label="Own %"
+                          value={formatPercent(selectedFantasyPlayer.ownedBy)}
+                          sublabel={
+                            ownershipBaselineSnapshot
+                              ? `Delta ${formatOwnershipDelta(selectedOwnershipDelta)} vs ${formatBrisbaneDateTime(ownershipBaselineSnapshot.capturedAt)}`
+                              : undefined
+                          }
+                        />
                         <MetricCard
                           compact
                           label="Priced At"

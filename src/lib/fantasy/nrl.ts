@@ -1,3 +1,5 @@
+import { createServerSupabaseClient } from "@/lib/supabase/client";
+
 export const FANTASY_POSITION_MAP: Record<number, string> = {
   1: "HOK",
   2: "MID",
@@ -30,6 +32,18 @@ export interface FantasyPlayerSnapshot {
   isBye: boolean
   locked: boolean
   priceHistory: Record<string, number>
+}
+
+export interface FantasyOwnershipBaselinePoint {
+  playerId: number
+  name: string
+  ownedBy: number | null
+}
+
+export interface FantasyOwnershipBaselineSnapshot {
+  capturedAt: string
+  snapshotWeekBrisbane: string
+  points: FantasyOwnershipBaselinePoint[]
 }
 
 interface FantasyPlayerRaw {
@@ -170,4 +184,50 @@ export async function fetchFantasyPlayersSnapshot(): Promise<FantasyPlayerSnapsh
       if (ownA !== ownB) return ownB - ownA
       return a.name.localeCompare(b.name)
     })
+}
+
+interface FantasyOwnershipSnapshotRow {
+  captured_at: string
+  snapshot_week_brisbane: string
+  snapshot_data: unknown
+}
+
+function normaliseOwnershipBaselinePoints(value: unknown): FantasyOwnershipBaselinePoint[] {
+  if (!Array.isArray(value)) return []
+
+  return value.flatMap((row) => {
+    if (typeof row !== "object" || row == null || Array.isArray(row)) return []
+    const point = row as Record<string, unknown>
+    const playerId = point.playerId
+    const name = point.name
+    const ownedByRaw = point.ownedBy
+    if (typeof playerId !== "number" || !Number.isFinite(playerId) || typeof name !== "string") return []
+    const ownedBy = typeof ownedByRaw === "number" && Number.isFinite(ownedByRaw) ? ownedByRaw : null
+    return [{ playerId: Math.trunc(playerId), name, ownedBy }]
+  })
+}
+
+export async function fetchLatestFantasyOwnershipBaselineSnapshot(): Promise<FantasyOwnershipBaselineSnapshot | null> {
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase
+    .schema("shortside")
+    .from("fantasy_ownership_snapshots")
+    .select("captured_at, snapshot_week_brisbane, snapshot_data")
+    .eq("snapshot_type", "weekly_sunday_11pm_brisbane")
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Unable to fetch fantasy ownership baseline snapshot.", error.message);
+    return null;
+  }
+  if (!data) return null;
+
+  const row = data as FantasyOwnershipSnapshotRow;
+  return {
+    capturedAt: row.captured_at,
+    snapshotWeekBrisbane: row.snapshot_week_brisbane,
+    points: normaliseOwnershipBaselinePoints(row.snapshot_data),
+  };
 }

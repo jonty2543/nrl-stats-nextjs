@@ -3,7 +3,10 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { isAccessibleSeason } from "@/lib/access/season-access"
-import { fetchFantasyPlayersSnapshot } from "@/lib/fantasy/nrl"
+import {
+  fetchFantasyPlayersSnapshot,
+  fetchLatestFantasyOwnershipBaselineSnapshot,
+} from "@/lib/fantasy/nrl"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
@@ -27,12 +30,13 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
 
-  const [fantasyPlayers, availableYears, draw2026Data, playerImages, teamLogos] = await Promise.all([
+  const [fantasyPlayers, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchAvailableYears(),
     loadDraw2026Data(),
     fetchPlayerImages(),
     fetchTeamLogos(),
+    fetchLatestFantasyOwnershipBaselineSnapshot(),
   ])
 
   const selectedPlayer = fantasyPlayers.find(
@@ -74,6 +78,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
         initialSelectedFantasyName={selectedPlayer.name}
         showOwnedCards={false}
         playerRouteBasePath="/dashboard/fantasy"
+        ownershipBaselineSnapshot={ownershipBaselineSnapshot}
       />
     </div>
   )

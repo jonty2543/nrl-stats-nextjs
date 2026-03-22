@@ -1,7 +1,10 @@
 import { auth } from "@clerk/nextjs/server"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { isAccessibleSeason } from "@/lib/access/season-access"
-import { fetchFantasyPlayersSnapshot } from "@/lib/fantasy/nrl"
+import {
+  fetchFantasyPlayersSnapshot,
+  fetchLatestFantasyOwnershipBaselineSnapshot,
+} from "@/lib/fantasy/nrl"
 import { fetchAvailableYears } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
@@ -11,9 +14,10 @@ export default async function FantasyPage() {
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
 
-  const [fantasyPlayers, availableYears] = await Promise.all([
+  const [fantasyPlayers, availableYears, ownershipBaselineSnapshot] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchAvailableYears(),
+    fetchLatestFantasyOwnershipBaselineSnapshot(),
   ])
 
   const unlockedYears = canAccessLoginSeason
@@ -31,6 +35,7 @@ export default async function FantasyPage() {
       canAccessLoginSeason={canAccessLoginSeason}
       showPlayerDetails={false}
       playerRouteBasePath="/dashboard/fantasy"
+      ownershipBaselineSnapshot={ownershipBaselineSnapshot}
     />
   )
 }

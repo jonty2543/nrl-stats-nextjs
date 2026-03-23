@@ -462,7 +462,7 @@ function OwnershipTableCard({
               <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wide text-nrl-muted">Player</th>
               <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wide text-nrl-muted">Pos</th>
               <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Own %</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Delta</th>
+              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Weekly</th>
               <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Price</th>
             </tr>
           </thead>
@@ -896,6 +896,30 @@ export function FantasyDashboard({
     return map
   }, [fantasyPlayers, ownershipBaselineByPlayerId])
 
+  const overallTopBoughtWeekly = useMemo(() => {
+    return [...fantasyPlayers]
+      .filter((player) => (ownershipDeltaByPlayerId.get(player.id) ?? 0) > 0)
+      .sort((a, b) => {
+        const aDelta = ownershipDeltaByPlayerId.get(a.id) ?? 0
+        const bDelta = ownershipDeltaByPlayerId.get(b.id) ?? 0
+        if (bDelta !== aDelta) return bDelta - aDelta
+        return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
+      })
+      .slice(0, 20)
+  }, [fantasyPlayers, ownershipDeltaByPlayerId])
+
+  const overallTopSoldWeekly = useMemo(() => {
+    return [...fantasyPlayers]
+      .filter((player) => (ownershipDeltaByPlayerId.get(player.id) ?? 0) < 0)
+      .sort((a, b) => {
+        const aDelta = ownershipDeltaByPlayerId.get(a.id) ?? 0
+        const bDelta = ownershipDeltaByPlayerId.get(b.id) ?? 0
+        if (aDelta !== bDelta) return aDelta - bDelta
+        return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
+      })
+      .slice(0, 20)
+  }, [fantasyPlayers, ownershipDeltaByPlayerId])
+
   const selectedOwnershipDelta = useMemo(
     () =>
       selectedFantasyPlayer
@@ -958,16 +982,47 @@ export function FantasyDashboard({
   }, [])
 
   const ownedCards = useMemo(
-    () => [
-      { key: "price", title: "TOP 20 PRICE", rows: overallTopPrice },
-      { key: "all", title: "TOP 20 ALL POS", rows: overallTopOwned },
-      ...topOwnedByPosition.map((table) => ({
-        key: String(table.code),
-        title: `TOP 20 ${table.label}`,
-        rows: table.rows,
-      })),
-    ],
-    [overallTopOwned, overallTopPrice, topOwnedByPosition]
+    () =>
+      ownershipBaselineSnapshot
+        ? [
+            {
+              key: "weekly-bought",
+              title: "TOP BOUGHT WEEKLY",
+              rows: overallTopBoughtWeekly,
+            },
+            {
+              key: "weekly-sold",
+              title: "TOP SOLD WEEKLY",
+              rows: overallTopSoldWeekly,
+            },
+            { key: "price", title: "TOP PRICE", rows: overallTopPrice },
+            ...topOwnedByPosition.map((table) => ({
+              key: String(table.code),
+              title: `TOP ${table.label}`,
+              rows: table.rows,
+            })),
+          ]
+        : [
+            {
+              key: "all",
+              title: "TOP ALL POS",
+              rows: overallTopOwned,
+            },
+            { key: "price", title: "TOP PRICE", rows: overallTopPrice },
+            ...topOwnedByPosition.map((table) => ({
+              key: String(table.code),
+              title: `TOP ${table.label}`,
+              rows: table.rows,
+            })),
+          ],
+    [
+      overallTopBoughtWeekly,
+      overallTopOwned,
+      overallTopPrice,
+      overallTopSoldWeekly,
+      ownershipBaselineSnapshot,
+      topOwnedByPosition,
+    ]
   )
 
   const draw2026Panel = (
@@ -1113,7 +1168,7 @@ export function FantasyDashboard({
                           value={formatPercent(selectedFantasyPlayer.ownedBy)}
                           sublabel={
                             ownershipBaselineSnapshot
-                              ? `Delta ${formatOwnershipDelta(selectedOwnershipDelta)} vs ${formatBrisbaneDateTime(ownershipBaselineSnapshot.capturedAt)}`
+                              ? `Weekly ${formatOwnershipDelta(selectedOwnershipDelta)}`
                               : undefined
                           }
                         />

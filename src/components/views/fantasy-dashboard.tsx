@@ -1111,9 +1111,9 @@ export function FantasyDashboard({
         .sort((a, b) => {
           const aDelta = ownershipDeltaByPlayerId.get(a.id)
           const bDelta = ownershipDeltaByPlayerId.get(b.id)
-          if (aDelta === null && bDelta === null) return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
-          if (aDelta === null) return 1
-          if (bDelta === null) return -1
+          if (aDelta == null && bDelta == null) return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
+          if (aDelta == null) return 1
+          if (bDelta == null) return -1
           if (bDelta !== aDelta) return bDelta - aDelta
           return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
         })

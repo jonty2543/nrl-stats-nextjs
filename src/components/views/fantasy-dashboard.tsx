@@ -435,7 +435,7 @@ function getScaledBaseUpsideBarWidths(
   if (totalWidthPct <= 0) return { basePct: 0, upsidePct: 0 }
 
   const base = Math.max(0, split.basePoints)
-  const upside = Math.max(0, split.upsidePoints)
+  const upside = Math.abs(split.upsidePoints)
   const total = base + upside
   if (total <= 0) return { basePct: 0, upsidePct: 0 }
 
@@ -1548,7 +1548,7 @@ export function FantasyDashboard({
                       </div>
                     </div>
 
-                    <div className="pt-6 grid grid-cols-[8rem_minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-[9rem_minmax(0,1fr)] xl:grid-cols-1">
+                    <div className="pt-6 grid grid-cols-[8rem_minmax(0,1fr)] items-stretch gap-5 sm:grid-cols-[9rem_minmax(0,1fr)] xl:grid-cols-1">
                       <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
                         <MetricCard compact label="Price" value={formatPrice(selectedFantasyPlayer.cost)} />
                         <MetricCard compact label="PPM" value={formatNumber(localPpm, 2)} />
@@ -1571,7 +1571,11 @@ export function FantasyDashboard({
 
                       {fantasyCardPlayerName ? (
                         <div className="flex h-full items-center justify-center xl:hidden">
-                          <div className="w-full max-w-[18rem] sm:max-w-[20rem]">
+                          <div className="relative w-full max-w-[18rem] overflow-hidden rounded-2xl sm:max-w-[20rem]">
+                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
+                            <div className="pointer-events-none absolute left-[8%] top-[12%] h-24 w-24 rounded-full bg-emerald-300/10 blur-2xl" />
+                            <div className="pointer-events-none absolute bottom-[10%] right-[12%] h-28 w-28 rounded-full bg-violet-400/12 blur-3xl" />
+                            <div className="relative">
                             <PlayerImageCard
                               playerName={fantasyCardPlayerName}
                               imageRow={fantasyCardImage}
@@ -1581,6 +1585,7 @@ export function FantasyDashboard({
                               frameless
                               priority
                             />
+                            </div>
                           </div>
                         </div>
                       ) : null}
@@ -1588,8 +1593,12 @@ export function FantasyDashboard({
                   </div>
 
                   {fantasyCardPlayerName ? (
-                    <div className="hidden items-center justify-center xl:order-1 xl:flex xl:justify-start">
-                      <div className="w-full max-w-[14rem]">
+                    <div className="hidden items-center justify-center xl:order-1 xl:flex xl:justify-start xl:pr-10">
+                      <div className="relative w-full max-w-[14rem] overflow-hidden rounded-2xl">
+                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
+                        <div className="pointer-events-none absolute left-[8%] top-[12%] h-20 w-20 rounded-full bg-emerald-300/10 blur-2xl" />
+                        <div className="pointer-events-none absolute bottom-[10%] right-[12%] h-24 w-24 rounded-full bg-violet-400/12 blur-3xl" />
+                        <div className="relative">
                         <PlayerImageCard
                           playerName={fantasyCardPlayerName}
                           imageRow={fantasyCardImage}
@@ -1598,6 +1607,7 @@ export function FantasyDashboard({
                           frameless
                           priority
                         />
+                        </div>
                       </div>
                     </div>
                   ) : null}
@@ -1863,12 +1873,26 @@ export function FantasyDashboard({
                           FANTASY_BOX_PLOT_PAD_PCT +
                           ((value - fantasyBoxPlotRange.min) / range) * (100 - FANTASY_BOX_PLOT_PAD_PCT * 2)
                         return (
-                          <div key={`box-${row.label}`} className="grid grid-cols-[92px_minmax(0,1fr)] items-start gap-3">
+                          <div key={`box-${row.label}`} className="grid grid-cols-[132px_minmax(0,1fr)] items-center gap-3">
                             <div className="text-xs">
                               <div className="font-semibold text-nrl-text">{row.label}</div>
                               <div className="text-[10px] text-nrl-muted">n={row.values.length}</div>
+                              <div className="mt-2 space-y-1 text-[10px] leading-none">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="uppercase tracking-wide text-nrl-muted/80">Low</span>
+                                  <span className="font-medium text-nrl-muted">{row.min.toFixed(1)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="uppercase tracking-wide text-nrl-muted/80">Median</span>
+                                  <span className="font-medium text-nrl-text">{row.median.toFixed(1)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="uppercase tracking-wide text-nrl-muted/80">High</span>
+                                  <span className="font-medium text-nrl-muted">{row.max.toFixed(1)}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="space-y-1">
+                            <div>
                               <svg
                                 viewBox="0 0 100 28"
                                 preserveAspectRatio="none"
@@ -1917,49 +1941,11 @@ export function FantasyDashboard({
                                   strokeWidth="1.5"
                                 />
                               </svg>
-                              <div className="relative h-7">
-                                <div
-                                  className="absolute top-0 -translate-x-1/2 text-[10px] font-medium text-nrl-muted"
-                                  style={{ left: `${scale(row.min)}%` }}
-                                >
-                                  {row.min.toFixed(1)}
-                                </div>
-                                <div
-                                  className="absolute top-0 -translate-x-1/2 text-[10px] font-medium text-nrl-text"
-                                  style={{ left: `${scale(row.median)}%` }}
-                                >
-                                  {row.median.toFixed(1)}
-                                </div>
-                                <div
-                                  className="absolute top-0 -translate-x-1/2 text-[10px] font-medium text-nrl-muted"
-                                  style={{ left: `${scale(row.max)}%` }}
-                                >
-                                  {row.max.toFixed(1)}
-                                </div>
-                                <div
-                                  className="absolute top-3 -translate-x-1/2 text-[9px] uppercase tracking-wide text-nrl-muted/80"
-                                  style={{ left: `${scale(row.min)}%` }}
-                                >
-                                  Low
-                                </div>
-                                <div
-                                  className="absolute top-3 -translate-x-1/2 text-[9px] uppercase tracking-wide text-nrl-muted/80"
-                                  style={{ left: `${scale(row.median)}%` }}
-                                >
-                                  Median
-                                </div>
-                                <div
-                                  className="absolute top-3 -translate-x-1/2 text-[9px] uppercase tracking-wide text-nrl-muted/80"
-                                  style={{ left: `${scale(row.max)}%` }}
-                                >
-                                  High
-                                </div>
-                              </div>
                             </div>
                           </div>
                         )
                       })}
-                      <div className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-3 pt-1">
+                      <div className="grid grid-cols-[132px_minmax(0,1fr)] items-center gap-3 pt-1">
                         <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
                           Score
                         </div>
@@ -2075,12 +2061,12 @@ export function FantasyDashboard({
                     <colgroup>
                       {GAME_LOG_COLUMNS.map((column) => (
                         <Fragment key={column.key}>
-                          <col
-                            style={{ width: `${getGameLogColumnWidthPx(column.key)}px` }}
-                          />
                           {showBaseUpsideBars && column.key === "Fantasy" ? (
                             <col style={{ width: `${GAME_LOG_BASE_UPSIDE_COLUMN_WIDTH_PX}px` }} />
                           ) : null}
+                          <col
+                            style={{ width: `${getGameLogColumnWidthPx(column.key)}px` }}
+                          />
                         </Fragment>
                       ))}
                     </colgroup>
@@ -2088,6 +2074,11 @@ export function FantasyDashboard({
                       <tr className="bg-nrl-panel">
                         {GAME_LOG_COLUMNS.map((column) => (
                           <Fragment key={column.key}>
+                            {showBaseUpsideBars && column.key === "Fantasy" ? (
+                              <th className="sticky top-0 z-10 border-b border-nrl-border px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-normal text-nrl-muted whitespace-nowrap">
+                                Base vs Upside
+                              </th>
+                            ) : null}
                             <th
                               className={`sticky top-0 z-10 border-b border-nrl-border py-2 text-[10px] font-semibold uppercase tracking-normal text-nrl-muted whitespace-nowrap ${
                                 getGameLogCellPaddingClass(column.key)
@@ -2108,11 +2099,6 @@ export function FantasyDashboard({
                                 <span>{column.label}</span>
                               </button>
                             </th>
-                            {showBaseUpsideBars && column.key === "Fantasy" ? (
-                              <th className="sticky top-0 z-10 border-b border-nrl-border px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-normal text-nrl-muted whitespace-nowrap">
-                                Base vs Upside
-                              </th>
-                            ) : null}
                           </Fragment>
                         ))}
                       </tr>
@@ -2142,15 +2128,6 @@ export function FantasyDashboard({
 
                               return (
                                 <Fragment key={column.key}>
-                                  <td
-                                    className={`py-2 text-xs font-semibold whitespace-nowrap ${
-                                      getGameLogCellPaddingClass(column.key)
-                                    } ${
-                                      column.align === "right" ? "text-right" : "text-left"
-                                    } ${isFantasy ? "text-nrl-accent" : "text-nrl-muted"}`}
-                                  >
-                                    {display}
-                                  </td>
                                   {showBaseUpsideBars && column.key === "Fantasy" ? (
                                     <td className="px-3 py-2 text-xs">
                                       {averageBaseUpsideSplit ? (
@@ -2167,13 +2144,25 @@ export function FantasyDashboard({
                                                   style={{ width: `${barPercentages.basePct}%` }}
                                                 />
                                                 <div
-                                                  className="bg-violet-400"
+                                                  className={
+                                                    averageBaseUpsideSplit.upsidePoints < 0
+                                                      ? "bg-rose-500"
+                                                      : "bg-violet-400"
+                                                  }
                                                   style={{ width: `${barPercentages.upsidePct}%` }}
                                                 />
                                               </div>
                                               <div className="mt-1 flex items-center justify-between gap-2 whitespace-nowrap text-[10px] text-nrl-muted">
                                                 <span>{averageBaseUpsideSplit.basePoints.toFixed(1)}</span>
-                                                <span>{averageBaseUpsideSplit.upsidePoints.toFixed(1)}</span>
+                                                <span
+                                                  className={
+                                                    averageBaseUpsideSplit.upsidePoints < 0
+                                                      ? "text-rose-400"
+                                                      : undefined
+                                                  }
+                                                >
+                                                  {averageBaseUpsideSplit.upsidePoints.toFixed(1)}
+                                                </span>
                                               </div>
                                             </div>
                                           )
@@ -2183,6 +2172,15 @@ export function FantasyDashboard({
                                       )}
                                     </td>
                                   ) : null}
+                                  <td
+                                    className={`py-2 text-xs font-semibold whitespace-nowrap ${
+                                      getGameLogCellPaddingClass(column.key)
+                                    } ${
+                                      column.align === "right" ? "text-right" : "text-left"
+                                    } ${isFantasy ? "text-nrl-accent" : "text-nrl-muted"}`}
+                                  >
+                                    {display}
+                                  </td>
                                 </Fragment>
                               )
                             })}
@@ -2195,15 +2193,6 @@ export function FantasyDashboard({
 
                                 return (
                                   <Fragment key={column.key}>
-                                    <td
-                                      className={`py-2 text-xs whitespace-nowrap ${
-                                        getGameLogCellPaddingClass(column.key)
-                                      } ${
-                                        column.align === "right" ? "text-right" : "text-left"
-                                      } ${isFantasy ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
-                                    >
-                                      {display}
-                                    </td>
                                     {showBaseUpsideBars && column.key === "Fantasy" ? (
                                       <td className="px-3 py-2 text-xs">
                                         {(() => {
@@ -2220,19 +2209,30 @@ export function FantasyDashboard({
                                                   style={{ width: `${barPercentages.basePct}%` }}
                                                 />
                                                 <div
-                                                  className="bg-violet-400"
+                                                  className={split.upsidePoints < 0 ? "bg-rose-500" : "bg-violet-400"}
                                                   style={{ width: `${barPercentages.upsidePct}%` }}
                                                 />
                                               </div>
                                               <div className="mt-1 flex items-center justify-between gap-2 whitespace-nowrap text-[10px] text-nrl-muted">
                                                 <span>{split.basePoints.toFixed(0)}</span>
-                                                <span>{split.upsidePoints.toFixed(0)}</span>
+                                                <span className={split.upsidePoints < 0 ? "text-rose-400" : undefined}>
+                                                  {split.upsidePoints.toFixed(0)}
+                                                </span>
                                               </div>
                                             </div>
                                           )
                                         })()}
                                       </td>
                                     ) : null}
+                                    <td
+                                      className={`py-2 text-xs whitespace-nowrap ${
+                                        getGameLogCellPaddingClass(column.key)
+                                      } ${
+                                        column.align === "right" ? "text-right" : "text-left"
+                                      } ${isFantasy ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
+                                    >
+                                      {display}
+                                    </td>
                                   </Fragment>
                                 )
                               })}

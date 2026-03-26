@@ -17,7 +17,7 @@ import {
 } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
-const PREFERRED_DEFAULT_YEARS = ["2026", "2025"] as const
+const PREFERRED_DEFAULT_YEARS = ["2026", "2025", "2024"] as const
 
 interface FantasyPlayerPageProps {
   params: Promise<{

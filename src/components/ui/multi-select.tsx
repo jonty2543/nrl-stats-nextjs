@@ -38,6 +38,8 @@ export function MultiSelect({
     () => options.filter((opt) => (open ? draftValue : value).includes(opt)),
     [draftValue, open, options, value]
   );
+  const visibleSelectedOptions = selectedOptions.slice(0, 3);
+  const hasOverflowSelectedOptions = selectedOptions.length > 3;
 
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
@@ -87,14 +89,21 @@ export function MultiSelect({
               {selectedOptions.length === 0 ? (
                 <span className="text-[10px] text-nrl-muted">Select year(s)</span>
               ) : (
-                selectedOptions.map((opt) => (
-                  <span
-                    key={opt}
-                    className="rounded-sm px-1.5 py-[1px] text-[9px] font-semibold bg-nrl-accent/20 text-nrl-accent border border-nrl-accent/30"
-                  >
-                    {opt}
-                  </span>
-                ))
+                <>
+                  {visibleSelectedOptions.map((opt) => (
+                    <span
+                      key={opt}
+                      className="rounded-sm px-1.5 py-[1px] text-[9px] font-semibold bg-nrl-accent/20 text-nrl-accent border border-nrl-accent/30"
+                    >
+                      {opt}
+                    </span>
+                  ))}
+                  {hasOverflowSelectedOptions ? (
+                    <span className="rounded-sm px-1.5 py-[1px] text-[9px] font-semibold border border-nrl-border bg-nrl-panel text-nrl-muted">
+                      + More
+                    </span>
+                  ) : null}
+                </>
               )}
             </div>
             <span

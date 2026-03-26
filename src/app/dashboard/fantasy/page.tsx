@@ -8,7 +8,7 @@ import {
 import { fetchAvailableYears } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
-const PREFERRED_DEFAULT_YEARS = ["2026", "2025"] as const
+const PREFERRED_DEFAULT_YEARS = ["2026", "2025", "2024"] as const
 
 export default async function FantasyPage() {
   const { userId } = await auth()

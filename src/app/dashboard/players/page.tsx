@@ -5,7 +5,7 @@ import { isAccessibleSeason } from "@/lib/access/season-access";
 import { hasProPlotAccess } from "@/lib/access/pro-access";
 
 export const dynamic = "force-dynamic";
-const PREFERRED_DEFAULT_YEARS = ["2026", "2025"] as const;
+const PREFERRED_DEFAULT_YEARS = ["2026", "2025", "2024"] as const;
 
 export default async function PlayersPage() {
   const { userId } = await auth();

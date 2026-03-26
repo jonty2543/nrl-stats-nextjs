@@ -138,6 +138,62 @@ function parsePersonName(value: string): { first: string; last: string } {
 }
 
 const preferredImageIndexByCandidatesKey = new Map<string, number>();
+const PLAYER_IMAGE_FALLBACK_URL = "/body-shot.png";
+
+function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const push = (value: string | null | undefined) => {
+    if (!value || typeof value !== "string") return;
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    out.push(trimmed);
+  };
+
+  const normalizeRemoteAxd = (value: string): string[] => {
+    const variants: string[] = [];
+    const seenVariants = new Set<string>();
+    const pushVariant = (candidate: string | null | undefined) => {
+      if (!candidate) return;
+      const trimmed = candidate.trim();
+      if (!trimmed || seenVariants.has(trimmed)) return;
+      seenVariants.add(trimmed);
+      variants.push(trimmed);
+    };
+
+    if (value.startsWith("http://")) {
+      pushVariant(`https://${value.slice("http://".length)}`);
+    }
+    if (value.includes("/remote.axd?http://")) {
+      pushVariant(value.replace("/remote.axd?http://", "/remote.axd?https://"));
+    }
+    const marker = "/remote.axd?";
+    const idx = value.indexOf(marker);
+    if (idx >= 0) {
+      const nested = value.slice(idx + marker.length);
+      if (nested) {
+        const httpsNested = nested.startsWith("http://")
+          ? `https://${nested.slice("http://".length)}`
+          : nested;
+        pushVariant(httpsNested);
+      }
+    }
+    pushVariant(value);
+    return variants;
+  };
+
+  for (const source of [imageRow?.body_image, imageRow?.head_image]) {
+    if (!source) continue;
+    for (const variant of normalizeRemoteAxd(source)) {
+      push(variant);
+    }
+  }
+
+  push(PLAYER_IMAGE_FALLBACK_URL);
+  return out;
+}
 
 export function resolvePlayerImage(
   playerName: string,
@@ -274,59 +330,7 @@ export function PlayerImageCard({
   frameless?: boolean;
   priority?: boolean;
 }) {
-  const imageCandidates = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-
-    const push = (value: string | null | undefined) => {
-      if (!value || typeof value !== "string") return;
-      const trimmed = value.trim();
-      if (!trimmed || seen.has(trimmed)) return;
-      seen.add(trimmed);
-      out.push(trimmed);
-    };
-
-    const normalizeRemoteAxd = (value: string): string[] => {
-      const variants: string[] = [];
-      const seenVariants = new Set<string>();
-      const pushVariant = (candidate: string | null | undefined) => {
-        if (!candidate) return;
-        const trimmed = candidate.trim();
-        if (!trimmed || seenVariants.has(trimmed)) return;
-        seenVariants.add(trimmed);
-        variants.push(trimmed);
-      };
-
-      if (value.startsWith("http://")) {
-        pushVariant(`https://${value.slice("http://".length)}`);
-      }
-      if (value.includes("/remote.axd?http://")) {
-        pushVariant(value.replace("/remote.axd?http://", "/remote.axd?https://"));
-      }
-      const marker = "/remote.axd?";
-      const idx = value.indexOf(marker);
-      if (idx >= 0) {
-        const nested = value.slice(idx + marker.length);
-        if (nested) {
-          const httpsNested = nested.startsWith("http://")
-            ? `https://${nested.slice("http://".length)}`
-            : nested;
-          pushVariant(httpsNested);
-        }
-      }
-      pushVariant(value);
-      return variants;
-    };
-
-    for (const source of [imageRow?.body_image, imageRow?.head_image]) {
-      if (!source) continue;
-      for (const variant of normalizeRemoteAxd(source)) {
-        push(variant);
-      }
-    }
-
-    return out;
-  }, [imageRow?.body_image, imageRow?.head_image]);
+  const imageCandidates = useMemo(() => buildPlayerImageCandidates(imageRow), [imageRow]);
   const imageCandidatesKey = imageCandidates.join("|");
   const [imageAttemptState, setImageAttemptState] = useState<{ key: string; index: number }>({
     key: "",
@@ -575,10 +579,70 @@ export function PlayerImageCard({
   );
 }
 
+export function SimplePlayerPhotoTile({
+  playerName,
+  imageRow,
+  priority = false,
+  className,
+  imageHeightClass,
+}: {
+  playerName: string;
+  imageRow: PlayerImageRecord | null;
+  priority?: boolean;
+  className?: string;
+  imageHeightClass?: string;
+}) {
+  const imageCandidates = useMemo(() => buildPlayerImageCandidates(imageRow), [imageRow]);
+  const imageCandidatesKey = imageCandidates.join("|");
+  const [imageAttemptState, setImageAttemptState] = useState<{ key: string; index: number }>({
+    key: "",
+    index: 0,
+  });
+  const cachedPreferredIndex = preferredImageIndexByCandidatesKey.get(imageCandidatesKey) ?? 0;
+  const initialIndex = Math.max(0, Math.min(cachedPreferredIndex, Math.max(0, imageCandidates.length - 1)));
+  const imageIndex =
+    imageAttemptState.key === imageCandidatesKey ? imageAttemptState.index : initialIndex;
+  const imageUrl = imageCandidates[imageIndex] ?? null;
+
+  return (
+    <div className={`w-full overflow-hidden rounded-2xl border border-[#1d3a63] bg-[#0b1832] shadow-[0_18px_40px_rgba(0,0,0,0.28)] ${className ?? "max-w-[15rem]"}`}>
+      <div className={`flex items-end justify-center overflow-hidden bg-[radial-gradient(circle_at_top,rgba(92,132,255,0.2),transparent_60%),linear-gradient(180deg,#112347,#0a1327)] ${imageHeightClass ?? "h-[15rem]"}`}>
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt={`${playerName} player image`}
+            className="max-h-[96%] w-auto object-contain"
+            loading="eager"
+            fetchPriority={priority ? "high" : "auto"}
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onLoad={() => {
+              preferredImageIndexByCandidatesKey.set(imageCandidatesKey, imageIndex);
+            }}
+            onError={() => {
+              setImageAttemptState((prev) => ({
+                key: imageCandidatesKey,
+                index: (prev.key === imageCandidatesKey ? prev.index : 0) + 1,
+              }));
+            }}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs text-nrl-muted">
+            Image unavailable
+          </div>
+        )}
+      </div>
+      <div className="border-t border-[#1d3a63] px-4 py-3 text-center">
+        <div className="text-sm font-semibold text-white">{playerName || "No player selected"}</div>
+      </div>
+    </div>
+  );
+}
+
 export function PlayerComparison({
   initialData,
   playerImages,
-  teamLogos,
   availableYears,
   defaultYears,
   canBypassPlotGate = false,
@@ -1035,30 +1099,11 @@ export function PlayerComparison({
   );
   const p1CardImage = useMemo(
     () => resolvePlayerImage(effectiveP1, p1CardTeam, playerImages),
-    [effectiveP1, p1CardTeam, p1AllRows, playerImages]
-  );
-  const p1CardPosition = useMemo(
-    () => primaryValueForLatestSelectedYear(p1AllRows, selectedYears, "Position"),
-    [p1AllRows, selectedYears]
+    [effectiveP1, p1CardTeam, playerImages]
   );
   const p2CardImage = useMemo(
     () => (hasTwoPlayers ? resolvePlayerImage(player2, p2CardTeam, playerImages) : null),
-    [hasTwoPlayers, player2, p2CardTeam, p2AllRows, playerImages]
-  );
-  const p2CardPosition = useMemo(
-    () => (hasTwoPlayers ? primaryValueForLatestSelectedYear(p2AllRows, selectedYears, "Position") : null),
-    [hasTwoPlayers, p2AllRows, selectedYears]
-  );
-  const p1CardLogoUrl = useMemo(
-    () => resolveTeamLogoUrl(p1CardImage?.team ?? p1CardTeam, teamLogos),
-    [p1CardImage?.team, p1CardTeam, teamLogos]
-  );
-  const p2CardLogoUrl = useMemo(
-    () =>
-      hasTwoPlayers
-        ? resolveTeamLogoUrl(p2CardImage?.team ?? p2CardTeam, teamLogos)
-        : null,
-    [hasTwoPlayers, p2CardImage?.team, p2CardTeam, teamLogos]
+    [hasTwoPlayers, player2, p2CardTeam, playerImages]
   );
 
   const percentileResults = useMemo(() => {
@@ -1528,23 +1573,17 @@ export function PlayerComparison({
                       hasTwoPlayers ? "" : "mx-auto max-w-[14rem] xl:max-w-[16rem]"
                     }`}
                   >
-                    <PlayerImageCard
+                    <SimplePlayerPhotoTile
                       playerName={effectiveP1}
                       imageRow={p1CardImage}
-                      teamLogoUrl={p1CardLogoUrl}
-                      fantasyPosition={p1CardPosition}
-                      frameless
                       priority
                     />
                   </div>
                   {hasTwoPlayers ? (
                     <div className="flex h-full w-full items-center justify-center">
-                      <PlayerImageCard
+                      <SimplePlayerPhotoTile
                         playerName={player2}
                         imageRow={p2CardImage}
-                        teamLogoUrl={p2CardLogoUrl}
-                        fantasyPosition={p2CardPosition}
-                        frameless
                         priority
                       />
                     </div>

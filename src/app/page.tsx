@@ -600,7 +600,7 @@ export default async function Home() {
             </div>
 
             <div className="relative hidden lg:flex lg:items-end lg:justify-center lg:self-end">
-              <div className="relative flex h-[20.5rem] w-full max-w-[33rem] items-end justify-center overflow-hidden rounded-[2rem] border border-white/8 bg-[linear-gradient(180deg,rgba(24,31,59,0.98),rgba(13,18,35,0.98))] px-1 pt-3">
+              <div className="relative flex h-[16.5rem] w-full max-w-[30rem] items-end justify-center overflow-hidden rounded-[2rem] border border-white/8 bg-[linear-gradient(180deg,rgba(24,31,59,0.98),rgba(13,18,35,0.98))] px-1 pt-3">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_24%,rgba(71,255,182,0.18),transparent_34%),radial-gradient(circle_at_78%_76%,rgba(129,92,255,0.2),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
                 <div className="pointer-events-none absolute left-[10%] top-[10%] h-28 w-28 rounded-full bg-emerald-300/12 blur-3xl" />
                 <div className="pointer-events-none absolute bottom-[12%] right-[8%] h-32 w-32 rounded-full bg-violet-400/14 blur-3xl" />
@@ -610,7 +610,7 @@ export default async function Home() {
                   width={720}
                   height={720}
                   priority
-                  className="relative z-10 translate-x-3 h-auto w-[110%] max-w-none object-contain object-bottom"
+                  className="relative z-10 translate-x-3 h-[104%] w-auto max-w-[129%] object-contain object-bottom"
                 />
               </div>
             </div>

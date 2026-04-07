@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton } from "@clerk/nextjs"
@@ -50,7 +51,13 @@ interface FantasyDashboardProps {
 
 type TeammateMode = "With" | "Without"
 type GameLogSortDirection = "asc" | "desc"
-type PositionOwnershipView = "Total" | "Weekly"
+type PositionOwnershipMetric = "Total" | "Weekly"
+type PositionOwnershipDirection = "asc" | "desc"
+
+interface PositionOwnershipControl {
+  metric: PositionOwnershipMetric
+  direction: PositionOwnershipDirection
+}
 
 interface PlayerDrawStripRound {
   round: number
@@ -731,7 +738,7 @@ export function FantasyDashboard({
   const [showStatVsFantasyPlot, setShowStatVsFantasyPlot] = useState(false)
   const [selectedStatVsFantasyLabel, setSelectedStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [showWithWithoutPlot, setShowWithWithoutPlot] = useState(false)
-  const [positionOwnershipViews, setPositionOwnershipViews] = useState<Partial<Record<number, PositionOwnershipView>>>(
+  const [positionOwnershipControls, setPositionOwnershipControls] = useState<Partial<Record<number, PositionOwnershipControl>>>(
     {}
   )
   const [gameLogSort, setGameLogSort] = useState<{ column: GameLogColumn; direction: GameLogSortDirection } | null>(
@@ -1078,6 +1085,10 @@ export function FantasyDashboard({
         .filter((player) => player.positions.includes(position.code))
         .sort((a, b) => (b.ownedBy ?? -1) - (a.ownedBy ?? -1))
         .slice(0, 20),
+      ascRows: fantasyPlayers
+        .filter((player) => player.positions.includes(position.code))
+        .sort((a, b) => (a.ownedBy ?? Infinity) - (b.ownedBy ?? Infinity))
+        .slice(0, 20),
     }))
   }, [fantasyPlayers])
 
@@ -1106,7 +1117,7 @@ export function FantasyDashboard({
   const topWeeklyByPosition = useMemo(() => {
     return POSITION_TABLES.map((position) => ({
       ...position,
-      rows: fantasyPlayers
+      boughtRows: fantasyPlayers
         .filter((player) => player.positions.includes(position.code))
         .sort((a, b) => {
           const aDelta = ownershipDeltaByPlayerId.get(a.id)
@@ -1115,6 +1126,18 @@ export function FantasyDashboard({
           if (aDelta == null) return 1
           if (bDelta == null) return -1
           if (bDelta !== aDelta) return bDelta - aDelta
+          return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
+        })
+        .slice(0, 20),
+      soldRows: fantasyPlayers
+        .filter((player) => player.positions.includes(position.code))
+        .sort((a, b) => {
+          const aDelta = ownershipDeltaByPlayerId.get(a.id)
+          const bDelta = ownershipDeltaByPlayerId.get(b.id)
+          if (aDelta == null && bDelta == null) return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
+          if (aDelta == null) return 1
+          if (bDelta == null) return -1
+          if (aDelta !== bDelta) return aDelta - bDelta
           return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
         })
         .slice(0, 20),
@@ -1334,10 +1357,19 @@ export function FantasyDashboard({
     })
   }, [])
 
-  const setPositionOwnershipView = useCallback((positionCode: number, view: PositionOwnershipView) => {
-    setPositionOwnershipViews((prev) => {
-      if (prev[positionCode] === view) return prev
-      return { ...prev, [positionCode]: view }
+  const setPositionOwnershipMetric = useCallback((positionCode: number, metric: PositionOwnershipMetric) => {
+    setPositionOwnershipControls((prev) => {
+      const current = prev[positionCode] ?? { metric: "Total", direction: "desc" as const }
+      if (current.metric === metric) return prev
+      return { ...prev, [positionCode]: { ...current, metric } }
+    })
+  }, [])
+
+  const setPositionOwnershipDirection = useCallback((positionCode: number, direction: PositionOwnershipDirection) => {
+    setPositionOwnershipControls((prev) => {
+      const current = prev[positionCode] ?? { metric: "Total", direction: "desc" as const }
+      if (current.direction === direction) return prev
+      return { ...prev, [positionCode]: { ...current, direction } }
     })
   }, [])
 
@@ -1356,15 +1388,23 @@ export function FantasyDashboard({
               rows: overallTopSoldWeekly,
             },
             { key: "price", title: "TOP PRICE", rows: overallTopPrice },
-            ...topOwnedByPosition.map((table) => ({
-              key: String(table.code),
-              title: `TOP ${table.label}`,
-              rows:
-                (positionOwnershipViews[table.code] ?? "Total") === "Weekly"
-                  ? (topWeeklyByPosition.find((weeklyTable) => weeklyTable.code === table.code)?.rows ?? table.rows)
-                  : table.rows,
-              positionCode: table.code,
-            })),
+            ...topOwnedByPosition.map((table) => {
+              const control = positionOwnershipControls[table.code] ?? { metric: "Total" as const, direction: "desc" as const }
+              const weeklyTable = topWeeklyByPosition.find((candidate) => candidate.code === table.code)
+              return {
+                key: String(table.code),
+                title: `TOP ${table.label}`,
+                rows:
+                  control.metric === "Weekly"
+                    ? control.direction === "desc"
+                      ? (weeklyTable?.boughtRows ?? table.rows)
+                      : (weeklyTable?.soldRows ?? table.ascRows)
+                    : control.direction === "desc"
+                      ? table.rows
+                      : table.ascRows,
+                positionCode: table.code,
+              }
+            }),
           ]
         : [
             {
@@ -1386,7 +1426,7 @@ export function FantasyDashboard({
       overallTopPrice,
       overallTopSoldWeekly,
       ownershipBaselineSnapshot,
-      positionOwnershipViews,
+      positionOwnershipControls,
       topWeeklyByPosition,
       topOwnedByPosition,
     ]
@@ -1458,14 +1498,24 @@ export function FantasyDashboard({
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold text-nrl-text">Fantasy</h1>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:min-w-[260px]">
-            <SearchableSelect
-              label=""
-              value={selectedFantasyName}
-              options={playerSearchOptions}
-              onChange={navigateToPlayer}
-              placeholder="Search player..."
-            />
+          <div className="flex flex-col gap-3 sm:min-w-[260px] lg:items-end">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/dashboard/fantasy/draft"
+                className="inline-flex items-center rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+              >
+                Draft Matchup Prices
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:min-w-[260px]">
+              <SearchableSelect
+                label=""
+                value={selectedFantasyName}
+                options={playerSearchOptions}
+                onChange={navigateToPlayer}
+                placeholder="Search player..."
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -1482,24 +1532,62 @@ export function FantasyDashboard({
                 ownershipDeltaByPlayerId={ownershipDeltaByPlayerId}
                 headerRight={
                   ownershipBaselineSnapshot && card.positionCode != null ? (
-                    <div className="flex items-center overflow-hidden rounded border border-nrl-border bg-nrl-panel">
-                      {(["Total", "Weekly"] as const).map((view) => {
-                        const isActive = (positionOwnershipViews[card.positionCode!] ?? "Total") === view
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const control = positionOwnershipControls[card.positionCode!] ?? { metric: "Total" as const, direction: "desc" as const }
                         return (
-                          <button
-                            key={`${card.key}-${view}`}
-                            type="button"
-                            onClick={() => setPositionOwnershipView(card.positionCode!, view)}
-                            className={`cursor-pointer px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide transition-colors ${
-                              isActive
-                                ? "bg-nrl-accent/15 text-nrl-accent"
-                                : "text-nrl-muted hover:text-nrl-text"
-                            }`}
-                          >
-                            {view}
-                          </button>
+                          <>
+                            <div className="flex items-center overflow-hidden rounded border border-nrl-border bg-nrl-panel">
+                              <button
+                                type="button"
+                                onClick={() => setPositionOwnershipMetric(card.positionCode!, "Total")}
+                                title="Sort by total ownership"
+                                className={`cursor-pointer px-3 py-1 text-[9px] font-semibold uppercase tracking-wide transition-colors ${
+                                  control.metric === "Total"
+                                    ? "bg-nrl-accent/15 text-nrl-accent"
+                                    : "text-nrl-muted hover:text-nrl-text"
+                                }`}
+                              >
+                                Total
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPositionOwnershipMetric(card.positionCode!, "Weekly")}
+                                title="Sort by weekly ownership change"
+                                className={`cursor-pointer border-l border-nrl-border px-3 py-1 text-[9px] font-semibold uppercase tracking-wide transition-colors ${
+                                  control.metric === "Weekly"
+                                    ? "bg-nrl-accent/15 text-nrl-accent"
+                                    : "text-nrl-muted hover:text-nrl-text"
+                                }`}
+                              >
+                                Weekly
+                              </button>
+                            </div>
+                            <div className="flex items-center overflow-hidden rounded border border-nrl-border bg-nrl-panel text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => setPositionOwnershipDirection(card.positionCode!, "desc")}
+                                title={control.metric === "Weekly" ? "Sort by biggest weekly buys" : "Sort by highest ownership"}
+                                className={`cursor-pointer px-2 py-1 transition-colors hover:text-nrl-text ${
+                                  control.direction === "desc" ? "bg-nrl-accent/15 text-nrl-accent" : "text-nrl-muted"
+                                }`}
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPositionOwnershipDirection(card.positionCode!, "asc")}
+                                title={control.metric === "Weekly" ? "Sort by biggest weekly sells" : "Sort by lowest ownership"}
+                                className={`cursor-pointer border-l border-nrl-border px-2 py-1 transition-colors hover:text-nrl-text ${
+                                  control.direction === "asc" ? "bg-nrl-accent/15 text-nrl-accent" : "text-nrl-muted"
+                                }`}
+                              >
+                                ↓
+                              </button>
+                            </div>
+                          </>
                         )
-                      })}
+                      })()}
                     </div>
                   ) : null
                 }

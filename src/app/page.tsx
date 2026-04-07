@@ -386,7 +386,7 @@ function PreviewFrame({ title, children }: { title: string; children: React.Reac
         </div>
         <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/42">{title}</div>
       </div>
-      <div className="mt-3 min-h-[340px] sm:mt-4 sm:min-h-[420px] lg:min-h-[520px]">{children}</div>
+      <div className="mt-3 min-h-[300px] sm:mt-4 sm:min-h-[420px] lg:min-h-[520px]">{children}</div>
     </div>
   )
 }
@@ -419,7 +419,7 @@ function FeatureSection({
         <h3 className="mt-3 text-xl font-bold text-white sm:text-2xl">{title}</h3>
         <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(16rem,0.85fr)] lg:items-start">
           <p className="max-w-2xl text-sm leading-6 text-white/58 sm:leading-7">{description}</p>
-          <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2">
+          <div className="grid gap-x-5 gap-y-2 md:grid-cols-2">
             {bullets.map((bullet) => (
               <div key={bullet} className="flex items-center gap-2 text-sm text-white/78">
                 <span className="h-1.5 w-1.5 rounded-full bg-nrl-accent" />
@@ -561,23 +561,23 @@ export default async function Home() {
         </header>
 
         <LandingHeroScrollShell>
-          <section className="grid gap-8 pb-12 pt-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-end lg:pt-14">
+          <section className="grid gap-6 pb-10 pt-8 sm:gap-8 sm:pb-12 sm:pt-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-end lg:pb-0 lg:pt-14">
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
                 Live NRL Analysis Platform
               </div>
-              <h1 className="mt-5 pb-2 text-4xl font-black leading-[1.02] tracking-tight text-white sm:text-6xl">
+              <h1 className="mt-5 pb-2 text-[2.85rem] font-black leading-[0.98] tracking-tight text-white sm:text-6xl">
                 Smarter Analysis for
                 {" "}
                 <span className="bg-[linear-gradient(135deg,#ffffff_0%,#ae94ff_44%,#53ffd0_100%)] bg-clip-text text-transparent">
                   Rugby League
                 </span>
               </h1>
-              <p className="mt-4 max-w-xl text-sm leading-7 text-white/62 sm:text-base">
+              <p className="mt-4 max-w-xl text-sm leading-6 text-white/62 sm:text-base sm:leading-7">
                 Short Side brings Fantasy, Betting, and Stats into one hub for NRL analytics.
               </p>
 
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:flex-wrap">
                 <Link
                   href="/dashboard/fantasy"
                   className="inline-flex items-center justify-center rounded-full border border-[#9870ff] bg-[#8d63ff]/14 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#8d63ff]/22"
@@ -592,25 +592,35 @@ export default async function Home() {
                 </Link>
                 <Link
                   href="/dashboard/players"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white"
+                  className="col-span-2 inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white sm:col-span-1"
                 >
                   Open Stats
                 </Link>
               </div>
+
+              <div className="relative mt-6 flex items-end justify-center lg:hidden">
+                <div className="relative flex h-[15.5rem] w-full max-w-[26rem] items-end justify-center overflow-hidden rounded-[1.6rem] px-1 pt-3">
+                  <Image
+                    src="/nrl_players-removebg-preview.png"
+                    alt="NRL players"
+                    width={720}
+                    height={720}
+                    priority
+                    className="relative z-10 translate-x-2 h-[104%] w-auto max-w-[126%] object-contain object-bottom"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="relative hidden lg:flex lg:items-end lg:justify-center lg:self-end">
-              <div className="relative flex h-[16.5rem] w-full max-w-[30rem] items-end justify-center overflow-hidden rounded-[2rem] border border-white/8 bg-[linear-gradient(180deg,rgba(24,31,59,0.98),rgba(13,18,35,0.98))] px-1 pt-3">
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_24%,rgba(71,255,182,0.18),transparent_34%),radial-gradient(circle_at_78%_76%,rgba(129,92,255,0.2),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
-                <div className="pointer-events-none absolute left-[10%] top-[10%] h-28 w-28 rounded-full bg-emerald-300/12 blur-3xl" />
-                <div className="pointer-events-none absolute bottom-[12%] right-[8%] h-32 w-32 rounded-full bg-violet-400/14 blur-3xl" />
+              <div className="relative flex h-[16.5rem] w-full max-w-[30rem] items-end justify-center overflow-visible rounded-[2rem] px-1 pt-3">
                 <Image
-                  src="/nrl_players_fltd.png"
+                  src="/nrl_players-removebg-preview.png"
                   alt="NRL players"
                   width={720}
                   height={720}
                   priority
-                  className="relative z-10 translate-x-3 h-[104%] w-auto max-w-[129%] object-contain object-bottom"
+                  className="relative z-10 translate-x-3 h-[118%] w-auto max-w-[141%] object-contain object-bottom"
                 />
               </div>
             </div>
@@ -641,11 +651,11 @@ export default async function Home() {
             <LandingCarousel>
               <PreviewFrame title="Fantasy / Player Detail">
                 <div className="grid gap-3 sm:gap-4 xl:grid-cols-[290px_minmax(0,1fr)_220px]">
-                  <div className="relative flex items-center justify-center overflow-hidden rounded-2xl border border-white/8 bg-[#1b2140] p-3">
+                  <div className="relative flex min-h-[12rem] items-center justify-center overflow-hidden rounded-2xl border border-white/8 bg-[#1b2140] p-2 sm:min-h-0 sm:p-3">
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
                     <div className="pointer-events-none absolute left-[8%] top-[12%] h-24 w-24 rounded-full bg-emerald-300/10 blur-2xl" />
                     <div className="pointer-events-none absolute bottom-[10%] right-[12%] h-28 w-28 rounded-full bg-violet-400/12 blur-3xl" />
-                    <div className="relative w-full max-w-[18.5rem]">
+                    <div className="relative w-full max-w-[10rem] sm:max-w-[18.5rem]">
                       <PlayerImageCard
                         playerName={spotlightFantasyPlayer?.name ?? "Fantasy player"}
                         imageRow={spotlightCardImage}
@@ -658,34 +668,34 @@ export default async function Home() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
+                  <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-2.5 sm:p-4">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-3xl font-bold text-white">{spotlightFantasyPlayer?.name ?? "Fantasy player"}</h4>
+                      <h4 className="text-xl font-bold text-white sm:text-3xl">{spotlightFantasyPlayer?.name ?? "Fantasy player"}</h4>
                       <span className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-white/55">Team: {spotlightTeam ?? "-"}</span>
                       <span className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-white/55">Status: {spotlightFantasyPlayer?.status ?? "available"}</span>
                     </div>
-                    <div className="mt-4 grid min-h-[164px] flex-1 grid-cols-2 grid-rows-2 gap-3">
-                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                    <div className="mt-3 grid grid-cols-2 gap-2.5 sm:mt-4 sm:min-h-[164px] sm:grid-rows-2 sm:gap-3">
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
                         <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Price</div>
-                        <div className="mt-3 text-2xl font-bold text-white">{formatCurrency(spotlightFantasyPlayer?.cost ?? null)}</div>
+                        <div className="mt-2 text-lg font-bold text-white sm:mt-3 sm:text-2xl">{formatCurrency(spotlightFantasyPlayer?.cost ?? null)}</div>
                       </div>
-                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
                         <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Avg</div>
-                        <div className="mt-3 text-2xl font-bold text-white">{formatNumber(spotlightFantasyPlayer?.avgPoints ?? null, 1)}</div>
+                        <div className="mt-2 text-lg font-bold text-white sm:mt-3 sm:text-2xl">{formatNumber(spotlightFantasyPlayer?.avgPoints ?? null, 1)}</div>
                       </div>
-                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
                         <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Own %</div>
-                        <div className="mt-3 text-2xl font-bold text-white">{formatPercent(spotlightFantasyPlayer?.ownedBy ?? null)}</div>
+                        <div className="mt-2 text-lg font-bold text-white sm:mt-3 sm:text-2xl">{formatPercent(spotlightFantasyPlayer?.ownedBy ?? null)}</div>
                         <div className="mt-1 text-[11px] text-white/42">Weekly {formatSignedPercent(spotlightWeeklyDelta)}</div>
                       </div>
-                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
                         <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Priced At</div>
-                        <div className="mt-3 text-2xl font-bold text-white">{formatNumber(spotlightFantasyPlayer?.pricedAt ?? null, 0)}</div>
+                        <div className="mt-2 text-lg font-bold text-white sm:mt-3 sm:text-2xl">{formatNumber(spotlightFantasyPlayer?.pricedAt ?? null, 0)}</div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex h-full flex-col rounded-2xl border border-white/8 bg-[#1b2140] p-3 xl:row-span-2">
+                  <div className="hidden h-full flex-col rounded-2xl border border-white/8 bg-[#1b2140] p-3 xl:row-span-2 xl:flex">
                     <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">2026 Draw</div>
                     <div className="mt-1 text-[11px] text-white/38">{spotlightTeam ?? "Team"}</div>
                     <div className="mt-3 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-1">
@@ -702,7 +712,61 @@ export default async function Home() {
                   </div>
 
                   <div className="rounded-2xl border border-white/8 bg-[#20274a] p-3 xl:col-span-2">
-                      <div className="grid gap-3 md:grid-cols-3">
+                    <div className="space-y-3 sm:hidden">
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Season</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {previewYears.map((year) => (
+                            <span key={`mobile-${year}`} className="rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">{year}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/75">All Opponents</div>
+                        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/75">All Positions</div>
+                        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/75">Finals: Yes</div>
+                        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/75">Over: 40 Mins</div>
+                        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/75">Under: Any</div>
+                        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/75">Teammate: None</div>
+                        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/75">Mate Pos: All</div>
+                        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-emerald-300">Mode: With</div>
+                      </div>
+                      <div className="space-y-2">
+                        {spotlightSortedRows.slice(0, 3).map((row, index) => (
+                          <div key={`mobile-row-${row.Year}-${row.Round}-${index}`} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-white">{row.Opponent ?? "-"}</div>
+                                <div className="mt-0.5 text-[11px] text-white/45">
+                                  {typeof row.match_date === "string" ? formatShortDate(row.match_date) : row.Round_Label}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-sm font-bold text-emerald-300">{formatNumber(toFiniteNumber(row.Fantasy), 0)}</div>
+                                <div className="text-[11px] text-white/45">{formatNumber(toFiniteNumber(row["Mins Played"]), 0)} mins</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">2026 Draw</div>
+                        <div className="mt-2 space-y-2">
+                          {spotlightDrawRows.slice(0, 4).map((row) => (
+                            <div key={`mobile-draw-${row.round}`} className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-[#20274a] px-3 py-2">
+                              <div className="min-w-0">
+                                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">Rd {row.round}</div>
+                                <div className="mt-0.5 flex items-center gap-2 text-xs text-white/78">
+                                  {row.opponentLogoUrl ? <ImageWithFallback sources={[row.opponentLogoUrl]} alt={row.opponent ?? "Opponent"} className="h-3.5 w-3.5 object-contain" /> : null}
+                                  <span className="truncate">{row.isHome ? "vs" : "@"} {row.opponent ?? "-"}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                      <div className="hidden gap-3 md:grid md:grid-cols-3">
                       <div>
                         <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Season</div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -747,7 +811,7 @@ export default async function Home() {
                         </div>
                       </div>
                     </div>
-                      <div className="mt-3 overflow-x-auto rounded-xl border border-white/8">
+                      <div className="mt-3 hidden overflow-x-auto rounded-xl border border-white/8 sm:block">
                         <table className="min-w-[42rem] divide-y divide-white/8 text-left text-[11px] text-white/72 sm:min-w-full">
                           <thead className="bg-white/[0.03] text-[10px] uppercase tracking-[0.14em] text-white/35">
                             <tr>
@@ -781,7 +845,23 @@ export default async function Home() {
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
                     <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Average vs Opponent</div>
-                    <div className="mt-3 overflow-x-auto rounded-xl border border-white/8">
+                    <div className="mt-3 grid gap-2 sm:hidden">
+                      {spotlightHeatmapRows.map((row) => (
+                        <div key={`${row.label}-mobile`} className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5">
+                          <div className="text-[13px] font-semibold text-white">{row.label}</div>
+                          <div className="mt-2 grid grid-cols-3 gap-1.5">
+                            {row.cells.slice(0, 3).map((cell) => (
+                              <div key={`${row.label}-${cell.opponent}-mobile`} className="rounded-lg border border-white/8 px-1.5 py-1.5 text-center" style={{ backgroundColor: getScaledHeatColour(cell.average) }}>
+                                <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/60">{cell.opponent.slice(0, 3).toUpperCase()}</div>
+                                <div className="mt-0.5 text-[15px] font-semibold leading-none text-white">{cell.average == null ? "-" : cell.average.toFixed(1)}</div>
+                                <div className="text-[9px] text-white/45">n={cell.count}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 hidden overflow-x-auto rounded-xl border border-white/8 sm:block">
                       <table className="min-w-[34rem] text-center text-[11px] text-white/72 sm:min-w-full">
                         <thead className="bg-white/[0.03] text-[10px] uppercase tracking-[0.14em] text-white/35">
                           <tr>
@@ -811,9 +891,9 @@ export default async function Home() {
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Fantasy Score Box Plot</div>
-                      <div className="text-[10px] text-white/38">All games plus selected years</div>
+                      <div className="hidden text-[10px] text-white/38 sm:block">All games plus selected years</div>
                     </div>
-                    <div className="mt-3 space-y-3">
+                    <div className="mt-3 hidden space-y-3 sm:block">
                       {spotlightBoxSummaries.map((summary) => {
                         const min = Math.min(...spotlightBoxSummaries.map((item) => item.low))
                         const max = Math.max(...spotlightBoxSummaries.map((item) => item.high))
@@ -841,6 +921,38 @@ export default async function Home() {
                           </div>
                         )
                       })}
+                    </div>
+                    <div className="mt-3 space-y-2 sm:hidden">
+                      {(() => {
+                        const min = Math.min(...spotlightBoxSummaries.map((item) => item.low))
+                        const max = Math.max(...spotlightBoxSummaries.map((item) => item.high))
+                        const scale = (value: number) => (max === min ? 50 : ((value - min) / (max - min)) * 100)
+                        return spotlightBoxSummaries.slice(0, 3).map((summary) => (
+                          <div key={`${summary.label}-box-mobile`} className="rounded-xl border border-white/8 bg-white/[0.03] px-2.5 py-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="text-[12px] font-semibold text-white">{summary.label}</div>
+                                <div className="text-[9px] uppercase tracking-[0.14em] text-white/40">n={summary.count}</div>
+                              </div>
+                              <div className="text-sm font-bold text-white">{summary.median.toFixed(0)}</div>
+                            </div>
+                            <div className="mt-2">
+                              <div className="relative h-7">
+                                <div className="absolute left-0 right-0 top-3.5 h-px bg-white/18" />
+                                <div className="absolute top-3 h-3 w-px bg-white/35" style={{ left: `${scale(summary.low)}%` }} />
+                                <div className="absolute top-3 h-3 w-px bg-white/35" style={{ left: `${scale(summary.high)}%` }} />
+                                <div className="absolute top-1.5 h-4 rounded-md border border-emerald-400 bg-emerald-400/16" style={{ left: `${scale(summary.q1)}%`, width: `${Math.max(4, scale(summary.q3) - scale(summary.q1))}%` }} />
+                                <div className="absolute top-1.5 h-4 w-1 bg-white" style={{ left: `${scale(summary.median)}%` }} />
+                              </div>
+                              <div className="mt-1 flex justify-between text-[9px] uppercase tracking-[0.12em] text-white/40">
+                                <span>{summary.low.toFixed(0)}</span>
+                                <span>{summary.median.toFixed(0)}</span>
+                                <span>{summary.high.toFixed(0)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      })()}
                     </div>
                   </div>
 

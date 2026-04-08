@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
+import { hasProPlotAccess } from "@/lib/access/pro-access"
 import { isAccessibleSeason } from "@/lib/access/season-access"
 import {
   fetchFantasyPlayersSnapshot,
@@ -29,6 +30,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const { playerSlug } = await params
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
+  const canBypassPlotGate = hasProPlotAccess(userId)
 
   const [fantasyPlayers, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
@@ -71,6 +73,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
         defaultYears={initialYears}
         initialPlayerStats={initialPlayerStats}
         canAccessLoginSeason={canAccessLoginSeason}
+        canBypassPlotGate={canBypassPlotGate}
         preloadedPlayerAllYears
         draw2026Data={draw2026Data}
         playerImages={playerImages}

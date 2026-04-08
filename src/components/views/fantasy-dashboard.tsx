@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton } from "@clerk/nextjs"
@@ -1499,14 +1498,6 @@ export function FantasyDashboard({
             <h1 className="text-xl font-bold text-nrl-text">Fantasy</h1>
           </div>
           <div className="flex flex-col gap-3 sm:min-w-[260px] lg:items-end">
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                href="/dashboard/fantasy/draft"
-                className="inline-flex items-center rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
-              >
-                Draft Matchup Prices
-              </Link>
-            </div>
             <div className="grid grid-cols-1 gap-3 sm:min-w-[260px]">
               <SearchableSelect
                 label=""

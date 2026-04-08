@@ -72,6 +72,11 @@ interface OpponentHeatmapCell {
   games: number
 }
 
+interface OpponentHeatmapColumn {
+  opponent: string
+  round: number | null
+}
+
 interface OpponentHeatmapRow {
   label: string
   cells: OpponentHeatmapCell[]
@@ -1281,6 +1286,14 @@ export function FantasyDashboard({
     const allOpponentSums = new Map<string, { sum: number; count: number }>()
     const seasons = new Set<string>()
     const opponents = new Set<string>()
+    const drawOpponentFirstRound = new Map<string, number>()
+
+    for (const row of draw2026StripRows) {
+      if (!row.opponent || row.isBye) continue
+      const opponent = formatOpponent(row.opponent)
+      if (!opponent || opponent === "-" || drawOpponentFirstRound.has(opponent)) continue
+      drawOpponentFirstRound.set(opponent, row.round)
+    }
 
     for (const row of filteredRows) {
       const opponent = formatOpponent(row.Opponent)
@@ -1303,12 +1316,24 @@ export function FantasyDashboard({
       allOpponentSums.set(opponent, allCurrent)
     }
 
-    const opponentList = [...opponents].sort((a, b) => a.localeCompare(b))
+    const columns: OpponentHeatmapColumn[] = [...opponents]
+      .sort((a, b) => {
+        const aRound = drawOpponentFirstRound.get(a)
+        const bRound = drawOpponentFirstRound.get(b)
+        if (aRound != null && bRound != null && aRound !== bRound) return aRound - bRound
+        if (aRound != null) return -1
+        if (bRound != null) return 1
+        return a.localeCompare(b)
+      })
+      .map((opponent) => ({
+        opponent,
+        round: drawOpponentFirstRound.get(opponent) ?? null,
+      }))
     const seasonList = [...seasons].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
 
     const allRow: OpponentHeatmapRow = {
       label: "All",
-      cells: opponentList.map((opponent) => {
+      cells: columns.map(({ opponent }) => {
         const total = allOpponentSums.get(opponent)
         if (!total || total.count === 0) return { average: null, games: 0 }
         return { average: total.sum / total.count, games: total.count }
@@ -1317,7 +1342,7 @@ export function FantasyDashboard({
 
     const seasonRows: OpponentHeatmapRow[] = seasonList.map((season) => ({
       label: season,
-      cells: opponentList.map((opponent) => {
+      cells: columns.map(({ opponent }) => {
         const total = seasonOpponentSums.get(`${season}|||${opponent}`)
         if (!total || total.count === 0) return { average: null, games: 0 }
         return { average: total.sum / total.count, games: total.count }
@@ -1325,10 +1350,10 @@ export function FantasyDashboard({
     }))
 
     return {
-      opponents: opponentList,
+      columns,
       rows: [allRow, ...seasonRows],
     }
-  }, [filteredRows])
+  }, [draw2026StripRows, filteredRows])
 
   const fantasyBoxPlotRows = useMemo<FantasyBoxPlotRow[]>(() => {
     const grouped = new Map<string, number[]>()
@@ -1901,7 +1926,7 @@ export function FantasyDashboard({
                       Fixed scale: {HEATMAP_LOW_SCORE} low · {HEATMAP_MID_SCORE} mid · {HEATMAP_HIGH_SCORE} high
                     </div>
                   </div>
-                  {opponentHeatmap.opponents.length === 0 ? (
+                  {opponentHeatmap.columns.length === 0 ? (
                     <div className="text-xs text-nrl-muted">No opponent data for current filters.</div>
                   ) : (
                     <div className="overflow-x-auto">
@@ -1911,12 +1936,17 @@ export function FantasyDashboard({
                             <th className="sticky left-0 z-20 border-b border-r border-nrl-border bg-nrl-panel-2 px-2 py-1 text-left text-[10px] uppercase tracking-wide text-nrl-muted">
                               Season
                             </th>
-                            {opponentHeatmap.opponents.map((opponent) => (
+                            {opponentHeatmap.columns.map((column) => (
                               <th
-                                key={`heat-head-${opponent}`}
+                                key={`heat-head-${column.opponent}`}
                                 className="border-b border-nrl-border px-2 py-1 text-center text-[10px] uppercase tracking-wide text-nrl-muted whitespace-nowrap"
                               >
-                                {opponent}
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <span className="text-[8px] font-semibold tracking-normal text-nrl-accent">
+                                    {column.round != null ? `R${column.round}` : "-"}
+                                  </span>
+                                  <span>{column.opponent}</span>
+                                </div>
                               </th>
                             ))}
                           </tr>
@@ -1929,7 +1959,7 @@ export function FantasyDashboard({
                               </th>
                               {row.cells.map((cell, index) => (
                                 <td
-                                  key={`heat-cell-${row.label}-${opponentHeatmap.opponents[index]}`}
+                                  key={`heat-cell-${row.label}-${opponentHeatmap.columns[index]?.opponent ?? index}`}
                                   className="min-w-[74px] border-l border-nrl-border/60 px-2 py-1.5 text-center"
                                   style={
                                     cell.average === null

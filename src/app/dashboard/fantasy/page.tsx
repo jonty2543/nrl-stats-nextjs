@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
+import { hasProPlotAccess } from "@/lib/access/pro-access"
 import { isAccessibleSeason } from "@/lib/access/season-access"
 import {
   fetchFantasyPlayersSnapshot,
@@ -13,6 +14,7 @@ const PREFERRED_DEFAULT_YEARS = ["2026", "2025", "2024"] as const
 export default async function FantasyPage() {
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
+  const canBypassPlotGate = hasProPlotAccess(userId)
 
   const [fantasyPlayers, availableYears, ownershipBaselineSnapshot] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
@@ -33,6 +35,7 @@ export default async function FantasyPage() {
       defaultYears={initialYears}
       initialPlayerStats={[]}
       canAccessLoginSeason={canAccessLoginSeason}
+      canBypassPlotGate={canBypassPlotGate}
       showPlayerDetails={false}
       playerRouteBasePath="/dashboard/fantasy"
       ownershipBaselineSnapshot={ownershipBaselineSnapshot}

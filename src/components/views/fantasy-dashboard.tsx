@@ -46,6 +46,7 @@ interface FantasyDashboardProps {
   showPlayerDetails?: boolean
   playerRouteBasePath?: string
   canAccessLoginSeason?: boolean
+  canBypassPlotGate?: boolean
 }
 
 type TeammateMode = "With" | "Without"
@@ -660,6 +661,38 @@ function OwnershipTableCard({
   )
 }
 
+function FantasyPlotToggleButton({
+  active,
+  locked,
+  onClick,
+  activeLabel,
+  inactiveLabel,
+}: {
+  active: boolean
+  locked: boolean
+  onClick: () => void
+  activeLabel: string
+  inactiveLabel: string
+}) {
+  return (
+    <button
+      type="button"
+      disabled={locked}
+      onClick={onClick}
+      title={locked ? "Pro coming soon" : undefined}
+      className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
+        locked
+          ? "cursor-not-allowed border-nrl-border text-nrl-muted opacity-70"
+          : active
+            ? "cursor-pointer border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
+            : "cursor-pointer border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+      }`}
+    >
+      {locked ? `${inactiveLabel} • Pro coming soon` : active ? activeLabel : inactiveLabel}
+    </button>
+  )
+}
+
 function MetricCard({
   label,
   value,
@@ -707,6 +740,7 @@ export function FantasyDashboard({
   showPlayerDetails = true,
   playerRouteBasePath,
   canAccessLoginSeason = false,
+  canBypassPlotGate = false,
 }: FantasyDashboardProps) {
   const router = useRouter()
   const initialSelectedYears = useMemo(
@@ -743,6 +777,7 @@ export function FantasyDashboard({
   const [gameLogSort, setGameLogSort] = useState<{ column: GameLogColumn; direction: GameLogSortDirection } | null>(
     null
   )
+  const hasFantasyPlotAccess = canBypassPlotGate
   const playerDetailsRef = useRef<HTMLElement | null>(null)
 
   const scrollToPlayerDetails = useCallback(() => {
@@ -894,6 +929,15 @@ export function FantasyDashboard({
       setShowWithWithoutPlot(false)
     }
   }, [canAccessLoginSeason, teammate])
+
+  useEffect(() => {
+    if (hasFantasyPlotAccess) return
+    setShowBaseUpsideBars(false)
+    setShowOpponentHeatmap(false)
+    setShowFantasyBoxPlot(false)
+    setShowStatVsFantasyPlot(false)
+    setShowWithWithoutPlot(false)
+  }, [hasFantasyPlotAccess])
 
   useEffect(() => {
     setOpponentFilter("All Opponents")
@@ -1782,62 +1826,42 @@ export function FantasyDashboard({
               </div>
 
               <div className="flex flex-wrap items-center justify-start gap-2">
-                <button
-                  type="button"
+                <FantasyPlotToggleButton
+                  active={showBaseUpsideBars}
+                  locked={!hasFantasyPlotAccess}
                   onClick={() => setShowBaseUpsideBars((prev) => !prev)}
-                  className={`cursor-pointer rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                    showBaseUpsideBars
-                      ? "border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
-                      : "border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                  }`}
-                >
-                  {showBaseUpsideBars ? "Hide Base vs Upside" : "Show Base vs Upside"}
-                </button>
-                <button
-                  type="button"
+                  activeLabel="Hide Base vs Upside"
+                  inactiveLabel="Show Base vs Upside"
+                />
+                <FantasyPlotToggleButton
+                  active={showOpponentHeatmap}
+                  locked={!hasFantasyPlotAccess}
                   onClick={() => setShowOpponentHeatmap((prev) => !prev)}
-                  className={`cursor-pointer rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                    showOpponentHeatmap
-                      ? "border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
-                      : "border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                  }`}
-                >
-                  {showOpponentHeatmap ? "Hide Avg vs Opp Heatmap" : "Show Avg vs Opp Heatmap"}
-                </button>
-                <button
-                  type="button"
+                  activeLabel="Hide Avg vs Opp Heatmap"
+                  inactiveLabel="Show Avg vs Opp Heatmap"
+                />
+                <FantasyPlotToggleButton
+                  active={showFantasyBoxPlot}
+                  locked={!hasFantasyPlotAccess}
                   onClick={() => setShowFantasyBoxPlot((prev) => !prev)}
-                  className={`cursor-pointer rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                    showFantasyBoxPlot
-                      ? "border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
-                      : "border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                  }`}
-                >
-                  {showFantasyBoxPlot ? "Hide Fantasy Box Plot" : "Show Fantasy Box Plot"}
-                </button>
-                <button
-                  type="button"
+                  activeLabel="Hide Fantasy Box Plot"
+                  inactiveLabel="Show Fantasy Box Plot"
+                />
+                <FantasyPlotToggleButton
+                  active={showStatVsFantasyPlot}
+                  locked={!hasFantasyPlotAccess}
                   onClick={() => setShowStatVsFantasyPlot((prev) => !prev)}
-                  className={`cursor-pointer rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                    showStatVsFantasyPlot
-                      ? "border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
-                      : "border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                  }`}
-                >
-                  {showStatVsFantasyPlot ? "Hide Stat vs Fantasy Plot" : "Show Stat vs Fantasy Plot"}
-                </button>
+                  activeLabel="Hide Stat vs Fantasy Plot"
+                  inactiveLabel="Show Stat vs Fantasy Plot"
+                />
                 {canAccessLoginSeason && teammate !== "None" ? (
-                  <button
-                    type="button"
+                  <FantasyPlotToggleButton
+                    active={showWithWithoutPlot}
+                    locked={!hasFantasyPlotAccess}
                     onClick={() => setShowWithWithoutPlot((prev) => !prev)}
-                    className={`cursor-pointer rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                      showWithWithoutPlot
-                        ? "border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
-                        : "border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                    }`}
-                  >
-                    {showWithWithoutPlot ? "Hide With vs Without Plot" : "Show With vs Without Plot"}
-                  </button>
+                    activeLabel="Hide With vs Without Plot"
+                    inactiveLabel="Show With vs Without Plot"
+                  />
                 ) : null}
                 {showBaseUpsideBars ? (
                   <div className="flex items-center gap-2 text-[10px] text-nrl-muted">

@@ -9,7 +9,8 @@ import {
 import { fetchAvailableYears } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
-const PREFERRED_DEFAULT_YEARS = ["2026", "2025", "2024"] as const
+const SIGNED_IN_DEFAULT_YEAR_COUNT = 6
+const GUEST_PREFERRED_DEFAULT_YEARS = ["2026", "2025", "2024"] as const
 
 export default async function FantasyPage() {
   const { userId } = await auth()
@@ -25,7 +26,9 @@ export default async function FantasyPage() {
   const unlockedYears = canAccessLoginSeason
     ? availableYears
     : availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason))
-  const defaultYears = PREFERRED_DEFAULT_YEARS.filter((year) => unlockedYears.includes(year))
+  const defaultYears = canAccessLoginSeason
+    ? unlockedYears.slice(0, SIGNED_IN_DEFAULT_YEAR_COUNT)
+    : GUEST_PREFERRED_DEFAULT_YEARS.filter((year) => unlockedYears.includes(year))
   const initialYears = defaultYears.length > 0 ? defaultYears : unlockedYears.slice(0, 1)
 
   return (

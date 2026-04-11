@@ -32,6 +32,35 @@ export interface PlayerImageRecord {
   last_seen_match_date: string | null;
 }
 
+export interface PlayerFantasySd5yRecord {
+  player: string;
+  primary_position: string | null;
+  games: number;
+  avg_fantasy: number | null;
+  fantasy_sd: number | null;
+  fantasy_cv: number | null;
+  min_score: number | null;
+  max_score: number | null;
+}
+
+export interface PositionFantasySd5yRecord {
+  position: string;
+  games: number;
+  players: number;
+  avg_fantasy: number | null;
+  fantasy_sd: number | null;
+  fantasy_cv: number | null;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function normaliseTeamKey(value: unknown): string {
   return String(value ?? "")
     .replace(/-/g, " ")
@@ -1016,6 +1045,45 @@ export async function fetchPlayerImages(): Promise<PlayerImageRecord[]> {
     console.warn("Unable to fetch player_images; using empty image list.", error);
     return [];
   }
+}
+
+export async function fetchPlayerFantasySd5yFromSupabase(): Promise<PlayerFantasySd5yRecord[]> {
+  const raw = await fetchAllRowsFromSchema<Record<string, unknown>>("shortside", "player_fantasy_sd_5y");
+  return raw.flatMap((row) => {
+    const player = typeof row.player === "string" ? row.player.trim() : "";
+    const games = toFiniteNumber(row.games);
+    if (!player || games == null) return [];
+
+    return [{
+      player,
+      primary_position: typeof row.primary_position === "string" ? row.primary_position : null,
+      games: Math.trunc(games),
+      avg_fantasy: toFiniteNumber(row.avg_fantasy),
+      fantasy_sd: toFiniteNumber(row.fantasy_sd),
+      fantasy_cv: toFiniteNumber(row.fantasy_cv),
+      min_score: toFiniteNumber(row.min_score),
+      max_score: toFiniteNumber(row.max_score),
+    }];
+  });
+}
+
+export async function fetchPositionFantasySd5yFromSupabase(): Promise<PositionFantasySd5yRecord[]> {
+  const raw = await fetchAllRowsFromSchema<Record<string, unknown>>("shortside", "position_fantasy_sd_5y");
+  return raw.flatMap((row) => {
+    const position = typeof row.position === "string" ? row.position.trim() : "";
+    const games = toFiniteNumber(row.games);
+    const players = toFiniteNumber(row.players);
+    if (!position || games == null || players == null) return [];
+
+    return [{
+      position,
+      games: Math.trunc(games),
+      players: Math.trunc(players),
+      avg_fantasy: toFiniteNumber(row.avg_fantasy),
+      fantasy_sd: toFiniteNumber(row.fantasy_sd),
+      fantasy_cv: toFiniteNumber(row.fantasy_cv),
+    }];
+  });
 }
 
 export async function fetchTeamLogosFromSupabase(): Promise<Record<string, string>> {

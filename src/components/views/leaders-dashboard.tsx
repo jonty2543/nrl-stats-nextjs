@@ -1,9 +1,6 @@
 import Link from "next/link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
-import {
-  TEAM_COLOURS,
-  TEAM_COLOURS_INVERSE,
-} from "@/lib/data/constants"
+import { TEAM_COLOURS } from "@/lib/data/constants"
 import type { PlayerStat } from "@/lib/data/types"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 
@@ -380,32 +377,6 @@ function resolveTeamColour(team: string): string {
   return alias ? TEAM_COLOURS[alias] : "#223052"
 }
 
-function resolveTeamInverseColour(team: string): string {
-  if (team in TEAM_COLOURS_INVERSE) return TEAM_COLOURS_INVERSE[team as keyof typeof TEAM_COLOURS_INVERSE]
-
-  const aliases: Record<string, keyof typeof TEAM_COLOURS_INVERSE> = {
-    "Brisbane Broncos": "Broncos",
-    "Sydney Roosters": "Roosters",
-    "South Sydney Rabbitohs": "Rabbitohs",
-    "Melbourne Storm": "Storm",
-    "Parramatta Eels": "Eels",
-    "Canberra Raiders": "Raiders",
-    "Newcastle Knights": "Knights",
-    "St George Illawarra Dragons": "Dragons",
-    "Manly Warringah Sea Eagles": "Sea Eagles",
-    "Penrith Panthers": "Panthers",
-    "Cronulla Sutherland Sharks": "Sharks",
-    "Canterbury Bankstown Bulldogs": "Bulldogs",
-    "Gold Coast Titans": "Titans",
-    "North Queensland Cowboys": "Cowboys",
-    "New Zealand Warriors": "Warriors",
-    "Wests Tigers": "Wests Tigers",
-  }
-
-  const alias = aliases[team]
-  return alias ? TEAM_COLOURS_INVERSE[alias] : "#ffffff"
-}
-
 function buildPlayerImageSources(
   playerName: string,
   teamHint: string,
@@ -685,7 +656,6 @@ function TeamLeaderCard({ card }: { card: TeamLeaderCardData }) {
   const leader = card.leaders[0] ?? null
   const runnerUps = card.leaders.slice(1)
   const teamColour = resolveTeamColour(leader?.team ?? "")
-  const inverseColour = resolveTeamInverseColour(leader?.team ?? "")
 
   return (
     <article className="overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
@@ -696,26 +666,26 @@ function TeamLeaderCard({ card }: { card: TeamLeaderCardData }) {
         }}
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_42%)]" />
-        {leader?.logoUrl ? (
-          <div className="pointer-events-none absolute right-4 top-4 opacity-90">
-            <ImageWithFallback
-              sources={[leader.logoUrl]}
-              alt={leader.team}
-              className="h-20 w-20 object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.2)]"
-            />
-          </div>
-        ) : null}
-
-        <div className="relative flex min-h-[11rem] flex-col justify-between p-4 pr-24">
+        <div className="relative grid min-h-[11rem] grid-cols-[minmax(0,1fr)_112px] gap-4 p-4">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">{card.label}</div>
             <div className="mt-6 text-3xl font-bold leading-tight text-white">{leader?.team ?? "No leader"}</div>
           </div>
-          <div className="flex items-end justify-between gap-3">
-            <div className="text-sm" style={{ color: hexToRgba(inverseColour, 0.86) }}>
-              Team total
-            </div>
-            <div className="text-5xl font-black tracking-tight text-white">
+
+          <div className="flex flex-col items-end justify-between">
+            {leader?.logoUrl ? (
+              <div className="pointer-events-none opacity-90">
+                <ImageWithFallback
+                  sources={[leader.logoUrl]}
+                  alt={leader.team}
+                  className="h-20 w-20 object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.2)]"
+                />
+              </div>
+            ) : (
+              <div />
+            )}
+
+            <div className="w-full text-right text-5xl font-black tracking-tight text-white">
               {leader ? formatLeaderValue(card.key, leader.value) : "-"}
             </div>
           </div>

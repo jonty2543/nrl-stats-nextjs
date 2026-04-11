@@ -1,8 +1,9 @@
 "use client"
 
+import Link from "next/link"
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { SignInButton } from "@clerk/nextjs"
+import { SignInButton, useAuth } from "@clerk/nextjs"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
 import type { Draw2026Data } from "@/lib/draw/types"
 import type {
@@ -12,6 +13,7 @@ import type {
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import { FANTASY_POSITION_MAP } from "@/lib/fantasy/nrl"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
+import { hasProPlotAccess } from "@/lib/access/pro-access"
 import {
   buildFantasyRank,
   filterByFinals,
@@ -21,8 +23,9 @@ import {
 } from "@/lib/data/transform"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Select } from "@/components/ui/select"
-import { MultiSelect } from "@/components/ui/multi-select"
 import { PillRadio } from "@/components/ui/pill-radio"
+import { YearRangeSlider } from "@/components/ui/year-range-slider"
+import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush"
 import {
   PlayerImageCard,
   resolvePlayerImage,
@@ -201,35 +204,35 @@ function isCompactGameLogColumn(column: GameLogColumn): boolean {
 }
 
 function getGameLogCellPaddingClass(column: GameLogColumn): string {
-  if (column === "Round" || column === "Fantasy") return "pl-0.5 pr-3"
-  if (column === "Date" || column === "Position") return "pl-3 pr-0.5"
-  return isCompactGameLogColumn(column) ? "px-0.5" : "px-1"
+  if (column === "Round" || column === "Fantasy") return "pl-0.5 pr-2"
+  if (column === "Date" || column === "Position") return "pl-2 pr-0.5"
+  return isCompactGameLogColumn(column) ? "px-0.5" : "px-0.5"
 }
 
 function getGameLogColumnWidthPx(column: GameLogColumn): number {
   switch (column) {
     case "Year":
-      return 64
-    case "Round":
-      return 46
-    case "Date":
-      return 82
-    case "Opponent":
-      return 126
-    case "Fantasy":
-      return 64
-    case "Position":
-      return 100
-    case "Mins Played":
       return 54
-    case "FDO":
+    case "Round":
+      return 38
+    case "Date":
+      return 72
+    case "Opponent":
+      return 110
+    case "Fantasy":
+      return 56
+    case "Position":
+      return 82
+    case "Mins Played":
       return 48
+    case "FDO":
+      return 42
     case "Tackles Made":
     case "All Run Metres":
     case "Kicking Metres":
-      return 52
+      return 46
     default:
-      return 42
+      return 38
   }
 }
 
@@ -532,6 +535,11 @@ function sortRoundsDesc(a: PlayerStat, b: PlayerStat): number {
   return (b.Round ?? 0) - (a.Round ?? 0)
 }
 
+function sortRoundsAsc(a: PlayerStat, b: PlayerStat): number {
+  if (a.Year !== b.Year) return a.Year.localeCompare(b.Year)
+  return (a.Round ?? 0) - (b.Round ?? 0)
+}
+
 function getDefaultGameLogSortDirection(column: GameLogColumn): GameLogSortDirection {
   switch (column) {
     case "Opponent":
@@ -684,16 +692,15 @@ function FantasyPlotToggleButton({
       type="button"
       disabled={locked}
       onClick={onClick}
-      title={locked ? "Pro coming soon" : undefined}
       className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
         locked
-          ? "cursor-not-allowed border-nrl-border text-nrl-muted opacity-70"
+          ? "cursor-not-allowed border-white/8 bg-white/[0.035] text-slate-500 shadow-none"
           : active
             ? "cursor-pointer border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
             : "cursor-pointer border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
       }`}
     >
-      {locked ? `${inactiveLabel} • Pro coming soon` : active ? activeLabel : inactiveLabel}
+      {locked ? inactiveLabel : active ? activeLabel : inactiveLabel}
     </button>
   )
 }
@@ -712,17 +719,17 @@ function MetricCard({
   return (
     <div
       className={`rounded-lg border border-nrl-border bg-nrl-panel-2 ${
-        compact ? "px-3 py-1.5" : "px-3 py-2"
+        compact ? "px-1.5 py-4 xl:px-1.5 xl:py-2.5" : "px-3 py-2"
       }`}
     >
-      <div className={`${compact ? "text-[8px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
+      <div className={`${compact ? "text-[7px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
         {label}
       </div>
-      <div className={`${compact ? "mt-0.5 text-lg" : "mt-1 text-xl"} font-bold text-nrl-text`}>
+      <div className={`${compact ? "mt-1 text-[1.5rem] leading-none" : "mt-1 text-xl"} font-bold text-nrl-text`}>
         {value}
       </div>
       {sublabel ? (
-        <div className={`${compact ? "mt-0 text-[9px]" : "mt-0.5 text-[10px]"} text-nrl-muted`}>
+        <div className={`${compact ? "mt-1 text-[8px]" : "mt-0.5 text-[10px]"} text-nrl-muted`}>
           {sublabel}
         </div>
       ) : null}
@@ -748,6 +755,7 @@ export function FantasyDashboard({
   canBypassPlotGate = false,
 }: FantasyDashboardProps) {
   const router = useRouter()
+  const { userId } = useAuth()
   const initialSelectedYears = useMemo(
     () => {
       const validDefaultYears = defaultYears.filter((year) => availableYears.includes(year))
@@ -770,6 +778,7 @@ export function FantasyDashboard({
   const [teammateMode, setTeammateMode] = useState<TeammateMode>("With")
   const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any")
   const [minutesUnderFilter, setMinutesUnderFilter] = useState<string>("Any")
+  const [showRollingAveragePlot, setShowRollingAveragePlot] = useState(true)
   const [showBaseUpsideBars, setShowBaseUpsideBars] = useState(false)
   const [showOpponentHeatmap, setShowOpponentHeatmap] = useState(false)
   const [showFantasyBoxPlot, setShowFantasyBoxPlot] = useState(false)
@@ -782,7 +791,8 @@ export function FantasyDashboard({
   const [gameLogSort, setGameLogSort] = useState<{ column: GameLogColumn; direction: GameLogSortDirection } | null>(
     null
   )
-  const hasFantasyPlotAccess = canBypassPlotGate
+  const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId)
+  const analysisLocked = !hasFantasyPlotAccess
   const playerDetailsRef = useRef<HTMLElement | null>(null)
 
   const scrollToPlayerDetails = useCallback(() => {
@@ -848,6 +858,17 @@ export function FantasyDashboard({
     () => fantasyPlayers.find((player) => player.name === selectedFantasyName) ?? null,
     [fantasyPlayers, selectedFantasyName]
   )
+  const selectedFantasyCoachRound = useMemo(() => {
+    if (!selectedFantasyPlayer) return null
+    const roundKeys = [
+      ...Object.keys(selectedFantasyPlayer.priceHistory ?? {}),
+      ...Object.keys(selectedFantasyPlayer.scoreHistory ?? {}),
+    ]
+      .map((value) => Number.parseInt(value, 10))
+      .filter((value) => Number.isFinite(value))
+      .sort((a, b) => b - a)
+    return roundKeys[0] ?? null
+  }, [selectedFantasyPlayer])
 
   const selectedYearData = useMemo(() => {
     if (selectedYears.length === 0) return allData
@@ -984,6 +1005,39 @@ export function FantasyDashboard({
     positionFilter,
   ])
 
+  const trendRowsBeforeTeammateFilter = useMemo(() => {
+    let rows = [...playerRowsAllYears]
+    rows = filterByFinals(rows, finalsMode)
+
+    if (positionFilter !== "All Positions") {
+      rows = rows.filter((row) => row.Position === positionFilter)
+    }
+
+    if (opponentFilter !== "All Opponents") {
+      rows = rows.filter((row) => formatOpponent(row.Opponent) === opponentFilter)
+    }
+
+    rows = filterByMinutes(rows, 0, "All")
+
+    rows = rows.filter((row) => {
+      const mins = toFiniteNumber(row["Mins Played"]) ?? 0
+      const overThreshold = parseMinutesFilterOption(minutesOverFilter)
+      const underThreshold = parseMinutesFilterOption(minutesUnderFilter)
+      if (overThreshold > 0 && mins < overThreshold) return false
+      if (underThreshold > 0 && mins > underThreshold) return false
+      return true
+    })
+
+    return rows.sort(sortRoundsDesc)
+  }, [
+    finalsMode,
+    minutesOverFilter,
+    minutesUnderFilter,
+    opponentFilter,
+    playerRowsAllYears,
+    positionFilter,
+  ])
+
   const filteredRows = useMemo(() => {
     if (canAccessLoginSeason && teammate !== "None") {
       return filterByTeammate(
@@ -1003,6 +1057,27 @@ export function FantasyDashboard({
     teammate,
     teammateMode,
     teammatePosition,
+  ])
+
+  const trendFilteredRows = useMemo(() => {
+    if (canAccessLoginSeason && teammate !== "None") {
+      return filterByTeammate(
+        trendRowsBeforeTeammateFilter,
+        teammate,
+        teammateMode === "With",
+        teammateLookupSourceRows,
+        teammatePosition
+      )
+    }
+
+    return trendRowsBeforeTeammateFilter
+  }, [
+    canAccessLoginSeason,
+    teammate,
+    teammateLookupSourceRows,
+    teammateMode,
+    teammatePosition,
+    trendRowsBeforeTeammateFilter,
   ])
 
   const withWithoutFantasyPlotData = useMemo(() => {
@@ -1250,6 +1325,17 @@ export function FantasyDashboard({
       STAT_VS_FANTASY_OPTIONS[0],
     [selectedStatVsFantasyLabel]
   )
+  const chronologicalTrendRows = useMemo(
+    () => [...trendFilteredRows].sort(sortRoundsAsc),
+    [trendFilteredRows]
+  )
+  const gameLogChartKey = useMemo(
+    () =>
+      chronologicalTrendRows
+        .map((row) => `${row.Year}-${row.Round}-${String(row.match_date ?? "")}`)
+        .join("|"),
+    [chronologicalTrendRows]
+  )
 
   const gameLogAverages = useMemo(() => {
     const out: Partial<Record<GameLogColumn, number | null>> = {}
@@ -1295,7 +1381,7 @@ export function FantasyDashboard({
       drawOpponentFirstRound.set(opponent, row.round)
     }
 
-    for (const row of filteredRows) {
+    for (const row of trendFilteredRows) {
       const opponent = formatOpponent(row.Opponent)
       const fantasy = toFiniteNumber(row.Fantasy)
       if (!opponent || opponent === "-" || fantasy === null) continue
@@ -1353,7 +1439,7 @@ export function FantasyDashboard({
       columns,
       rows: [allRow, ...seasonRows],
     }
-  }, [draw2026StripRows, filteredRows])
+  }, [draw2026StripRows, trendFilteredRows])
 
   const fantasyBoxPlotRows = useMemo<FantasyBoxPlotRow[]>(() => {
     const grouped = new Map<string, number[]>()
@@ -1410,8 +1496,9 @@ export function FantasyDashboard({
   }, [fantasyBoxPlotRows])
 
   const sortedFilteredRows = useMemo(() => {
-    if (!gameLogSort) return filteredRows
-    return [...filteredRows].sort((a, b) =>
+    const defaultRows = [...filteredRows].sort(sortRoundsDesc)
+    if (!gameLogSort) return defaultRows
+    return defaultRows.sort((a, b) =>
       compareGameLogRows(a, b, gameLogSort.column, gameLogSort.direction)
     )
   }, [filteredRows, gameLogSort])
@@ -1561,24 +1648,37 @@ export function FantasyDashboard({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold text-nrl-text">Fantasy</h1>
-          </div>
-          <div className="flex flex-col gap-3 sm:min-w-[260px] lg:items-end">
-            <div className="grid grid-cols-1 gap-3 sm:min-w-[260px]">
-              <SearchableSelect
-                label=""
-                value={selectedFantasyName}
-                options={playerSearchOptions}
-                onChange={navigateToPlayer}
-                placeholder="Search player..."
-              />
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
+        <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-bold text-nrl-text">Fantasy</h1>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end lg:justify-end">
+              <div className="grid grid-cols-1 gap-3 sm:min-w-[260px] lg:min-w-[420px]">
+                <SearchableSelect
+                  label=""
+                  value={selectedFantasyName}
+                  options={playerSearchOptions}
+                  onChange={navigateToPlayer}
+                  placeholder="Search player..."
+                />
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        {showOwnedCards ? (
+          <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-2 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] xl:min-w-[230px]">
+            <Link
+              href="/dashboard/fantasy/draft"
+              className="inline-flex h-full min-h-[32px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[linear-gradient(135deg,rgba(91,61,173,0.34),rgba(12,93,74,0.3))] px-3 text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
+            >
+              Draft Matchup Projection
+            </Link>
+          </div>
+        ) : null}
+      </div>
 
       {showOwnedCards ? (
         <section className="space-y-4">
@@ -1659,11 +1759,14 @@ export function FantasyDashboard({
 
       {showPlayerDetails && selectedFantasyPlayer ? (
         <section ref={playerDetailsRef} id="fantasy-player-details" className="scroll-mt-24">
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_200px] xl:items-start">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_252px] xl:items-start">
             <div className="min-w-0 space-y-4">
-              <div className="rounded-xl border border-nrl-border bg-nrl-panel p-3">
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-[220px_minmax(0,1fr)] xl:items-center">
-                  <div className="min-w-0 space-y-3 xl:-ml-8 xl:order-2">
+              <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel p-3">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_28%,rgba(71,255,182,0.16),transparent_30%),radial-gradient(circle_at_82%_76%,rgba(129,92,255,0.18),transparent_34%),linear-gradient(135deg,rgba(13,21,44,0.18),rgba(13,21,44,0))]" />
+                <div className="pointer-events-none absolute left-[10%] top-[18%] h-28 w-28 rounded-full bg-emerald-300/8 blur-3xl" />
+                <div className="pointer-events-none absolute bottom-[8%] right-[14%] h-32 w-32 rounded-full bg-violet-400/10 blur-3xl" />
+                <div className="relative z-[1] grid grid-cols-1 gap-3 xl:grid-cols-[220px_minmax(0,1fr)] xl:items-center">
+                  <div className="min-w-0 space-y-3 xl:order-2">
                     <div className="min-w-0 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-2xl font-bold text-nrl-text">{selectedFantasyPlayer.name}</h2>
@@ -1696,8 +1799,8 @@ export function FantasyDashboard({
                       </div>
                     </div>
 
-                    <div className="pt-6 grid grid-cols-[8rem_minmax(0,1fr)] items-stretch gap-5 sm:grid-cols-[9rem_minmax(0,1fr)] xl:grid-cols-1">
-                      <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
+                    <div className="pt-6 grid grid-cols-[minmax(0,1fr)_13rem] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_14.25rem] sm:gap-4 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5">
+                      <div className="grid w-full grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                         <MetricCard compact label="Price" value={formatPrice(selectedFantasyPlayer.cost)} />
                         <MetricCard compact label="PPM" value={formatNumber(localPpm, 2)} />
                         <MetricCard
@@ -1718,21 +1821,18 @@ export function FantasyDashboard({
                       </div>
 
                       {fantasyCardPlayerName ? (
-                        <div className="flex h-full items-center justify-center xl:hidden">
-                          <div className="relative w-full max-w-[18rem] overflow-hidden rounded-2xl sm:max-w-[20rem]">
-                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
-                            <div className="pointer-events-none absolute left-[8%] top-[12%] h-24 w-24 rounded-full bg-emerald-300/10 blur-2xl" />
-                            <div className="pointer-events-none absolute bottom-[10%] right-[12%] h-28 w-28 rounded-full bg-violet-400/12 blur-3xl" />
+                        <div className="-mt-5 flex self-start items-start justify-end xl:hidden">
+                          <div className="w-full max-w-[13rem] rounded-[1.2rem] bg-[linear-gradient(180deg,rgba(17,23,46,0.46),rgba(17,23,46,0.18))] shadow-[0_18px_40px_rgba(8,10,18,0.22)] sm:max-w-[14.25rem] lg:max-w-[15.25rem]">
                             <div className="relative">
-                            <PlayerImageCard
-                              playerName={fantasyCardPlayerName}
-                              imageRow={fantasyCardImage}
-                              teamLogoUrl={fantasyCardLogoUrl}
-                              fantasyPosition={fantasyCardPosition}
-                              compact
-                              frameless
-                              priority
-                            />
+                              <PlayerImageCard
+                                playerName={fantasyCardPlayerName}
+                                imageRow={fantasyCardImage}
+                                teamLogoUrl={fantasyCardLogoUrl}
+                                fantasyPosition={fantasyCardPosition}
+                                compact
+                                frameless
+                                priority
+                              />
                             </div>
                           </div>
                         </div>
@@ -1741,20 +1841,17 @@ export function FantasyDashboard({
                   </div>
 
                   {fantasyCardPlayerName ? (
-                    <div className="hidden items-center justify-center xl:order-1 xl:flex xl:justify-start xl:pr-10">
-                      <div className="relative w-full max-w-[14rem] overflow-hidden rounded-2xl">
-                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
-                        <div className="pointer-events-none absolute left-[8%] top-[12%] h-20 w-20 rounded-full bg-emerald-300/10 blur-2xl" />
-                        <div className="pointer-events-none absolute bottom-[10%] right-[12%] h-24 w-24 rounded-full bg-violet-400/12 blur-3xl" />
+                    <div className="hidden items-center justify-center pt-2 xl:order-1 xl:flex xl:justify-center">
+                      <div className="w-full max-w-[14.5rem] rounded-[1.2rem] bg-[linear-gradient(180deg,rgba(17,23,46,0.46),rgba(17,23,46,0.18))] shadow-[0_18px_40px_rgba(8,10,18,0.22)]">
                         <div className="relative">
-                        <PlayerImageCard
-                          playerName={fantasyCardPlayerName}
-                          imageRow={fantasyCardImage}
-                          teamLogoUrl={fantasyCardLogoUrl}
-                          fantasyPosition={fantasyCardPosition}
-                          frameless
-                          priority
-                        />
+                          <PlayerImageCard
+                            playerName={fantasyCardPlayerName}
+                            imageRow={fantasyCardImage}
+                            teamLogoUrl={fantasyCardLogoUrl}
+                            fantasyPosition={fantasyCardPosition}
+                            frameless
+                            priority
+                          />
                         </div>
                       </div>
                     </div>
@@ -1763,8 +1860,12 @@ export function FantasyDashboard({
               </div>
 
               <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
-            <div className="grid grid-cols-3 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-              <MultiSelect
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Filters</div>
+                  <div className="text-[10px] text-nrl-muted">Applies to player game log and filtered analysis</div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+              <YearRangeSlider
                 label="Season"
                 value={selectedYears}
                 options={availableYears}
@@ -1804,22 +1905,21 @@ export function FantasyDashboard({
 	              />
 	            </div>
 
-              {!canAccessLoginSeason ? (
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <div className="text-[10px] text-nrl-muted">Sign in to access pre-2025 seasons</div>
-                  <SignInButton mode="modal">
-                    <button
-                      type="button"
-                      className="cursor-pointer rounded border border-nrl-accent/45 px-2 py-0.5 text-[10px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10"
-                    >
-                      Sign in
-                    </button>
-                  </SignInButton>
-                </div>
-              ) : null}
+                {!canAccessLoginSeason ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="text-[10px] text-nrl-muted">Sign in to access pre-2025 seasons</div>
+                    <SignInButton mode="modal">
+                      <button
+                        type="button"
+                        className="cursor-pointer rounded border border-nrl-accent/45 px-2 py-0.5 text-[10px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10"
+                      >
+                        Sign in
+                      </button>
+                    </SignInButton>
+                  </div>
+                ) : null}
 
-	            <div className="mt-4 flex flex-col gap-3">
-              <div className="grid grid-cols-3 gap-3 sm:grid-cols-[minmax(220px,1fr)_180px_auto]">
+                <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-[minmax(220px,1fr)_180px_auto]">
                   <SearchableSelect
                     label="Teammate"
                     value={teammate}
@@ -1848,61 +1948,10 @@ export function FantasyDashboard({
                     />
                   </div>
                 </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-start gap-2">
-                <FantasyPlotToggleButton
-                  active={showBaseUpsideBars}
-                  locked={!hasFantasyPlotAccess}
-                  onClick={() => setShowBaseUpsideBars((prev) => !prev)}
-                  activeLabel="Hide Base vs Upside"
-                  inactiveLabel="Show Base vs Upside"
-                />
-                <FantasyPlotToggleButton
-                  active={showOpponentHeatmap}
-                  locked={!hasFantasyPlotAccess}
-                  onClick={() => setShowOpponentHeatmap((prev) => !prev)}
-                  activeLabel="Hide Avg vs Opp Heatmap"
-                  inactiveLabel="Show Avg vs Opp Heatmap"
-                />
-                <FantasyPlotToggleButton
-                  active={showFantasyBoxPlot}
-                  locked={!hasFantasyPlotAccess}
-                  onClick={() => setShowFantasyBoxPlot((prev) => !prev)}
-                  activeLabel="Hide Fantasy Box Plot"
-                  inactiveLabel="Show Fantasy Box Plot"
-                />
-                <FantasyPlotToggleButton
-                  active={showStatVsFantasyPlot}
-                  locked={!hasFantasyPlotAccess}
-                  onClick={() => setShowStatVsFantasyPlot((prev) => !prev)}
-                  activeLabel="Hide Stat vs Fantasy Plot"
-                  inactiveLabel="Show Stat vs Fantasy Plot"
-                />
-                {canAccessLoginSeason && teammate !== "None" ? (
-                  <FantasyPlotToggleButton
-                    active={showWithWithoutPlot}
-                    locked={!hasFantasyPlotAccess}
-                    onClick={() => setShowWithWithoutPlot((prev) => !prev)}
-                    activeLabel="Hide With vs Without Plot"
-                    inactiveLabel="Show With vs Without Plot"
-                  />
-                ) : null}
-                {showBaseUpsideBars ? (
-                  <div className="flex items-center gap-2 text-[10px] text-nrl-muted">
-                    <span className="inline-block h-2.5 w-2.5 rounded-sm bg-nrl-accent" />
-                    <span>Base</span>
-                    <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-400" />
-                    <span>Upside</span>
-                  </div>
-                ) : null}
-                <div className="text-xs text-nrl-muted">
-                  Showing <span className="font-semibold text-nrl-text">{filteredRows.length}</span> games
                 </div>
-              </div>
 
-	              {!canAccessLoginSeason ? (
-                  <div className="flex flex-wrap items-center gap-2">
+                {!canAccessLoginSeason ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <div className="text-[10px] text-nrl-muted">Sign in to unlock teammate filtering</div>
                     <SignInButton mode="modal">
                       <button
@@ -1913,266 +1962,376 @@ export function FantasyDashboard({
                       </button>
                     </SignInButton>
                   </div>
-	              ) : null}
+                ) : null}
               </div>
 
-              {showOpponentHeatmap ? (
-                <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-                      Average Fantasy vs Opponent
-                    </div>
-                    <div className="text-[10px] text-nrl-muted">
-                      Fixed scale: {HEATMAP_LOW_SCORE} low · {HEATMAP_MID_SCORE} mid · {HEATMAP_HIGH_SCORE} high
-                    </div>
+              <div
+                className={`relative rounded-xl border p-4 ${
+                  analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel"
+                }`}
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div
+                    className={`text-xs font-bold uppercase tracking-wide ${
+                      analysisLocked ? "text-slate-400" : "text-nrl-accent"
+                    }`}
+                  >
+                    Analysis
                   </div>
-                  {opponentHeatmap.columns.length === 0 ? (
-                    <div className="text-xs text-nrl-muted">No opponent data for current filters.</div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full border-collapse">
-                        <thead>
-                          <tr>
-                            <th className="sticky left-0 z-20 border-b border-r border-nrl-border bg-nrl-panel-2 px-2 py-1 text-left text-[10px] uppercase tracking-wide text-nrl-muted">
-                              Season
-                            </th>
-                            {opponentHeatmap.columns.map((column) => (
-                              <th
-                                key={`heat-head-${column.opponent}`}
-                                className="border-b border-nrl-border px-2 py-1 text-center text-[10px] uppercase tracking-wide text-nrl-muted whitespace-nowrap"
-                              >
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <span className="text-[8px] font-semibold tracking-normal text-nrl-accent">
-                                    {column.round != null ? `R${column.round}` : "-"}
-                                  </span>
-                                  <span>{column.opponent}</span>
-                                </div>
+                  <div className={`text-xs ${analysisLocked ? "text-slate-500" : "text-nrl-muted"}`}>
+                    Showing <span className="font-semibold text-nrl-text">{filteredRows.length}</span> games
+                  </div>
+                </div>
+                <div className={analysisLocked ? "pointer-events-none select-none opacity-40" : undefined}>
+                <div className="mb-3 grid grid-cols-2 gap-3 sm:max-w-[360px]">
+                  <MetricCard
+                    compact
+                    label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
+                    value={analysisLocked ? "--" : formatNumber(selectedFantasyPlayer.projectedAvg, 1)}
+                  />
+                  <MetricCard
+                    compact
+                    label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}
+                    value={analysisLocked ? "--" : formatNumber(selectedFantasyPlayer.be, 0)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-start gap-2">
+                  <FantasyPlotToggleButton
+                    active={showRollingAveragePlot}
+                    locked={analysisLocked}
+                    onClick={() => setShowRollingAveragePlot((prev) => !prev)}
+                    activeLabel="Hide Rolling Average Plot"
+                    inactiveLabel="Show Rolling Average Plot"
+                  />
+                  <FantasyPlotToggleButton
+                    active={showBaseUpsideBars}
+                    locked={analysisLocked}
+                    onClick={() => setShowBaseUpsideBars((prev) => !prev)}
+                    activeLabel="Hide Base vs Upside"
+                    inactiveLabel="Show Base vs Upside"
+                  />
+                  <FantasyPlotToggleButton
+                    active={showOpponentHeatmap}
+                    locked={analysisLocked}
+                    onClick={() => setShowOpponentHeatmap((prev) => !prev)}
+                    activeLabel="Hide Avg vs Opp Heatmap"
+                    inactiveLabel="Show Avg vs Opp Heatmap"
+                  />
+                  <FantasyPlotToggleButton
+                    active={showFantasyBoxPlot}
+                    locked={analysisLocked}
+                    onClick={() => setShowFantasyBoxPlot((prev) => !prev)}
+                    activeLabel="Hide Fantasy Box Plot"
+                    inactiveLabel="Show Fantasy Box Plot"
+                  />
+                  <FantasyPlotToggleButton
+                    active={showStatVsFantasyPlot}
+                    locked={analysisLocked}
+                    onClick={() => setShowStatVsFantasyPlot((prev) => !prev)}
+                    activeLabel="Hide Stat vs Fantasy Plot"
+                    inactiveLabel="Show Stat vs Fantasy Plot"
+                  />
+                  {canAccessLoginSeason && teammate !== "None" ? (
+                    <FantasyPlotToggleButton
+                      active={showWithWithoutPlot}
+                      locked={analysisLocked}
+                      onClick={() => setShowWithWithoutPlot((prev) => !prev)}
+                      activeLabel="Hide With vs Without Plot"
+                      inactiveLabel="Show With vs Without Plot"
+                    />
+                  ) : null}
+                  {showBaseUpsideBars ? (
+                    <div className="flex items-center gap-2 text-[10px] text-nrl-muted">
+                      <span className="inline-block h-2.5 w-2.5 rounded-sm bg-nrl-accent" />
+                      <span>Base</span>
+                      <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-400" />
+                      <span>Upside</span>
+                    </div>
+                  ) : null}
+                </div>
+                </div>
+
+                {!analysisLocked && showRollingAveragePlot && trendFilteredRows.length > 0 ? (
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                        Rolling Average Plot
+                      </div>
+                      <div className="text-[10px] text-nrl-muted">
+                        Fantasy score bars with rolling average trend
+                      </div>
+                    </div>
+	                    <FantasyGameLogTrendBrush
+	                      key={gameLogChartKey}
+	                      rows={chronologicalTrendRows}
+	                      defaultStartYear="2023"
+	                    />
+	                  </div>
+	                ) : null}
+
+                {!analysisLocked && showOpponentHeatmap ? (
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                        Average Fantasy vs Opponent
+                      </div>
+                    </div>
+                    {opponentHeatmap.columns.length === 0 ? (
+                      <div className="text-xs text-nrl-muted">No opponent data for current filters.</div>
+                    ) : (
+                      <div className="max-h-[24rem] overflow-auto">
+                        <table className="min-w-full border-collapse">
+                          <thead>
+                            <tr>
+                              <th className="sticky left-0 z-20 border-b border-r border-nrl-border bg-nrl-panel-2 px-2 py-1 text-left text-[10px] uppercase tracking-wide text-nrl-muted">
+                                Season
                               </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {opponentHeatmap.rows.map((row) => (
-                            <tr key={`heat-row-${row.label}`} className="border-t border-nrl-border/60">
-                              <th className="sticky left-0 z-10 border-r border-nrl-border bg-nrl-panel-2 px-2 py-1 text-left text-[10px] font-semibold text-nrl-text whitespace-nowrap">
-                                {row.label}
-                              </th>
-                              {row.cells.map((cell, index) => (
-                                <td
-                                  key={`heat-cell-${row.label}-${opponentHeatmap.columns[index]?.opponent ?? index}`}
-                                  className="min-w-[74px] border-l border-nrl-border/60 px-2 py-1.5 text-center"
-                                  style={
-                                    cell.average === null
-                                      ? undefined
-                                      : { backgroundColor: getHeatColorForAverage(cell.average) }
-                                  }
+                              {opponentHeatmap.columns.map((column) => (
+                                <th
+                                  key={`heat-head-${column.opponent}`}
+                                  className="border-b border-nrl-border px-2 py-1 text-center text-[10px] uppercase tracking-wide text-nrl-muted whitespace-nowrap"
                                 >
-                                  {cell.average === null ? (
-                                    <span className="text-[10px] text-nrl-muted">-</span>
-                                  ) : (
-                                    <div>
-                                      <div className="text-xs font-semibold text-nrl-text">{cell.average.toFixed(1)}</div>
-                                      <div className="text-[9px] text-nrl-muted">n={cell.games}</div>
-                                    </div>
-                                  )}
-                                </td>
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <span className="text-[8px] font-semibold tracking-normal text-nrl-accent">
+                                      {column.round != null ? `R${column.round}` : "-"}
+                                    </span>
+                                    <span>{column.opponent}</span>
+                                  </div>
+                                </th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              {showFantasyBoxPlot ? (
-                <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-                      Fantasy Score Box Plot
-                    </div>
-                    <div className="text-[10px] text-nrl-muted">
-                      All games plus selected years
-                    </div>
+                          </thead>
+                          <tbody>
+                            {opponentHeatmap.rows.map((row) => (
+                              <tr key={`heat-row-${row.label}`} className="border-t border-nrl-border/60">
+                                <th className="sticky left-0 z-10 border-r border-nrl-border bg-nrl-panel-2 px-2 py-1 text-left text-[10px] font-semibold text-nrl-text whitespace-nowrap">
+                                  {row.label}
+                                </th>
+                                {row.cells.map((cell, index) => (
+                                  <td
+                                    key={`heat-cell-${row.label}-${opponentHeatmap.columns[index]?.opponent ?? index}`}
+                                    className="min-w-[74px] border-l border-nrl-border/60 px-2 py-1.5 text-center"
+                                    style={
+                                      cell.average === null
+                                        ? undefined
+                                        : { backgroundColor: getHeatColorForAverage(cell.average) }
+                                    }
+                                  >
+                                    {cell.average === null ? (
+                                      <span className="text-[10px] text-nrl-muted">-</span>
+                                    ) : (
+                                      <div>
+                                        <div className="text-xs font-semibold text-nrl-text">{cell.average.toFixed(1)}</div>
+                                        <div className="text-[9px] text-nrl-muted">n={cell.games}</div>
+                                      </div>
+                                    )}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
-                  {fantasyBoxPlotRows.length === 0 ? (
-                    <div className="text-xs text-nrl-muted">No fantasy scores for current filters.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {fantasyBoxPlotRows.map((row) => {
-                        const range = Math.max(1, fantasyBoxPlotRange.max - fantasyBoxPlotRange.min)
-                        const scale = (value: number) =>
-                          FANTASY_BOX_PLOT_PAD_PCT +
-                          ((value - fantasyBoxPlotRange.min) / range) * (100 - FANTASY_BOX_PLOT_PAD_PCT * 2)
-                        return (
-                          <div key={`box-${row.label}`} className="grid grid-cols-[132px_minmax(0,1fr)] items-center gap-3">
-                            <div className="text-xs">
-                              <div className="font-semibold text-nrl-text">{row.label}</div>
-                              <div className="text-[10px] text-nrl-muted">n={row.values.length}</div>
-                              <div className="mt-2 space-y-1 text-[10px] leading-none">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="uppercase tracking-wide text-nrl-muted/80">Low</span>
-                                  <span className="font-medium text-nrl-muted">{row.min.toFixed(1)}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="uppercase tracking-wide text-nrl-muted/80">Median</span>
-                                  <span className="font-medium text-nrl-text">{row.median.toFixed(1)}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="uppercase tracking-wide text-nrl-muted/80">High</span>
-                                  <span className="font-medium text-nrl-muted">{row.max.toFixed(1)}</span>
+                ) : null}
+
+                {!analysisLocked && showFantasyBoxPlot ? (
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                        Fantasy Score Box Plot
+                      </div>
+                      <div className="text-[10px] text-nrl-muted">Selected years</div>
+                    </div>
+                    {fantasyBoxPlotRows.length === 0 ? (
+                      <div className="text-xs text-nrl-muted">No fantasy scores for current filters.</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {fantasyBoxPlotRows.map((row) => {
+                          const range = Math.max(1, fantasyBoxPlotRange.max - fantasyBoxPlotRange.min)
+                          const scale = (value: number) =>
+                            FANTASY_BOX_PLOT_PAD_PCT +
+                            ((value - fantasyBoxPlotRange.min) / range) * (100 - FANTASY_BOX_PLOT_PAD_PCT * 2)
+                          return (
+                            <div key={`box-${row.label}`} className="grid grid-cols-[132px_minmax(0,1fr)] items-center gap-3">
+                              <div className="text-xs">
+                                <div className="font-semibold text-nrl-text">{row.label}</div>
+                                <div className="text-[10px] text-nrl-muted">n={row.values.length}</div>
+                                <div className="mt-2 space-y-1 text-[10px] leading-none">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="uppercase tracking-wide text-nrl-muted/80">Low</span>
+                                    <span className="font-medium text-nrl-muted">{row.min.toFixed(1)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="uppercase tracking-wide text-nrl-muted/80">Median</span>
+                                    <span className="font-medium text-nrl-text">{row.median.toFixed(1)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="uppercase tracking-wide text-nrl-muted/80">High</span>
+                                    <span className="font-medium text-nrl-muted">{row.max.toFixed(1)}</span>
+                                  </div>
                                 </div>
                               </div>
+                              <div>
+                                <svg
+                                  viewBox="0 0 100 28"
+                                  preserveAspectRatio="none"
+                                  className="h-9 w-full overflow-visible"
+                                >
+                                  <line
+                                    x1={scale(row.min)}
+                                    x2={scale(row.max)}
+                                    y1="14"
+                                    y2="14"
+                                    stroke="rgba(154,164,191,0.9)"
+                                    strokeWidth="1.3"
+                                  />
+                                  <line
+                                    x1={scale(row.min)}
+                                    x2={scale(row.min)}
+                                    y1="8"
+                                    y2="20"
+                                    stroke="rgba(154,164,191,0.9)"
+                                    strokeWidth="1.3"
+                                  />
+                                  <line
+                                    x1={scale(row.max)}
+                                    x2={scale(row.max)}
+                                    y1="8"
+                                    y2="20"
+                                    stroke="rgba(154,164,191,0.9)"
+                                    strokeWidth="1.3"
+                                  />
+                                  <rect
+                                    x={scale(row.q1)}
+                                    y="6"
+                                    width={Math.max(1.5, scale(row.q3) - scale(row.q1))}
+                                    height="16"
+                                    rx="1.5"
+                                    fill="rgba(0,245,138,0.18)"
+                                    stroke="rgba(0,245,138,0.9)"
+                                    strokeWidth="1.3"
+                                  />
+                                  <line
+                                    x1={scale(row.median)}
+                                    x2={scale(row.median)}
+                                    y1="5"
+                                    y2="23"
+                                    stroke="rgba(255,255,255,0.95)"
+                                    strokeWidth="1.5"
+                                  />
+                                </svg>
+                              </div>
                             </div>
-                            <div>
-                              <svg
-                                viewBox="0 0 100 28"
-                                preserveAspectRatio="none"
-                                className="h-9 w-full overflow-visible"
-                              >
-                                <line
-                                  x1={scale(row.min)}
-                                  x2={scale(row.max)}
-                                  y1="14"
-                                  y2="14"
-                                  stroke="rgba(154,164,191,0.9)"
-                                  strokeWidth="1.3"
-                                />
-                                <line
-                                  x1={scale(row.min)}
-                                  x2={scale(row.min)}
-                                  y1="8"
-                                  y2="20"
-                                  stroke="rgba(154,164,191,0.9)"
-                                  strokeWidth="1.3"
-                                />
-                                <line
-                                  x1={scale(row.max)}
-                                  x2={scale(row.max)}
-                                  y1="8"
-                                  y2="20"
-                                  stroke="rgba(154,164,191,0.9)"
-                                  strokeWidth="1.3"
-                                />
-                                <rect
-                                  x={scale(row.q1)}
-                                  y="6"
-                                  width={Math.max(1.5, scale(row.q3) - scale(row.q1))}
-                                  height="16"
-                                  rx="1.5"
-                                  fill="rgba(0,245,138,0.18)"
-                                  stroke="rgba(0,245,138,0.9)"
-                                  strokeWidth="1.3"
-                                />
-                                <line
-                                  x1={scale(row.median)}
-                                  x2={scale(row.median)}
-                                  y1="5"
-                                  y2="23"
-                                  stroke="rgba(255,255,255,0.95)"
-                                  strokeWidth="1.5"
-                                />
-                              </svg>
+                          )
+                        })}
+                        <div className="grid grid-cols-[132px_minmax(0,1fr)] items-center gap-3 pt-1">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                            Score
+                          </div>
+                          <div className="relative h-8">
+                            <div
+                              className="absolute top-2 border-t border-nrl-border"
+                              style={{
+                                left: `${FANTASY_BOX_PLOT_PAD_PCT}%`,
+                                right: `${FANTASY_BOX_PLOT_PAD_PCT}%`,
+                              }}
+                            />
+                            <div
+                              className="absolute top-0 h-4 border-l border-nrl-border"
+                              style={{ left: `${FANTASY_BOX_PLOT_PAD_PCT}%` }}
+                            />
+                            <div className="absolute left-1/2 top-0 h-4 -translate-x-1/2 border-l border-nrl-border" />
+                            <div
+                              className="absolute top-0 h-4 border-l border-nrl-border"
+                              style={{ left: `${100 - FANTASY_BOX_PLOT_PAD_PCT}%` }}
+                            />
+                            <div
+                              className="absolute top-4 -translate-x-1/2 text-[10px] text-nrl-muted"
+                              style={{ left: `${FANTASY_BOX_PLOT_PAD_PCT}%` }}
+                            >
+                              {fantasyBoxPlotRange.min.toFixed(0)}
                             </div>
-                          </div>
-                        )
-                      })}
-                      <div className="grid grid-cols-[132px_minmax(0,1fr)] items-center gap-3 pt-1">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
-                          Score
-                        </div>
-                        <div className="relative h-8">
-                          <div
-                            className="absolute top-2 border-t border-nrl-border"
-                            style={{
-                              left: `${FANTASY_BOX_PLOT_PAD_PCT}%`,
-                              right: `${FANTASY_BOX_PLOT_PAD_PCT}%`,
-                            }}
-                          />
-                          <div
-                            className="absolute top-0 h-4 border-l border-nrl-border"
-                            style={{ left: `${FANTASY_BOX_PLOT_PAD_PCT}%` }}
-                          />
-                          <div className="absolute left-1/2 top-0 h-4 -translate-x-1/2 border-l border-nrl-border" />
-                          <div
-                            className="absolute top-0 h-4 border-l border-nrl-border"
-                            style={{ left: `${100 - FANTASY_BOX_PLOT_PAD_PCT}%` }}
-                          />
-                          <div
-                            className="absolute top-4 -translate-x-1/2 text-[10px] text-nrl-muted"
-                            style={{ left: `${FANTASY_BOX_PLOT_PAD_PCT}%` }}
-                          >
-                            {fantasyBoxPlotRange.min.toFixed(0)}
-                          </div>
-                          <div className="absolute left-1/2 top-4 -translate-x-1/2 text-[10px] text-nrl-muted">
-                            {((fantasyBoxPlotRange.min + fantasyBoxPlotRange.max) / 2).toFixed(0)}
-                          </div>
-                          <div
-                            className="absolute top-4 -translate-x-1/2 text-[10px] text-nrl-muted"
-                            style={{ left: `${100 - FANTASY_BOX_PLOT_PAD_PCT}%` }}
-                          >
-                            {fantasyBoxPlotRange.max.toFixed(0)}
+                            <div className="absolute left-1/2 top-4 -translate-x-1/2 text-[10px] text-nrl-muted">
+                              {((fantasyBoxPlotRange.min + fantasyBoxPlotRange.max) / 2).toFixed(0)}
+                            </div>
+                            <div
+                              className="absolute top-4 -translate-x-1/2 text-[10px] text-nrl-muted"
+                              style={{ left: `${100 - FANTASY_BOX_PLOT_PAD_PCT}%` }}
+                            >
+                              {fantasyBoxPlotRange.max.toFixed(0)}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              {showStatVsFantasyPlot ? (
-                <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-                      Stat vs Fantasy
-                    </div>
-                    <div className="text-[10px] text-nrl-muted">
-                      Current filters, coloured by game recency
-                    </div>
+                    )}
                   </div>
-                  <div className="mb-3 max-w-[220px]">
-                    <Select
-                      label="Stat"
-                      value={selectedStatVsFantasyLabel}
-                      options={STAT_VS_FANTASY_OPTIONS.map((option) => option.label)}
-                      onChange={(value) => setSelectedStatVsFantasyLabel(value as StatVsFantasyOptionLabel)}
+                ) : null}
+
+                {!analysisLocked && showStatVsFantasyPlot ? (
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                        Stat vs Fantasy
+                      </div>
+                      <div className="text-[10px] text-nrl-muted">All years</div>
+                    </div>
+                    <div className="mb-3 max-w-[220px]">
+                      <Select
+                        label="Stat"
+                        value={selectedStatVsFantasyLabel}
+                        options={STAT_VS_FANTASY_OPTIONS.map((option) => option.label)}
+                        onChange={(value) => setSelectedStatVsFantasyLabel(value as StatVsFantasyOptionLabel)}
+                      />
+                    </div>
+                    <ScatterCorrelation
+                      rows={trendFilteredRows}
+                      statX={selectedStatVsFantasyOption.key}
+                      statY="Fantasy"
+                      title={`Fantasy ${selectedStatVsFantasyOption.label} vs Score`}
                     />
                   </div>
-                  <ScatterCorrelation
-                    rows={filteredRows}
-                    statX={selectedStatVsFantasyOption.key}
-                    statY="Fantasy"
-                    title={`Fantasy ${selectedStatVsFantasyOption.label} vs Score`}
-                  />
-                </div>
-              ) : null}
+                ) : null}
 
-              {showWithWithoutPlot && canAccessLoginSeason && teammate !== "None" ? (
-                <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-                      With vs Without {teammate}
+                {!analysisLocked && showWithWithoutPlot && canAccessLoginSeason && teammate !== "None" ? (
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                        With vs Without {teammate}
+                      </div>
+                      <div className="text-[10px] text-nrl-muted">
+                        Fantasy score distribution across current filters
+                      </div>
                     </div>
-                    <div className="text-[10px] text-nrl-muted">
-                      Fantasy score distribution across current filters
+                    {withWithoutFantasyPlotData.withValues.length === 0 ||
+                    withWithoutFantasyPlotData.withoutValues.length === 0 ? (
+                      <div className="text-xs text-nrl-muted">
+                        Need games in both teammate states to draw this plot.
+                      </div>
+                    ) : (
+                      <WithWithoutKDE
+                        title={`Fantasy: With vs Without ${teammate}`}
+                        stat="Fantasy Score"
+                        withValues={withWithoutFantasyPlotData.withValues}
+                        withoutValues={withWithoutFantasyPlotData.withoutValues}
+                      />
+                    )}
+                  </div>
+                ) : null}
+
+                {analysisLocked ? (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl">
+                    <div className="rounded-xl border border-white/10 bg-slate-950/45 px-4 py-3 text-center shadow-[0_12px_30px_rgba(0,0,0,0.28)] backdrop-blur-[2px]">
+                      <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-200">
+                        Pro Coming Soon
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        Projection, breakevens and plots unlocked with Pro.
+                      </div>
                     </div>
                   </div>
-                  {withWithoutFantasyPlotData.withValues.length === 0 ||
-                  withWithoutFantasyPlotData.withoutValues.length === 0 ? (
-                    <div className="text-xs text-nrl-muted">
-                      Need games in both teammate states to draw this plot.
-                    </div>
-                  ) : (
-                    <WithWithoutKDE
-                      title={`Fantasy: With vs Without ${teammate}`}
-                      stat="Fantasy Score"
-                      withValues={withWithoutFantasyPlotData.withValues}
-                      withoutValues={withWithoutFantasyPlotData.withoutValues}
-                    />
-                  )}
-                </div>
-              ) : null}
+                ) : null}
               </div>
 
               <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">

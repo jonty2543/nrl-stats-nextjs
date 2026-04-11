@@ -57,6 +57,41 @@ export interface DraftPricingResult {
   generatedAt: string
 }
 
+export interface DraftPricingPoolPlayer {
+  id: number
+  name: string
+  team: string | null
+  positionLabel: string
+  positionLabels: string[]
+  status: string | null
+  projection: number
+  actualScore: number | null
+  average: number | null
+  standardDeviation: number
+  isBye: boolean
+}
+
+export interface ManualDraftPricingTeamInput {
+  id: string
+  label: string
+  coachLabel?: string | null
+  playerIds: number[]
+  slotLabels?: string[]
+}
+
+export interface DraftPricingHistoricalPlayerSd {
+  player: string
+  primaryPosition: string | null
+  games: number
+  fantasySd: number | null
+}
+
+export interface DraftPricingHistoricalPositionSd {
+  position: string
+  games: number
+  fantasySd: number | null
+}
+
 interface ProjectionPoint {
   id: number | null
   name: string
@@ -76,6 +111,7 @@ interface FantasyPlayerDirectoryPoint {
   positionLabel: string
   status: string | null
   isBye: boolean
+  scoreHistory: Record<string, number>
 }
 
 interface TeamMatchKey {
@@ -126,6 +162,103 @@ function normaliseText(value: string | null | undefined): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
+}
+
+function fallbackStandardDeviation(projection: number, average: number | null): number {
+  if (Math.abs(projection) <= 0) return 0
+  return Math.max(6, Math.abs(projection) * 0.35, Math.abs(average ?? projection) * 0.28)
+}
+
+function mapHistoricalPositionToFantasySlots(position: string | null | undefined): string[] {
+  const raw = String(position ?? "").trim()
+  if (!raw) return []
+  const upper = raw.toUpperCase()
+  if (["HOK", "MID", "EDG", "HLF", "CTR", "WFB"].includes(upper)) return [upper]
+
+  const lower = raw.toLowerCase()
+  const mapped = new Set<string>()
+
+  if (lower.includes("fullback") || lower.includes("wing") || /\bfb\b/.test(lower) || /\bwg\b/.test(lower) || /\bwfb\b/.test(lower)) {
+    mapped.add("WFB")
+  }
+  if (lower.includes("centre") || lower.includes("center") || /\bctr\b/.test(lower)) {
+    mapped.add("CTR")
+  }
+  if (lower.includes("five") || lower.includes("half") || /\bhb\b/.test(lower) || /\bfe\b/.test(lower) || /\bhlf\b/.test(lower)) {
+    mapped.add("HLF")
+  }
+  if (lower.includes("hooker") || /\bhok\b/.test(lower) || /\bdh\b/.test(lower)) {
+    mapped.add("HOK")
+  }
+  if (lower.includes("prop") || lower.includes("front row") || lower.includes("lock") || /\bprp\b/.test(lower) || /\block\b/.test(lower) || /\bmid\b/.test(lower)) {
+    mapped.add("MID")
+  }
+  if (lower.includes("2nd") || lower.includes("2rf") || lower.includes("back row") || lower.includes("second") || lower.includes("edge") || /\bsrf\b/.test(lower) || /\bedg\b/.test(lower)) {
+    mapped.add("EDG")
+  }
+
+  return [...mapped]
+}
+
+function buildHistoricalPlayerSdLookup(rows: DraftPricingHistoricalPlayerSd[] | undefined): Map<string, DraftPricingHistoricalPlayerSd> {
+  const lookup = new Map<string, DraftPricingHistoricalPlayerSd>()
+  for (const row of rows ?? []) {
+    const key = normaliseText(row.player)
+    if (!key) continue
+    lookup.set(key, row)
+  }
+  return lookup
+}
+
+function buildHistoricalPositionSdLookup(rows: DraftPricingHistoricalPositionSd[] | undefined): Map<string, number> {
+  const buckets = new Map<string, { weightedSd: number; games: number }>()
+
+  for (const row of rows ?? []) {
+    if (row.fantasySd == null || row.fantasySd <= 0 || row.games <= 0) continue
+    const slots = mapHistoricalPositionToFantasySlots(row.position)
+    for (const slot of slots) {
+      const current = buckets.get(slot) ?? { weightedSd: 0, games: 0 }
+      current.weightedSd += row.fantasySd * row.games
+      current.games += row.games
+      buckets.set(slot, current)
+    }
+  }
+
+  return new Map(
+    [...buckets.entries()]
+      .filter(([, bucket]) => bucket.games > 0)
+      .map(([slot, bucket]) => [slot, bucket.weightedSd / bucket.games])
+  )
+}
+
+function resolveHistoricalStandardDeviation(params: {
+  player: FantasyPlayerSnapshot
+  projectionPoint: ProjectionPoint | null
+  playerSdLookup: Map<string, DraftPricingHistoricalPlayerSd>
+  positionSdLookup: Map<string, number>
+}): number {
+  const { player, projectionPoint, playerSdLookup, positionSdLookup } = params
+  const average = projectionPoint?.average ?? player.avgPoints ?? null
+  const effectiveProjection = projectionPoint?.projection ?? player.projectedAvg ?? average ?? 0
+  if (Math.abs(effectiveProjection) <= 0) return 0
+  const fallback = projectionPoint?.standardDeviation ?? Math.max(6, Math.abs(player.projectedAvg ?? player.avgPoints ?? 30) * 0.3)
+  const playerRow = playerSdLookup.get(normaliseText(player.name))
+
+  if (playerRow?.games != null && playerRow.games >= 30 && playerRow.fantasySd != null && playerRow.fantasySd > 0) {
+    return playerRow.fantasySd
+  }
+
+  const fantasyPosition = player.positionLabels.find((label) => positionSdLookup.has(label)) ?? player.positionLabels[0] ?? null
+  const positionSd = fantasyPosition ? positionSdLookup.get(fantasyPosition) ?? null : null
+  if (positionSd != null && positionSd > 0) {
+    return positionSd
+  }
+
+  if (playerRow?.fantasySd != null && playerRow.fantasySd > 0) {
+    return playerRow.fantasySd
+  }
+
+  return fallbackStandardDeviation(effectiveProjection, average) || fallback
 }
 
 function teamHasFixtureInRound(draw2026Data: Draw2026Data | null | undefined, round: number | null, team: string | null): boolean | null {
@@ -232,7 +365,7 @@ function parseProjectionPoint(raw: unknown, round: number | null, fallbackId?: n
     row.round_score,
     row.live_score,
   )
-  const standardDeviation = Math.max(6, Math.abs(projection) * 0.35, Math.abs(average ?? projection) * 0.28)
+  const standardDeviation = fallbackStandardDeviation(projection, average)
 
   return {
     id,
@@ -373,6 +506,7 @@ function buildFantasyPlayerDirectory(points: FantasyPlayerSnapshot[], fantasyPla
       positionLabel: point.positionLabel,
       status: point.status,
       isBye: point.isBye,
+      scoreHistory: point.scoreHistory,
     }
     byId.set(point.id, normalized)
     byName.set(normaliseText(point.name), normalized)
@@ -695,6 +829,59 @@ function collectAvailableRounds(showRaw: unknown): number[] {
   return [...found].sort((a, b) => a - b)
 }
 
+function collectAvailableRoundsFromDraw(draw2026Data: Draw2026Data | null | undefined): number[] {
+  if (!draw2026Data) return []
+  return [...new Set(draw2026Data.rows.map((row) => row.round).filter((round) => Number.isFinite(round)))].sort((a, b) => a - b)
+}
+
+function buildTeamFromManualInput(
+  input: ManualDraftPricingTeamInput,
+  projections: ReturnType<typeof buildProjectionLookups>,
+  fantasyPlayers: ReturnType<typeof buildFantasyPlayerDirectory>,
+  draw2026Data: Draw2026Data | null | undefined,
+  round: number | null,
+): DraftPricingTeam {
+  const players = input.playerIds.map((playerId, index) => {
+    const projectionPoint = projections.byId.get(playerId)
+    const fantasyPlayer = fantasyPlayers.byId.get(playerId)
+    const roundHasFixture = teamHasFixtureInRound(draw2026Data, round, fantasyPlayer?.team ?? null)
+    const fantasyActualScore =
+      playerId != null && round != null
+        ? fantasyPlayer?.scoreHistory?.[String(round)] ?? null
+        : null
+
+    return {
+      id: playerId,
+      name: fantasyPlayer?.name ?? projectionPoint?.name ?? `Player ${playerId}`,
+      projection: projectionPoint?.projection ?? 0,
+      actualScore: projectionPoint?.actualScore ?? fantasyActualScore,
+      standardDeviation: projectionPoint?.standardDeviation ?? 8,
+      slotLabel: input.slotLabels?.[index] ?? `Slot ${index + 1}`,
+      isBench: false,
+      isBye: roundHasFixture == null ? (fantasyPlayer?.isBye ?? false) : !roundHasFixture,
+      isEmergency: false,
+    }
+  })
+
+  const activePlayers = players.filter((player) => !player.isBench && !player.isEmergency && !player.isBye)
+  const activeWithActual = activePlayers.filter((player) => player.actualScore != null)
+  const variance = activePlayers.reduce((sum, player) => sum + player.standardDeviation ** 2, 0)
+
+  return {
+    id: input.id,
+    label: input.label,
+    coachLabel: input.coachLabel ?? null,
+    projectedTotal: activePlayers.reduce((sum, player) => sum + player.projection, 0),
+    actualTotal:
+      activeWithActual.length > 0
+        ? activeWithActual.reduce((sum, player) => sum + (player.actualScore ?? 0), 0)
+        : null,
+    standardDeviation: Math.sqrt(variance),
+    activePlayerCount: activePlayers.length,
+    players,
+  }
+}
+
 function parseMatchups(showRaw: unknown, teams: DraftPricingTeam[]): Array<{ round: number | null; home: DraftPricingTeam; away: DraftPricingTeam }> {
   const matchups: Array<{ round: number | null; home: DraftPricingTeam; away: DraftPricingTeam }> = []
   const seen = new Set<string>()
@@ -830,6 +1017,131 @@ export function buildDraftPricingResult(params: {
     leagueType: leagueMeta.leagueType,
     teams,
     matchups,
+    warnings,
+    generatedAt: new Date().toISOString(),
+  }
+}
+
+export function buildDraftPricingPlayerPool(params: {
+  round: number | null
+  projectionsRaw: unknown
+  fantasyPlayers: FantasyPlayerSnapshot[]
+  fantasyPlayerTeams: Record<number, string | null>
+  draw2026Data: Draw2026Data | null
+  historicalPlayerSdRows?: DraftPricingHistoricalPlayerSd[]
+  historicalPositionSdRows?: DraftPricingHistoricalPositionSd[]
+}): DraftPricingPoolPlayer[] {
+  const projectionPoints = collectProjectionPoints(params.projectionsRaw, params.round)
+  const projectionLookups = buildProjectionLookups(projectionPoints)
+  const fantasyPlayerDirectory = buildFantasyPlayerDirectory(params.fantasyPlayers, params.fantasyPlayerTeams)
+  const playerSdLookup = buildHistoricalPlayerSdLookup(params.historicalPlayerSdRows)
+  const positionSdLookup = buildHistoricalPositionSdLookup(params.historicalPositionSdRows)
+
+  return params.fantasyPlayers
+    .map((player) => {
+      const projectionPoint =
+        projectionLookups.byId.get(player.id) ??
+        projectionLookups.byName.get(normaliseText(player.name)) ??
+        null
+      const directoryPoint = fantasyPlayerDirectory.byId.get(player.id)
+      const roundHasFixture = teamHasFixtureInRound(params.draw2026Data, params.round, directoryPoint?.team ?? null)
+      const fantasyActualScore =
+        params.round != null
+          ? player.scoreHistory?.[String(params.round)] ?? null
+          : null
+
+      return {
+        id: player.id,
+        name: player.name,
+        team: directoryPoint?.team ?? null,
+        positionLabel: player.positionLabel,
+        positionLabels: player.positionLabels,
+        status: player.status,
+        projection: projectionPoint?.projection ?? 0,
+        actualScore: projectionPoint?.actualScore ?? fantasyActualScore,
+        average: projectionPoint?.average ?? player.avgPoints ?? null,
+        standardDeviation: resolveHistoricalStandardDeviation({
+          player,
+          projectionPoint,
+          playerSdLookup,
+          positionSdLookup,
+        }),
+        isBye: roundHasFixture == null ? player.isBye : !roundHasFixture,
+      } satisfies DraftPricingPoolPlayer
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function buildManualDraftPricingResult(params: {
+  round: number | null
+  projectionsRaw: unknown
+  fantasyPlayers: FantasyPlayerSnapshot[]
+  fantasyPlayerTeams: Record<number, string | null>
+  draw2026Data: Draw2026Data | null
+  homeTeam: ManualDraftPricingTeamInput
+  awayTeam: ManualDraftPricingTeamInput
+}): DraftPricingResult {
+  const warnings: string[] = []
+  const projectionPoints = collectProjectionPoints(params.projectionsRaw, params.round)
+  const projectionLookups = buildProjectionLookups(projectionPoints)
+  const fantasyPlayerDirectory = buildFantasyPlayerDirectory(params.fantasyPlayers, params.fantasyPlayerTeams)
+  const availableRounds = collectAvailableRoundsFromDraw(params.draw2026Data)
+  const round = params.round ?? availableRounds[0] ?? null
+
+  if (projectionPoints.length === 0) {
+    warnings.push("No projection rows were parsed from coach players feed.")
+  }
+
+  const homeTeam = buildTeamFromManualInput(
+    params.homeTeam,
+    projectionLookups,
+    fantasyPlayerDirectory,
+    params.draw2026Data,
+    round,
+  )
+  const awayTeam = buildTeamFromManualInput(
+    params.awayTeam,
+    projectionLookups,
+    fantasyPlayerDirectory,
+    params.draw2026Data,
+    round,
+  )
+
+  const marginSd = Math.max(8, Math.sqrt(homeTeam.standardDeviation ** 2 + awayTeam.standardDeviation ** 2))
+  const projectedMargin = homeTeam.projectedTotal - awayTeam.projectedTotal
+  const homeWinProbability = normalCdf(projectedMargin / marginSd)
+  const awayWinProbability = 1 - homeWinProbability
+  const totalSd = Math.max(10, Math.sqrt(homeTeam.standardDeviation ** 2 + awayTeam.standardDeviation ** 2))
+
+  const matchup: DraftPricingMatchup = {
+    id: `${round ?? "na"}:${homeTeam.id}:${awayTeam.id}`,
+    round,
+    homeTeam,
+    awayTeam,
+    projectedHomeScore: Math.round(homeTeam.projectedTotal * 10) / 10,
+    projectedAwayScore: Math.round(awayTeam.projectedTotal * 10) / 10,
+    actualHomeScore: homeTeam.actualTotal == null ? null : Math.round(homeTeam.actualTotal * 10) / 10,
+    actualAwayScore: awayTeam.actualTotal == null ? null : Math.round(awayTeam.actualTotal * 10) / 10,
+    projectedMargin: Math.round(projectedMargin * 10) / 10,
+    marginStandardDeviation: Math.round(marginSd * 10) / 10,
+    totalPointsLine: roundToHalf(homeTeam.projectedTotal + awayTeam.projectedTotal),
+    totalPointsStandardDeviation: Math.round(totalSd * 10) / 10,
+    homeWinProbability,
+    awayWinProbability,
+    homeOdds: fairDecimalOdds(homeWinProbability),
+    awayOdds: fairDecimalOdds(awayWinProbability),
+    spreadLine: roundToHalf(projectedMargin),
+    favouriteLabel: projectedMargin >= 0 ? homeTeam.label : awayTeam.label,
+  }
+
+  return {
+    leagueId: "manual",
+    round,
+    availableRounds,
+    leagueName: "Manual Draft Matchup",
+    leagueType: "13 v 13 Builder",
+    teams: [homeTeam, awayTeam],
+    matchups: [matchup],
     warnings,
     generatedAt: new Date().toISOString(),
   }

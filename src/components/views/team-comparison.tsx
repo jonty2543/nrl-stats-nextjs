@@ -13,16 +13,16 @@ import {
   computeSummary,
   computePercentileRanks,
   computeRecentForm,
-  computeRoundData,
 } from "@/lib/data/transform";
 import { FilterBar } from "@/components/filters/filter-bar";
 import { TeamSelectors } from "@/components/filters/team-selectors";
 import { SummaryPanel } from "@/components/summary/summary-panel";
 import { ChartPanelGrid } from "@/components/charts/chart-panel-grid";
 import { ScatterCorrelation } from "@/components/charts/scatter-correlation";
-import { LineRound } from "@/components/charts/line-round";
 import { KDEDistribution } from "@/components/charts/kde-distribution";
-import { PillRadio } from "@/components/ui/pill-radio";
+import { OpponentAverageHeatmap } from "@/components/charts/opponent-average-heatmap";
+import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush";
+import { hasProPlotAccess } from "@/lib/access/pro-access";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
 interface TeamComparisonProps {
@@ -60,6 +60,7 @@ export function TeamComparison({
 }: TeamComparisonProps) {
   const { userId } = useAuth();
   const canAccessLoginSeason = Boolean(userId);
+  const hasClientProPlotAccess = canBypassPlotGate || hasProPlotAccess(userId);
   const [allData, setAllData] = useState<PlayerStat[]>(initialData);
   const unlockedYears = useMemo(
     () =>
@@ -85,16 +86,14 @@ export function TeamComparison({
     [unlockedYears]
   );
 
-  const handleYearsChange = useCallback(async (years: string[]) => {
-    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
-    setSelectedYears(validYears);
-    if (validYears.length === 0) {
+  const loadAllUnlockedYears = useCallback(async () => {
+    if (unlockedYears.length === 0) {
       setAllData([]);
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/player-stats?years=${validYears.join(",")}`);
+      const res = await fetch(`/api/player-stats?years=${unlockedYears.join(",")}`);
       if (res.ok) {
         const data = await res.json();
         setAllData(data);
@@ -102,6 +101,11 @@ export function TeamComparison({
     } finally {
       setLoading(false);
     }
+  }, [unlockedYears]);
+
+  const handleYearsChange = useCallback(async (years: string[]) => {
+    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    setSelectedYears(validYears);
   }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
   const [position, setPosition] = useState("All");
   const [finalsMode, setFinalsMode] = useState("Yes");
@@ -116,16 +120,33 @@ export function TeamComparison({
     () => filterByFinals(dfYear, finalsMode as "Yes" | "No"),
     [dfYear, finalsMode]
   );
+  const plotDfYear = useMemo(
+    () => filterByYear(allData, unlockedYears),
+    [allData, unlockedYears]
+  );
+  const plotDfYearFinals = useMemo(
+    () => filterByFinals(plotDfYear, finalsMode as "Yes" | "No"),
+    [plotDfYear, finalsMode]
+  );
   const dfPosition = useMemo(
     () => filterByPosition(dfYearFinals, position),
     [dfYearFinals, position]
+  );
+  const plotDfPosition = useMemo(
+    () => filterByPosition(plotDfYearFinals, position),
+    [plotDfYearFinals, position]
   );
   const df = useMemo(
     () => filterByMinutes(dfPosition, minMinutes, minutesMode as "All" | "Over" | "Under"),
     [dfPosition, minMinutes, minutesMode]
   );
+  const plotDf = useMemo(
+    () => filterByMinutes(plotDfPosition, minMinutes, minutesMode as "All" | "Over" | "Under"),
+    [plotDfPosition, minMinutes, minutesMode]
+  );
 
   const teamDf = useMemo(() => aggregateTeamStats(df), [df]);
+  const plotTeamDf = useMemo(() => aggregateTeamStats(plotDf), [plotDf]);
 
   const positions = useMemo(
     () => [...new Set(dfYearFinals.map((r) => r.Position))].filter(Boolean).sort(),
@@ -149,7 +170,6 @@ export function TeamComparison({
   const [team2, setTeam2] = useState("Storm");
   const [stat1, setStat1] = useState("Points");
   const [stat2, setStat2] = useState("All Run Metres");
-  const [roundYear, setRoundYear] = useState(defaultYears[0] ?? "");
 
   useEffect(() => {
     if (teamList.length === 0) return;
@@ -198,77 +218,6 @@ export function TeamComparison({
     }
   }, [team1, team2, teamList]);
 
-  const presetPayload = useMemo<Record<string, unknown>>(
-    () => ({
-      selectedYears,
-      position,
-      finalsMode,
-      minMinutes,
-      minutesMode,
-      team1,
-      team2,
-      stat1,
-      stat2,
-      roundYear,
-    }),
-    [
-      selectedYears,
-      position,
-      finalsMode,
-      minMinutes,
-      minutesMode,
-      team1,
-      team2,
-      stat1,
-      stat2,
-      roundYear,
-    ]
-  );
-
-  const applyPreset = useCallback(
-    async (payload: Record<string, unknown>) => {
-      const validYears = Array.isArray(payload.selectedYears)
-        ? payload.selectedYears
-            .filter((value): value is string => typeof value === "string")
-            .filter((year) => unlockedYears.includes(year))
-        : [];
-
-      if (validYears.length > 0) {
-        await handleYearsChange(validYears);
-      }
-
-      const fallbackYear = validYears[0] ?? selectedYears[0] ?? "";
-
-      if (typeof payload.position === "string") setPosition(payload.position);
-      if (payload.finalsMode === "Yes" || payload.finalsMode === "No") {
-        setFinalsMode(payload.finalsMode);
-      }
-      if (
-        payload.minutesMode === "All" ||
-        payload.minutesMode === "Over" ||
-        payload.minutesMode === "Under"
-      ) {
-        setMinutesMode(payload.minutesMode);
-      }
-      if (
-        typeof payload.minMinutes === "number" &&
-        Number.isFinite(payload.minMinutes)
-      ) {
-        setMinMinutes(Math.max(0, payload.minMinutes));
-      }
-      if (typeof payload.team1 === "string") setTeam1(payload.team1);
-      if (typeof payload.team2 === "string") setTeam2(payload.team2);
-      if (typeof payload.stat1 === "string") setStat1(payload.stat1);
-      if (typeof payload.stat2 === "string") setStat2(payload.stat2);
-      if (typeof payload.roundYear === "string") {
-        setRoundYear(payload.roundYear);
-      } else if (fallbackYear) {
-        setRoundYear(fallbackYear);
-      }
-    },
-    [handleYearsChange, selectedYears, unlockedYears]
-  );
-
   useEffect(() => {
     if (selectedYears.length > 0 || unlockedYears.length === 0) return;
     setSelectedYears(unlockedYears.slice(0, 1));
@@ -280,10 +229,10 @@ export function TeamComparison({
       hasBootstrappedFetch.current = true;
       return;
     }
-    if (selectedYears.length === 0) return;
+    if (unlockedYears.length === 0) return;
     hasBootstrappedFetch.current = true;
-    void handleYearsChange(selectedYears);
-  }, [allData.length, handleYearsChange, initialData.length, selectedYears]);
+    void loadAllUnlockedYears();
+  }, [allData.length, initialData.length, loadAllUnlockedYears, unlockedYears.length]);
 
   useEffect(() => {
     const validYears = selectedYears.filter((year) => unlockedYears.includes(year));
@@ -294,6 +243,14 @@ export function TeamComparison({
     void handleYearsChange(validYears);
   }, [handleYearsChange, selectedYears, unlockedYears]);
 
+  useEffect(() => {
+    const loadedYears = [...new Set(allData.map((row) => row.Year))];
+    const missingUnlockedYear = unlockedYears.some((year) => !loadedYears.includes(year));
+    const hasLockedYearLoaded = loadedYears.some((year) => !unlockedYears.includes(year));
+    if (!missingUnlockedYear && !hasLockedYearLoaded) return;
+    void loadAllUnlockedYears();
+  }, [allData, loadAllUnlockedYears, unlockedYears]);
+
   const effectiveT1 = team1 || teamList[0] || "";
 
   const t1Rows = useMemo(
@@ -303,6 +260,14 @@ export function TeamComparison({
   const t2Rows = useMemo(
     () => (team2 !== "None" ? teamDf.filter((r) => r.Team === team2) : []),
     [teamDf, team2]
+  );
+  const t1PlotRows = useMemo(
+    () => plotTeamDf.filter((r) => r.Team === effectiveT1),
+    [plotTeamDf, effectiveT1]
+  );
+  const t2PlotRows = useMemo(
+    () => (team2 !== "None" ? plotTeamDf.filter((r) => r.Team === team2) : []),
+    [plotTeamDf, team2]
   );
 
   const statsToShow = useMemo(
@@ -345,34 +310,6 @@ export function TeamComparison({
     }
     return results;
   }, [effectiveT1, t1Rows, team2, t2Rows, statsToShow]);
-
-  // Chart data — filtered to a single year for round charts
-  const effectiveRoundYear =
-    selectedYears.includes(roundYear) ? roundYear : (selectedYears[0] || "");
-  const t1RoundRows = useMemo(
-    () => (t1Rows as unknown as PlayerStat[]).filter((r) => r.Year === effectiveRoundYear),
-    [t1Rows, effectiveRoundYear]
-  );
-  const t2RoundRows = useMemo(
-    () => (t2Rows as unknown as PlayerStat[]).filter((r) => r.Year === effectiveRoundYear),
-    [t2Rows, effectiveRoundYear]
-  );
-  const t1RoundData = useMemo(
-    () => computeRoundData(t1RoundRows, stat1),
-    [t1RoundRows, stat1]
-  );
-  const t2RoundData = useMemo(
-    () => (team2 !== "None" ? computeRoundData(t2RoundRows, stat1) : []),
-    [t2RoundRows, team2, stat1]
-  );
-  const t1Stat2Round = useMemo(
-    () => (stat2 !== "None" ? computeRoundData(t1RoundRows, stat2) : []),
-    [t1RoundRows, stat2]
-  );
-  const t2Stat2Round = useMemo(
-    () => (team2 !== "None" && stat2 !== "None" ? computeRoundData(t2RoundRows, stat2) : []),
-    [t2RoundRows, team2, stat2]
-  );
 
   const chartPanels = useMemo(() => {
     const panels: { id: string; title: string; content: React.ReactNode; wide?: boolean }[] = [];
@@ -445,75 +382,116 @@ export function TeamComparison({
       });
     }
 
-    const roundYearPicker = selectedYears.length > 1 ? (
-      <div className="mb-3">
-        <PillRadio options={selectedYears} value={effectiveRoundYear} onChange={setRoundYear} />
-      </div>
-    ) : null;
-
     panels.push({
-      id: "round-1",
-      title: `${stat1}: Stat Comparison by Round`,
+      id: "rolling-t1",
+      title: `${effectiveT1}: ${stat1} Rolling Average`,
       wide: true,
       content: (
-        <div>
-          {roundYearPicker}
-          <LineRound
-            title={
-              hasTwoTeams
-                ? `${stat1}: ${effectiveT1} vs ${team2}`
-                : `${effectiveT1} \u2014 ${stat1} by Round`
-            }
-            stat={stat1}
-            series={
-              hasTwoTeams
-                ? [
-                    { label: effectiveT1, data: t1RoundData },
-                    { label: team2, data: t2RoundData },
-                  ]
-                : [{ label: effectiveT1, data: t1RoundData }]
-            }
-            mode={hasTwoTeams ? "compare" : "single"}
-          />
-        </div>
+        <FantasyGameLogTrendBrush
+          rows={t1PlotRows}
+          headerTitle="Rolling Average Plot"
+          valueLabel={stat1}
+          primarySeriesLabel={effectiveT1}
+          valueAccessor={(row) => toFiniteNumber(row[stat1]) ?? 0}
+        />
       ),
     });
-    if (hasTwoStats) {
+    if (hasTwoTeams) {
       panels.push({
-        id: "round-2",
-        title: `${stat2}: Stat Comparison by Round`,
+        id: "rolling-t2",
+        title: `${team2}: ${stat1} Rolling Average`,
         wide: true,
         content: (
-          <div>
-            {roundYearPicker}
-            <LineRound
-              title={
-                hasTwoTeams
-                  ? `${stat2}: ${effectiveT1} vs ${team2}`
-                  : `${effectiveT1} \u2014 ${stat2} by Round`
-              }
-              stat={stat2}
-              series={
-                hasTwoTeams
-                  ? [
-                      { label: effectiveT1, data: t1Stat2Round },
-                      { label: team2, data: t2Stat2Round },
-                    ]
-                  : [{ label: effectiveT1, data: t1Stat2Round }]
-              }
-              mode={hasTwoTeams ? "compare" : "single"}
-            />
-          </div>
+          <FantasyGameLogTrendBrush
+            rows={t2PlotRows}
+            headerTitle="Rolling Average Plot"
+            valueLabel={stat1}
+            primarySeriesLabel={team2}
+            primaryBarColor="rgba(180, 112, 255, 0.42)"
+            valueAccessor={(row) => toFiniteNumber(row[stat1]) ?? 0}
+          />
         ),
       });
+    }
+    if (hasTwoStats) {
+      panels.push({
+        id: "rolling-t1-stat2",
+        title: `${effectiveT1}: ${stat2} Rolling Average`,
+        wide: true,
+        content: (
+          <FantasyGameLogTrendBrush
+            rows={t1PlotRows}
+            headerTitle="Rolling Average Plot"
+            valueLabel={stat2}
+            primarySeriesLabel={effectiveT1}
+            valueAccessor={(row) => toFiniteNumber(row[stat2]) ?? 0}
+          />
+        ),
+      });
+      if (hasTwoTeams) {
+        panels.push({
+          id: "rolling-t2-stat2",
+          title: `${team2}: ${stat2} Rolling Average`,
+          wide: true,
+          content: (
+            <FantasyGameLogTrendBrush
+              rows={t2PlotRows}
+              headerTitle="Rolling Average Plot"
+              valueLabel={stat2}
+              primarySeriesLabel={team2}
+              primaryBarColor="rgba(180, 112, 255, 0.42)"
+              valueAccessor={(row) => toFiniteNumber(row[stat2]) ?? 0}
+            />
+          ),
+        });
+      }
+    }
+
+    panels.push({
+      id: "opp-t1",
+      title: `${effectiveT1}: ${stat1} Avg vs Opponent`,
+      wide: true,
+      content: <OpponentAverageHeatmap rows={t1PlotRows} stat={stat1} />,
+    });
+    if (hasTwoTeams) {
+      panels.push({
+        id: "opp-t2",
+        title: `${team2}: ${stat1} Avg vs Opponent`,
+        wide: true,
+        content: <OpponentAverageHeatmap rows={t2PlotRows} stat={stat1} />,
+      });
+    }
+    if (hasTwoStats) {
+      panels.push({
+        id: "opp-t1-stat2",
+        title: `${effectiveT1}: ${stat2} Avg vs Opponent`,
+        wide: true,
+        content: <OpponentAverageHeatmap rows={t1PlotRows} stat={stat2} />,
+      });
+      if (hasTwoTeams) {
+        panels.push({
+          id: "opp-t2-stat2",
+          title: `${team2}: ${stat2} Avg vs Opponent`,
+          wide: true,
+          content: <OpponentAverageHeatmap rows={t2PlotRows} stat={stat2} />,
+        });
+      }
     }
 
     return panels;
   }, [
-    effectiveT1, team2, stat1, stat2, t1Rows, t2Rows,
-    t1RoundData, t2RoundData, t1Stat2Round, t2Stat2Round,
-    effectiveRoundYear, setRoundYear, selectedYears,
+    effectiveT1, team2, stat1, stat2, t1Rows, t2Rows, t1PlotRows, t2PlotRows,
   ]);
+
+  const filteredChartPanels = useMemo(
+    () => chartPanels.filter((panel) => !/Rolling Average|Avg vs Opponent/i.test(panel.title)),
+    [chartPanels]
+  );
+
+  const historyChartPanels = useMemo(
+    () => chartPanels.filter((panel) => /Rolling Average|Avg vs Opponent/i.test(panel.title)),
+    [chartPanels]
+  );
 
   return (
     <div className="space-y-4">
@@ -530,9 +508,6 @@ export function TeamComparison({
         onMinutesThresholdChange={setMinMinutes}
         minutesMode={minutesMode}
         onMinutesModeChange={setMinutesMode}
-        presetsScope="team"
-        presetPayload={presetPayload}
-        onApplyPreset={applyPreset}
         showPosition={false}
         showMinutes={false}
       />
@@ -575,7 +550,19 @@ export function TeamComparison({
             rankingMode="rank"
           />
 
-          <ChartPanelGrid panels={chartPanels} unlockAll={canBypassPlotGate} />
+          <ChartPanelGrid panels={filteredChartPanels} unlockAll={hasClientProPlotAccess} />
+
+          {historyChartPanels.length > 0 ? (
+            <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                Full History Plots
+              </div>
+              <div className="mt-4 text-xs text-nrl-muted">
+                Rolling average and avg vs opponent use the full unlocked-year history rather than the filters above.
+              </div>
+              <ChartPanelGrid panels={historyChartPanels} unlockAll={hasClientProPlotAccess} />
+            </div>
+          ) : null}
         </>
       )}
     </div>

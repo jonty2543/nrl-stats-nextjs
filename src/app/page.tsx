@@ -580,7 +580,7 @@ export default async function Home() {
               <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:flex-wrap">
                 <Link
                   href="/dashboard/fantasy"
-                  className="inline-flex items-center justify-center rounded-full border border-[#9870ff] bg-[#8d63ff]/14 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#8d63ff]/22"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white"
                 >
                   Open Fantasy
                 </Link>

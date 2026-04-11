@@ -32,6 +32,7 @@ export interface FantasyPlayerSnapshot {
   isBye: boolean
   locked: boolean
   priceHistory: Record<string, number>
+  scoreHistory: Record<string, number>
 }
 
 export interface FantasyOwnershipBaselinePoint {
@@ -102,6 +103,16 @@ function extractPriceHistory(input: unknown): Record<string, number> {
   return out
 }
 
+function extractScoreHistory(input: unknown): Record<string, number> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {}
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(input)) {
+    const n = toNum(v)
+    if (n !== null) out[k] = n
+  }
+  return out
+}
+
 function getLatestPrice(cost: number | null, priceHistory: Record<string, number>): number | null {
   const entries = Object.entries(priceHistory)
     .map(([round, price]) => ({ round: Number.parseInt(round, 10), price }))
@@ -127,6 +138,7 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
   const positionLabel = positionLabels.join("/") || "N/A"
 
   const priceHistory = extractPriceHistory(raw.stats?.prices)
+  const scoreHistory = extractScoreHistory(raw.stats?.scores)
   const cost = toInt(raw.cost)
   const latestPrice = getLatestPrice(cost, priceHistory)
   const be =
@@ -157,6 +169,7 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
     isBye: toBool(raw.is_bye),
     locked: toBool(raw.locked),
     priceHistory,
+    scoreHistory,
   }
 }
 

@@ -3,8 +3,8 @@
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useState } from "react";
 import { SignInButton } from "@clerk/nextjs";
-import { MultiSelect } from "@/components/ui/multi-select";
 import { Select } from "@/components/ui/select";
+import { YearRangeSlider } from "@/components/ui/year-range-slider";
 import {
   getSeasonLockReason,
   hasProLockedHistoricalSeasons,
@@ -85,6 +85,7 @@ export function FilterBar({
     "stats"
   );
   const shouldShowYearFooter = shouldPromptLoginFor2024 || hasHistoricalYearsLocked;
+  const selectableYears = years.filter((year) => !disabledYearReasons[year]);
   const safeSelectedYears = selectedYears.filter((year) =>
     !disabledYearReasons[year]
   );
@@ -260,11 +261,10 @@ export function FilterBar({
         <div className={`grid ${mobileGridColumns} ${gridColumns} gap-5`}>
           {canShowYear && (
             <div className="flex flex-col gap-1">
-              <MultiSelect
+              <YearRangeSlider
                 label="Year"
                 value={safeSelectedYears}
-                options={years}
-                disabledOptions={disabledYearReasons}
+                options={selectableYears}
                 openFooter={
                   shouldShowYearFooter ? (
                     <div className="space-y-1">

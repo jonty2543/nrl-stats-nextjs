@@ -1,75 +1,52 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useEffectEvent, useMemo, useState, useTransition } from "react"
+import { useAuth } from "@clerk/nextjs"
+import { useEffect, useMemo, useState } from "react"
+import { SearchableSelect } from "@/components/ui/searchable-select"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { resolvePlayerImage } from "@/components/views/player-comparison"
 import type { Draw2026Data } from "@/lib/draw/types"
 import type { FantasyPlayerSnapshot } from "@/lib/fantasy/nrl"
-import { buildDraftPricingResult, type DraftPricingMatchup, type DraftPricingPlayer, type DraftPricingResult } from "@/lib/fantasy/draft-pricing"
+import {
+  buildDraftPricingPlayerPool,
+  type DraftPricingHistoricalPlayerSd,
+  type DraftPricingHistoricalPositionSd,
+  type DraftPricingPlayer,
+  type DraftPricingPoolPlayer,
+} from "@/lib/fantasy/draft-pricing"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 
-type DraftLoadSource = "browser" | "pasted"
-type CaptainSelections = Record<string, string | null>
-type BannerState = { kind: "error" | "info" | "success"; text: string } | null
-type BrowserImportPayload = {
-  type: "nrl-draft-import"
-  leagueId: string
-  round: number
-  showRaw: unknown
-  rostersRaw: unknown
+const TEAM_SLOT_LABELS = ["HOK", "MID", "MID", "MID", "EDG", "EDG", "HLF", "HLF", "CTR", "CTR", "WFB", "WFB", "WFB"] as const
+const EMPTY_SLOTS = Array.from({ length: TEAM_SLOT_LABELS.length }, () => null as number | null)
+const DRAFT_PRICER_LOCAL_KEY_PREFIX = "fantasy-draft-pricer"
+const DRAFT_PRICER_SAVED_TEAMS_LOCAL_KEY_PREFIX = "fantasy-draft-pricer-teams"
+
+type CaptainSelections = {
+  home: number | null
+  away: number | null
 }
 
-async function copyText(value: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(value)
-    return true
-  } catch {
-    const textarea = document.createElement("textarea")
-    textarea.value = value
-    textarea.setAttribute("readonly", "true")
-    textarea.style.position = "fixed"
-    textarea.style.opacity = "0"
-    textarea.style.pointerEvents = "none"
-    document.body.appendChild(textarea)
-    textarea.focus()
-    textarea.select()
-    textarea.setSelectionRange(0, textarea.value.length)
-    const copied = document.execCommand("copy")
-    document.body.removeChild(textarea)
-    return copied
-  }
+interface SavedDraftPricerState {
+  round: string
+  homeLabel: string
+  awayLabel: string
+  homeSlots: Array<number | null>
+  awaySlots: Array<number | null>
+  captainSelections: CaptainSelections
 }
 
-function formatScore(value: number | null): string {
-  return value == null ? "-" : value.toFixed(1)
+interface SavedDraftTeamPreset {
+  id: string
+  name: string
+  label: string
+  slots: Array<number | null>
+  captainId: number | null
+  updatedAt: string
 }
 
-function formatOdds(value: number): string {
-  return value.toFixed(2)
-}
-
-function erf(x: number): number {
-  const sign = x < 0 ? -1 : 1
-  const absX = Math.abs(x)
-  const a1 = 0.254829592
-  const a2 = -0.284496736
-  const a3 = 1.421413741
-  const a4 = -1.453152027
-  const a5 = 1.061405429
-  const p = 0.3275911
-  const t = 1 / (1 + p * absX)
-  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-absX * absX)
-  return sign * y
-}
-
-function normalCdf(x: number): number {
-  return 0.5 * (1 + erf(x / Math.sqrt(2)))
-}
-
-function fairDecimalOdds(probability: number): number {
-  const bounded = Math.min(0.985, Math.max(0.015, probability))
-  return Math.round((1 / bounded) * 100) / 100
+function formatOdds(value: number | null): string {
+  return value == null ? "--" : `$${value.toFixed(2)}`
 }
 
 function toRound(value: string): number | null {
@@ -78,185 +55,35 @@ function toRound(value: string): number | null {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null
 }
 
-function inferCurrentRound(showRaw: unknown): number | null {
-  if (!showRaw || typeof showRaw !== "object" || Array.isArray(showRaw)) return null
-  const wrapped = showRaw as Record<string, unknown>
-  const root =
-    wrapped.result && typeof wrapped.result === "object" && !Array.isArray(wrapped.result)
-      ? (wrapped.result as Record<string, unknown>)
-      : wrapped
-  const league = (root.league as Record<string, unknown> | undefined) ?? root
-  const direct = league.current_round ?? league.round ?? root.current_round ?? root.round
-  const parsed = typeof direct === "number" ? direct : typeof direct === "string" ? Number(direct) : null
-  if (parsed != null && Number.isFinite(parsed)) return Math.trunc(parsed)
+function defaultRoundFromDraw(draw2026Data: Draw2026Data | null | undefined): number {
+  const now = Date.now()
+  const upcomingRound = draw2026Data?.rows.find((row) => {
+    const kickoff = Date.parse(row.kickoff)
+    return Number.isFinite(kickoff) && kickoff >= now
+  })?.round
 
-  const fixture = league.fixture
-  if (fixture && typeof fixture === "object" && !Array.isArray(fixture)) {
-    const rounds = Object.keys(fixture)
-      .map((key) => Number(key))
-      .filter((value) => Number.isFinite(value))
-      .sort((a, b) => a - b)
-    if (rounds.length > 0) return Math.trunc(rounds[0])
-  }
-
-  return null
+  return upcomingRound ?? draw2026Data?.rows[0]?.round ?? 1
 }
 
-async function fetchFantasyBrowserJson(url: string): Promise<unknown> {
-  let response: Response
-  try {
-    response = await fetch(url, {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-      headers: {
-        accept: "application/json",
-      },
-    })
-  } catch {
-    throw new Error("Browser import failed before the request completed. On localhost this is usually because fantasy.nrl.com does not allow cross-origin browser reads from your app, even if you are logged in. Use pasted JSON instead.")
-  }
-
-  const text = await response.text()
-  const trimmed = text.trim()
-
-  if (!trimmed) {
-    throw new Error("Fantasy returned an empty response.")
-  }
-
-  if (trimmed.startsWith("<")) {
-    throw new Error("Fantasy returned HTML instead of JSON. Make sure you are signed into fantasy.nrl.com in this browser and have the league open.")
-  }
-
-  let payload: unknown
-  try {
-    payload = JSON.parse(trimmed)
-  } catch {
-    throw new Error("Fantasy returned invalid JSON.")
-  }
-
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    const errorRows = (payload as { errors?: Array<{ code?: unknown; text?: unknown }> }).errors
-    if (Array.isArray(errorRows) && errorRows.length > 0) {
-      const authError = errorRows.find((entry) => Number(entry.code) === 401)
-      if (authError) {
-        throw new Error(
-          typeof authError.text === "string"
-            ? `Fantasy denied the request: ${authError.text}. Make sure you are logged in and can open that league in the same browser session.`
-            : "Fantasy requires authorization for that league. Make sure you are logged in and can open it in the same browser session."
-        )
-      }
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(`Fantasy request failed: ${response.status} ${response.statusText}`)
-  }
-
-  return payload
+function formatCompactPlayerName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length <= 1) return name
+  return `${parts[0]?.[0] ?? ""}. ${parts.slice(1).join(" ")}`
 }
 
-function buildFantasyImportHelperSnippet({
-  leagueId,
-  round,
-  targetOrigin,
-}: {
-  leagueId: string
-  round: number | null
-  targetOrigin: string
-}): string {
-  return `(async () => {
-  const leagueId = ${JSON.stringify(leagueId)};
-  const roundOverride = ${round == null ? "null" : String(round)};
-  const targetOrigin = ${JSON.stringify(targetOrigin)};
-  const targetWindow = window.opener;
-
-  if (!targetWindow) {
-    alert("Reopen the Fantasy helper from the NRL app tab so the import can send data back automatically.");
-    return;
-  }
-
-  const inferRound = (showRaw) => {
-    if (!showRaw || typeof showRaw !== "object" || Array.isArray(showRaw)) return null;
-    const wrapped = showRaw;
-    const root =
-      wrapped.result && typeof wrapped.result === "object" && !Array.isArray(wrapped.result)
-        ? wrapped.result
-        : wrapped;
-    const league = root.league && typeof root.league === "object" && !Array.isArray(root.league) ? root.league : root;
-    const direct = league.current_round ?? league.round ?? root.current_round ?? root.round;
-    const parsed = typeof direct === "number" ? direct : typeof direct === "string" ? Number(direct) : null;
-    if (parsed != null && Number.isFinite(parsed)) return Math.trunc(parsed);
-
-    const fixture = league.fixture;
-    if (fixture && typeof fixture === "object" && !Array.isArray(fixture)) {
-      const rounds = Object.keys(fixture)
-        .map((key) => Number(key))
-        .filter((value) => Number.isFinite(value))
-        .sort((a, b) => a - b);
-      if (rounds.length > 0) return Math.trunc(rounds[0]);
-    }
-
-    return null;
-  };
-
-  const fetchJson = async (url) => {
-    const response = await fetch(url, {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-      headers: { accept: "application/json" },
-    });
-
-    const text = await response.text();
-    const trimmed = text.trim();
-
-    if (!trimmed) throw new Error("Fantasy returned an empty response.");
-    if (trimmed.startsWith("<")) {
-      throw new Error("Fantasy returned HTML instead of JSON. Make sure you are signed into fantasy.nrl.com in this tab.");
-    }
-
-    const payload = JSON.parse(trimmed);
-    if (payload && typeof payload === "object" && !Array.isArray(payload) && Array.isArray(payload.errors) && payload.errors.length > 0) {
-      const authError = payload.errors.find((entry) => Number(entry?.code) === 401);
-      if (authError) {
-        throw new Error(
-          typeof authError.text === "string"
-            ? "Fantasy denied the request: " + authError.text
-            : "Fantasy requires authorization for that league."
-        );
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error("Fantasy request failed: " + response.status + " " + response.statusText);
-    }
-
-    return payload;
-  };
-
-  try {
-    const showRaw = await fetchJson("https://fantasy.nrl.com/nrl_draft/api/leagues_draft/show?id=" + encodeURIComponent(leagueId) + "&_=" + Date.now());
-    const round = roundOverride ?? inferRound(showRaw);
-    if (round == null) throw new Error("Unable to infer the round from the league response. Enter the round manually in the NRL app.");
-    const rostersRaw = await fetchJson("https://fantasy.nrl.com/nrl_draft/api/leagues_draft/rosters?league_id=" + encodeURIComponent(leagueId) + "&round=" + round);
-    targetWindow.postMessage({ type: "nrl-draft-import", leagueId, round, showRaw, rostersRaw }, targetOrigin);
-    alert("Draft data sent back to the NRL app tab.");
-    window.close();
-  } catch (error) {
-    console.error(error);
-    alert(error instanceof Error ? error.message : String(error));
-  }
-})();`
+function buildPlayerOptionLabel(player: DraftPricingPoolPlayer): string {
+  return player.name
 }
 
 function playerImageSources(
   player: DraftPricingPlayer,
+  playerPoolById: Map<number, DraftPricingPoolPlayer>,
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
   playerImages: PlayerImageRecord[],
 ): string[] {
   const canonicalName = player.id != null ? fantasyPlayersById.get(player.id)?.name ?? player.name : player.name
-  const row = resolvePlayerImage(canonicalName, null, playerImages)
+  const teamHint = player.id != null ? playerPoolById.get(player.id)?.team ?? null : null
+  const row = resolvePlayerImage(canonicalName, teamHint, playerImages)
   const out: string[] = []
   const seen = new Set<string>()
 
@@ -293,39 +120,7 @@ function playerImageSources(
     pushVariants(source)
   }
   push("/body-shot.png")
-  return out
-}
 
-function captainTeamKey(matchupId: string, teamId: string): string {
-  return `${matchupId}:${teamId}`
-}
-
-function captainPlayerKey(player: DraftPricingPlayer, index: number): string {
-  return `${player.id ?? player.name}:${index}`
-}
-
-function defaultCaptainKey(players: DraftPricingPlayer[]): string | null {
-  let bestIndex = -1
-  let bestProjection = -Infinity
-
-  for (let index = 0; index < players.length; index += 1) {
-    const player = players[index]
-    if (player.isBench || player.isEmergency || player.isBye) continue
-    if (player.projection > bestProjection) {
-      bestProjection = player.projection
-      bestIndex = index
-    }
-  }
-
-  return bestIndex >= 0 ? captainPlayerKey(players[bestIndex], bestIndex) : null
-}
-
-function defaultCaptainSelectionsForResult(result: DraftPricingResult): CaptainSelections {
-  const out: CaptainSelections = {}
-  for (const matchup of result.matchups) {
-    out[captainTeamKey(matchup.id, matchup.homeTeam.id)] = defaultCaptainKey(matchup.homeTeam.players)
-    out[captainTeamKey(matchup.id, matchup.awayTeam.id)] = defaultCaptainKey(matchup.awayTeam.players)
-  }
   return out
 }
 
@@ -333,269 +128,558 @@ function adjustedPlayerProjection(player: DraftPricingPlayer, isCaptain: boolean
   return player.projection + (isCaptain ? player.projection : 0)
 }
 
-function adjustedPlayerActual(player: DraftPricingPlayer, isCaptain: boolean): number | null {
-  if (player.actualScore == null) return null
-  return player.actualScore + (isCaptain ? player.actualScore : 0)
+function effectivePlayerScore(player: DraftPricingPlayer, isCaptain: boolean): number {
+  if (player.actualScore != null) {
+    return player.actualScore * (isCaptain ? 2 : 1)
+  }
+  return adjustedPlayerProjection(player, isCaptain)
 }
 
-function TeamRosterColumn({
-  matchupId,
-  teamId,
-  title,
-  coach,
-  projected,
-  actual,
+function effectivePlayerVariance(player: DraftPricingPlayer, isCaptain: boolean): number {
+  if (player.actualScore != null) return 0
+  if (Math.abs(player.projection) <= 0) return 0
+  const multiplier = isCaptain ? 2 : 1
+  return (player.standardDeviation * multiplier) ** 2
+}
+
+function erf(x: number): number {
+  const sign = x < 0 ? -1 : 1
+  const absX = Math.abs(x)
+  const a1 = 0.254829592
+  const a2 = -0.284496736
+  const a3 = 1.421413741
+  const a4 = -1.453152027
+  const a5 = 1.061405429
+  const p = 0.3275911
+  const t = 1 / (1 + p * absX)
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-absX * absX)
+  return sign * y
+}
+
+function normalCdf(x: number): number {
+  return 0.5 * (1 + erf(x / Math.sqrt(2)))
+}
+
+function fairDecimalOdds(probability: number): number {
+  const bounded = Math.min(0.985, Math.max(0.015, probability))
+  return Math.round((1 / bounded) * 100) / 100
+}
+
+function resolveCaptainId(
+  playerIds: Array<number | null>,
+  preferredCaptainId: number | null,
+  playerPoolById: Map<number, DraftPricingPoolPlayer>,
+): number | null {
+  const selectedIds = playerIds.filter((playerId): playerId is number => playerId != null)
+  if (selectedIds.length === 0) return null
+
+  if (preferredCaptainId != null && selectedIds.includes(preferredCaptainId)) {
+    const preferredPlayer = playerPoolById.get(preferredCaptainId)
+    if (preferredPlayer && !preferredPlayer.isBye) {
+      return preferredCaptainId
+    }
+  }
+
+  const bestActive = selectedIds
+    .map((playerId) => playerPoolById.get(playerId))
+    .filter((player): player is DraftPricingPoolPlayer => player != null)
+    .filter((player) => !player.isBye)
+    .sort((a, b) => b.projection - a.projection)[0]
+
+  return bestActive?.id ?? selectedIds[0]
+}
+
+function buildSlotOptionLists(
+  currentSlots: Array<number | null>,
+  otherSlots: Array<number | null>,
+  playerPool: DraftPricingPoolPlayer[],
+  optionLabelById: Map<number, string>,
+  slotLabels: readonly string[],
+): string[][] {
+  const globallySelected = new Set<number>(
+    [...currentSlots, ...otherSlots].filter((playerId): playerId is number => playerId != null)
+  )
+
+  return currentSlots.map((currentId, index) =>
+    playerPool
+      .filter((player) => player.positionLabels.includes(slotLabels[index] ?? ""))
+      .filter((player) => !globallySelected.has(player.id) || player.id === currentId)
+      .map((player) => optionLabelById.get(player.id))
+      .filter((label): label is string => Boolean(label))
+  )
+}
+
+function buildBoardPlayer(
+  playerId: number | null,
+  slotLabel: string,
+  playerPoolById: Map<number, DraftPricingPoolPlayer>,
+): DraftPricingPlayer | null {
+  if (playerId == null) return null
+  const player = playerPoolById.get(playerId)
+  if (!player) return null
+
+  return {
+    id: player.id,
+    name: player.name,
+    projection: player.projection,
+    actualScore: player.actualScore,
+    standardDeviation: player.standardDeviation,
+    slotLabel,
+    isBench: false,
+    isBye: player.isBye,
+    isEmergency: false,
+  }
+}
+
+function summariseBoardTeam(players: Array<DraftPricingPlayer | null>, captainId: number | null) {
+  const activePlayers = players.filter((player): player is DraftPricingPlayer => Boolean(player && !player.isBye))
+  const captain = activePlayers.find((player) => player.id === captainId) ?? null
+  const total = activePlayers.reduce(
+    (sum, player) => sum + effectivePlayerScore(player, player.id === captain?.id),
+    0
+  )
+  const variance = activePlayers.reduce(
+    (sum, player) => sum + effectivePlayerVariance(player, player.id === captain?.id),
+    0
+  )
+
+  return { total, variance, captain }
+}
+
+function teamAvatarSources(
+  players: Array<DraftPricingPlayer | null>,
+  selectedCaptainId: number | null,
+  playerPoolById: Map<number, DraftPricingPoolPlayer>,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  playerImages: PlayerImageRecord[],
+): string[] {
+  const validPlayers = players.filter((player): player is DraftPricingPlayer => player != null)
+  const captain = validPlayers.find((player) => player.id === selectedCaptainId)
+  const leadPlayer = captain ?? validPlayers[0] ?? null
+  if (!leadPlayer) return ["/body-shot.png"]
+  return playerImageSources(leadPlayer, playerPoolById, fantasyPlayersById, playerImages)
+}
+
+function ProjectionPill({
+  value,
+  tone = "default",
+  size = "sm",
+}: {
+  value: number | null
+  tone?: "default" | "captain" | "played"
+  size?: "sm" | "lg"
+}) {
+  return (
+    <div
+      className={`inline-flex flex-col items-center justify-center rounded-full border font-semibold ${
+        size === "lg"
+          ? "min-w-[54px] px-2 py-1 text-[15px] leading-none md:min-w-[66px] md:px-2.5 md:text-[17px]"
+          : "min-w-[36px] px-1.5 py-0.5 text-[10px] leading-none md:min-w-[40px] md:px-2 md:text-[11px]"
+      } ${
+        tone === "played"
+          ? "border-emerald-400 bg-emerald-500/14 text-emerald-200"
+          : tone === "captain"
+          ? "border-orange-400 bg-orange-500/14 text-orange-200"
+          : "border-violet-400/70 bg-[#20284a] text-violet-200"
+      }`}
+    >
+      <span>{value == null ? "--" : Math.round(value)}</span>
+    </div>
+  )
+}
+
+function TeamHeader({
+  side,
+  teamLabel,
+  onTeamLabelChange,
   players,
-  selectedCaptainKey,
-  onSelectCaptain,
+  playerPoolById,
   fantasyPlayersById,
   playerImages,
+  savedTeams,
+  onLoadSavedTeam,
+  onSaveCurrentTeam,
+  onDeleteSavedTeam,
 }: {
-  matchupId: string
-  teamId: string
-  title: string
-  coach: string | null
-  projected: number
-  actual: number | null
-  players: DraftPricingPlayer[]
-  selectedCaptainKey: string | null
-  onSelectCaptain: (captainKey: string | null) => void
+  side: "left" | "right"
+  teamLabel: string
+  onTeamLabelChange: (value: string) => void
+  players: Array<DraftPricingPlayer | null>
+  playerPoolById: Map<number, DraftPricingPoolPlayer>
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
   playerImages: PlayerImageRecord[]
+  savedTeams: SavedDraftTeamPreset[]
+  onLoadSavedTeam: (teamId: string) => void
+  onSaveCurrentTeam: () => void
+  onDeleteSavedTeam: (teamId: string) => void
 }) {
-  const starters = players.filter((player) => !player.isBench)
-  const benchPlayers = players.filter((player) => player.isBench)
+  const selectedPlayers = players.filter((player): player is DraftPricingPlayer => player != null)
+  const selectedCount = selectedPlayers.length
+  const [selectedSavedTeamId, setSelectedSavedTeamId] = useState("")
+  const activeCaptainId =
+    selectedPlayers.find((player) => !player.isBye && player.id != null)?.id ?? null
+  const avatarSources = teamAvatarSources(players, activeCaptainId, playerPoolById, fantasyPlayersById, playerImages)
+  const alignClass = side === "left" ? "items-start text-left" : "items-end text-right"
 
   return (
-    <div className="rounded-xl border border-nrl-border bg-nrl-panel p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-base font-semibold text-nrl-text">{title}</div>
-          {coach ? <div className="mt-1 text-xs text-nrl-muted">{coach}</div> : null}
-        </div>
-        <div className="text-right">
-          <div className="text-lg font-bold text-nrl-accent">{formatScore(projected)}</div>
-          <div className="text-[11px] text-nrl-muted">Projected</div>
-          {actual != null ? <div className="mt-1 text-xs font-semibold text-nrl-text">Live {formatScore(actual)}</div> : null}
-        </div>
+    <div className={`flex flex-col ${alignClass}`}>
+      <div className="flex h-10 w-10 items-end justify-center overflow-hidden rounded-full border border-nrl-border bg-[linear-gradient(180deg,#243055,#181f39)] shadow-sm md:h-14 md:w-14">
+        <ImageWithFallback sources={avatarSources} alt={teamLabel} className="h-full w-full object-cover object-top" />
       </div>
-
-      <div className="mt-3 space-y-2">
-        {starters.map((player, index) => {
-          const rowCaptainKey = captainPlayerKey(player, index)
-          const canCaptain = !player.isEmergency && !player.isBye
-          const isCaptain = selectedCaptainKey === rowCaptainKey
-          const displayName = player.id != null ? fantasyPlayersById.get(player.id)?.name ?? player.name : player.name
-          const sources = playerImageSources(player, fantasyPlayersById, playerImages)
-          const playerProjection = adjustedPlayerProjection(player, isCaptain)
-          const playerActual = adjustedPlayerActual(player, isCaptain)
-          return (
-            <div
-              key={`${player.id ?? player.name}-${index}`}
-              className={`flex items-center gap-3 rounded-lg border px-2.5 py-2 ${
-                player.isEmergency
-                  ? "border-nrl-border/60 bg-nrl-panel-2/50 opacity-65"
-                  : player.isBye
-                    ? "border-nrl-border/60 bg-nrl-panel-2/40 opacity-60"
-                  : isCaptain
-                    ? "border-orange-400/80 bg-orange-500/8 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]"
-                    : "border-nrl-border bg-nrl-panel-2"
-              }`}
-            >
-              <div className="flex h-14 w-14 shrink-0 items-end justify-center overflow-hidden rounded-lg bg-[radial-gradient(circle_at_50%_18%,rgba(71,255,182,0.14),transparent_48%),linear-gradient(180deg,rgba(33,40,73,0.96),rgba(16,20,39,0.98))]">
-                {sources.length > 0 ? (
-                  <ImageWithFallback sources={sources} alt={displayName} className="h-full w-full object-contain object-bottom" />
-                ) : (
-                  <div className="text-[10px] text-nrl-muted">No image</div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-nrl-text">{displayName}</div>
-                <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-nrl-muted">
-                  {player.isEmergency ? <span className="text-amber-300">Emergency</span> : null}
-                  {player.isBye ? <span className="text-rose-300">Bye</span> : null}
-                  {isCaptain ? <span className="text-orange-300">Captain</span> : null}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-semibold text-nrl-accent">{formatScore(playerProjection)}</div>
-                <div className="text-[10px] text-nrl-muted">Proj</div>
-                {playerActual != null ? (
-                  <div className="mt-1 text-[11px] font-semibold text-nrl-text">{formatScore(playerActual)}</div>
-                ) : null}
-              </div>
-              {canCaptain ? (
-                <button
-                  type="button"
-                  onClick={() => onSelectCaptain(isCaptain ? null : rowCaptainKey)}
-                  className={`cursor-pointer rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${
-                    isCaptain
-                      ? "border-orange-400/80 bg-orange-500/12 text-orange-200"
-                      : "border-nrl-border bg-nrl-panel text-nrl-muted hover:border-orange-400/70 hover:text-orange-200"
-                  }`}
-                >
-                  C
-                </button>
-              ) : null}
-            </div>
-          )
-        })}
-
-        {benchPlayers.length > 0 ? (
-          <>
-            <div className="my-3 border-t border-nrl-border/70 pt-3 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
-              Bench
-            </div>
-            {benchPlayers.map((player, index) => {
-              const displayName = player.id != null ? fantasyPlayersById.get(player.id)?.name ?? player.name : player.name
-              const sources = playerImageSources(player, fantasyPlayersById, playerImages)
-              return (
-                <div
-                  key={`${matchupId}-${teamId}-bench-${player.id ?? player.name}-${index}`}
-                  className="flex items-center gap-3 rounded-lg border border-nrl-border/60 bg-nrl-panel-2/40 px-2.5 py-2 opacity-55"
-                >
-                  <div className="flex h-14 w-14 shrink-0 items-end justify-center overflow-hidden rounded-lg bg-[radial-gradient(circle_at_50%_18%,rgba(71,255,182,0.12),transparent_48%),linear-gradient(180deg,rgba(33,40,73,0.9),rgba(16,20,39,0.96))]">
-                    {sources.length > 0 ? (
-                      <ImageWithFallback sources={sources} alt={displayName} className="h-full w-full object-contain object-bottom grayscale-[0.25]" />
-                    ) : (
-                      <div className="text-[10px] text-nrl-muted">No image</div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-nrl-text">{displayName}</div>
-                    <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-nrl-muted">
-                      <span>Bench</span>
-                      {player.isBye ? <span className="text-rose-300">Bye</span> : null}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-semibold text-nrl-muted">{formatScore(player.projection)}</div>
-                    <div className="text-[10px] text-nrl-muted">Proj</div>
-                    {player.actualScore != null ? (
-                      <div className="mt-1 text-[11px] font-semibold text-nrl-muted">{formatScore(player.actualScore)}</div>
-                    ) : null}
-                  </div>
-                </div>
-              )
-            })}
-          </>
-        ) : null}
+      <div className="mt-1 text-[10px] font-semibold text-nrl-muted md:mt-2 md:text-xs">{selectedCount}/13</div>
+      <input
+        value={teamLabel}
+        onChange={(event) => onTeamLabelChange(event.target.value)}
+        className="mt-1 w-full max-w-[140px] border border-nrl-border bg-[#20284a] px-2 py-1 text-[11px] font-bold text-nrl-text outline-none focus:border-fuchsia-400 md:mt-2 md:max-w-[205px] md:px-2 md:text-[13px]"
+      />
+      <div className="mt-1 flex w-full max-w-[140px] flex-col gap-1.5 md:mt-2 md:max-w-[205px] md:gap-2">
+        <select
+          value={selectedSavedTeamId}
+          onChange={(event) => {
+            const selectedId = event.target.value
+            setSelectedSavedTeamId(selectedId)
+            if (!selectedId) return
+            onLoadSavedTeam(selectedId)
+          }}
+          className="w-full border border-nrl-border bg-[#20284a] px-2 py-1 text-[10px] text-nrl-muted outline-none focus:border-fuchsia-400 md:px-2 md:text-xs"
+        >
+          <option value="">Saved teams</option>
+          {savedTeams.map((savedTeam) => (
+            <option key={savedTeam.id} value={savedTeam.id}>
+              {savedTeam.name}
+            </option>
+          ))}
+        </select>
+        <div className={`flex gap-2 ${side === "right" ? "justify-end" : "justify-start"}`}>
+          <button
+            type="button"
+            onClick={onSaveCurrentTeam}
+            className="border border-nrl-border bg-[#20284a] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text md:px-2 md:text-[10px] md:tracking-[0.14em]"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!selectedSavedTeamId) return
+              onDeleteSavedTeam(selectedSavedTeamId)
+              setSelectedSavedTeamId("")
+            }}
+            disabled={!selectedSavedTeamId}
+            className="border border-nrl-border bg-[#20284a] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-nrl-muted transition-colors hover:border-rose-400 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50 md:px-2 md:text-[10px] md:tracking-[0.14em]"
+          >
+            Delete
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
-function MatchupMarketCard({
-  matchup,
-  captainSelections,
-  onSelectCaptain,
+function EditableBoardRow({
+  slotLabel,
+  leftPlayer,
+  rightPlayer,
+  leftValue,
+  rightValue,
+  leftOptions,
+  rightOptions,
+  onLeftChange,
+  onRightChange,
+  leftCaptainId,
+  rightCaptainId,
+  onLeftCaptainSelect,
+  onRightCaptainSelect,
+  playerPoolById,
   fantasyPlayersById,
   playerImages,
-  expanded,
-  onToggleExpanded,
 }: {
-  matchup: DraftPricingMatchup
-  captainSelections: CaptainSelections
-  onSelectCaptain: (teamSelectionKey: string, captainKey: string | null) => void
+  slotLabel: string
+  leftPlayer: DraftPricingPlayer | null
+  rightPlayer: DraftPricingPlayer | null
+  leftValue: string
+  rightValue: string
+  leftOptions: string[]
+  rightOptions: string[]
+  onLeftChange: (value: string) => void
+  onRightChange: (value: string) => void
+  leftCaptainId: number | null
+  rightCaptainId: number | null
+  onLeftCaptainSelect: (captainId: number | null) => void
+  onRightCaptainSelect: (captainId: number | null) => void
+  playerPoolById: Map<number, DraftPricingPoolPlayer>
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
   playerImages: PlayerImageRecord[]
-  expanded: boolean
-  onToggleExpanded: () => void
 }) {
-  const homeSelectionKey = captainTeamKey(matchup.id, matchup.homeTeam.id)
-  const awaySelectionKey = captainTeamKey(matchup.id, matchup.awayTeam.id)
-  const homeCaptainKey = captainSelections[homeSelectionKey] ?? null
-  const awayCaptainKey = captainSelections[awaySelectionKey] ?? null
-
-  const adjustedTeamTotals = (team: DraftPricingMatchup["homeTeam"], selectedCaptainKey: string | null) => {
-    const starters = team.players.filter((player) => !player.isBench && !player.isEmergency && !player.isBye)
-    const selectedPlayer = starters.find((player, index) => captainPlayerKey(player, index) === selectedCaptainKey) ?? null
-    const captainProjectionBonus = selectedPlayer?.projection ?? 0
-    const captainActualBonus = selectedPlayer?.actualScore ?? null
-    return {
-      projected: team.projectedTotal + captainProjectionBonus,
-      actual: team.actualTotal == null ? null : team.actualTotal + (captainActualBonus ?? 0),
-      variance: team.standardDeviation ** 2 + (selectedPlayer ? selectedPlayer.standardDeviation ** 2 : 0),
-    }
-  }
-
-  const adjustedHome = adjustedTeamTotals(matchup.homeTeam, homeCaptainKey)
-  const adjustedAway = adjustedTeamTotals(matchup.awayTeam, awayCaptainKey)
-  const marginSd = Math.max(8, Math.sqrt(adjustedHome.variance + adjustedAway.variance))
-  const projectedMargin = adjustedHome.projected - adjustedAway.projected
-  const homeWinProbability = normalCdf(projectedMargin / marginSd)
-  const awayWinProbability = 1 - homeWinProbability
-  const homeOdds = fairDecimalOdds(homeWinProbability)
-  const awayOdds = fairDecimalOdds(awayWinProbability)
+  const leftName = leftPlayer ? fantasyPlayersById.get(leftPlayer.id ?? -1)?.name ?? leftPlayer.name : ""
+  const rightName = rightPlayer ? fantasyPlayersById.get(rightPlayer.id ?? -1)?.name ?? rightPlayer.name : ""
 
   return (
-    <article className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-            {matchup.round != null ? `Round ${matchup.round}` : "Matchup"}
-          </div>
-          <div className="mt-1 text-lg font-semibold text-nrl-text">
-            {matchup.homeTeam.label} vs {matchup.awayTeam.label}
-          </div>
-          <div className="mt-1 text-xs text-nrl-muted">
-            {matchup.homeTeam.coachLabel ?? matchup.homeTeam.label} vs {matchup.awayTeam.coachLabel ?? matchup.awayTeam.label}
-          </div>
-        </div>
+    <div className="grid grid-cols-[12px_minmax(0,1fr)_38px_18px_38px_minmax(0,1fr)_12px] items-center gap-1 border-t border-nrl-border px-1.5 py-1.5 first:border-t-0 md:grid-cols-[16px_minmax(0,1fr)_48px_54px_48px_minmax(0,1fr)_16px] md:gap-1.5 md:px-2">
+      <div className="text-center text-[8px] font-bold uppercase tracking-[0.1em] text-nrl-muted [writing-mode:vertical-rl] rotate-180 md:text-[10px] md:tracking-[0.12em]">
+        {slotLabel}
+      </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="rounded-md border border-nrl-accent/45 bg-nrl-accent/10 px-4 py-2 text-center">
-            <div className="text-[10px] uppercase tracking-wide text-nrl-muted">{matchup.homeTeam.label}</div>
-            <div className="mt-1 text-lg font-bold text-nrl-accent">
-              {formatOdds(homeOdds)}
-            </div>
+      <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-1 md:grid-cols-[30px_minmax(0,1fr)] md:gap-1.5">
+        <div className={`group relative flex h-6 w-6 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${leftPlayer?.id === leftCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
+          <ImageWithFallback
+            sources={leftPlayer ? playerImageSources(leftPlayer, playerPoolById, fantasyPlayersById, playerImages) : ["/body-shot.png"]}
+            alt={leftName || "Player"}
+            className="h-full w-full object-cover object-top"
+          />
+        </div>
+        <div className="min-w-0 max-w-[106px] md:max-w-[131px]">
+          <div className="truncate text-[10px] font-semibold text-nrl-text md:text-[13px]">
+            {leftPlayer ? formatCompactPlayerName(leftName) : "-"}
           </div>
-          <div className="rounded-md border border-nrl-border bg-nrl-panel-2 px-4 py-2 text-center">
-            <div className="text-[10px] uppercase tracking-wide text-nrl-muted">{matchup.awayTeam.label}</div>
-            <div className="mt-1 text-lg font-bold text-nrl-text">
-              {formatOdds(awayOdds)}
-            </div>
+          <div className="mt-0.5 grid grid-cols-[minmax(0,1fr)_22px] items-center gap-1 md:grid-cols-[minmax(0,1fr)_24px]">
+            <SearchableSelect
+              label=""
+              value={leftValue}
+              options={leftOptions}
+              onChange={onLeftChange}
+              placeholder={`Select ${slotLabel}`}
+            />
+            <button
+              type="button"
+              onClick={() => onLeftCaptainSelect(leftPlayer?.id === leftCaptainId ? null : leftPlayer?.id ?? null)}
+              disabled={!leftPlayer || leftPlayer.isBye}
+              aria-label={leftPlayer?.id === leftCaptainId ? `Unset ${leftName} as captain` : `Set ${leftName || "player"} as captain`}
+              className={`h-[26px] rounded-md border text-[10px] font-bold uppercase leading-none transition-colors md:h-[28px] ${
+                leftPlayer?.id === leftCaptainId
+                  ? "border-orange-400 bg-orange-500/14 text-orange-200"
+                  : "border-nrl-border bg-[#20284a] text-nrl-muted hover:border-orange-400 hover:text-orange-200"
+              } disabled:cursor-not-allowed disabled:opacity-40`}
+            >
+              C
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onToggleExpanded}
-            className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
-          >
-            {expanded ? "Hide Teams" : "Show Teams"}
-          </button>
         </div>
       </div>
 
-      {expanded ? (
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <TeamRosterColumn
-            matchupId={matchup.id}
-            teamId={matchup.homeTeam.id}
-            title={matchup.homeTeam.label}
-            coach={matchup.homeTeam.coachLabel}
-            projected={Math.round(adjustedHome.projected * 10) / 10}
-            actual={adjustedHome.actual == null ? null : Math.round(adjustedHome.actual * 10) / 10}
-            players={matchup.homeTeam.players}
-            selectedCaptainKey={homeCaptainKey}
-            onSelectCaptain={(captainKey) => onSelectCaptain(homeSelectionKey, captainKey)}
-            fantasyPlayersById={fantasyPlayersById}
-            playerImages={playerImages}
-          />
-          <TeamRosterColumn
-            matchupId={matchup.id}
-            teamId={matchup.awayTeam.id}
-            title={matchup.awayTeam.label}
-            coach={matchup.awayTeam.coachLabel}
-            projected={Math.round(adjustedAway.projected * 10) / 10}
-            actual={adjustedAway.actual == null ? null : Math.round(adjustedAway.actual * 10) / 10}
-            players={matchup.awayTeam.players}
-            selectedCaptainKey={awayCaptainKey}
-            onSelectCaptain={(captainKey) => onSelectCaptain(awaySelectionKey, captainKey)}
-            fantasyPlayersById={fantasyPlayersById}
-            playerImages={playerImages}
+        <div className="flex justify-center">
+          <ProjectionPill
+            value={leftPlayer ? effectivePlayerScore(leftPlayer, leftCaptainId === leftPlayer.id) : null}
+            tone={
+              leftPlayer?.actualScore != null
+                ? "played"
+              : leftPlayer?.id === leftCaptainId
+                ? "captain"
+                : "default"
+          }
+        />
+      </div>
+
+      <div className="text-center text-[8px] font-bold uppercase tracking-[0.08em] text-nrl-muted md:text-[9px] md:tracking-[0.16em]">vs</div>
+
+        <div className="flex justify-center">
+          <ProjectionPill
+            value={rightPlayer ? effectivePlayerScore(rightPlayer, rightCaptainId === rightPlayer.id) : null}
+            tone={
+              rightPlayer?.actualScore != null
+                ? "played"
+              : rightPlayer?.id === rightCaptainId
+                ? "captain"
+                : "default"
+          }
+        />
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_24px] items-center gap-1 md:grid-cols-[minmax(0,1fr)_30px] md:gap-1.5">
+        <div className="min-w-0 max-w-[106px] justify-self-end text-right md:max-w-[131px]">
+          <div className="truncate text-[10px] font-semibold text-nrl-text md:text-[13px]">
+            {rightPlayer ? formatCompactPlayerName(rightName) : "-"}
+          </div>
+          <div className="mt-0.5 grid grid-cols-[22px_minmax(0,1fr)] items-center gap-1 md:grid-cols-[24px_minmax(0,1fr)]">
+            <button
+              type="button"
+              onClick={() => onRightCaptainSelect(rightPlayer?.id === rightCaptainId ? null : rightPlayer?.id ?? null)}
+              disabled={!rightPlayer || rightPlayer.isBye}
+              aria-label={rightPlayer?.id === rightCaptainId ? `Unset ${rightName} as captain` : `Set ${rightName || "player"} as captain`}
+              className={`h-[26px] rounded-md border text-[10px] font-bold uppercase leading-none transition-colors md:h-[28px] ${
+                rightPlayer?.id === rightCaptainId
+                  ? "border-orange-400 bg-orange-500/14 text-orange-200"
+                  : "border-nrl-border bg-[#20284a] text-nrl-muted hover:border-orange-400 hover:text-orange-200"
+              } disabled:cursor-not-allowed disabled:opacity-40`}
+            >
+              C
+            </button>
+            <SearchableSelect
+              label=""
+              value={rightValue}
+              options={rightOptions}
+              onChange={onRightChange}
+              placeholder={`Select ${slotLabel}`}
+            />
+          </div>
+        </div>
+        <div className={`group relative flex h-6 w-6 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${rightPlayer?.id === rightCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
+          <ImageWithFallback
+            sources={rightPlayer ? playerImageSources(rightPlayer, playerPoolById, fantasyPlayersById, playerImages) : ["/body-shot.png"]}
+            alt={rightName || "Player"}
+            className="h-full w-full object-cover object-top"
           />
         </div>
-      ) : null}
+      </div>
+
+      <div className="text-center text-[9px] font-bold uppercase tracking-[0.1em] text-nrl-muted [writing-mode:vertical-rl]">
+        {slotLabel}
+      </div>
+    </div>
+  )
+}
+
+function EditableMatchupBoard({
+  homeLabel,
+  awayLabel,
+  onHomeLabelChange,
+  onAwayLabelChange,
+  homeSlots,
+  awaySlots,
+  captainSelections,
+  onCaptainSelectionChange,
+  onHomeSlotChange,
+  onAwaySlotChange,
+  fantasyPlayersById,
+  playerImages,
+  playerPoolById,
+  optionLabelById,
+  playerIdByOptionLabel,
+  homeSlotOptions,
+  awaySlotOptions,
+  homePrice,
+  awayPrice,
+  savedTeams,
+  onLoadSavedTeamToSide,
+  onSaveSideAsTeam,
+  onDeleteSavedTeam,
+}: {
+  homeLabel: string
+  awayLabel: string
+  onHomeLabelChange: (value: string) => void
+  onAwayLabelChange: (value: string) => void
+  homeSlots: Array<number | null>
+  awaySlots: Array<number | null>
+  captainSelections: CaptainSelections
+  onCaptainSelectionChange: (teamId: "home" | "away", captainId: number | null) => void
+  onHomeSlotChange: (slotIndex: number, playerId: number | null) => void
+  onAwaySlotChange: (slotIndex: number, playerId: number | null) => void
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
+  playerImages: PlayerImageRecord[]
+  playerPoolById: Map<number, DraftPricingPoolPlayer>
+  optionLabelById: Map<number, string>
+  playerIdByOptionLabel: Map<string, number>
+  homeSlotOptions: string[][]
+  awaySlotOptions: string[][]
+  homePrice: number | null
+  awayPrice: number | null
+  savedTeams: SavedDraftTeamPreset[]
+  onLoadSavedTeamToSide: (side: "home" | "away", teamId: string) => void
+  onSaveSideAsTeam: (side: "home" | "away") => void
+  onDeleteSavedTeam: (teamId: string) => void
+}) {
+  const homePlayers = TEAM_SLOT_LABELS.map((slotLabel, index) => buildBoardPlayer(homeSlots[index], slotLabel, playerPoolById))
+  const awayPlayers = TEAM_SLOT_LABELS.map((slotLabel, index) => buildBoardPlayer(awaySlots[index], slotLabel, playerPoolById))
+  const homeSummary = summariseBoardTeam(homePlayers, captainSelections.home)
+  const awaySummary = summariseBoardTeam(awayPlayers, captainSelections.away)
+
+  return (
+    <article className="overflow-hidden border border-nrl-border bg-nrl-panel shadow-[0_18px_45px_rgba(8,12,24,0.22)]">
+      <div className="border-b border-nrl-border bg-nrl-panel px-2 py-3 md:px-4 md:py-5">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 md:items-center md:gap-3">
+          <TeamHeader
+            side="left"
+            teamLabel={homeLabel}
+            onTeamLabelChange={onHomeLabelChange}
+            players={homePlayers}
+            playerPoolById={playerPoolById}
+            fantasyPlayersById={fantasyPlayersById}
+            playerImages={playerImages}
+            savedTeams={savedTeams}
+            onLoadSavedTeam={(teamId) => onLoadSavedTeamToSide("home", teamId)}
+            onSaveCurrentTeam={() => onSaveSideAsTeam("home")}
+            onDeleteSavedTeam={onDeleteSavedTeam}
+          />
+
+          <div className="flex min-w-[92px] flex-col items-center md:min-w-[168px]">
+            <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-nrl-muted md:text-[10px] md:tracking-[0.18em]">
+              Scores
+            </div>
+            <div className="mt-2 flex items-center gap-1 md:mt-2.5 md:gap-2.5">
+              <ProjectionPill value={homeSummary.total} size="lg" />
+              <ProjectionPill value={awaySummary.total} size="lg" />
+            </div>
+            <div className="mt-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-nrl-muted md:mt-4 md:text-[10px] md:tracking-[0.18em]">
+              Odds
+            </div>
+            <div className="mt-2 flex items-center gap-1 md:mt-2 md:gap-2.5">
+              <span className="rounded-full border border-violet-400/70 bg-[#20284a] px-2 py-1 text-[13px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px]">
+                {formatOdds(homePrice)}
+              </span>
+              <span className="rounded-full border border-violet-400/70 bg-[#20284a] px-2 py-1 text-[13px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px]">
+                {formatOdds(awayPrice)}
+              </span>
+            </div>
+          </div>
+
+          <TeamHeader
+            side="right"
+            teamLabel={awayLabel}
+            onTeamLabelChange={onAwayLabelChange}
+            players={awayPlayers}
+            playerPoolById={playerPoolById}
+            fantasyPlayersById={fantasyPlayersById}
+            playerImages={playerImages}
+            savedTeams={savedTeams}
+            onLoadSavedTeam={(teamId) => onLoadSavedTeamToSide("away", teamId)}
+            onSaveCurrentTeam={() => onSaveSideAsTeam("away")}
+            onDeleteSavedTeam={onDeleteSavedTeam}
+          />
+        </div>
+      </div>
+
+      <div className="bg-[#20284a] px-1 py-1.5 text-[10px] font-semibold text-nrl-muted md:px-3 md:text-[11px]">
+        <div className="grid grid-cols-[12px_minmax(0,1fr)_38px_18px_38px_minmax(0,1fr)_12px] items-center gap-1 md:grid-cols-[16px_minmax(0,1fr)_48px_54px_48px_minmax(0,1fr)_16px] md:gap-1.5">
+          <div />
+          <div>{homeLabel}</div>
+          <div className="col-span-3 flex items-center justify-center gap-3 text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-muted md:text-[10px] md:tracking-[0.16em]">
+            <div className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-full bg-violet-300" />
+              <span>Proj</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-300" />
+              <span>Actual</span>
+            </div>
+          </div>
+          <div className="text-right">{awayLabel}</div>
+          <div />
+        </div>
+      </div>
+
+      <div className="overflow-visible bg-nrl-panel">
+        {TEAM_SLOT_LABELS.map((slotLabel, index) => (
+          <EditableBoardRow
+            key={`row-${slotLabel}-${index}`}
+            slotLabel={slotLabel}
+            leftPlayer={homePlayers[index]}
+            rightPlayer={awayPlayers[index]}
+            leftValue={homeSlots[index] != null ? optionLabelById.get(homeSlots[index] ?? -1) ?? "" : ""}
+            rightValue={awaySlots[index] != null ? optionLabelById.get(awaySlots[index] ?? -1) ?? "" : ""}
+            leftOptions={homeSlotOptions[index] ?? []}
+            rightOptions={awaySlotOptions[index] ?? []}
+            onLeftChange={(value) => onHomeSlotChange(index, playerIdByOptionLabel.get(value) ?? null)}
+            onRightChange={(value) => onAwaySlotChange(index, playerIdByOptionLabel.get(value) ?? null)}
+            leftCaptainId={captainSelections.home}
+            rightCaptainId={captainSelections.away}
+            onLeftCaptainSelect={(captainId) => onCaptainSelectionChange("home", captainId)}
+            onRightCaptainSelect={(captainId) => onCaptainSelectionChange("away", captainId)}
+            playerPoolById={playerPoolById}
+            fantasyPlayersById={fantasyPlayersById}
+            playerImages={playerImages}
+          />
+        ))}
+      </div>
     </article>
   )
 }
@@ -605,37 +689,27 @@ export function FantasyDraftPricingPage({
   fantasyPlayers,
   coachProjectionsRaw,
   draw2026Data,
+  playerFantasySdRows,
+  positionFantasySdRows,
 }: {
   playerImages: PlayerImageRecord[]
   fantasyPlayers: FantasyPlayerSnapshot[]
   coachProjectionsRaw: unknown
   draw2026Data: Draw2026Data | null
+  playerFantasySdRows: DraftPricingHistoricalPlayerSd[]
+  positionFantasySdRows: DraftPricingHistoricalPositionSd[]
 }) {
-  const [leagueId, setLeagueId] = useState("62872")
-  const [round, setRound] = useState("")
-  const [showJsonInput, setShowJsonInput] = useState(false)
-  const [showJson, setShowJson] = useState("")
-  const [rostersJson, setRostersJson] = useState("")
-  const [result, setResult] = useState<DraftPricingResult | null>(null)
-  const [banner, setBanner] = useState<BannerState>(null)
-  const [expandedMatchups, setExpandedMatchups] = useState<Record<string, boolean>>({})
-  const [captainSelections, setCaptainSelections] = useState<CaptainSelections>({})
-  const [loadedShowRaw, setLoadedShowRaw] = useState<unknown | null>(null)
-  const [loadedRostersRaw, setLoadedRostersRaw] = useState<unknown | null>(null)
-  const [loadSource, setLoadSource] = useState<DraftLoadSource | null>(null)
-  const [helperSnippet, setHelperSnippet] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const { isLoaded, userId } = useAuth()
+  const currentRound = defaultRoundFromDraw(draw2026Data)
+  const [round, setRound] = useState(String(defaultRoundFromDraw(draw2026Data)))
+  const [homeLabel, setHomeLabel] = useState("Paradisepalms")
+  const [awayLabel, setAwayLabel] = useState("Guns 'R' Us")
+  const [homeSlots, setHomeSlots] = useState<Array<number | null>>(EMPTY_SLOTS)
+  const [awaySlots, setAwaySlots] = useState<Array<number | null>>(EMPTY_SLOTS)
+  const [captainSelections, setCaptainSelections] = useState<CaptainSelections>({ home: null, away: null })
+  const [savedTeams, setSavedTeams] = useState<SavedDraftTeamPreset[]>([])
+  const [hasLoadedSavedState, setHasLoadedSavedState] = useState(false)
 
-  const activeRound = result?.round != null ? String(result.round) : round
-
-  const availableRounds = useMemo(() => result?.availableRounds ?? [], [result])
-  const toggleRounds = useMemo(() => {
-    if (availableRounds.length === 0) return []
-    const active = result?.round ?? null
-    if (active == null) return availableRounds.slice(0, 3)
-    const startIndex = Math.max(0, availableRounds.indexOf(active))
-    return availableRounds.slice(startIndex, startIndex + 3)
-  }, [availableRounds, result?.round])
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
   const fantasyPlayerTeams = useMemo(
     () =>
@@ -645,185 +719,240 @@ export function FantasyDraftPricingPage({
     [fantasyPlayers, playerImages]
   )
 
-  const applyResult = (nextResult: DraftPricingResult) => {
-    setResult(nextResult)
-    setBanner(null)
-    setHelperSnippet(null)
-    setExpandedMatchups(
-      Object.fromEntries(nextResult.matchups.map((matchup) => [matchup.id, true]))
-    )
-    setCaptainSelections(defaultCaptainSelectionsForResult(nextResult))
-  }
+  const roundValue = toRound(round)
+  const storageKey = useMemo(
+    () => `${DRAFT_PRICER_LOCAL_KEY_PREFIX}:${userId ?? "guest"}`,
+    [userId]
+  )
+  const savedTeamsStorageKey = useMemo(
+    () => `${DRAFT_PRICER_SAVED_TEAMS_LOCAL_KEY_PREFIX}:${userId ?? "guest"}`,
+    [userId]
+  )
+  const roundOptions = useMemo(() => {
+    const fromDraw = [...new Set((draw2026Data?.rows ?? []).map((row) => row.round))]
+      .filter((value) => Number.isFinite(value))
+      .sort((a, b) => a - b)
+    if (fromDraw.length > 0) {
+      const currentIndex = Math.max(0, fromDraw.findIndex((value) => value >= currentRound))
+      return fromDraw.slice(currentIndex, currentIndex + 3).map(String)
+    }
+    return Array.from({ length: 3 }, (_, index) => String(currentRound + index))
+  }, [currentRound, draw2026Data])
 
-  const applyImportedPayload = (payload: BrowserImportPayload) => {
-    setLeagueId(payload.leagueId)
-    setRound(String(payload.round))
-    setLoadedShowRaw(payload.showRaw)
-    setLoadedRostersRaw(payload.rostersRaw)
-    setLoadSource("browser")
-    applyResult(
-      buildDraftPricingResult({
-        leagueId: payload.leagueId,
-        round: payload.round,
-        showRaw: payload.showRaw,
-        rostersRaw: payload.rostersRaw,
+  const playerPool = useMemo(
+    () =>
+      buildDraftPricingPlayerPool({
+        round: roundValue,
         projectionsRaw: coachProjectionsRaw,
         fantasyPlayers,
         fantasyPlayerTeams,
         draw2026Data,
-      })
-    )
-    setBanner({ kind: "success", text: "Imported draft data from your Fantasy browser session." })
-  }
+        historicalPlayerSdRows: playerFantasySdRows,
+        historicalPositionSdRows: positionFantasySdRows,
+      }),
+    [roundValue, coachProjectionsRaw, fantasyPlayers, fantasyPlayerTeams, draw2026Data, playerFantasySdRows, positionFantasySdRows]
+  )
 
-  const handleFantasyImportMessage = useEffectEvent((payload: BrowserImportPayload) => {
-    try {
-      applyImportedPayload(payload)
-    } catch (error) {
-      setResult(null)
-      setBanner({ kind: "error", text: error instanceof Error ? error.message : String(error) })
+  const playerPoolById = useMemo(() => new Map(playerPool.map((player) => [player.id, player])), [playerPool])
+  const optionLabelById = useMemo(
+    () => new Map(playerPool.map((player) => [player.id, buildPlayerOptionLabel(player)])),
+    [playerPool]
+  )
+  const playerIdByOptionLabel = useMemo(
+    () => new Map(playerPool.map((player) => [buildPlayerOptionLabel(player), player.id])),
+    [playerPool]
+  )
+
+  const homeSlotOptions = useMemo(
+    () => buildSlotOptionLists(homeSlots, awaySlots, playerPool, optionLabelById, TEAM_SLOT_LABELS),
+    [homeSlots, awaySlots, playerPool, optionLabelById]
+  )
+  const awaySlotOptions = useMemo(
+    () => buildSlotOptionLists(awaySlots, homeSlots, playerPool, optionLabelById, TEAM_SLOT_LABELS),
+    [awaySlots, homeSlots, playerPool, optionLabelById]
+  )
+
+  const duplicateSelectedIds = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (const playerId of [...homeSlots, ...awaySlots]) {
+      if (playerId == null) continue
+      counts.set(playerId, (counts.get(playerId) ?? 0) + 1)
     }
-  })
+    return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([playerId]) => playerId))
+  }, [homeSlots, awaySlots])
+
+  const effectiveCaptainSelections = useMemo(
+    () => ({
+      home: resolveCaptainId(homeSlots, captainSelections.home, playerPoolById),
+      away: resolveCaptainId(awaySlots, captainSelections.away, playerPoolById),
+    }),
+    [homeSlots, awaySlots, captainSelections.home, captainSelections.away, playerPoolById]
+  )
+
+  const homeComplete = homeSlots.every((playerId) => playerId != null)
+  const awayComplete = awaySlots.every((playerId) => playerId != null)
+
+  const marketSummary = useMemo(() => {
+    if (!homeComplete || !awayComplete || duplicateSelectedIds.size > 0) return null
+
+    const homePlayers = TEAM_SLOT_LABELS.map((slotLabel, index) => buildBoardPlayer(homeSlots[index], slotLabel, playerPoolById))
+    const awayPlayers = TEAM_SLOT_LABELS.map((slotLabel, index) => buildBoardPlayer(awaySlots[index], slotLabel, playerPoolById))
+    const homeSummary = summariseBoardTeam(homePlayers, effectiveCaptainSelections.home)
+    const awaySummary = summariseBoardTeam(awayPlayers, effectiveCaptainSelections.away)
+    const margin = homeSummary.total - awaySummary.total
+    const variance = homeSummary.variance + awaySummary.variance
+
+    let homeWinProbability = 0.5
+    if (variance <= 0) {
+      homeWinProbability = margin > 0 ? 1 : margin < 0 ? 0 : 0.5
+    } else {
+      homeWinProbability = normalCdf(margin / Math.sqrt(variance))
+    }
+
+    return {
+      homeOdds: fairDecimalOdds(homeWinProbability),
+      awayOdds: fairDecimalOdds(1 - homeWinProbability),
+    }
+  }, [homeComplete, awayComplete, duplicateSelectedIds, homeSlots, awaySlots, playerPoolById, effectiveCaptainSelections.home, effectiveCaptainSelections.away])
+
+  const homePrice = marketSummary?.homeOdds ?? null
+  const awayPrice = marketSummary?.awayOdds ?? null
 
   useEffect(() => {
-    const onMessage = (event: MessageEvent<unknown>) => {
-      if (event.origin !== "https://fantasy.nrl.com") return
-      const payload = event.data
-      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return
-      if ((payload as { type?: string }).type !== "nrl-draft-import") return
+    if (!isLoaded) return
 
-      handleFantasyImportMessage(payload as BrowserImportPayload)
-    }
-
-    window.addEventListener("message", onMessage)
-    return () => window.removeEventListener("message", onMessage)
-  }, [])
-
-  const startFantasyHelperImport = async (roundOverride?: string, helperWindow?: Window | null) => {
-    const trimmedLeagueId = leagueId.trim()
-    if (!trimmedLeagueId) {
-      throw new Error("League ID is required.")
-    }
-
-    const helperRound = toRound((roundOverride ?? round).trim())
-    const snippet = buildFantasyImportHelperSnippet({
-      leagueId: trimmedLeagueId,
-      round: helperRound,
-      targetOrigin: window.location.origin,
-    })
-    setHelperSnippet(snippet)
-
-    const copied = await copyText(snippet)
-
-    const targetWindow = helperWindow ?? window.open("", "_blank")
-    if (targetWindow) {
-      targetWindow.location.assign("https://fantasy.nrl.com/nrl_draft/")
-    }
-    setBanner({
-      kind: "info",
-      text: targetWindow
-        ? copied
-          ? "Direct import is blocked here. A Fantasy helper script was copied to your clipboard and a Fantasy tab was opened. Paste into that tab's console and press Enter."
-          : "Direct import is blocked here. A Fantasy tab was opened. Copy the helper script below, paste it into that tab's console, and press Enter."
-        : "Direct import is blocked here and the helper tab was blocked by the browser. Allow popups for this page, then try again.",
-    })
-  }
-
-  const prepareHelperWindow = (): Window | null => {
-    const host = window.location.hostname
-    if (host !== "localhost" && host !== "127.0.0.1") return null
-    const helperWindow = window.open("", "_blank")
-    if (helperWindow) {
-      helperWindow.document.title = "Fantasy Import Helper"
-      helperWindow.document.body.innerHTML =
-        "<div style='font-family: system-ui; padding: 24px; color: #d7def7; background: #0f1327;'>Preparing Fantasy import helper...</div>"
-    }
-    return helperWindow
-  }
-
-  const rebuildFromRaw = (showRaw: unknown, rostersRaw: unknown, roundValue: number | null) => {
-    applyResult(
-      buildDraftPricingResult({
-        leagueId: leagueId.trim() || "manual",
-        round: roundValue,
-        showRaw,
-        rostersRaw,
-        projectionsRaw: coachProjectionsRaw,
-        fantasyPlayers,
-        fantasyPlayerTeams,
-        draw2026Data,
-      })
-    )
-  }
-
-  const loadPricingFromBrowser = async (roundOverride?: string, helperWindow?: Window | null) => {
-    setBanner(null)
-    const trimmedLeagueId = leagueId.trim()
     try {
-      const showRaw = await fetchFantasyBrowserJson(`https://fantasy.nrl.com/nrl_draft/api/leagues_draft/show?id=${encodeURIComponent(trimmedLeagueId)}&_=${Date.now()}`)
-      const effectiveRound = toRound((roundOverride ?? round).trim()) ?? inferCurrentRound(showRaw)
-      if (effectiveRound == null) {
-        throw new Error("Unable to infer the round from the league response. Enter the round manually.")
+      const raw = window.localStorage.getItem(storageKey)
+      if (!raw) {
+        setHasLoadedSavedState(true)
+        return
       }
-      const [rostersRaw, projectionsRaw] = await Promise.all([
-        fetchFantasyBrowserJson(`https://fantasy.nrl.com/nrl_draft/api/leagues_draft/rosters?league_id=${encodeURIComponent(trimmedLeagueId)}&round=${effectiveRound}`),
-        Promise.resolve(coachProjectionsRaw),
-      ])
 
-      setLoadedShowRaw(showRaw)
-      setLoadedRostersRaw(rostersRaw)
-      setLoadSource("browser")
-      helperWindow?.close()
-      applyResult(
-        buildDraftPricingResult({
-          leagueId: trimmedLeagueId,
-          round: effectiveRound,
-          showRaw,
-          rostersRaw,
-          projectionsRaw,
-          fantasyPlayers,
-          fantasyPlayerTeams,
-          draw2026Data,
+      const parsed = JSON.parse(raw) as Partial<SavedDraftPricerState>
+      if (typeof parsed.round === "string") setRound(parsed.round)
+      if (typeof parsed.homeLabel === "string") setHomeLabel(parsed.homeLabel)
+      if (typeof parsed.awayLabel === "string") setAwayLabel(parsed.awayLabel)
+      if (Array.isArray(parsed.homeSlots) && parsed.homeSlots.length === TEAM_SLOT_LABELS.length) {
+        setHomeSlots(parsed.homeSlots.map((value) => (typeof value === "number" ? value : null)))
+      }
+      if (Array.isArray(parsed.awaySlots) && parsed.awaySlots.length === TEAM_SLOT_LABELS.length) {
+        setAwaySlots(parsed.awaySlots.map((value) => (typeof value === "number" ? value : null)))
+      }
+      if (parsed.captainSelections && typeof parsed.captainSelections === "object") {
+        setCaptainSelections({
+          home: typeof parsed.captainSelections.home === "number" ? parsed.captainSelections.home : null,
+          away: typeof parsed.captainSelections.away === "number" ? parsed.captainSelections.away : null,
         })
-      )
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      const directImportBlocked =
-        message.includes("Browser import failed before the request completed") ||
-        message.includes("Failed to fetch")
-
-      if (!directImportBlocked) {
-        helperWindow?.close()
-        throw error
       }
 
-      await startFantasyHelperImport(roundOverride, helperWindow)
+      const rawSavedTeams = window.localStorage.getItem(savedTeamsStorageKey)
+      if (rawSavedTeams) {
+        const parsedSavedTeams = JSON.parse(rawSavedTeams)
+        if (Array.isArray(parsedSavedTeams)) {
+          setSavedTeams(
+            parsedSavedTeams.flatMap((row) => {
+              if (!row || typeof row !== "object") return []
+              const preset = row as Partial<SavedDraftTeamPreset>
+              if (typeof preset.id !== "string" || typeof preset.name !== "string" || typeof preset.label !== "string") return []
+              if (!Array.isArray(preset.slots) || preset.slots.length !== TEAM_SLOT_LABELS.length) return []
+              return [{
+                id: preset.id,
+                name: preset.name,
+                label: preset.label,
+                slots: preset.slots.map((value) => (typeof value === "number" ? value : null)),
+                captainId: typeof preset.captainId === "number" ? preset.captainId : null,
+                updatedAt: typeof preset.updatedAt === "string" ? preset.updatedAt : new Date(0).toISOString(),
+              }]
+            })
+          )
+        }
+      }
+    } catch {
+      // Ignore bad saved payloads and fall back to defaults.
+    } finally {
+      setHasLoadedSavedState(true)
     }
+  }, [isLoaded, savedTeamsStorageKey, storageKey])
+
+  useEffect(() => {
+    if (!hasLoadedSavedState) return
+
+    const payload: SavedDraftPricerState = {
+      round,
+      homeLabel,
+      awayLabel,
+      homeSlots,
+      awaySlots,
+      captainSelections,
+    }
+
+    window.localStorage.setItem(storageKey, JSON.stringify(payload))
+  }, [hasLoadedSavedState, storageKey, round, homeLabel, awayLabel, homeSlots, awaySlots, captainSelections])
+
+  useEffect(() => {
+    if (!hasLoadedSavedState) return
+    window.localStorage.setItem(savedTeamsStorageKey, JSON.stringify(savedTeams))
+  }, [hasLoadedSavedState, savedTeams, savedTeamsStorageKey])
+
+  useEffect(() => {
+    if (roundOptions.length === 0) return
+    if (!roundOptions.includes(round)) {
+      setRound(roundOptions[0] ?? String(currentRound))
+    }
+  }, [currentRound, round, roundOptions])
+
+  const saveSideAsTeam = (side: "home" | "away") => {
+    const sourceSlots = side === "home" ? homeSlots : awaySlots
+    const sourceLabel = side === "home" ? homeLabel : awayLabel
+    const sourceCaptainId = side === "home" ? effectiveCaptainSelections.home : effectiveCaptainSelections.away
+    const selectedCount = sourceSlots.filter((playerId) => playerId != null).length
+    if (selectedCount === 0) return
+
+    const suggestedName = sourceLabel.trim() || `${side === "home" ? "Home" : "Away"} Team`
+    const rawName = window.prompt("Save draft team as", suggestedName)
+    const name = rawName?.trim()
+    if (!name) return
+
+    setSavedTeams((current) => {
+      const existing = current.find((team) => team.name.toLowerCase() === name.toLowerCase())
+      const nextPreset: SavedDraftTeamPreset = {
+        id: existing?.id ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        name,
+        label: sourceLabel.trim() || name,
+        slots: [...sourceSlots],
+        captainId: sourceCaptainId,
+        updatedAt: new Date().toISOString(),
+      }
+
+      const next = existing
+        ? current.map((team) => (team.id === existing.id ? nextPreset : team))
+        : [nextPreset, ...current]
+
+      return [...next].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    })
   }
 
-  const loadPricingFromPastedJson = async () => {
-    setBanner(null)
+  const loadSavedTeamToSide = (side: "home" | "away", teamId: string) => {
+    const preset = savedTeams.find((team) => team.id === teamId)
+    if (!preset) return
 
-    let parsedShow: unknown
-    let parsedRosters: unknown
-
-    try {
-      parsedShow = JSON.parse(showJson)
-    } catch {
-      throw new Error("The pasted league show JSON is invalid.")
+    if (side === "home") {
+      setHomeLabel(preset.label)
+      setHomeSlots([...preset.slots])
+      setCaptainSelections((current) => ({ ...current, home: preset.captainId }))
+      return
     }
 
-    try {
-      parsedRosters = JSON.parse(rostersJson)
-    } catch {
-      throw new Error("The pasted roster JSON is invalid.")
-    }
+    setAwayLabel(preset.label)
+    setAwaySlots([...preset.slots])
+    setCaptainSelections((current) => ({ ...current, away: preset.captainId }))
+  }
 
-    const effectiveRound = toRound(round.trim()) ?? inferCurrentRound(parsedShow)
-    setLoadedShowRaw(parsedShow)
-    setLoadedRostersRaw(parsedRosters)
-    setLoadSource("pasted")
-    rebuildFromRaw(parsedShow, parsedRosters, effectiveRound)
+  const deleteSavedTeam = (teamId: string) => {
+    const preset = savedTeams.find((team) => team.id === teamId)
+    if (!preset) return
+    if (!window.confirm(`Delete saved team "${preset.name}"?`)) return
+    setSavedTeams((current) => current.filter((team) => team.id !== teamId))
   }
 
   return (
@@ -838,246 +967,70 @@ export function FantasyDraftPricingPage({
       </div>
 
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl">
-            <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Draft Matchup Prices</div>
-            <h1 className="mt-1 text-xl font-bold text-nrl-text">Price draft and H2H leagues from live projections</h1>
-          </div>
+        <div className="mb-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent xl:leading-none">Draft Matchup Pricer</div>
 
-          <form
-            className="grid gap-3 sm:grid-cols-[minmax(140px,180px)_120px_auto]"
-            onSubmit={(event) => {
-              event.preventDefault()
-              const helperWindow = prepareHelperWindow()
-              startTransition(() => {
-                void loadPricingFromBrowser(undefined, helperWindow).catch((loadError) => {
-                  setResult(null)
-                  setBanner({ kind: "error", text: loadError instanceof Error ? loadError.message : String(loadError) })
-                })
-              })
-            }}
-          >
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">League ID</span>
-              <input
-                value={leagueId}
-                onChange={(event) => setLeagueId(event.target.value)}
-                placeholder="62872"
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">Round</span>
-              <input
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex min-w-[160px] flex-col">
+              <select
                 value={round}
                 onChange={(event) => setRound(event.target.value)}
-                placeholder="Auto"
-                inputMode="numeric"
                 className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={!leagueId.trim() || isPending}
-              className="cursor-pointer rounded-md border border-nrl-accent/45 bg-nrl-accent/10 px-4 py-2 text-sm font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/16 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isPending ? "Importing..." : "Import From Browser Session"}
-            </button>
-          </form>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowJsonInput((current) => !current)}
-            className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
-          >
-            {showJsonInput ? "Hide Manual JSON" : "Use Pasted JSON Instead"}
-          </button>
-        </div>
-
-        {showJsonInput ? (
-          <div className="mt-4 grid gap-3 xl:grid-cols-2">
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">League Show JSON</span>
-              <textarea
-                value={showJson}
-                onChange={(event) => setShowJson(event.target.value)}
-                rows={8}
-                placeholder='Paste the response from /nrl_draft/api/leagues_draft/show?...'
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-xs text-nrl-text outline-none focus:border-nrl-accent"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">Roster JSON</span>
-              <textarea
-                value={rostersJson}
-                onChange={(event) => setRostersJson(event.target.value)}
-                rows={8}
-                placeholder='Paste the response from /nrl_draft/api/leagues_draft/rosters?...'
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-xs text-nrl-text outline-none focus:border-nrl-accent"
-              />
-            </label>
-            <div className="xl:col-span-2">
-              <button
-                type="button"
-                disabled={!showJson.trim() || !rostersJson.trim() || isPending}
-                onClick={() =>
-                  startTransition(() => {
-                    void loadPricingFromPastedJson().catch((loadError) => {
-                      setResult(null)
-                      setBanner({ kind: "error", text: loadError instanceof Error ? loadError.message : String(loadError) })
-                    })
-                  })
-                }
-                className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-4 py-2 text-sm font-semibold text-nrl-text transition-colors hover:border-nrl-accent hover:text-nrl-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isPending ? "Building..." : "Build From Pasted JSON"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {banner ? (
-          <div
-            className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
-              banner.kind === "error"
-                ? "border-red-500/35 bg-red-500/10 text-red-300"
-                : banner.kind === "success"
-                  ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200"
-                  : "border-amber-500/35 bg-amber-500/10 text-amber-200"
-            }`}
-          >
-            {banner.text}
-          </div>
-        ) : null}
-
-        {helperSnippet ? (
-          <div className="mt-4 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-nrl-muted">Fantasy Helper Script</div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void copyText(helperSnippet).then((copied) => {
-                      setBanner({
-                        kind: copied ? "success" : "error",
-                        text: copied ? "Helper script copied." : "Could not copy the helper script automatically. Select and copy it manually.",
-                      })
-                    })
-                  }}
-                  className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
-                >
-                  Copy Script
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.open("https://fantasy.nrl.com/nrl_draft/", "_blank")}
-                  className="cursor-pointer rounded-md border border-nrl-accent/45 bg-nrl-accent/10 px-3 py-1.5 text-xs font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/16"
-                >
-                  Open Fantasy Tab
-                </button>
-              </div>
-            </div>
-            <textarea
-              readOnly
-              value={helperSnippet}
-              rows={10}
-              className="mt-3 w-full rounded-md border border-nrl-border bg-[#0f1327] px-3 py-2 font-mono text-[11px] text-nrl-text outline-none"
-            />
-          </div>
-        ) : null}
-
-        {result ? (
-          <div className="mt-5 space-y-4">
-            <div className="flex flex-wrap gap-2 text-[11px] text-nrl-muted">
-              <span className="rounded border border-nrl-border bg-nrl-panel-2 px-2.5 py-1">
-                {result.leagueName ?? `League ${result.leagueId}`}
-              </span>
-              {result.leagueType ? (
-                <span className="rounded border border-nrl-border bg-nrl-panel-2 px-2.5 py-1">{result.leagueType}</span>
-              ) : null}
-              {result.generatedAt ? (
-                <span className="rounded border border-nrl-border bg-nrl-panel-2 px-2.5 py-1">Updated {new Date(result.generatedAt).toLocaleString("en-AU")}</span>
-              ) : null}
-            </div>
-
-            {toggleRounds.length > 0 ? (
-              <div className="space-y-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">Round</div>
-                <div className="flex flex-wrap gap-2">
-                  {toggleRounds.map((roundOption) => {
-                    const active = String(roundOption) === activeRound
-                    return (
-                      <button
-                        key={roundOption}
-                        type="button"
-                        onClick={() => {
-                          setRound(String(roundOption))
-                          const helperWindow = prepareHelperWindow()
-                          startTransition(() => {
-                            if (loadSource === "pasted" && loadedShowRaw != null && loadedRostersRaw != null) {
-                              helperWindow?.close()
-                              try {
-                                rebuildFromRaw(loadedShowRaw, loadedRostersRaw, roundOption)
-                              } catch (loadError) {
-                                setBanner({ kind: "error", text: loadError instanceof Error ? loadError.message : String(loadError) })
-                              }
-                              return
-                            }
-
-                            void loadPricingFromBrowser(String(roundOption), helperWindow).catch((loadError) => {
-                              setBanner({ kind: "error", text: loadError instanceof Error ? loadError.message : String(loadError) })
-                            })
-                          })
-                        }}
-                        className={`cursor-pointer rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
-                          active
-                            ? "border-nrl-accent bg-nrl-accent/12 text-nrl-accent"
-                            : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                        }`}
-                      >
-                        {roundOption}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ) : null}
-
-            {result.warnings.length > 0 ? (
-              <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                {result.warnings.join(" ")}
-              </div>
-            ) : null}
-
-            {result.matchups.length > 0 ? (
-              <div className="space-y-4">
-                {result.matchups.map((matchup) => (
-                  <MatchupMarketCard
-                    key={matchup.id}
-                    matchup={matchup}
-                    captainSelections={captainSelections}
-                    onSelectCaptain={(teamSelectionKey, captainKey) =>
-                      setCaptainSelections((current) => ({ ...current, [teamSelectionKey]: captainKey }))
-                    }
-                    fantasyPlayersById={fantasyPlayersById}
-                    playerImages={playerImages}
-                    expanded={expandedMatchups[matchup.id] ?? true}
-                    onToggleExpanded={() =>
-                      setExpandedMatchups((current) => ({ ...current, [matchup.id]: !(current[matchup.id] ?? true) }))
-                    }
-                  />
+                {roundOptions.map((option) => (
+                  <option key={option} value={option}>
+                    Round {option}
+                  </option>
                 ))}
-              </div>
-            ) : (
-              <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-4 text-sm text-nrl-muted">
-                No matchups were parsed for this league/round yet. The page is ready to iterate once we confirm the exact draft payload shape for a few live leagues.
-              </div>
-            )}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => {
+                setHomeSlots([...EMPTY_SLOTS])
+                setAwaySlots([...EMPTY_SLOTS])
+                setCaptainSelections({ home: null, away: null })
+              }}
+              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+            >
+              Clear
+            </button>
           </div>
-        ) : null}
+        </div>
+
+        <EditableMatchupBoard
+          homeLabel={homeLabel}
+          awayLabel={awayLabel}
+          onHomeLabelChange={setHomeLabel}
+          onAwayLabelChange={setAwayLabel}
+          homeSlots={homeSlots}
+          awaySlots={awaySlots}
+          captainSelections={effectiveCaptainSelections}
+          onCaptainSelectionChange={(teamId, captainId) =>
+            setCaptainSelections((current) => ({ ...current, [teamId]: captainId }))
+          }
+          onHomeSlotChange={(slotIndex, playerId) =>
+            setHomeSlots((current) => current.map((value, index) => (index === slotIndex ? playerId : value)))
+          }
+          onAwaySlotChange={(slotIndex, playerId) =>
+            setAwaySlots((current) => current.map((value, index) => (index === slotIndex ? playerId : value)))
+          }
+          fantasyPlayersById={fantasyPlayersById}
+          playerImages={playerImages}
+          playerPoolById={playerPoolById}
+          optionLabelById={optionLabelById}
+          playerIdByOptionLabel={playerIdByOptionLabel}
+          homeSlotOptions={homeSlotOptions}
+          awaySlotOptions={awaySlotOptions}
+          homePrice={homePrice}
+          awayPrice={awayPrice}
+          savedTeams={savedTeams}
+          onLoadSavedTeamToSide={loadSavedTeamToSide}
+          onSaveSideAsTeam={saveSideAsTeam}
+          onDeleteSavedTeam={deleteSavedTeam}
+        />
+
       </section>
     </div>
   )

@@ -18,8 +18,10 @@ import {
 } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
-const SIGNED_IN_DEFAULT_YEAR_COUNT = 6
-const GUEST_PREFERRED_DEFAULT_YEARS = ["2026", "2025"] as const
+
+function defaultRecentYears(years: string[], maxYears = 4): string[] {
+  return years.slice(0, Math.min(maxYears, years.length))
+}
 
 interface FantasyPlayerPageProps {
   params: Promise<{
@@ -53,10 +55,9 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const unlockedYears = canAccessLoginSeason
     ? availableYears
     : availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason))
-  const defaultYears = canAccessLoginSeason
-    ? unlockedYears.slice(0, SIGNED_IN_DEFAULT_YEAR_COUNT)
-    : GUEST_PREFERRED_DEFAULT_YEARS.filter((year) => unlockedYears.includes(year))
-  const initialYears = defaultYears.length > 0 ? defaultYears : unlockedYears.slice(0, 1)
+  const initialYears = defaultRecentYears(
+    unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
+  )
   const initialPlayerStats = await fetchFantasyPlayerStatsAllYears(selectedPlayer.name)
 
   return (

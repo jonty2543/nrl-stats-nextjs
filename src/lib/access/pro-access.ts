@@ -8,10 +8,14 @@ function parseAllowlistedUserIds(raw: string | undefined): Set<string> {
   );
 }
 
-export function hasProPlotAccess(userId: string | null | undefined): boolean {
-  if (!userId) return false;
-  const allowlistedUserIds = parseAllowlistedUserIds(
+function getProPlotAllowlist(): Set<string> {
+  return parseAllowlistedUserIds(
     process.env.PRO_PLOT_UNLOCK_USER_IDS ?? process.env.NEXT_PUBLIC_PRO_PLOT_UNLOCK_USER_IDS
   );
+}
+
+export function hasProPlotAccess(userId: string | null | undefined): boolean {
+  if (!userId) return false;
+  const allowlistedUserIds = getProPlotAllowlist();
   return allowlistedUserIds.has(userId);
 }

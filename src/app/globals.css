@@ -76,6 +76,39 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.year-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.9rem;
+  width: 0.9rem;
+  margin-top: calc((0.25rem - 0.9rem) / 2);
+  border-radius: 9999px;
+  border: 2px solid var(--color-nrl-bg);
+  background: var(--color-nrl-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-nrl-accent) 60%, transparent);
+}
+
+.year-range-slider::-moz-range-thumb {
+  height: 0.9rem;
+  width: 0.9rem;
+  border-radius: 9999px;
+  border: 2px solid var(--color-nrl-bg);
+  background: var(--color-nrl-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-nrl-accent) 60%, transparent);
+}
+
+.year-range-slider::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-nrl-border) 88%, transparent);
+}
+
+.year-range-slider::-moz-range-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-nrl-border) 88%, transparent);
+}
+
 /* In fullscreen chart view, grow chart height so plots don't become thin and wide. */
 .chart-fullscreen .h-56,
 .chart-fullscreen .h-64 {

@@ -21,7 +21,9 @@ export function ImageWithFallback({ sources, alt, className }: ImageWithFallback
     return out
   }, [sources])
 
-  const [index, setIndex] = useState(0)
+  const sourceSignature = uniqueSources.join("|")
+  const [state, setState] = useState({ signature: sourceSignature, index: 0 })
+  const index = state.signature === sourceSignature ? state.index : 0
   const activeSource = uniqueSources[index] ?? null
 
   if (!activeSource) {
@@ -37,7 +39,14 @@ export function ImageWithFallback({ sources, alt, className }: ImageWithFallback
       loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => {
-        setIndex((current) => (current < uniqueSources.length - 1 ? current + 1 : current))
+        setState((current) => {
+          const baseIndex = current.signature === sourceSignature ? current.index : 0
+          const nextIndex = baseIndex < uniqueSources.length - 1 ? baseIndex + 1 : baseIndex
+          return {
+            signature: sourceSignature,
+            index: nextIndex,
+          }
+        })
       }}
     />
   )

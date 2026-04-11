@@ -1,7 +1,11 @@
 import { FantasyDraftPricingPage } from "@/components/views/fantasy-draft-pricing-page"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import { fetchFantasyPlayersSnapshot } from "@/lib/fantasy/nrl"
-import { fetchPlayerImages } from "@/lib/supabase/queries"
+import {
+  fetchPlayerFantasySd5yFromSupabase,
+  fetchPlayerImages,
+  fetchPositionFantasySd5yFromSupabase,
+} from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -22,12 +26,25 @@ async function fetchCoachProjectionsRaw(): Promise<unknown> {
 }
 
 export default async function FantasyDraftPricingRoutePage() {
-  const [playerImages, fantasyPlayers, coachProjectionsRaw, draw2026Data] = await Promise.all([
+  const [playerImages, fantasyPlayers, coachProjectionsRaw, draw2026Data, rawPlayerFantasySdRows, rawPositionFantasySdRows] = await Promise.all([
     fetchPlayerImages(),
     fetchFantasyPlayersSnapshot(),
     fetchCoachProjectionsRaw(),
     loadDraw2026Data().catch(() => null),
+    fetchPlayerFantasySd5yFromSupabase().catch(() => []),
+    fetchPositionFantasySd5yFromSupabase().catch(() => []),
   ])
+  const playerFantasySdRows = rawPlayerFantasySdRows.map((row) => ({
+    player: row.player,
+    primaryPosition: row.primary_position,
+    games: row.games,
+    fantasySd: row.fantasy_sd,
+  }))
+  const positionFantasySdRows = rawPositionFantasySdRows.map((row) => ({
+    position: row.position,
+    games: row.games,
+    fantasySd: row.fantasy_sd,
+  }))
 
   return (
     <FantasyDraftPricingPage
@@ -35,6 +52,8 @@ export default async function FantasyDraftPricingRoutePage() {
       fantasyPlayers={fantasyPlayers}
       coachProjectionsRaw={coachProjectionsRaw}
       draw2026Data={draw2026Data}
+      playerFantasySdRows={playerFantasySdRows}
+      positionFantasySdRows={positionFantasySdRows}
     />
   )
 }

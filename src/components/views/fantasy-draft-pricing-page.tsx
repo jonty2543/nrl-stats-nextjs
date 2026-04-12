@@ -17,17 +17,20 @@ import {
 } from "@/lib/fantasy/draft-pricing"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 
-const TEAM_SLOT_LABELS = ["HOK", "MID", "MID", "MID", "EDG", "EDG", "HLF", "HLF", "CTR", "CTR", "WFB", "WFB", "WFB"] as const
-const EMPTY_SLOTS = Array.from({ length: TEAM_SLOT_LABELS.length }, () => null as number | null)
+const DRAFT_SLOT_LABELS = ["HOK", "MID", "MID", "MID", "EDG", "EDG", "HLF", "HLF", "CTR", "CTR", "WFB", "WFB", "WFB"] as const
+const H2H_BENCH_SLOT_LABELS = ["BEN", "BEN", "BEN", "BEN"] as const
+const H2H_SLOT_LABELS = [...DRAFT_SLOT_LABELS, ...H2H_BENCH_SLOT_LABELS] as const
 const DRAFT_PRICER_LOCAL_KEY_PREFIX = "fantasy-draft-pricer"
 const DRAFT_PRICER_SAVED_TEAMS_LOCAL_KEY_PREFIX = "fantasy-draft-pricer-teams"
 
+type MatchupMode = "draft" | "h2h"
 type CaptainSelections = {
   home: number | null
   away: number | null
 }
 
 interface SavedDraftPricerState {
+  mode?: MatchupMode
   round: string
   homeLabel: string
   awayLabel: string
@@ -40,6 +43,7 @@ interface SavedDraftTeamPreset {
   id: string
   name: string
   label: string
+  mode?: MatchupMode
   slots: Array<number | null>
   captainId: number | null
   updatedAt: string
@@ -49,6 +53,30 @@ const LEGACY_DEFAULT_TEAM_LABELS = new Set(["Paradisepalms", "Guns 'R' Us"])
 
 function normaliseDraftTeamLabel(value: string): string {
   return LEGACY_DEFAULT_TEAM_LABELS.has(value.trim()) ? "" : value
+}
+
+function slotLabelsForMode(mode: MatchupMode): readonly string[] {
+  return mode === "h2h" ? H2H_SLOT_LABELS : DRAFT_SLOT_LABELS
+}
+
+function buildEmptySlots(slotCount: number): Array<number | null> {
+  return Array.from({ length: slotCount }, () => null)
+}
+
+function resizeSlots(values: Array<number | null>, slotCount: number): Array<number | null> {
+  const next = values.slice(0, slotCount).map((value) => (typeof value === "number" ? value : null))
+  while (next.length < slotCount) {
+    next.push(null)
+  }
+  return next
+}
+
+function inferModeFromSlotCount(slotCount: number): MatchupMode {
+  return slotCount > DRAFT_SLOT_LABELS.length ? "h2h" : "draft"
+}
+
+function matchesSlotLabel(player: DraftPricingPoolPlayer, slotLabel: string): boolean {
+  return slotLabel === "BEN" ? true : player.positionLabels.includes(slotLabel)
 }
 
 function formatOdds(value: number | null): string {
@@ -208,7 +236,7 @@ function buildSlotOptionLists(
 
   return currentSlots.map((currentId, index) =>
     playerPool
-      .filter((player) => player.positionLabels.includes(slotLabels[index] ?? ""))
+      .filter((player) => matchesSlotLabel(player, slotLabels[index] ?? ""))
       .filter((player) => !globallySelected.has(player.id) || player.id === currentId)
       .map((player) => optionLabelById.get(player.id))
       .filter((label): label is string => Boolean(label))
@@ -231,7 +259,7 @@ function buildBoardPlayer(
     actualScore: player.actualScore,
     standardDeviation: player.standardDeviation,
     slotLabel,
-    isBench: false,
+    isBench: slotLabel === "BEN",
     isBye: player.isBye,
     isEmergency: false,
   }
@@ -299,6 +327,7 @@ function TeamHeader({
   teamLabel,
   onTeamLabelChange,
   players,
+  totalSlots,
   playerPoolById,
   fantasyPlayersById,
   playerImages,
@@ -311,6 +340,7 @@ function TeamHeader({
   teamLabel: string
   onTeamLabelChange: (value: string) => void
   players: Array<DraftPricingPlayer | null>
+  totalSlots: number
   playerPoolById: Map<number, DraftPricingPoolPlayer>
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
   playerImages: PlayerImageRecord[]
@@ -332,7 +362,7 @@ function TeamHeader({
       <div className="flex h-10 w-10 items-end justify-center overflow-hidden rounded-full border border-nrl-border bg-[linear-gradient(180deg,#243055,#181f39)] shadow-sm md:h-14 md:w-14">
         <ImageWithFallback sources={avatarSources} alt={teamLabel} className="h-full w-full object-cover object-top" />
       </div>
-      <div className="mt-1 text-[10px] font-semibold text-nrl-muted md:mt-2 md:text-xs">{selectedCount}/13</div>
+      <div className="mt-1 text-[10px] font-semibold text-nrl-muted md:mt-2 md:text-xs">{selectedCount}/{totalSlots}</div>
       <input
         value={teamLabel}
         onChange={(event) => onTeamLabelChange(event.target.value)}
@@ -536,6 +566,8 @@ function EditableBoardRow({
 }
 
 function EditableMatchupBoard({
+  matchupMode,
+  slotLabels,
   homeLabel,
   awayLabel,
   onHomeLabelChange,
@@ -560,6 +592,8 @@ function EditableMatchupBoard({
   onSaveSideAsTeam,
   onDeleteSavedTeam,
 }: {
+  matchupMode: MatchupMode
+  slotLabels: readonly string[]
   homeLabel: string
   awayLabel: string
   onHomeLabelChange: (value: string) => void
@@ -584,8 +618,8 @@ function EditableMatchupBoard({
   onSaveSideAsTeam: (side: "home" | "away") => void
   onDeleteSavedTeam: (teamId: string) => void
 }) {
-  const homePlayers = TEAM_SLOT_LABELS.map((slotLabel, index) => buildBoardPlayer(homeSlots[index], slotLabel, playerPoolById))
-  const awayPlayers = TEAM_SLOT_LABELS.map((slotLabel, index) => buildBoardPlayer(awaySlots[index], slotLabel, playerPoolById))
+  const homePlayers = slotLabels.map((slotLabel, index) => buildBoardPlayer(homeSlots[index], slotLabel, playerPoolById))
+  const awayPlayers = slotLabels.map((slotLabel, index) => buildBoardPlayer(awaySlots[index], slotLabel, playerPoolById))
   const homeSummary = summariseBoardTeam(homePlayers, captainSelections.home)
   const awaySummary = summariseBoardTeam(awayPlayers, captainSelections.away)
 
@@ -598,6 +632,7 @@ function EditableMatchupBoard({
             teamLabel={homeLabel}
             onTeamLabelChange={onHomeLabelChange}
             players={homePlayers}
+            totalSlots={slotLabels.length}
             playerPoolById={playerPoolById}
             fantasyPlayersById={fantasyPlayersById}
             playerImages={playerImages}
@@ -633,6 +668,7 @@ function EditableMatchupBoard({
             teamLabel={awayLabel}
             onTeamLabelChange={onAwayLabelChange}
             players={awayPlayers}
+            totalSlots={slotLabels.length}
             playerPoolById={playerPoolById}
             fantasyPlayersById={fantasyPlayersById}
             playerImages={playerImages}
@@ -664,26 +700,32 @@ function EditableMatchupBoard({
       </div>
 
       <div className="overflow-visible bg-nrl-panel">
-        {TEAM_SLOT_LABELS.map((slotLabel, index) => (
-          <EditableBoardRow
-            key={`row-${slotLabel}-${index}`}
-            slotLabel={slotLabel}
-            leftPlayer={homePlayers[index]}
-            rightPlayer={awayPlayers[index]}
-            leftValue={homeSlots[index] != null ? optionLabelById.get(homeSlots[index] ?? -1) ?? "" : ""}
-            rightValue={awaySlots[index] != null ? optionLabelById.get(awaySlots[index] ?? -1) ?? "" : ""}
-            leftOptions={homeSlotOptions[index] ?? []}
-            rightOptions={awaySlotOptions[index] ?? []}
-            onLeftChange={(value) => onHomeSlotChange(index, playerIdByOptionLabel.get(value) ?? null)}
-            onRightChange={(value) => onAwaySlotChange(index, playerIdByOptionLabel.get(value) ?? null)}
-            leftCaptainId={captainSelections.home}
-            rightCaptainId={captainSelections.away}
-            onLeftCaptainSelect={(captainId) => onCaptainSelectionChange("home", captainId)}
-            onRightCaptainSelect={(captainId) => onCaptainSelectionChange("away", captainId)}
-            playerPoolById={playerPoolById}
-            fantasyPlayersById={fantasyPlayersById}
-            playerImages={playerImages}
-          />
+        {slotLabels.map((slotLabel, index) => (
+          <div key={`row-${slotLabel}-${index}`}>
+            {matchupMode === "h2h" && index === DRAFT_SLOT_LABELS.length ? (
+              <div className="border-y border-fuchsia-400/25 bg-[linear-gradient(90deg,rgba(34,197,94,0.08),rgba(168,85,247,0.08))] px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.24em] text-nrl-text md:text-[11px]">
+                Bench
+              </div>
+            ) : null}
+            <EditableBoardRow
+              slotLabel={slotLabel}
+              leftPlayer={homePlayers[index]}
+              rightPlayer={awayPlayers[index]}
+              leftValue={homeSlots[index] != null ? optionLabelById.get(homeSlots[index] ?? -1) ?? "" : ""}
+              rightValue={awaySlots[index] != null ? optionLabelById.get(awaySlots[index] ?? -1) ?? "" : ""}
+              leftOptions={homeSlotOptions[index] ?? []}
+              rightOptions={awaySlotOptions[index] ?? []}
+              onLeftChange={(value) => onHomeSlotChange(index, playerIdByOptionLabel.get(value) ?? null)}
+              onRightChange={(value) => onAwaySlotChange(index, playerIdByOptionLabel.get(value) ?? null)}
+              leftCaptainId={captainSelections.home}
+              rightCaptainId={captainSelections.away}
+              onLeftCaptainSelect={(captainId) => onCaptainSelectionChange("home", captainId)}
+              onRightCaptainSelect={(captainId) => onCaptainSelectionChange("away", captainId)}
+              playerPoolById={playerPoolById}
+              fantasyPlayersById={fantasyPlayersById}
+              playerImages={playerImages}
+            />
+          </div>
         ))}
       </div>
     </article>
@@ -708,10 +750,11 @@ export function FantasyDraftPricingPage({
   const { isLoaded, userId } = useAuth()
   const currentRound = defaultRoundFromDraw(draw2026Data)
   const [round, setRound] = useState(String(defaultRoundFromDraw(draw2026Data)))
+  const [matchupMode, setMatchupMode] = useState<MatchupMode>("draft")
   const [homeLabel, setHomeLabel] = useState("")
   const [awayLabel, setAwayLabel] = useState("")
-  const [homeSlots, setHomeSlots] = useState<Array<number | null>>(EMPTY_SLOTS)
-  const [awaySlots, setAwaySlots] = useState<Array<number | null>>(EMPTY_SLOTS)
+  const [homeSlots, setHomeSlots] = useState<Array<number | null>>(buildEmptySlots(DRAFT_SLOT_LABELS.length))
+  const [awaySlots, setAwaySlots] = useState<Array<number | null>>(buildEmptySlots(DRAFT_SLOT_LABELS.length))
   const [captainSelections, setCaptainSelections] = useState<CaptainSelections>({ home: null, away: null })
   const [savedTeams, setSavedTeams] = useState<SavedDraftTeamPreset[]>([])
   const [hasLoadedSavedState, setHasLoadedSavedState] = useState(false)
@@ -726,6 +769,7 @@ export function FantasyDraftPricingPage({
   )
 
   const roundValue = toRound(round)
+  const slotLabels = useMemo(() => slotLabelsForMode(matchupMode), [matchupMode])
   const storageKey = useMemo(
     () => `${DRAFT_PRICER_LOCAL_KEY_PREFIX}:${userId ?? "guest"}`,
     [userId]
@@ -770,12 +814,12 @@ export function FantasyDraftPricingPage({
   )
 
   const homeSlotOptions = useMemo(
-    () => buildSlotOptionLists(homeSlots, awaySlots, playerPool, optionLabelById, TEAM_SLOT_LABELS),
-    [homeSlots, awaySlots, playerPool, optionLabelById]
+    () => buildSlotOptionLists(homeSlots, awaySlots, playerPool, optionLabelById, slotLabels),
+    [homeSlots, awaySlots, playerPool, optionLabelById, slotLabels]
   )
   const awaySlotOptions = useMemo(
-    () => buildSlotOptionLists(awaySlots, homeSlots, playerPool, optionLabelById, TEAM_SLOT_LABELS),
-    [awaySlots, homeSlots, playerPool, optionLabelById]
+    () => buildSlotOptionLists(awaySlots, homeSlots, playerPool, optionLabelById, slotLabels),
+    [awaySlots, homeSlots, playerPool, optionLabelById, slotLabels]
   )
 
   const duplicateSelectedIds = useMemo(() => {
@@ -801,8 +845,8 @@ export function FantasyDraftPricingPage({
   const marketSummary = useMemo(() => {
     if (!homeComplete || !awayComplete || duplicateSelectedIds.size > 0) return null
 
-    const homePlayers = TEAM_SLOT_LABELS.map((slotLabel, index) => buildBoardPlayer(homeSlots[index], slotLabel, playerPoolById))
-    const awayPlayers = TEAM_SLOT_LABELS.map((slotLabel, index) => buildBoardPlayer(awaySlots[index], slotLabel, playerPoolById))
+    const homePlayers = slotLabels.map((slotLabel, index) => buildBoardPlayer(homeSlots[index], slotLabel, playerPoolById))
+    const awayPlayers = slotLabels.map((slotLabel, index) => buildBoardPlayer(awaySlots[index], slotLabel, playerPoolById))
     const homeSummary = summariseBoardTeam(homePlayers, effectiveCaptainSelections.home)
     const awaySummary = summariseBoardTeam(awayPlayers, effectiveCaptainSelections.away)
     const margin = homeSummary.total - awaySummary.total
@@ -819,7 +863,7 @@ export function FantasyDraftPricingPage({
       homeOdds: fairDecimalOdds(homeWinProbability),
       awayOdds: fairDecimalOdds(1 - homeWinProbability),
     }
-  }, [homeComplete, awayComplete, duplicateSelectedIds, homeSlots, awaySlots, playerPoolById, effectiveCaptainSelections.home, effectiveCaptainSelections.away])
+  }, [homeComplete, awayComplete, duplicateSelectedIds, homeSlots, awaySlots, playerPoolById, effectiveCaptainSelections.home, effectiveCaptainSelections.away, slotLabels])
 
   const homePrice = marketSummary?.homeOdds ?? null
   const awayPrice = marketSummary?.awayOdds ?? null
@@ -835,14 +879,17 @@ export function FantasyDraftPricingPage({
       }
 
       const parsed = JSON.parse(raw) as Partial<SavedDraftPricerState>
+      const parsedMode = parsed.mode === "h2h" ? "h2h" : "draft"
+      const parsedSlotCount = slotLabelsForMode(parsedMode).length
+      setMatchupMode(parsedMode)
       if (typeof parsed.round === "string") setRound(parsed.round)
       if (typeof parsed.homeLabel === "string") setHomeLabel(normaliseDraftTeamLabel(parsed.homeLabel))
       if (typeof parsed.awayLabel === "string") setAwayLabel(normaliseDraftTeamLabel(parsed.awayLabel))
-      if (Array.isArray(parsed.homeSlots) && parsed.homeSlots.length === TEAM_SLOT_LABELS.length) {
-        setHomeSlots(parsed.homeSlots.map((value) => (typeof value === "number" ? value : null)))
+      if (Array.isArray(parsed.homeSlots)) {
+        setHomeSlots(resizeSlots(parsed.homeSlots, parsedSlotCount))
       }
-      if (Array.isArray(parsed.awaySlots) && parsed.awaySlots.length === TEAM_SLOT_LABELS.length) {
-        setAwaySlots(parsed.awaySlots.map((value) => (typeof value === "number" ? value : null)))
+      if (Array.isArray(parsed.awaySlots)) {
+        setAwaySlots(resizeSlots(parsed.awaySlots, parsedSlotCount))
       }
       if (parsed.captainSelections && typeof parsed.captainSelections === "object") {
         setCaptainSelections({
@@ -860,12 +907,14 @@ export function FantasyDraftPricingPage({
               if (!row || typeof row !== "object") return []
               const preset = row as Partial<SavedDraftTeamPreset>
               if (typeof preset.id !== "string" || typeof preset.name !== "string" || typeof preset.label !== "string") return []
-              if (!Array.isArray(preset.slots) || preset.slots.length !== TEAM_SLOT_LABELS.length) return []
+              if (!Array.isArray(preset.slots)) return []
+              const presetMode = preset.mode === "h2h" ? "h2h" : inferModeFromSlotCount(preset.slots.length)
               return [{
                 id: preset.id,
                 name: preset.name,
                 label: preset.label,
-                slots: preset.slots.map((value) => (typeof value === "number" ? value : null)),
+                mode: presetMode,
+                slots: resizeSlots(preset.slots, slotLabelsForMode(presetMode).length),
                 captainId: typeof preset.captainId === "number" ? preset.captainId : null,
                 updatedAt: typeof preset.updatedAt === "string" ? preset.updatedAt : new Date(0).toISOString(),
               }]
@@ -884,6 +933,7 @@ export function FantasyDraftPricingPage({
     if (!hasLoadedSavedState) return
 
     const payload: SavedDraftPricerState = {
+      mode: matchupMode,
       round,
       homeLabel,
       awayLabel,
@@ -893,7 +943,7 @@ export function FantasyDraftPricingPage({
     }
 
     window.localStorage.setItem(storageKey, JSON.stringify(payload))
-  }, [hasLoadedSavedState, storageKey, round, homeLabel, awayLabel, homeSlots, awaySlots, captainSelections])
+  }, [hasLoadedSavedState, storageKey, matchupMode, round, homeLabel, awayLabel, homeSlots, awaySlots, captainSelections])
 
   useEffect(() => {
     if (!hasLoadedSavedState) return
@@ -925,6 +975,7 @@ export function FantasyDraftPricingPage({
         id: existing?.id ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         name,
         label: sourceLabel.trim() || name,
+        mode: matchupMode,
         slots: [...sourceSlots],
         captainId: sourceCaptainId,
         updatedAt: new Date().toISOString(),
@@ -941,16 +992,17 @@ export function FantasyDraftPricingPage({
   const loadSavedTeamToSide = (side: "home" | "away", teamId: string) => {
     const preset = savedTeams.find((team) => team.id === teamId)
     if (!preset) return
+    const nextSlots = resizeSlots(preset.slots, slotLabels.length)
 
     if (side === "home") {
       setHomeLabel(preset.label)
-      setHomeSlots([...preset.slots])
+      setHomeSlots(nextSlots)
       setCaptainSelections((current) => ({ ...current, home: preset.captainId }))
       return
     }
 
     setAwayLabel(preset.label)
-    setAwaySlots([...preset.slots])
+    setAwaySlots(nextSlots)
     setCaptainSelections((current) => ({ ...current, away: preset.captainId }))
   }
 
@@ -974,7 +1026,33 @@ export function FantasyDraftPricingPage({
 
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
         <div className="mb-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent xl:leading-none">Draft Matchup Pricer</div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent xl:leading-none">Draft / H2H Matchup Projection</div>
+            <div className="inline-flex rounded-full border border-nrl-border bg-[#20284a] p-1">
+              {([
+                ["draft", "Draft"],
+                ["h2h", "H2H"],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    const nextSlotLabels = slotLabelsForMode(value)
+                    setMatchupMode(value)
+                    setHomeSlots((current) => resizeSlots(current, nextSlotLabels.length))
+                    setAwaySlots((current) => resizeSlots(current, nextSlotLabels.length))
+                  }}
+                  className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                    matchupMode === value
+                      ? "bg-[linear-gradient(135deg,rgba(34,197,94,0.18),rgba(168,85,247,0.22))] text-nrl-text"
+                      : "text-nrl-muted hover:text-nrl-text"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex min-w-[160px] flex-col">
@@ -994,8 +1072,8 @@ export function FantasyDraftPricingPage({
             <button
               type="button"
               onClick={() => {
-                setHomeSlots([...EMPTY_SLOTS])
-                setAwaySlots([...EMPTY_SLOTS])
+                setHomeSlots(buildEmptySlots(slotLabels.length))
+                setAwaySlots(buildEmptySlots(slotLabels.length))
                 setCaptainSelections({ home: null, away: null })
               }}
               className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
@@ -1006,6 +1084,8 @@ export function FantasyDraftPricingPage({
         </div>
 
         <EditableMatchupBoard
+          matchupMode={matchupMode}
+          slotLabels={slotLabels}
           homeLabel={homeLabel}
           awayLabel={awayLabel}
           onHomeLabelChange={setHomeLabel}

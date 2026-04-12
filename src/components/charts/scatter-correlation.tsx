@@ -117,7 +117,7 @@ export function ScatterCorrelation({
 
   if (points.length < 2) {
     return (
-      <div className="flex items-center justify-center h-64 text-nrl-muted text-sm">
+      <div className="flex h-52 items-center justify-center text-sm text-nrl-muted sm:h-64">
         Need at least two data points for correlation.
       </div>
     );
@@ -158,7 +158,7 @@ export function ScatterCorrelation({
           r = {r >= 0 ? "+" : ""}{r.toFixed(2)} | games = {points.length}
         </div>
       )}
-      <div className="relative h-56">
+      <div className="relative h-48 sm:h-56">
         <svg width="100%" height="100%" viewBox="0 0 500 224" preserveAspectRatio="xMidYMid meet">
           <image
             href="/logo-mark.svg"

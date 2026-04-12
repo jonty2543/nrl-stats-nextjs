@@ -44,6 +44,9 @@ interface PlayerComparisonProps {
   canBypassPlotGate?: boolean;
 }
 
+const DEFAULT_PLAYER_1_CANDIDATES = ["Nathan Cleary"];
+const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
+
 const MINUTES_FILTER_OPTIONS = [
   "Any",
   "10 Mins",
@@ -608,7 +611,7 @@ export function SimplePlayerPhotoTile({
 
   return (
     <div className={`w-full overflow-hidden rounded-2xl border border-[#1d3a63] bg-[#0b1832] shadow-[0_18px_40px_rgba(0,0,0,0.28)] ${className ?? "max-w-[15rem]"}`}>
-      <div className={`relative flex items-end justify-center overflow-hidden bg-[radial-gradient(circle_at_top,rgba(92,132,255,0.2),transparent_60%),linear-gradient(180deg,#112347,#0a1327)] ${imageHeightClass ?? "h-[15rem]"}`}>
+      <div className={`relative flex items-end justify-center overflow-hidden bg-[radial-gradient(circle_at_top,rgba(92,132,255,0.2),transparent_60%),linear-gradient(180deg,#112347,#0a1327)] ${imageHeightClass ?? "h-[12rem] sm:h-[15rem]"}`}>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
         <div className="pointer-events-none absolute left-[8%] top-[12%] h-20 w-20 rounded-full bg-emerald-300/10 blur-2xl" />
         <div className="pointer-events-none absolute bottom-[10%] right-[12%] h-24 w-24 rounded-full bg-violet-400/12 blur-3xl" />
@@ -766,8 +769,8 @@ export function PlayerComparison({
   );
 
   // Player selections
-  const [player1, setPlayer1] = useState("Nathan Cleary");
-  const [player2, setPlayer2] = useState("Nicho Hynes");
+  const [player1, setPlayer1] = useState("");
+  const [player2, setPlayer2] = useState("");
   const [player1Position, setPlayer1Position] = useState("All");
   const [player2Position, setPlayer2Position] = useState("All");
   const [teammate1, setTeammate1] = useState("None");
@@ -874,10 +877,38 @@ export function PlayerComparison({
 
   useEffect(() => {
     if (!hasLoadedData) return;
-    if (!player1 && p1PlayerOptions.length > 0) {
-      setPlayer1(p1PlayerOptions[0]);
+    const findPreferredPlayer = (options: string[], candidates: string[], exclude?: string) => {
+      for (const candidate of candidates) {
+        const exact = options.find(
+          (name) => name !== exclude && name.toLowerCase() === candidate.toLowerCase()
+        );
+        if (exact) return exact;
+      }
+      for (const candidate of candidates) {
+        const partial = options.find(
+          (name) => name !== exclude && name.toLowerCase().includes(candidate.toLowerCase())
+        );
+        if (partial) return partial;
+      }
+      return options.find((name) => name !== exclude) ?? "";
+    };
+
+    const nextPlayer1 = p1PlayerOptions.includes(player1)
+      ? player1
+      : findPreferredPlayer(p1PlayerOptions, DEFAULT_PLAYER_1_CANDIDATES);
+    if (nextPlayer1 !== player1) {
+      setPlayer1(nextPlayer1);
+      return;
     }
-  }, [hasLoadedData, player1, p1PlayerOptions]);
+
+    if (player2 === "None") return;
+    const nextPlayer2 = p2PlayerOptions.includes(player2)
+      ? player2
+      : (findPreferredPlayer(p2PlayerOptions, DEFAULT_PLAYER_2_CANDIDATES, nextPlayer1) || "None");
+    if (nextPlayer2 !== player2) {
+      setPlayer2(nextPlayer2);
+    }
+  }, [hasLoadedData, p1PlayerOptions, p2PlayerOptions, player1, player2]);
 
   const handleTeammate1Change = useCallback((value: string) => {
     setTeammate1(value);

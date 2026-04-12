@@ -173,7 +173,7 @@ function StripComparison({
 
   return (
     <div>
-      <div className="h-56">
+      <div className="h-48 sm:h-56">
         <svg className="distribution-svg" width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
           <line x1={margin.left} y1={withY} x2={width - margin.right} y2={withY} stroke={AXIS_COLOR} strokeDasharray="4 4" />
           <line x1={margin.left} y1={withoutY} x2={width - margin.right} y2={withoutY} stroke={AXIS_COLOR} strokeDasharray="4 4" />

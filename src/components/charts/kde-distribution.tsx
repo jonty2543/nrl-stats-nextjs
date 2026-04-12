@@ -84,7 +84,7 @@ function StripDistribution({
 
   if (visibleSeries.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-nrl-muted text-sm">
+      <div className="flex h-52 items-center justify-center text-sm text-nrl-muted sm:h-64">
         Not enough data for distribution plot.
       </div>
     );
@@ -187,7 +187,7 @@ function StripDistribution({
 
   return (
     <div>
-      <div className="h-64">
+      <div className="h-52 sm:h-64">
         <svg className="distribution-svg" width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
           {visibleSeries.map((s, index) => {
             const y = yForIndex(index);
@@ -292,7 +292,7 @@ function HistogramDistribution({
 
   if (visibleSeries.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-nrl-muted text-sm">
+      <div className="flex h-52 items-center justify-center text-sm text-nrl-muted sm:h-64">
         Not enough data for distribution plot.
       </div>
     );
@@ -351,7 +351,7 @@ function HistogramDistribution({
       <div className="mb-1 text-xs font-semibold text-nrl-muted">
         n &gt; 20 — showing histogram + mean
       </div>
-      <div className="h-64">
+      <div className="h-52 sm:h-64">
         <svg className="distribution-svg" width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet">
           {yTicks.map((tick, index) => {
             const y = yScale(tick);
@@ -520,7 +520,7 @@ export function KDEDistribution({ title: _title, stat, series }: KDEDistribution
 
   if (nonEmptySeries.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-nrl-muted text-sm">
+      <div className="flex h-52 items-center justify-center text-sm text-nrl-muted sm:h-64">
         Not enough data for distribution plot.
       </div>
     );

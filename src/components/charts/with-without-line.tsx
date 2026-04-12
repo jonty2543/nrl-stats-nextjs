@@ -233,7 +233,7 @@ export function WithWithoutLine({
 
   return (
     <div>
-      <div className="h-64">
+      <div className="h-52 sm:h-64">
         <ResponsiveLine
           data={nivoData}
           theme={nrlChartTheme}

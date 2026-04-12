@@ -710,11 +710,13 @@ function MetricCard({
   value,
   sublabel,
   compact = false,
+  blurValue = false,
 }: {
   label: string
   value: string
   sublabel?: string
   compact?: boolean
+  blurValue?: boolean
 }) {
   return (
     <div
@@ -725,7 +727,12 @@ function MetricCard({
       <div className={`${compact ? "text-[7px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
         {label}
       </div>
-      <div className={`${compact ? "mt-1 text-[1.5rem] leading-none" : "mt-1 text-xl"} font-bold text-nrl-text`}>
+      <div
+        className={`${compact ? "mt-1 text-[1.5rem] leading-none" : "mt-1 text-xl"} font-bold text-nrl-text ${
+          blurValue ? "select-none blur-[5px]" : ""
+        }`}
+        aria-hidden={blurValue || undefined}
+      >
         {value}
       </div>
       {sublabel ? (
@@ -1987,12 +1994,14 @@ export function FantasyDashboard({
                   <MetricCard
                     compact
                     label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
-                    value={analysisLocked ? "--" : formatNumber(selectedFantasyPlayer.projectedAvg, 1)}
+                    value={formatNumber(selectedFantasyPlayer.projectedAvg, 1)}
+                    blurValue={analysisLocked}
                   />
                   <MetricCard
                     compact
                     label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}
-                    value={analysisLocked ? "--" : formatNumber(selectedFantasyPlayer.be, 0)}
+                    value={formatNumber(selectedFantasyPlayer.be, 0)}
+                    blurValue={analysisLocked}
                   />
                 </div>
                 <div className="flex flex-wrap items-center justify-start gap-2">
@@ -2321,15 +2330,20 @@ export function FantasyDashboard({
                 ) : null}
 
                 {analysisLocked ? (
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl">
-                    <div className="rounded-xl border border-white/10 bg-slate-950/45 px-4 py-3 text-center shadow-[0_12px_30px_rgba(0,0,0,0.28)] backdrop-blur-[2px]">
-                      <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-200">
-                        Pro Coming Soon
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl">
+                    <Link
+                      href="/sign-up"
+                      className="rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]"
+                    >
+                      <div className="rounded-[calc(1rem-1px)] bg-slate-950/80 px-4 py-3 text-center backdrop-blur-[2px]">
+                        <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
+                          Sign Up To Pro
+                        </div>
+                        <div className="mt-1 text-xs text-slate-400">
+                          Unlock projections, breakevens and plots.
+                        </div>
                       </div>
-                      <div className="mt-1 text-xs text-slate-400">
-                        Projection, breakevens and plots unlocked with Pro.
-                      </div>
-                    </div>
+                    </Link>
                   </div>
                 ) : null}
               </div>

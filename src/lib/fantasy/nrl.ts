@@ -69,6 +69,7 @@ interface FantasyPlayerRaw {
     break_even?: unknown
     breakeven?: unknown
     prices?: unknown
+    scores?: unknown
   } | null
 }
 
@@ -174,29 +175,34 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
 }
 
 export async function fetchFantasyPlayersSnapshot(): Promise<FantasyPlayerSnapshot[]> {
-  const res = await fetch("https://fantasy.nrl.com/data/nrl/players.json", {
-    next: { revalidate: 300 },
-    headers: {
-      accept: "application/json",
-    },
-  })
-
-  if (!res.ok) {
-    throw new Error(`Fantasy players fetch failed: ${res.status} ${res.statusText}`)
-  }
-
-  const raw = (await res.json()) as unknown
-  if (!Array.isArray(raw)) return []
-
-  return raw
-    .map((row) => normaliseOne(row as FantasyPlayerRaw))
-    .filter((row): row is FantasyPlayerSnapshot => row !== null)
-    .sort((a, b) => {
-      const ownA = a.ownedBy ?? -1
-      const ownB = b.ownedBy ?? -1
-      if (ownA !== ownB) return ownB - ownA
-      return a.name.localeCompare(b.name)
+  try {
+    const res = await fetch("https://fantasy.nrl.com/data/nrl/players.json", {
+      next: { revalidate: 300 },
+      headers: {
+        accept: "application/json",
+      },
     })
+
+    if (!res.ok) {
+      throw new Error(`Fantasy players fetch failed: ${res.status} ${res.statusText}`)
+    }
+
+    const raw = (await res.json()) as unknown
+    if (!Array.isArray(raw)) return []
+
+    return raw
+      .map((row) => normaliseOne(row as FantasyPlayerRaw))
+      .filter((row): row is FantasyPlayerSnapshot => row !== null)
+      .sort((a, b) => {
+        const ownA = a.ownedBy ?? -1
+        const ownB = b.ownedBy ?? -1
+        if (ownA !== ownB) return ownB - ownA
+        return a.name.localeCompare(b.name)
+      })
+  } catch (error) {
+    console.warn("Unable to fetch fantasy players snapshot; using empty list.", error)
+    return []
+  }
 }
 
 interface FantasyOwnershipSnapshotRow {

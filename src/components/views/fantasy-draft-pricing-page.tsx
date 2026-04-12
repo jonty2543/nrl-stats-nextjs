@@ -298,10 +298,12 @@ function ProjectionPill({
   value,
   tone = "default",
   size = "sm",
+  blurred = false,
 }: {
   value: number | null
   tone?: "default" | "captain" | "played"
   size?: "sm" | "lg"
+  blurred?: boolean
 }) {
   return (
     <div
@@ -317,7 +319,9 @@ function ProjectionPill({
           : "border-violet-400/70 bg-[#20284a] text-violet-200"
       }`}
     >
-      <span>{value == null ? "--" : Math.round(value)}</span>
+      <span className={blurred ? "blur-[5px] select-none" : undefined}>
+        {value == null ? "--" : Math.round(value)}
+      </span>
     </div>
   )
 }
@@ -426,6 +430,7 @@ function EditableBoardRow({
   rightCaptainId,
   onLeftCaptainSelect,
   onRightCaptainSelect,
+  blurValues = false,
   playerPoolById,
   fantasyPlayersById,
   playerImages,
@@ -443,6 +448,7 @@ function EditableBoardRow({
   rightCaptainId: number | null
   onLeftCaptainSelect: (captainId: number | null) => void
   onRightCaptainSelect: (captainId: number | null) => void
+  blurValues?: boolean
   playerPoolById: Map<number, DraftPricingPoolPlayer>
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
   playerImages: PlayerImageRecord[]
@@ -496,6 +502,7 @@ function EditableBoardRow({
         <div className="flex justify-center">
           <ProjectionPill
             value={leftPlayer ? effectivePlayerScore(leftPlayer, leftCaptainId === leftPlayer.id) : null}
+            blurred={blurValues}
             tone={
               leftPlayer?.actualScore != null
                 ? "played"
@@ -511,6 +518,7 @@ function EditableBoardRow({
         <div className="flex justify-center">
           <ProjectionPill
             value={rightPlayer ? effectivePlayerScore(rightPlayer, rightCaptainId === rightPlayer.id) : null}
+            blurred={blurValues}
             tone={
               rightPlayer?.actualScore != null
                 ? "played"
@@ -568,6 +576,7 @@ function EditableBoardRow({
 function EditableMatchupBoard({
   matchupMode,
   slotLabels,
+  blurValues = false,
   homeLabel,
   awayLabel,
   onHomeLabelChange,
@@ -594,6 +603,7 @@ function EditableMatchupBoard({
 }: {
   matchupMode: MatchupMode
   slotLabels: readonly string[]
+  blurValues?: boolean
   homeLabel: string
   awayLabel: string
   onHomeLabelChange: (value: string) => void
@@ -647,17 +657,17 @@ function EditableMatchupBoard({
               Scores
             </div>
             <div className="mt-2 flex items-center gap-1 md:mt-2.5 md:gap-2.5">
-              <ProjectionPill value={homeSummary.total} size="lg" />
-              <ProjectionPill value={awaySummary.total} size="lg" />
+              <ProjectionPill value={homeSummary.total} size="lg" blurred={blurValues} />
+              <ProjectionPill value={awaySummary.total} size="lg" blurred={blurValues} />
             </div>
             <div className="mt-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-nrl-muted md:mt-4 md:text-[10px] md:tracking-[0.18em]">
               Odds
             </div>
             <div className="mt-2 flex items-center gap-1 md:mt-2 md:gap-2.5">
-              <span className="rounded-full border border-violet-400/70 bg-[#20284a] px-2 py-1 text-[13px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px]">
+              <span className={`rounded-full border border-violet-400/70 bg-[#20284a] px-2 py-1 text-[13px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px] ${blurValues ? "blur-[5px] select-none" : ""}`}>
                 {formatOdds(homePrice)}
               </span>
-              <span className="rounded-full border border-violet-400/70 bg-[#20284a] px-2 py-1 text-[13px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px]">
+              <span className={`rounded-full border border-violet-400/70 bg-[#20284a] px-2 py-1 text-[13px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px] ${blurValues ? "blur-[5px] select-none" : ""}`}>
                 {formatOdds(awayPrice)}
               </span>
             </div>
@@ -721,6 +731,7 @@ function EditableMatchupBoard({
               rightCaptainId={captainSelections.away}
               onLeftCaptainSelect={(captainId) => onCaptainSelectionChange("home", captainId)}
               onRightCaptainSelect={(captainId) => onCaptainSelectionChange("away", captainId)}
+              blurValues={blurValues}
               playerPoolById={playerPoolById}
               fantasyPlayersById={fantasyPlayersById}
               playerImages={playerImages}
@@ -739,6 +750,7 @@ export function FantasyDraftPricingPage({
   draw2026Data,
   playerFantasySdRows,
   positionFantasySdRows,
+  locked = false,
 }: {
   playerImages: PlayerImageRecord[]
   fantasyPlayers: FantasyPlayerSnapshot[]
@@ -746,6 +758,7 @@ export function FantasyDraftPricingPage({
   draw2026Data: Draw2026Data | null
   playerFantasySdRows: DraftPricingHistoricalPlayerSd[]
   positionFantasySdRows: DraftPricingHistoricalPositionSd[]
+  locked?: boolean
 }) {
   const { isLoaded, userId } = useAuth()
   const currentRound = defaultRoundFromDraw(draw2026Data)
@@ -1027,7 +1040,7 @@ export function FantasyDraftPricingPage({
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
         <div className="mb-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent xl:leading-none">Draft / H2H Matchup Projection</div>
+            <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent xl:leading-none">Draft / H2H Projection and Odds</div>
             <div className="inline-flex rounded-full border border-nrl-border bg-[#20284a] p-1">
               {([
                 ["draft", "Draft"],
@@ -1052,6 +1065,14 @@ export function FantasyDraftPricingPage({
                 </button>
               ))}
             </div>
+            {locked ? (
+              <Link
+                href="/sign-up"
+                className="rounded-full border border-[rgba(0,245,138,0.28)] bg-[linear-gradient(135deg,rgba(91,61,173,0.28),rgba(12,93,74,0.24))] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:border-nrl-accent"
+              >
+                Sign Up To Pro
+              </Link>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-end gap-2">
@@ -1086,6 +1107,7 @@ export function FantasyDraftPricingPage({
         <EditableMatchupBoard
           matchupMode={matchupMode}
           slotLabels={slotLabels}
+          blurValues={locked}
           homeLabel={homeLabel}
           awayLabel={awayLabel}
           onHomeLabelChange={setHomeLabel}

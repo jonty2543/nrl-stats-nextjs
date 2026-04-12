@@ -1676,13 +1676,27 @@ export function FantasyDashboard({
         </section>
 
         {showOwnedCards ? (
-          <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-2 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] xl:min-w-[230px]">
-            <Link
-              href="/dashboard/fantasy/draft"
-              className="inline-flex h-full min-h-[32px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[linear-gradient(135deg,rgba(91,61,173,0.34),rgba(12,93,74,0.3))] px-3 text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
-            >
-              Draft Matchup Projection
-            </Link>
+          <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-2 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] xl:min-w-[260px]">
+            {hasFantasyPlotAccess ? (
+              <Link
+                href="/dashboard/fantasy/draft"
+                className="inline-flex h-full min-h-[72px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[linear-gradient(135deg,rgba(91,61,173,0.34),rgba(12,93,74,0.3))] px-3 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
+              >
+                Draft / H2H Projection and Odds
+              </Link>
+            ) : (
+              <Link
+                href="/dashboard/fantasy/draft"
+                className="flex h-full min-h-[72px] w-full flex-col items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[linear-gradient(135deg,rgba(91,61,173,0.34),rgba(12,93,74,0.3))] px-4 py-3 text-center transition-colors hover:border-nrl-accent xl:min-h-[100%]"
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-nrl-accent">
+                  Pro
+                </div>
+                <div className="mt-1 text-[11px] font-semibold text-white">
+                  Draft / H2H Projection and Odds
+                </div>
+              </Link>
+            )}
           </div>
         ) : null}
       </div>

@@ -45,6 +45,12 @@ interface SavedDraftTeamPreset {
   updatedAt: string
 }
 
+const LEGACY_DEFAULT_TEAM_LABELS = new Set(["Paradisepalms", "Guns 'R' Us"])
+
+function normaliseDraftTeamLabel(value: string): string {
+  return LEGACY_DEFAULT_TEAM_LABELS.has(value.trim()) ? "" : value
+}
+
 function formatOdds(value: number | null): string {
   return value == null ? "--" : `$${value.toFixed(2)}`
 }
@@ -702,8 +708,8 @@ export function FantasyDraftPricingPage({
   const { isLoaded, userId } = useAuth()
   const currentRound = defaultRoundFromDraw(draw2026Data)
   const [round, setRound] = useState(String(defaultRoundFromDraw(draw2026Data)))
-  const [homeLabel, setHomeLabel] = useState("Paradisepalms")
-  const [awayLabel, setAwayLabel] = useState("Guns 'R' Us")
+  const [homeLabel, setHomeLabel] = useState("")
+  const [awayLabel, setAwayLabel] = useState("")
   const [homeSlots, setHomeSlots] = useState<Array<number | null>>(EMPTY_SLOTS)
   const [awaySlots, setAwaySlots] = useState<Array<number | null>>(EMPTY_SLOTS)
   const [captainSelections, setCaptainSelections] = useState<CaptainSelections>({ home: null, away: null })
@@ -830,8 +836,8 @@ export function FantasyDraftPricingPage({
 
       const parsed = JSON.parse(raw) as Partial<SavedDraftPricerState>
       if (typeof parsed.round === "string") setRound(parsed.round)
-      if (typeof parsed.homeLabel === "string") setHomeLabel(parsed.homeLabel)
-      if (typeof parsed.awayLabel === "string") setAwayLabel(parsed.awayLabel)
+      if (typeof parsed.homeLabel === "string") setHomeLabel(normaliseDraftTeamLabel(parsed.homeLabel))
+      if (typeof parsed.awayLabel === "string") setAwayLabel(normaliseDraftTeamLabel(parsed.awayLabel))
       if (Array.isArray(parsed.homeSlots) && parsed.homeSlots.length === TEAM_SLOT_LABELS.length) {
         setHomeSlots(parsed.homeSlots.map((value) => (typeof value === "number" ? value : null)))
       }

@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import type { CSSProperties } from "react"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { LandingCarousel } from "@/components/views/landing-carousel"
 import { LandingHeroScrollShell } from "@/components/views/landing-hero-scroll-shell"
@@ -109,6 +110,17 @@ function formatShortDate(value: string): string {
     day: "numeric",
     month: "short",
   }).format(parsed)
+}
+
+function heroPlayerImageMaskStyle(mobile = false): CSSProperties {
+  const mask = mobile
+    ? "radial-gradient(102% 112% at 50% 88%, rgba(0,0,0,1) 0%, rgba(0,0,0,0.98) 42%, rgba(0,0,0,0.9) 58%, rgba(0,0,0,0.52) 72%, rgba(0,0,0,0.18) 84%, transparent 94%)"
+    : "radial-gradient(108% 116% at 50% 88%, rgba(0,0,0,1) 0%, rgba(0,0,0,0.98) 44%, rgba(0,0,0,0.9) 60%, rgba(0,0,0,0.54) 74%, rgba(0,0,0,0.18) 86%, transparent 95%)"
+
+  return {
+    WebkitMaskImage: mask,
+    maskImage: mask,
+  }
 }
 
 function normalisePersonName(value: string): string {
@@ -311,6 +323,21 @@ function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2): BettingMatc
   return [...grouped.values()]
     .filter((group) => group.rows.length >= 2)
     .sort((a, b) => a.rows[0].date.localeCompare(b.rows[0].date) || a.match.localeCompare(b.match))
+    .slice(0, limit)
+}
+
+function buildBetTrackerPreviewRows(snapshot: BettingOddsSnapshot, limit = 3): BettingOddsRow[] {
+  const grouped = new Map<string, BettingOddsRow>()
+
+  for (const row of snapshot.h2h) {
+    const key = `${row.date}|${row.match}`
+    if (!grouped.has(key)) {
+      grouped.set(key, row)
+    }
+  }
+
+  return [...grouped.values()]
+    .sort((a, b) => a.date.localeCompare(b.date) || a.match.localeCompare(b.match))
     .slice(0, limit)
 }
 
@@ -530,6 +557,7 @@ export default async function Home() {
   const spotlightScatterPoints = getScatterPoints(spotlightSortedRows)
 
   const h2hPreviews = buildH2HPreviews(bettingSnapshot)
+  const betTrackerPreviewRows = buildBetTrackerPreviewRows(bettingSnapshot)
   return (
     <div className="relative overflow-hidden text-nrl-text">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
@@ -561,7 +589,7 @@ export default async function Home() {
         </header>
 
         <LandingHeroScrollShell>
-          <section className="grid gap-6 pb-10 pt-8 sm:gap-8 sm:pb-12 sm:pt-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-end lg:pb-0 lg:pt-14">
+          <section className="grid gap-6 pb-0 pt-8 sm:gap-8 sm:pb-12 sm:pt-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-end lg:pb-0 lg:pt-14">
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
                 Live NRL Analysis Platform
@@ -605,9 +633,10 @@ export default async function Home() {
                     alt="NRL players"
                     width={720}
                     height={720}
-                    priority
-                    className="relative z-10 translate-x-2 h-[104%] w-auto max-w-[126%] object-contain object-bottom"
-                  />
+                  priority
+                  className="relative z-10 translate-x-2 h-[104%] w-auto max-w-[126%] object-contain object-bottom"
+                  style={heroPlayerImageMaskStyle(true)}
+                />
                 </div>
               </div>
             </div>
@@ -621,6 +650,7 @@ export default async function Home() {
                   height={720}
                   priority
                   className="relative z-10 translate-x-3 h-[118%] w-auto max-w-[141%] object-contain object-bottom"
+                  style={heroPlayerImageMaskStyle()}
                 />
               </div>
             </div>
@@ -1066,7 +1096,7 @@ export default async function Home() {
                       <div className="text-[11px] text-white/38">Hide Bets</div>
                     </div>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-                      <div className="rounded-lg border border-white/8 bg-[#171c36] px-3 py-2"><div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Bets</div><div className="mt-1 text-lg font-bold text-white">{bettingSnapshot.h2h.length}</div></div>
+                      <div className="rounded-lg border border-white/8 bg-[#171c36] px-3 py-2"><div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Bets</div><div className="mt-1 text-lg font-bold text-white">{betTrackerPreviewRows.length}</div></div>
                       <div className="rounded-lg border border-white/8 bg-[#171c36] px-3 py-2"><div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Win Rate</div><div className="mt-1 text-lg font-bold text-white">60.0%</div></div>
                       <div className="rounded-lg border border-white/8 bg-[#171c36] px-3 py-2"><div className="text-[10px] uppercase tracking-[0.16em] text-white/35">P/L</div><div className="mt-1 text-lg font-bold text-emerald-300">+35.41</div></div>
                       <div className="rounded-lg border border-white/8 bg-[#171c36] px-3 py-2"><div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Stake</div><div className="mt-1 text-lg font-bold text-white">218.00</div></div>
@@ -1085,7 +1115,7 @@ export default async function Home() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/8">
-                          {bettingSnapshot.h2h.slice(0, 3).map((row, index) => (
+                          {betTrackerPreviewRows.map((row, index) => (
                             <tr key={`${row.match}-${row.result}-${index}`}>
                               <td className="px-3 py-2">{formatShortDate(row.date)}</td>
                               <td className="px-3 py-2">{row.match}</td>

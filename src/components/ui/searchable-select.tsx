@@ -127,7 +127,7 @@ export function SearchableSelect({
         />
 
         {open && !disabled && (
-          <div className="absolute left-0 top-full z-[200] mt-1 max-h-56 w-full overflow-auto rounded-md border border-nrl-border bg-nrl-panel shadow-lg">
+          <div className="absolute left-0 top-full z-[200] mt-1 max-h-56 w-max min-w-[14rem] max-w-[18rem] overflow-auto rounded-md border border-nrl-border bg-nrl-panel shadow-lg">
             {filtered.length === 0 ? (
               <div className="px-2 py-1 text-[10px] text-nrl-muted">No matches</div>
             ) : (
@@ -139,7 +139,7 @@ export function SearchableSelect({
                     e.preventDefault();
                     selectOption(opt);
                   }}
-                  className={`block w-full px-2 py-1 text-left text-[10px] transition-colors ${
+                  className={`block w-full whitespace-nowrap px-2 py-1 text-left text-[10px] transition-colors ${
                     opt === value
                       ? "bg-nrl-accent/15 text-nrl-accent"
                       : "text-nrl-text hover:bg-nrl-panel-2"

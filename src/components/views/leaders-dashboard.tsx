@@ -601,24 +601,26 @@ function PlayerLeaderCard({ card }: { card: PlayerLeaderCardData }) {
           </div>
         ) : null}
 
-        <div className="relative flex min-h-[12.25rem] justify-between gap-3 p-4 pb-0">
-          <div className="flex max-w-[58%] flex-col justify-between pb-4">
+        <div className="relative flex min-h-[12.25rem] flex-col gap-3 p-4 sm:flex-row sm:justify-between sm:pb-0">
+          <div className="flex min-w-0 flex-col justify-between pb-0 sm:max-w-[58%] sm:pb-4">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">{card.label}</div>
-              <div className="mt-6 text-3xl font-bold leading-tight text-white">{leader?.name ?? "No leader"}</div>
+              <div className="mt-4 text-[1.8rem] font-bold leading-tight text-white sm:mt-6 sm:text-3xl">
+                {leader?.name ?? "No leader"}
+              </div>
               <div className="mt-1 text-sm text-white/72">{leader?.team ?? "-"}</div>
             </div>
-            <div className="text-5xl font-black tracking-tight text-white">
+            <div className="text-4xl font-black tracking-tight text-white sm:text-5xl">
               {leader ? formatLeaderValue(card.key, leader.value) : "-"}
             </div>
           </div>
 
-          <div className="relative flex min-w-[7rem] flex-1 items-end justify-end overflow-hidden">
+          <div className="relative flex min-h-[7.5rem] items-end justify-center overflow-hidden sm:min-w-[7rem] sm:flex-1 sm:justify-end">
             {leader ? (
               <ImageWithFallback
                 sources={leader.imageSources}
                 alt={leader.name}
-                className="max-h-[12.25rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)]"
+                className="max-h-[9.5rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[12.25rem]"
               />
             ) : null}
           </div>

@@ -1931,46 +1931,46 @@ export function FantasyDashboard({
                   <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Filters</div>
                   <div className="text-[10px] text-nrl-muted">Applies to player game log and filtered analysis</div>
                 </div>
-                <div className="grid grid-cols-3 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-              <YearRangeSlider
-                label="Season"
-                value={selectedYears}
-                options={availableYears}
-                onChange={(years) => {
-                  void handleYearsChange(years)
-                }}
-              />
-              <Select
-                label="Opponent"
-                value={opponentFilter}
-                options={["All Opponents", ...opponentOptions]}
-                onChange={setOpponentFilter}
-              />
-              <Select
-                label="Position"
-                value={positionFilter}
-                options={["All Positions", ...positionOptions]}
-                onChange={setPositionFilter}
-              />
-              <Select
-                label="Finals"
-                value={finalsMode}
-                options={["Yes", "No"]}
-                onChange={(value) => setFinalsMode(value as "Yes" | "No")}
-              />
-              <Select
-                label="Minutes Over"
-                value={minutesOverFilter}
-                options={[...MINUTES_FILTER_OPTIONS]}
-                onChange={setMinutesOverFilter}
-              />
-	              <Select
-	                label="Minutes Under"
-	                value={minutesUnderFilter}
-	                options={[...MINUTES_FILTER_OPTIONS]}
-	                onChange={setMinutesUnderFilter}
-	              />
-	            </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+                  <YearRangeSlider
+                    label="Season"
+                    value={selectedYears}
+                    options={availableYears}
+                    onChange={(years) => {
+                      void handleYearsChange(years)
+                    }}
+                  />
+                  <Select
+                    label="Opponent"
+                    value={opponentFilter}
+                    options={["All Opponents", ...opponentOptions]}
+                    onChange={setOpponentFilter}
+                  />
+                  <Select
+                    label="Position"
+                    value={positionFilter}
+                    options={["All Positions", ...positionOptions]}
+                    onChange={setPositionFilter}
+                  />
+                  <Select
+                    label="Finals"
+                    value={finalsMode}
+                    options={["Yes", "No"]}
+                    onChange={(value) => setFinalsMode(value as "Yes" | "No")}
+                  />
+                  <Select
+                    label="Minutes Over"
+                    value={minutesOverFilter}
+                    options={[...MINUTES_FILTER_OPTIONS]}
+                    onChange={setMinutesOverFilter}
+                  />
+                  <Select
+                    label="Minutes Under"
+                    value={minutesUnderFilter}
+                    options={[...MINUTES_FILTER_OPTIONS]}
+                    onChange={setMinutesUnderFilter}
+                  />
+                </div>
 
                 {!hasLoginAccess ? (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1986,7 +1986,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-[minmax(220px,1fr)_180px_auto]">
+                <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_auto]">
                   <SearchableSelect
                     label="Teammate"
                     value={teammate}
@@ -1995,26 +1995,26 @@ export function FantasyDashboard({
                     placeholder="Filter by teammate..."
                     disabled={!matchedLocalName || !hasLoginAccess}
                   />
-                <Select
-                  label="Teammate Position"
-                  value={teammatePosition}
-                  options={["All", ...teammatePositionOptions]}
-                  onChange={setTeammatePosition}
-                  disabled={!hasLoginAccess}
-                />
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
-                    With / Without
-                  </label>
-                  <div className="h-[30px] flex items-center">
-                    <PillRadio
-                      options={["With", "Without"]}
-                      value={teammateMode}
-                      onChange={(value) => setTeammateMode(value as TeammateMode)}
-                      disabled={teammate === "None" || !hasLoginAccess}
-                    />
+                  <Select
+                    label="Teammate Position"
+                    value={teammatePosition}
+                    options={["All", ...teammatePositionOptions]}
+                    onChange={setTeammatePosition}
+                    disabled={!hasLoginAccess}
+                  />
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
+                      With / Without
+                    </label>
+                    <div className="flex min-h-[30px] items-center">
+                      <PillRadio
+                        options={["With", "Without"]}
+                        value={teammateMode}
+                        onChange={(value) => setTeammateMode(value as TeammateMode)}
+                        disabled={teammate === "None" || !hasLoginAccess}
+                      />
+                    </div>
                   </div>
-                </div>
                 </div>
 
                 {!hasLoginAccess ? (

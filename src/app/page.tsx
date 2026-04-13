@@ -1548,7 +1548,7 @@ export default async function Home() {
                                   </div>
                                 </div>
 
-                                <div className="mt-3 grid grid-cols-5 gap-2">
+                                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
                                   <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
                                     <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Implied</div>
                                     <div className="mt-1 text-sm font-semibold text-white">{formatPct(implied == null ? null : implied * 100)}</div>
@@ -1569,7 +1569,7 @@ export default async function Home() {
                                       <span className="block blur-[4px] select-none">{recommendedStake}</span>
                                     </div>
                                   </div>
-                                  <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2 py-2">
+                                  <div className="col-span-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2 py-2 sm:col-auto">
                                     <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Bet</div>
                                     <div className="mt-1 text-sm font-semibold text-emerald-300">BET</div>
                                   </div>
@@ -1853,24 +1853,26 @@ export default async function Home() {
                         return (
                           <article key={`leader-${card.key}`} className="flex h-full flex-col overflow-hidden rounded-xl border border-white/8 bg-[#1b2140]">
                             <div className="relative min-h-[12.5rem] overflow-hidden border-b border-white/8 bg-[linear-gradient(135deg,#3a315f_0%,#31396d_100%)]">
-                              <div className="relative flex min-h-[12.5rem] justify-between gap-3 p-4 pb-0">
-                                <div className="flex max-w-[58%] flex-col justify-between pb-4">
+                              <div className="relative flex min-h-[12.5rem] flex-col gap-3 p-4 sm:flex-row sm:justify-between sm:pb-0">
+                                <div className="flex min-w-0 flex-col justify-between pb-0 sm:max-w-[58%] sm:pb-4">
                                   <div>
                                     <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">{card.label}</div>
-                                    <div className="mt-6 text-3xl font-bold leading-tight text-white">{leader?.name ?? "No leader"}</div>
+                                    <div className="mt-4 text-[1.8rem] font-bold leading-tight text-white sm:mt-6 sm:text-3xl">
+                                      {leader?.name ?? "No leader"}
+                                    </div>
                                     <div className="mt-1 text-sm text-white/72">{leader?.team ?? "-"}</div>
                                   </div>
-                                  <div className="text-5xl font-black tracking-tight text-white">
+                                  <div className="text-4xl font-black tracking-tight text-white sm:text-5xl">
                                     {leader ? formatNumber(leader.value, 0) : "-"}
                                   </div>
                                 </div>
 
-                                <div className="relative flex min-w-[7rem] flex-1 items-end justify-end overflow-hidden">
+                                <div className="relative flex min-h-[7.5rem] items-end justify-center overflow-hidden sm:min-w-[7rem] sm:flex-1 sm:justify-end">
                                   {leader ? (
                                     <ImageWithFallback
                                       sources={leader.imageSources}
                                       alt={leader.name}
-                                      className="max-h-[12.25rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)]"
+                                      className="max-h-[9.5rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[12.25rem]"
                                     />
                                   ) : null}
                                 </div>

@@ -78,7 +78,7 @@ export function YearRangeSlider({
   }, [committedYears, draftRange.endIndex, onChange, options]);
 
   useEffect(() => {
-    const onMouseDown = (event: MouseEvent) => {
+    const onPointerDown = (event: PointerEvent) => {
       if (!open || !containerRef.current) return;
       if (!containerRef.current.contains(event.target as Node)) {
         commitDraft();
@@ -86,12 +86,12 @@ export function YearRangeSlider({
       }
     };
 
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [commitDraft, open]);
 
   return (
-    <div className={`relative flex flex-col gap-0.5 ${open ? "z-[320]" : "z-0"}`}>
+    <div className={`relative min-w-0 flex flex-col gap-0.5 ${open ? "z-[320]" : "z-0"}`}>
       <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
         {label}
       </label>
@@ -108,7 +108,7 @@ export function YearRangeSlider({
             setOpen(true);
           }}
           aria-expanded={open}
-          className="h-[26px] w-full overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2 text-left"
+          className="h-[30px] w-full overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2 text-left sm:h-[26px]"
         >
           <div className="flex h-full items-stretch justify-between">
             <div className="flex min-w-0 flex-1 items-center bg-nrl-accent/10 px-3">
@@ -129,10 +129,10 @@ export function YearRangeSlider({
         </button>
 
         {open && (
-          <div className="absolute left-0 top-full z-[220] mt-1 w-[min(36rem,calc(100vw-1rem))] max-w-full rounded-md border border-nrl-border bg-nrl-panel p-6 shadow-lg sm:w-[36rem]">
+          <div className="absolute left-0 right-0 top-full z-[220] mt-1 w-full max-w-[calc(100vw-2rem)] rounded-md border border-nrl-border bg-nrl-panel p-4 shadow-lg sm:right-auto sm:w-[36rem] sm:max-w-[36rem] sm:p-6">
             {options.length > 0 ? (
               <div className="flex flex-col gap-5">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-[10px] font-semibold text-nrl-text">
                     {formatSelectionSummary(selectedYears)}
                   </div>

@@ -763,138 +763,130 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
     () => [...bets].sort((a, b) => b.placedAt.localeCompare(a.placedAt)),
     [bets]
   );
-  const stakingPreferencesReady = !isLoaded ? false : preferencesHydrated;
+  const stakingPreferencesLoading = isLoaded && Boolean(userId) && !preferencesHydrated;
 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
         <h1 className="text-xl font-bold text-nrl-text">Betting</h1>
-        <p className="mt-2 text-sm text-nrl-muted">
-          Customisable staking calculator, bet tracker and live odds for line, h2h and total NRL betting. Model
-          predictions are to be used as a guide, and a max edge is recommended as the model does not know about lineup
-          fluctuations and hence a large edge is likely incorrect.
-        </p>
       </section>
 
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-nrl-text">Staking Calculator</h2>
-        {!stakingPreferencesReady ? (
-          <div className="mt-4 text-xs text-nrl-muted">Loading staking preferences...</div>
-        ) : (
-          <>
-            <div className="mt-4 grid gap-2 md:grid-cols-3">
-              {STAKING_OPTIONS.map((option) => {
-                const active = option.mode === stakingMode;
-                const locked = !hasPremiumBettingAccess && option.mode === "kelly";
-                if (locked) {
-                  return (
-                    <div
-                      key={option.mode}
-                      className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-left text-nrl-muted opacity-65"
-                    >
-                      <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
-                        <span>{option.label}</span>
-                        <span className="rounded border border-nrl-border px-1.5 py-0.5 text-[9px] text-nrl-muted">
-                          Premium
-                        </span>
-                      </div>
-                      <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
-                      <BillingPageLink className="mt-2 inline-flex rounded border border-nrl-accent/45 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10">
-                        View plans
-                      </BillingPageLink>
-                    </div>
-                  );
-                }
-                return (
-                  <button
-                    key={option.mode}
-                    type="button"
-                    onClick={() => handleStakingModeChange(option.mode)}
-                    className={`rounded-md border px-3 py-2 text-left transition-colors ${
-                      active
-                        ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                        : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
-                      <span>{option.label}</span>
-                    </div>
-                    <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Bankroll</span>
-                <input
-                  type="number"
-                  value={bankroll}
-                  min={0}
-                  step={10}
-                  onChange={(event) => setBankroll(Math.max(0, Number(event.target.value) || 0))}
-                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-                />
-              </label>
-              {stakingMode === "percentage" ? (
-                <label className="flex flex-col gap-1">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Stake %</span>
-                  <input
-                    type="number"
-                    value={percentageStakePct}
-                    min={0}
-                    max={100}
-                    step={0.1}
-                    onChange={(event) => setPercentageStakePct(clamp(Number(event.target.value) || 0, 0, 100))}
-                    className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-                  />
-                </label>
-              ) : null}
-              {stakingMode === "targetProfit" ? (
-                <label className="flex flex-col gap-1">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Target Profit %</span>
-                  <input
-                    type="number"
-                    value={targetProfitPct}
-                    min={0}
-                    max={100}
-                    step={0.1}
-                    onChange={(event) => setTargetProfitPct(clamp(Number(event.target.value) || 0, 0, 100))}
-                    className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-                  />
-                </label>
-              ) : null}
-              {hasPremiumBettingAccess && stakingMode === "kelly" ? (
-                <label className="flex flex-col gap-1">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Kelly Fraction</span>
-                  <input
-                    type="number"
-                    value={kellyScale}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    onChange={(event) => setKellyScale(clamp(Number(event.target.value) || 0, 0, 1))}
-                    className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-                  />
-                </label>
-              ) : null}
-              {hasPremiumBettingAccess ? (
-                <label className="flex flex-col gap-1">
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Max Edge</span>
-                  <input
-                    type="number"
-                    value={maxEdge}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    onChange={(event) => setMaxEdge(clamp(Number(event.target.value) || 0, 0, 1))}
-                    className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-                  />
-                </label>
-              ) : null}
-            </div>
-          </>
-        )}
+        {stakingPreferencesLoading ? (
+          <div className="mt-3 text-xs text-nrl-muted">Loading staking…</div>
+        ) : null}
+        <div className="mt-4 grid gap-2 md:grid-cols-3">
+          {STAKING_OPTIONS.map((option) => {
+            const active = option.mode === stakingMode;
+            const locked = !hasPremiumBettingAccess && option.mode === "kelly";
+            if (locked) {
+              return (
+                <div
+                  key={option.mode}
+                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-left text-nrl-muted opacity-65"
+                >
+                  <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
+                    <span>{option.label}</span>
+                    <span className="rounded border border-nrl-border px-1.5 py-0.5 text-[9px] text-nrl-muted">
+                      Premium
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
+                  <BillingPageLink className="mt-2 inline-flex rounded border border-nrl-accent/45 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10">
+                    View plans
+                  </BillingPageLink>
+                </div>
+              );
+            }
+            return (
+              <button
+                key={option.mode}
+                type="button"
+                onClick={() => handleStakingModeChange(option.mode)}
+                className={`rounded-md border px-3 py-2 text-left transition-colors ${
+                  active
+                    ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
+                  <span>{option.label}</span>
+                </div>
+                <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Bankroll</span>
+            <input
+              type="number"
+              value={bankroll}
+              min={0}
+              step={10}
+              onChange={(event) => setBankroll(Math.max(0, Number(event.target.value) || 0))}
+              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+            />
+          </label>
+          {stakingMode === "percentage" ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Stake %</span>
+              <input
+                type="number"
+                value={percentageStakePct}
+                min={0}
+                max={100}
+                step={0.1}
+                onChange={(event) => setPercentageStakePct(clamp(Number(event.target.value) || 0, 0, 100))}
+                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+              />
+            </label>
+          ) : null}
+          {stakingMode === "targetProfit" ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Target Profit %</span>
+              <input
+                type="number"
+                value={targetProfitPct}
+                min={0}
+                max={100}
+                step={0.1}
+                onChange={(event) => setTargetProfitPct(clamp(Number(event.target.value) || 0, 0, 100))}
+                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+              />
+            </label>
+          ) : null}
+          {hasPremiumBettingAccess && stakingMode === "kelly" ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Kelly Fraction</span>
+              <input
+                type="number"
+                value={kellyScale}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(event) => setKellyScale(clamp(Number(event.target.value) || 0, 0, 1))}
+                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+              />
+            </label>
+          ) : null}
+          {hasPremiumBettingAccess ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Max Edge</span>
+              <input
+                type="number"
+                value={maxEdge}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(event) => setMaxEdge(clamp(Number(event.target.value) || 0, 0, 1))}
+                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+              />
+            </label>
+          ) : null}
+        </div>
       </section>
 
       {hasPremiumBettingAccess ? (
@@ -1165,9 +1157,6 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
         <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
           <div className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-3 text-sm text-nrl-muted">
             <div>Bet tracker is Premium-only.</div>
-            <BillingPageLink className="mt-3 inline-flex rounded-md border border-nrl-accent/45 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10">
-              View billing
-            </BillingPageLink>
           </div>
         </section>
       )}

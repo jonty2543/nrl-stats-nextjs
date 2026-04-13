@@ -148,7 +148,6 @@ export interface TeamStat {
   "On Report": number;
   "Sin Bins": number;
   "Send Offs": number;
-  "Possession %": number;
 
   [key: string]: string | number | null;
 }

@@ -720,24 +720,30 @@ function MetricCard({
   sublabel,
   compact = false,
   blurValue = false,
+  mobileTight = false,
 }: {
   label: string
   value: string
   sublabel?: string
   compact?: boolean
   blurValue?: boolean
+  mobileTight?: boolean
 }) {
   return (
     <div
       className={`rounded-lg border border-nrl-border bg-nrl-panel-2 ${
-        compact ? "px-2 py-3 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5" : "px-3 py-2"
+        compact
+          ? mobileTight
+            ? "px-1.5 py-2 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5"
+            : "px-2 py-3 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5"
+          : "px-3 py-2"
       }`}
     >
-      <div className={`${compact ? "text-[7px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
+      <div className={`${compact ? mobileTight ? "text-[6px] sm:text-[7px]" : "text-[7px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
         {label}
       </div>
       <div
-        className={`${compact ? "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${
+        className={`${compact ? mobileTight ? "mt-0.5 text-[0.98rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${
           blurValue ? "select-none blur-[5px]" : ""
         }`}
         aria-hidden={blurValue || undefined}
@@ -745,7 +751,7 @@ function MetricCard({
         {value}
       </div>
       {sublabel ? (
-        <div className={`${compact ? "mt-1 text-[8px] leading-tight" : "mt-0.5 text-[10px]"} text-nrl-muted`}>
+        <div className={`${compact ? mobileTight ? "mt-0.5 text-[7px] leading-tight sm:mt-1 sm:text-[8px]" : "mt-1 text-[8px] leading-tight" : "mt-0.5 text-[10px]"} text-nrl-muted`}>
           {sublabel}
         </div>
       ) : null}
@@ -1866,12 +1872,13 @@ export function FantasyDashboard({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 items-start gap-3 pt-4 sm:grid-cols-[minmax(0,1fr)_14.25rem] sm:gap-4 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5">
-                      <div className="grid w-full grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
-                        <MetricCard compact label="Price" value={formatPrice(selectedFantasyPlayer.cost)} />
-                        <MetricCard compact label="PPM" value={formatNumber(localPpm, 2)} />
+                    <div className={`grid items-start gap-2.5 pt-4 sm:gap-4 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5 ${fantasyCardPlayerName ? "grid-cols-[minmax(0,1fr)_6.4rem] sm:grid-cols-[minmax(0,1fr)_14.25rem]" : "grid-cols-1"}`}>
+                      <div className="grid w-full grid-cols-2 gap-1.5 sm:gap-3 xl:grid-cols-4">
+                        <MetricCard compact mobileTight label="Price" value={formatPrice(selectedFantasyPlayer.cost)} />
+                        <MetricCard compact mobileTight label="PPM" value={formatNumber(localPpm, 2)} />
                         <MetricCard
                           compact
+                          mobileTight
                           label="Own %"
                           value={formatPercent(selectedFantasyPlayer.ownedBy)}
                           sublabel={
@@ -1882,14 +1889,15 @@ export function FantasyDashboard({
                         />
                         <MetricCard
                           compact
+                          mobileTight
                           label="Priced At"
                           value={formatNumber(selectedFantasyPlayer.pricedAt, 0)}
                         />
                       </div>
 
                       {fantasyCardPlayerName ? (
-                        <div className="mt-1 flex self-start items-start justify-center sm:-mt-4 sm:justify-end xl:hidden">
-                          <div className="w-full max-w-[10.25rem] rounded-[1.1rem] bg-[linear-gradient(180deg,rgba(17,23,46,0.46),rgba(17,23,46,0.18))] shadow-[0_18px_40px_rgba(8,10,18,0.22)] sm:max-w-[14.25rem] sm:rounded-[1.2rem] lg:max-w-[15.25rem]">
+                        <div className="flex self-start items-start justify-center sm:-mt-4 sm:justify-end xl:hidden">
+                          <div className="w-full max-w-[6.4rem] rounded-[0.95rem] bg-[linear-gradient(180deg,rgba(17,23,46,0.46),rgba(17,23,46,0.18))] shadow-[0_18px_40px_rgba(8,10,18,0.22)] sm:max-w-[14.25rem] sm:rounded-[1.2rem] lg:max-w-[15.25rem]">
                             <div className="relative">
                               <PlayerImageCard
                                 playerName={fantasyCardPlayerName}

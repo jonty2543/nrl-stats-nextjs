@@ -73,10 +73,6 @@ function buildAgainstTeamStats(rows: TeamStat[]): TeamStat[] {
       ),
     } as TeamStat;
 
-    if (opponentRow) {
-      againstRow["Possession %"] = toFiniteNumber(opponentRow["Possession %"]) ?? 0;
-    }
-
     return againstRow;
   });
 }

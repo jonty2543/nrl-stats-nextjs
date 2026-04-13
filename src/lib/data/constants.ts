@@ -168,7 +168,6 @@ export const TEAM_STATS = [
   "On Report",
   "Sin Bins",
   "Send Offs",
-  "Possession %",
 ] as const;
 
 export const PLAYER_LABELS = [

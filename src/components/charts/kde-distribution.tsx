@@ -516,7 +516,13 @@ function HistogramDistribution({
 export function KDEDistribution({ title: _title, stat, series }: KDEDistributionProps) {
   void _title;
   const colors = [CHART_COLORS.primary, CHART_COLORS.secondary, CHART_COLORS.tertiary];
-  const nonEmptySeries = series.filter((s) => s.values.length > 0);
+  const normalisedSeries = series.map((s) => ({
+    ...s,
+    values: s.values
+      .map((value) => (typeof value === "number" ? value : Number(value)))
+      .filter((value) => Number.isFinite(value)),
+  }));
+  const nonEmptySeries = normalisedSeries.filter((s) => s.values.length > 0);
 
   if (nonEmptySeries.length === 0) {
     return (
@@ -528,8 +534,8 @@ export function KDEDistribution({ title: _title, stat, series }: KDEDistribution
 
   const smallestSample = Math.min(...nonEmptySeries.map((s) => s.values.length));
   if (smallestSample <= BOXPLOT_MAX_SAMPLE) {
-    return <StripDistribution stat={stat} series={series} colors={colors} />;
+    return <StripDistribution stat={stat} series={nonEmptySeries} colors={colors} />;
   }
 
-  return <HistogramDistribution stat={stat} series={series} colors={colors} />;
+  return <HistogramDistribution stat={stat} series={nonEmptySeries} colors={colors} />;
 }

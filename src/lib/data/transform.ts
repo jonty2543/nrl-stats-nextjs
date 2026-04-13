@@ -419,20 +419,6 @@ export function aggregateTeamStats(playerRows: PlayerStat[]): TeamStat[] {
     ),
   })) as TeamStat[];
 
-  const rowsByTeamRound = new Map<string, TeamStat>(
-    aggregatedRows.map((row) => [`${row.Year}|${row.Round}|${row.Team}`, row])
-  );
-
-  for (const row of aggregatedRows) {
-    const playTheBall = toFiniteNumber(row["Play The Ball"]) ?? 0;
-    const opponent = row.Opponent
-      ? rowsByTeamRound.get(`${row.Year}|${row.Round}|${row.Opponent}`)
-      : null;
-    const opponentPlayTheBall = opponent ? toFiniteNumber(opponent["Play The Ball"]) ?? 0 : 0;
-    const totalPlayTheBall = playTheBall + opponentPlayTheBall;
-    row["Possession %"] = totalPlayTheBall > 0 ? (playTheBall / totalPlayTheBall) * 100 : 0;
-  }
-
   return aggregatedRows;
 }
 

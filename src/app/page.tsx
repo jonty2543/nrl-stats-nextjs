@@ -974,6 +974,7 @@ export default async function Home() {
           </Link>
 
           <nav className="hidden items-center gap-5 text-xs text-white/55 md:flex">
+            <Link href="/" className="transition-colors hover:text-white">Home</Link>
             <Link href="/dashboard/fantasy" className="transition-colors hover:text-white">Fantasy</Link>
             <Link href="/dashboard/betting" className="transition-colors hover:text-white">Betting</Link>
             <Link href="/dashboard/players" className="transition-colors hover:text-white">Stats</Link>
@@ -988,6 +989,25 @@ export default async function Home() {
             </Link>
           </div>
         </header>
+
+        <div className="mt-3 md:hidden">
+          <nav className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="inline-flex min-w-max rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur">
+              <Link href="/" className="rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                Home
+              </Link>
+              <Link href="/dashboard/fantasy" className="rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55 transition-colors hover:text-white">
+                Fantasy
+              </Link>
+              <Link href="/dashboard/betting" className="rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55 transition-colors hover:text-white">
+                Betting
+              </Link>
+              <Link href="/dashboard/players" className="rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55 transition-colors hover:text-white">
+                Stats
+              </Link>
+            </div>
+          </nav>
+        </div>
 
         <LandingHeroScrollShell>
           <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
@@ -1556,14 +1576,6 @@ export default async function Home() {
                                     </div>
                                   </div>
                                   <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
-                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Implied</div>
-                                    <div className="mt-1 text-sm font-semibold text-white">{formatPct(implied == null ? null : implied * 100)}</div>
-                                  </div>
-                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
-                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Model</div>
-                                    <div className="mt-1 text-sm font-semibold text-white blur-[4px] select-none">{formatPct(modelProbability == null ? null : modelProbability * 100)}</div>
-                                  </div>
-                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
                                     <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Edge</div>
                                     <div className="mt-1 text-sm font-semibold text-white/72 blur-[4px] select-none">
                                       {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
@@ -1574,6 +1586,14 @@ export default async function Home() {
                                     <div className="mt-1 h-[1.25rem] text-sm font-semibold text-white">
                                       <span className="block blur-[4px] select-none">{recommendedStake}</span>
                                     </div>
+                                  </div>
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
+                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Implied</div>
+                                    <div className="mt-1 text-sm font-semibold text-white">{formatPct(implied == null ? null : implied * 100)}</div>
+                                  </div>
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
+                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Model</div>
+                                    <div className="mt-1 text-sm font-semibold text-white blur-[4px] select-none">{formatPct(modelProbability == null ? null : modelProbability * 100)}</div>
                                   </div>
                                   <div className="col-span-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2 py-2 sm:col-auto">
                                     <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Bet</div>
@@ -1716,24 +1736,24 @@ export default async function Home() {
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
-                        <div className="flex items-center justify-center">
+                      <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                        <div className="min-w-0 flex items-center justify-center">
                           <SimplePlayerPhotoTile
                             playerName={statsPlayer1Name ?? "Player 1"}
                             imageRow={statsPlayer1CardImage}
                             priority
-                            className="mx-auto w-full max-w-[8.9rem] sm:max-w-none"
-                            imageHeightClass="h-[8.75rem] sm:h-[15rem]"
+                            className="mx-auto w-full max-w-[7.1rem] sm:max-w-none"
+                            imageHeightClass="h-[7.25rem] sm:h-[15rem]"
                           />
                         </div>
 
-                        <div className="flex items-center justify-center">
+                        <div className="min-w-0 flex items-center justify-center">
                           <SimplePlayerPhotoTile
                             playerName={statsPlayer2Name ?? "Player 2"}
                             imageRow={statsPlayer2CardImage}
                             priority
-                            className="mx-auto w-full max-w-[8.9rem] sm:max-w-none"
-                            imageHeightClass="h-[8.75rem] sm:h-[15rem]"
+                            className="mx-auto w-full max-w-[7.1rem] sm:max-w-none"
+                            imageHeightClass="h-[7.25rem] sm:h-[15rem]"
                           />
                         </div>
                       </div>

@@ -610,8 +610,8 @@ export function SimplePlayerPhotoTile({
   const imageUrl = imageCandidates[imageIndex] ?? null;
 
   return (
-    <div className={`w-full overflow-hidden rounded-2xl border border-[#1d3a63] bg-[#0b1832] shadow-[0_18px_40px_rgba(0,0,0,0.28)] ${className ?? "max-w-[15rem]"}`}>
-      <div className={`relative flex items-end justify-center overflow-hidden bg-[radial-gradient(circle_at_top,rgba(92,132,255,0.2),transparent_60%),linear-gradient(180deg,#112347,#0a1327)] ${imageHeightClass ?? "h-[12rem] sm:h-[15rem]"}`}>
+    <div className={`min-w-0 w-full overflow-hidden rounded-2xl border border-[#1d3a63] bg-[#0b1832] shadow-[0_18px_40px_rgba(0,0,0,0.28)] ${className ?? "max-w-[8rem] sm:max-w-[15rem]"}`}>
+      <div className={`relative flex items-end justify-center overflow-hidden bg-[radial-gradient(circle_at_top,rgba(92,132,255,0.2),transparent_60%),linear-gradient(180deg,#112347,#0a1327)] ${imageHeightClass ?? "h-[7.5rem] sm:h-[15rem]"}`}>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
         <div className="pointer-events-none absolute left-[8%] top-[12%] h-20 w-20 rounded-full bg-emerald-300/10 blur-2xl" />
         <div className="pointer-events-none absolute bottom-[10%] right-[12%] h-24 w-24 rounded-full bg-violet-400/12 blur-3xl" />
@@ -641,8 +641,8 @@ export function SimplePlayerPhotoTile({
           </div>
         )}
       </div>
-      <div className="border-t border-[#1d3a63] px-4 py-3 text-center">
-        <div className="text-sm font-semibold text-white">{playerName || "No player selected"}</div>
+      <div className="border-t border-[#1d3a63] px-2.5 py-2 text-center sm:px-4 sm:py-3">
+        <div className="truncate text-[12px] font-semibold text-white sm:text-sm">{playerName || "No player selected"}</div>
       </div>
     </div>
   );

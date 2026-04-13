@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const tools = [
+  { label: "Home", href: "/" },
   { label: "Stats", href: "/dashboard/players" },
   { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "Betting", href: "/dashboard/betting" },
@@ -54,6 +55,8 @@ export function ToolNav() {
       ? "Betting"
     : pathname.startsWith("/dashboard/fantasy")
       ? "Fantasy"
+      : pathname === "/"
+        ? "Home"
       : "Stats";
 
   return (

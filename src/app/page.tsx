@@ -1548,7 +1548,13 @@ export default async function Home() {
                                   </div>
                                 </div>
 
-                                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
+                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Odds</div>
+                                    <div className="mt-1 text-sm font-semibold text-emerald-300">
+                                      {formatNumber(row.bestPrice, 2)}
+                                    </div>
+                                  </div>
                                   <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
                                     <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Implied</div>
                                     <div className="mt-1 text-sm font-semibold text-white">{formatPct(implied == null ? null : implied * 100)}</div>
@@ -1710,14 +1716,14 @@ export default async function Home() {
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                      <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
                         <div className="flex items-center justify-center">
                           <SimplePlayerPhotoTile
                             playerName={statsPlayer1Name ?? "Player 1"}
                             imageRow={statsPlayer1CardImage}
                             priority
-                            className="mx-auto w-full max-w-[13rem] sm:max-w-none"
-                            imageHeightClass="h-[13rem] sm:h-[15rem]"
+                            className="mx-auto w-full max-w-[8.9rem] sm:max-w-none"
+                            imageHeightClass="h-[8.75rem] sm:h-[15rem]"
                           />
                         </div>
 
@@ -1726,8 +1732,8 @@ export default async function Home() {
                             playerName={statsPlayer2Name ?? "Player 2"}
                             imageRow={statsPlayer2CardImage}
                             priority
-                            className="mx-auto w-full max-w-[13rem] sm:max-w-none"
-                            imageHeightClass="h-[13rem] sm:h-[15rem]"
+                            className="mx-auto w-full max-w-[8.9rem] sm:max-w-none"
+                            imageHeightClass="h-[8.75rem] sm:h-[15rem]"
                           />
                         </div>
                       </div>

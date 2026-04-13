@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import type { PlayerStat, TeamStat } from "@/lib/data/types";
 import { TEAM_STATS } from "@/lib/data/constants";
@@ -59,13 +59,17 @@ export function TeamComparison({
   canBypassPlotGate = false,
 }: TeamComparisonProps) {
   const { userId } = useAuth();
+  const { user } = useUser();
   const canAccessLoginSeason = Boolean(userId);
-  const hasClientProPlotAccess = canBypassPlotGate || hasProPlotAccess(userId);
+  const hasClientProPlotAccess =
+    canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata);
   const [allData, setAllData] = useState<PlayerStat[]>(initialData);
   const unlockedYears = useMemo(
     () =>
-      availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason, "stats")),
-    [availableYears, canAccessLoginSeason]
+      availableYears.filter((year) =>
+        isAccessibleSeason(year, canAccessLoginSeason, "stats", hasClientProPlotAccess)
+      ),
+    [availableYears, canAccessLoginSeason, hasClientProPlotAccess]
   );
   const initialYears = useMemo(() => {
     const validDefaultYears = defaultYears.filter((year) => unlockedYears.includes(year));

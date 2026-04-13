@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { YearRangeSlider } from "@/components/ui/year-range-slider";
 
 type StatRow = {
   Year: string;
@@ -28,6 +29,12 @@ function toFiniteNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function toRoundNumber(value: unknown): number | null {
+  const parsed = toFiniteNumber(value);
+  if (parsed === null) return null;
+  return Math.round(parsed);
 }
 
 function normalizeOpponent(value: unknown): string | null {
@@ -60,13 +67,32 @@ export function OpponentAverageHeatmap<T extends StatRow>({
   rows,
   stat,
 }: OpponentAverageHeatmapProps<T>) {
+  const seasonOptions = useMemo(
+    () =>
+      [...new Set(rows.map((row) => String(row.Year ?? "").trim() || "Unknown"))]
+        .filter(Boolean)
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
+    [rows]
+  );
+  const [selectedYears, setSelectedYears] = useState<string[]>(seasonOptions);
+  const effectiveSelectedYears = useMemo(() => {
+    const nextYears = selectedYears.filter((year) => seasonOptions.includes(year));
+    return nextYears.length > 0 ? nextYears : seasonOptions;
+  }, [seasonOptions, selectedYears]);
+
+  const filteredRows = useMemo(() => {
+    if (effectiveSelectedYears.length === 0) return rows;
+    const allowedYears = new Set(effectiveSelectedYears);
+    return rows.filter((row) => allowedYears.has(String(row.Year ?? "").trim() || "Unknown"));
+  }, [effectiveSelectedYears, rows]);
+
   const heatmap = useMemo(() => {
     const opponents = new Set<string>();
     const seasons = new Set<string>();
     const seasonOpponent = new Map<string, { sum: number; count: number }>();
     const allOpponent = new Map<string, { sum: number; count: number }>();
 
-    for (const row of rows) {
+    for (const row of filteredRows) {
       const opponent = normalizeOpponent(row.Opponent);
       const value = toFiniteNumber(row[stat]);
       if (!opponent || value === null) continue;
@@ -92,10 +118,10 @@ export function OpponentAverageHeatmap<T extends StatRow>({
     const opponentFirstRound = new Map<string, number>();
 
     if (referenceSeason) {
-      for (const row of rows) {
+      for (const row of filteredRows) {
         const opponent = normalizeOpponent(row.Opponent);
         const season = String(row.Year ?? "").trim() || "Unknown";
-        const round = typeof row.Round === "number" && Number.isFinite(row.Round) ? row.Round : null;
+        const round = toRoundNumber(row.Round);
         if (!opponent || season !== referenceSeason || round === null) continue;
         const current = opponentFirstRound.get(opponent);
         if (current === undefined || round < current) {
@@ -144,7 +170,7 @@ export function OpponentAverageHeatmap<T extends StatRow>({
           .filter((value): value is number => value !== null)
       ),
     };
-  }, [rows, stat]);
+  }, [filteredRows, stat]);
 
   if (heatmap.columns.length === 0) {
     return <div className="text-sm text-nrl-muted">No opponent data available for this selection.</div>;
@@ -171,6 +197,16 @@ export function OpponentAverageHeatmap<T extends StatRow>({
 
   return (
     <div className="space-y-2">
+      {seasonOptions.length > 1 ? (
+        <div className="max-w-[220px]">
+          <YearRangeSlider
+            label="Years"
+            value={effectiveSelectedYears}
+            options={seasonOptions}
+            onChange={setSelectedYears}
+          />
+        </div>
+      ) : null}
       <div className="text-[10px] text-nrl-muted">
         Scale: {scale.min.toFixed(1)} low · {scale.mid.toFixed(1)} mid · {scale.max.toFixed(1)} high
       </div>

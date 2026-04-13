@@ -20,6 +20,41 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Stripe Sandbox Setup
+
+Add these variables to `.env.local`:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_ID_PRO_MONTHLY=price_...
+```
+
+What each value is used for:
+
+- `STRIPE_SECRET_KEY`: server-side Stripe API access for Checkout, customer lookup, and billing portal.
+- `STRIPE_WEBHOOK_SECRET`: verifies events sent to `/api/stripe/webhook`.
+- `STRIPE_PRICE_ID_PRO_MONTHLY`: the Stripe Price ID for the Pro subscription used by the app.
+
+Local webhook forwarding:
+
+```bash
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+What the app does with Stripe:
+
+- Signed-in users can start Checkout from the dashboard header or locked Pro callouts.
+- Stripe webhooks update Clerk metadata for the user.
+- Pro access is granted from Clerk metadata, with the old user allowlist still working as a fallback.
+
+Before testing locally:
+
+1. Create a recurring test-mode Price in Stripe and copy its `price_...` ID into `STRIPE_PRICE_ID_PRO_MONTHLY`.
+2. Start the Next.js app with `npm run dev`.
+3. Start the Stripe CLI listener and copy the emitted `whsec_...` value into `STRIPE_WEBHOOK_SECRET`.
+4. Sign into the app with a Clerk user, click `Go Pro`, and complete Checkout with a Stripe test card.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

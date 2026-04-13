@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { type ReactNode } from "react";
+import { BillingPageLink } from "@/components/billing/billing-page-link";
 import { Expander } from "@/components/ui/expander";
 
 interface ChartPanel {
@@ -24,8 +24,7 @@ function ProLockedChart({ children }: { children: ReactNode }) {
         {children}
       </div>
       <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl">
-        <Link
-          href="/sign-up"
+        <BillingPageLink
           className="rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]"
         >
           <div className="rounded-[calc(1rem-1px)] bg-slate-950/80 px-4 py-3 text-center backdrop-blur-[2px]">
@@ -36,7 +35,7 @@ function ProLockedChart({ children }: { children: ReactNode }) {
               Unlock all stats plots.
             </div>
           </div>
-        </Link>
+        </BillingPageLink>
       </div>
     </div>
   );

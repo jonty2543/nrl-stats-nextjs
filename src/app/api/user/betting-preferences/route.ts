@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { createServerSupabaseClient } from "@/lib/supabase/client";
 
 type StakingMode = "percentage" | "targetProfit" | "kelly";
@@ -47,6 +48,7 @@ export async function GET() {
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const canAccessPremium = await getServerPremiumAccess(userId);
 
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
@@ -63,7 +65,16 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({ preferences: mapRowToResponse((data as UserBettingPreferencesRow | null) ?? null) });
+  const row = (data as UserBettingPreferencesRow | null) ?? null;
+  if (!row) {
+    return NextResponse.json({ preferences: null });
+  }
+
+  return NextResponse.json({
+    preferences: canAccessPremium || row.staking_mode !== "kelly"
+      ? mapRowToResponse(row)
+      : mapRowToResponse({ ...row, staking_mode: "percentage" }),
+  });
 }
 
 export async function PUT(request: NextRequest) {
@@ -71,6 +82,7 @@ export async function PUT(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const canAccessPremium = await getServerPremiumAccess(userId);
 
   let body: unknown;
   try {
@@ -87,6 +99,9 @@ export async function PUT(request: NextRequest) {
   const stakingMode = payload.stakingMode;
   if (!isStakingMode(stakingMode)) {
     return NextResponse.json({ error: "stakingMode must be percentage, targetProfit, or kelly" }, { status: 400 });
+  }
+  if (!canAccessPremium && stakingMode === "kelly") {
+    return NextResponse.json({ error: "Kelly staking requires Premium access" }, { status: 403 });
   }
 
   const row = {

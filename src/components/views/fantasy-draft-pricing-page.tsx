@@ -3,11 +3,17 @@
 import Link from "next/link"
 import { useAuth } from "@clerk/nextjs"
 import { useEffect, useMemo, useState } from "react"
+import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { resolvePlayerImage } from "@/components/views/player-comparison"
 import type { Draw2026Data } from "@/lib/draw/types"
-import type { FantasyPlayerSnapshot } from "@/lib/fantasy/nrl"
+import {
+  buildFantasyOwnershipDeltaByPlayerId,
+  getTopFantasyOwnershipRise,
+  type FantasyOwnershipBaselineSnapshot,
+  type FantasyPlayerSnapshot,
+} from "@/lib/fantasy/nrl"
 import {
   buildDraftPricingPlayerPool,
   type DraftPricingHistoricalPlayerSd,
@@ -747,6 +753,7 @@ export function FantasyDraftPricingPage({
   playerImages,
   fantasyPlayers,
   coachProjectionsRaw,
+  ownershipBaselineSnapshot = null,
   draw2026Data,
   playerFantasySdRows,
   positionFantasySdRows,
@@ -755,6 +762,7 @@ export function FantasyDraftPricingPage({
   playerImages: PlayerImageRecord[]
   fantasyPlayers: FantasyPlayerSnapshot[]
   coachProjectionsRaw: unknown
+  ownershipBaselineSnapshot?: FantasyOwnershipBaselineSnapshot | null
   draw2026Data: Draw2026Data | null
   playerFantasySdRows: DraftPricingHistoricalPlayerSd[]
   positionFantasySdRows: DraftPricingHistoricalPositionSd[]
@@ -773,6 +781,14 @@ export function FantasyDraftPricingPage({
   const [hasLoadedSavedState, setHasLoadedSavedState] = useState(false)
 
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
+  const ownershipDeltaByPlayerId = useMemo(
+    () => buildFantasyOwnershipDeltaByPlayerId(fantasyPlayers, ownershipBaselineSnapshot),
+    [fantasyPlayers, ownershipBaselineSnapshot]
+  )
+  const topOwnershipRise = useMemo(
+    () => getTopFantasyOwnershipRise(ownershipDeltaByPlayerId),
+    [ownershipDeltaByPlayerId]
+  )
   const fantasyPlayerTeams = useMemo(
     () =>
       Object.fromEntries(
@@ -810,10 +826,12 @@ export function FantasyDraftPricingPage({
         fantasyPlayers,
         fantasyPlayerTeams,
         draw2026Data,
+        ownershipDeltaByPlayerId,
+        topOwnershipRise,
         historicalPlayerSdRows: playerFantasySdRows,
         historicalPositionSdRows: positionFantasySdRows,
       }),
-    [roundValue, coachProjectionsRaw, fantasyPlayers, fantasyPlayerTeams, draw2026Data, playerFantasySdRows, positionFantasySdRows]
+    [roundValue, coachProjectionsRaw, fantasyPlayers, fantasyPlayerTeams, draw2026Data, ownershipDeltaByPlayerId, topOwnershipRise, playerFantasySdRows, positionFantasySdRows]
   )
 
   const playerPoolById = useMemo(() => new Map(playerPool.map((player) => [player.id, player])), [playerPool])
@@ -1066,12 +1084,11 @@ export function FantasyDraftPricingPage({
               ))}
             </div>
             {locked ? (
-              <Link
-                href="/sign-up"
+              <BillingPageLink
                 className="rounded-full border border-[rgba(0,245,138,0.28)] bg-[linear-gradient(135deg,rgba(91,61,173,0.28),rgba(12,93,74,0.24))] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:border-nrl-accent"
               >
                 Sign Up To Pro
-              </Link>
+              </BillingPageLink>
             ) : null}
           </div>
 

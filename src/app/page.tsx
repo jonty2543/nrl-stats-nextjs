@@ -2,18 +2,26 @@ import Image from "next/image"
 import Link from "next/link"
 import type { CSSProperties } from "react"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
+import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush"
 import { LandingCarousel } from "@/components/views/landing-carousel"
 import { LandingHeroScrollShell } from "@/components/views/landing-hero-scroll-shell"
-import { PlayerImageCard } from "@/components/views/player-comparison"
-import { LandingSuiteTabs } from "@/components/views/landing-suite-tabs"
+import {
+  PlayerImageCard,
+  SimplePlayerPhotoTile,
+} from "@/components/views/player-comparison"
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
 import type { Draw2026Data } from "@/lib/draw/types"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
+  applyFantasyBreakEvenOffset,
+  applyFantasyProjectionOffset,
+  buildFantasyOwnershipDeltaByPlayerId,
+  fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
+  getTopFantasyOwnershipRise,
+  getFantasyCoachRoundMetrics,
   fetchLatestFantasyOwnershipBaselineSnapshot,
-  type FantasyOwnershipBaselineSnapshot,
   type FantasyPlayerSnapshot,
 } from "@/lib/fantasy/nrl"
 import type { PlayerStat } from "@/lib/data/types"
@@ -21,9 +29,12 @@ import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   fetchAvailableYears,
   fetchBettingOddsSnapshot,
+  fetchPlayerStats,
   fetchFantasyPlayerStatsAllYears,
   fetchPlayerImages,
 } from "@/lib/supabase/queries"
+
+export const revalidate = 120
 
 const BOOKIE_LOGOS: Record<string, string> = {
   Sportsbet: "/logos/sportsbet.png",
@@ -31,15 +42,6 @@ const BOOKIE_LOGOS: Record<string, string> = {
   Unibet: "/logos/unibet.png",
   Palmerbet: "/logos/palmerbet.png",
   Betright: "/logos/betright.png",
-}
-
-interface FantasyWeeklyRow {
-  id: number
-  name: string
-  positionLabel: string
-  ownedBy: number | null
-  weeklyDelta: number | null
-  avgPoints: number | null
 }
 
 interface BettingMatchPreview {
@@ -70,6 +72,32 @@ interface HeatmapRow {
   cells: Array<{ opponent: string; average: number | null; count: number }>
 }
 
+interface LandingStatsSummaryRow {
+  playerName: string
+  team: string
+  position: string
+  stat: string
+  average: number | null
+  median: number | null
+  min: number | null
+  max: number | null
+}
+
+interface LandingStatsRecentFormRow {
+  playerName: string
+  stat: string
+  recentAverage: number | null
+  overallAverage: number | null
+  deltaPct: number | null
+}
+
+interface LandingLeaderEntry {
+  name: string
+  team: string
+  value: number
+  imageSources: string[]
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null
   if (typeof value === "string") {
@@ -95,6 +123,58 @@ function formatSignedPercent(value: number | null, digits = 2): string {
 function formatNumber(value: number | null, digits = 1): string {
   if (value == null || !Number.isFinite(value)) return "-"
   return value.toFixed(digits)
+}
+
+function formatPct(value: number | null, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) return "-"
+  return `${value.toFixed(digits)}%`
+}
+
+function impliedProbability(price: number | null): number | null {
+  if (price == null || price <= 1) return null
+  return 1 / price
+}
+
+function modelPercentToProbability(value: number | null): number | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null
+  if (value <= 1) return Math.max(0.01, Math.min(0.99, value))
+  return Math.max(0.01, Math.min(0.99, value / 100))
+}
+
+function bestBookMarketPercentage(rows: BettingOddsRow[]): number | null {
+  const prices = rows.map((row) => row.bestPrice).filter((price): price is number => price != null && price > 1)
+  if (prices.length === 0) return null
+  const inverseSum = prices.reduce((sum, price) => sum + 1 / price, 0)
+  return inverseSum > 0 ? inverseSum * 100 : null
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function percentileRank(value: number | null, sample: number[]): number | null {
+  if (value == null || sample.length === 0) return null
+  const lessThan = sample.filter((entry) => entry < value).length
+  const equalTo = sample.filter((entry) => entry === value).length
+  return ((lessThan + equalTo * 0.5) / sample.length) * 100
+}
+
+function formatOrdinal(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "-"
+  const rounded = Math.round(value)
+  const remainder = rounded % 100
+  if (remainder >= 11 && remainder <= 13) return `${rounded}th`
+  switch (rounded % 10) {
+    case 1:
+      return `${rounded}st`
+    case 2:
+      return `${rounded}nd`
+    case 3:
+      return `${rounded}rd`
+    default:
+      return `${rounded}th`
+  }
 }
 
 function formatCurrency(value: number | null): string {
@@ -255,37 +335,6 @@ function quantile(values: number[], q: number): number {
   return sorted[lowerIndex] * (1 - weight) + sorted[upperIndex] * weight
 }
 
-function buildFantasyWeeklyRows(
-  fantasyPlayers: FantasyPlayerSnapshot[],
-  snapshot: FantasyOwnershipBaselineSnapshot | null
-): FantasyWeeklyRow[] {
-  const baselineByPlayerId = new Map<number, number | null>()
-  for (const point of snapshot?.points ?? []) {
-    baselineByPlayerId.set(point.playerId, point.ownedBy)
-  }
-
-  return fantasyPlayers
-    .map((player) => {
-      const baseline = baselineByPlayerId.get(player.id)
-      const weeklyDelta = baseline == null || player.ownedBy == null ? null : player.ownedBy - baseline
-      return {
-        id: player.id,
-        name: player.name,
-        positionLabel: player.positionLabel,
-        ownedBy: player.ownedBy,
-        weeklyDelta,
-        avgPoints: player.avgPoints,
-      }
-    })
-    .sort((a, b) => {
-      const aDelta = a.weeklyDelta ?? -Infinity
-      const bDelta = b.weeklyDelta ?? -Infinity
-      if (bDelta !== aDelta) return bDelta - aDelta
-      return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
-    })
-    .slice(0, 3)
-}
-
 function buildDrawPreviewRows(draw2026Data: Draw2026Data | null, team: string | null): DrawPreviewRow[] {
   if (!draw2026Data || !team) return []
   const teamKey = normaliseTeamKey(team)
@@ -306,7 +355,7 @@ function buildDrawPreviewRows(draw2026Data: Draw2026Data | null, team: string | 
     })
 }
 
-function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2): BettingMatchPreview[] {
+function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2, requirePrices = true): BettingMatchPreview[] {
   const grouped = new Map<string, BettingMatchPreview>()
 
   for (const row of snapshot.h2h) {
@@ -321,8 +370,16 @@ function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2): BettingMatc
   }
 
   return [...grouped.values()]
-    .filter((group) => group.rows.length >= 2)
-    .sort((a, b) => a.rows[0].date.localeCompare(b.rows[0].date) || a.match.localeCompare(b.match))
+    .filter((group) => {
+      if (group.rows.length < 2) return false
+      if (!requirePrices) return true
+      return group.rows.some(
+        (row) =>
+          row.bestPrice != null ||
+          BETTING_BOOKIE_COLUMNS.some((bookie) => row[bookie] != null),
+      )
+    })
+    .sort((a, b) => b.rows[0].date.localeCompare(a.rows[0].date) || a.match.localeCompare(b.match))
     .slice(0, limit)
 }
 
@@ -341,9 +398,138 @@ function buildBetTrackerPreviewRows(snapshot: BettingOddsSnapshot, limit = 3): B
     .slice(0, limit)
 }
 
+function pickPreferredFantasyPlayerName(
+  fantasyPlayers: FantasyPlayerSnapshot[],
+  candidates: string[],
+  fallbackIndex = 0,
+): string | null {
+  for (const candidate of candidates) {
+    const exact = fantasyPlayers.find((player) => normalisePersonName(player.name) === normalisePersonName(candidate))
+    if (exact) return exact.name
+  }
+  return fantasyPlayers[fallbackIndex]?.name ?? null
+}
+
+function pickHighestPricedFantasyPlayer(fantasyPlayers: FantasyPlayerSnapshot[]): FantasyPlayerSnapshot | null {
+  if (fantasyPlayers.length === 0) return null
+
+  return [...fantasyPlayers]
+    .sort((a, b) => {
+      const aPrice = a.cost ?? a.pricedAt ?? -1
+      const bPrice = b.cost ?? b.pricedAt ?? -1
+      if (aPrice !== bPrice) return bPrice - aPrice
+      return (b.avgPoints ?? -1) - (a.avgPoints ?? -1)
+    })[0] ?? null
+}
+
+function buildStatsSummaryRows(
+  players: Array<{ name: string; rows: PlayerStat[] }>,
+  statKeys: string[],
+): LandingStatsSummaryRow[] {
+  return players.flatMap((player) => {
+    const team = primaryTeamForRows(player.rows) ?? "-"
+    const position = typeof player.rows[0]?.Position === "string" ? player.rows[0].Position : "-"
+    return statKeys.map((stat) => {
+      const values = player.rows
+        .map((row) => toFiniteNumber(row[stat]))
+        .filter((value): value is number => value !== null)
+      return {
+        playerName: player.name,
+        team,
+        position,
+        stat,
+        average: average(values),
+        median: values.length > 0 ? quantile(values, 0.5) : null,
+        min: values.length > 0 ? Math.min(...values) : null,
+        max: values.length > 0 ? Math.max(...values) : null,
+      }
+    })
+  })
+}
+
+function buildRecentFormRows(
+  players: Array<{ name: string; rows: PlayerStat[] }>,
+  statKeys: string[],
+): LandingStatsRecentFormRow[] {
+  return players.flatMap((player) => {
+    const sortedRows = sortRowsByDateDesc(player.rows)
+    return statKeys.map((stat) => {
+      const overallValues = sortedRows
+        .map((row) => toFiniteNumber(row[stat]))
+        .filter((value): value is number => value !== null)
+      const recentValues = sortedRows
+        .slice(0, 5)
+        .map((row) => toFiniteNumber(row[stat]))
+        .filter((value): value is number => value !== null)
+      const overallAverage = average(overallValues)
+      const recentAverage = average(recentValues)
+      const deltaPct =
+        overallAverage != null && overallAverage !== 0 && recentAverage != null
+          ? ((recentAverage - overallAverage) / overallAverage) * 100
+          : null
+
+      return {
+        playerName: player.name,
+        stat,
+        recentAverage,
+        overallAverage,
+        deltaPct,
+      }
+    })
+  })
+}
+
+function buildPlayerLeaderEntries(
+  rows: PlayerStat[],
+  statKey: keyof PlayerStat | string,
+  playerImages: PlayerImageRecord[],
+): LandingLeaderEntry[] {
+  const grouped = new Map<string, { name: string; team: string; value: number }>()
+
+  for (const row of rows) {
+    const key = `${row.Name}|${row.Team}`
+    const current = grouped.get(key) ?? { name: row.Name, team: row.Team, value: 0 }
+    current.value += toFiniteNumber(row[statKey]) ?? 0
+    grouped.set(key, current)
+  }
+
+  return [...grouped.values()]
+    .filter((entry) => entry.value > 0)
+    .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name))
+    .slice(0, 8)
+    .map((entry) => ({
+      ...entry,
+      imageSources: buildPlayerImageSources(entry.name, entry.team, playerImages),
+    }))
+}
+
 function buildOpponentHeatmapRows(rows: PlayerStat[], years: string[]): HeatmapRow[] {
+  const latestYear = [...new Set(rows.map((row) => String(row.Year ?? "").trim()).filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0] ?? null
+  const opponentFirstRound = new Map<string, number>()
+
+  if (latestYear) {
+    for (const row of rows) {
+      const opponent = String(row.Opponent ?? "").trim()
+      const season = String(row.Year ?? "").trim()
+      const round = toFiniteNumber(row.Round)
+      if (!opponent || season !== latestYear || round == null) continue
+      const current = opponentFirstRound.get(opponent)
+      if (current == null || round < current) {
+        opponentFirstRound.set(opponent, round)
+      }
+    }
+  }
+
   const opponents = [...new Set(rows.map((row) => String(row.Opponent ?? "").trim()).filter(Boolean))]
-    .sort()
+    .sort((a, b) => {
+      const aRound = opponentFirstRound.get(a)
+      const bRound = opponentFirstRound.get(b)
+      if (aRound != null && bRound != null && aRound !== bRound) return aRound - bRound
+      if (aRound != null) return -1
+      if (bRound != null) return 1
+      return a.localeCompare(b)
+    })
     .slice(0, 6)
   const scopes = ["All", ...years]
 
@@ -382,16 +568,6 @@ function buildBoxSummaries(rows: PlayerStat[], years: string[]): BoxSummaryRow[]
   })
 }
 
-function getScatterPoints(rows: PlayerStat[]): Array<{ x: number; y: number }> {
-  return rows
-    .map((row) => ({
-      x: toFiniteNumber(row["All Run Metres"]),
-      y: toFiniteNumber(row.Fantasy),
-    }))
-    .filter((point): point is { x: number; y: number } => point.x != null && point.y != null)
-    .slice(0, 18)
-}
-
 function getScaledHeatColour(value: number | null): string {
   if (value == null) return "rgba(255,255,255,0.05)"
   const clamped = Math.max(20, Math.min(90, value))
@@ -402,7 +578,37 @@ function getScaledHeatColour(value: number | null): string {
   return `rgba(${r}, ${g}, ${b}, 0.55)`
 }
 
-function PreviewFrame({ title, children }: { title: string; children: React.ReactNode }) {
+function LiveBroadcastIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    >
+      <circle cx="10" cy="10" r="1.7" fill="currentColor" stroke="none" />
+      <path d="M6.7 6.8a4.7 4.7 0 0 0 0 6.4" />
+      <path d="M13.3 6.8a4.7 4.7 0 0 1 0 6.4" />
+      <path d="M4.1 4.4a8.1 8.1 0 0 0 0 11.2" />
+      <path d="M15.9 4.4a8.1 8.1 0 0 1 0 11.2" />
+    </svg>
+  )
+}
+
+function PreviewFrame({
+  title,
+  children,
+  contentClassName,
+  live = false,
+}: {
+  title: string
+  children: React.ReactNode
+  contentClassName?: string
+  live?: boolean
+}) {
   return (
     <div className="h-full bg-[linear-gradient(180deg,rgba(27,33,61,0.96),rgba(15,18,36,0.96))] p-3 sm:p-5">
       <div className="flex items-center justify-between gap-3 border-b border-white/8 pb-3">
@@ -411,9 +617,150 @@ function PreviewFrame({ title, children }: { title: string; children: React.Reac
           <span className="h-2.5 w-2.5 rounded-full bg-[#00f58a]" />
           <span className="h-2.5 w-2.5 rounded-full bg-white/30" />
         </div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/42">{title}</div>
+        <div className="flex items-center gap-2.5">
+          {live ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/18 bg-emerald-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+              <LiveBroadcastIcon />
+              Live
+            </span>
+          ) : null}
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/42">{title}</div>
+        </div>
       </div>
-      <div className="mt-3 min-h-[300px] sm:mt-4 sm:min-h-[420px] lg:min-h-[520px]">{children}</div>
+      <div className={`mt-3 min-h-[300px] sm:mt-4 sm:min-h-[420px] lg:min-h-[520px] ${contentClassName ?? ""}`}>{children}</div>
+    </div>
+  )
+}
+
+function StatsPreviewNav({ active }: { active: "players" | "leaders" }) {
+  const tabs = [
+    { key: "players", label: "Players" },
+    { key: "teams", label: "Teams" },
+    { key: "leaders", label: "Leaders" },
+  ] as const
+
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-[#00f58a]">Short Side</span>
+          <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-white/72">
+            Stats
+          </span>
+        </div>
+        <div className="inline-flex rounded-lg border border-white/10 bg-[#171c36] p-1 text-[11px] font-semibold">
+          {tabs.map((tab) => {
+            const isActive = tab.key === active
+            return (
+              <span
+                key={tab.key}
+                className={`rounded-md px-3 py-1.5 transition-colors ${
+                  isActive ? "bg-emerald-400/16 text-emerald-300" : "text-white/45"
+                }`}
+              >
+                {tab.label}
+              </span>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SimpleHistogramPreview({
+  title,
+  statLabel,
+  series,
+}: {
+  title: string
+  statLabel: string
+  series: Array<{ label: string; color: string; values: number[]; mean: number | null }>
+}) {
+  const nonEmptySeries = series.filter((entry) => entry.values.length > 0)
+  if (nonEmptySeries.length === 0) {
+    return (
+      <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
+        <div className="text-sm font-semibold text-white">{title}</div>
+        <div className="mt-8 text-center text-xs text-white/35">No distribution data</div>
+      </div>
+    )
+  }
+
+  const combined = nonEmptySeries.flatMap((entry) => entry.values)
+  const min = Math.min(...combined)
+  const max = Math.max(...combined)
+  const binCount = 6
+  const range = max - min || 1
+  const peak = Math.max(
+    1,
+    ...nonEmptySeries.flatMap((entry) => {
+      const counts = Array.from({ length: binCount }, () => 0)
+      for (const value of entry.values) {
+        const rawIndex = Math.floor(((value - min) / range) * binCount)
+        const safeIndex = Math.min(binCount - 1, Math.max(0, rawIndex))
+        counts[safeIndex] += 1
+      }
+      return counts
+    }),
+  )
+
+  return (
+    <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-white">{title}</div>
+          <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-white/35">n &gt; 20 — showing histogram + mean</div>
+        </div>
+        <div className="space-y-1 text-[10px] text-white/72">
+          {nonEmptySeries.map((entry) => (
+            <div key={entry.label} className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
+              <span>{entry.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-4">
+        <div className="grid h-40 grid-cols-6 items-end gap-2">
+          {Array.from({ length: binCount }, (_, binIndex) => (
+            <div key={`${title}-bin-${binIndex}`} className="relative flex h-full items-end gap-1">
+              {nonEmptySeries.map((entry) => {
+                const counts = Array.from({ length: binCount }, () => 0)
+                for (const value of entry.values) {
+                  const rawIndex = Math.floor(((value - min) / range) * binCount)
+                  const safeIndex = Math.min(binCount - 1, Math.max(0, rawIndex))
+                  counts[safeIndex] += 1
+                }
+                const heightPct = (counts[binIndex] / peak) * 100
+                return (
+                  <div
+                    key={`${title}-${entry.label}-${binIndex}`}
+                    className="w-full rounded-t-sm border"
+                    style={{
+                      height: `${Math.max(heightPct, counts[binIndex] > 0 ? 10 : 0)}%`,
+                      backgroundColor: `${entry.color}33`,
+                      borderColor: `${entry.color}aa`,
+                    }}
+                  />
+                )
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex justify-between text-[10px] uppercase tracking-[0.12em] text-white/35">
+          <span>{Math.round(min)}</span>
+          <span>{statLabel}</span>
+          <span>{Math.round(max)}</span>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-white/72">
+          {nonEmptySeries.map((entry) => (
+            <span key={`${title}-${entry.label}-mean`} style={{ color: entry.color }}>
+              {entry.label.split(" (")[0]} {entry.mean == null ? "-" : entry.mean.toFixed(1)}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -429,6 +776,7 @@ function FeatureSection({
   bullets,
   ctaHref,
   ctaLabel,
+  live = false,
   children,
 }: {
   eyebrow: string
@@ -437,12 +785,21 @@ function FeatureSection({
   bullets: string[]
   ctaHref: string
   ctaLabel: string
+  live?: boolean
   children: React.ReactNode
 }) {
   return (
     <section className="space-y-6 border border-white/8 bg-[linear-gradient(180deg,rgba(16,20,42,0.92),rgba(11,14,29,0.92))] p-4 sm:space-y-7 sm:p-6">
       <div className="min-w-0">
-        <SectionEyebrow>{eyebrow}</SectionEyebrow>
+        <div className="flex flex-wrap items-center gap-3">
+          <SectionEyebrow>{eyebrow}</SectionEyebrow>
+          {live ? (
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/18 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+              <LiveBroadcastIcon />
+              Live
+            </span>
+          ) : null}
+        </div>
         <h3 className="mt-3 text-xl font-bold text-white sm:text-2xl">{title}</h3>
         <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(16rem,0.85fr)] lg:items-start">
           <p className="max-w-2xl text-sm leading-6 text-white/58 sm:leading-7">{description}</p>
@@ -468,48 +825,10 @@ function FeatureSection({
   )
 }
 
-function SimpleScatter({ points }: { points: Array<{ x: number; y: number }> }) {
-  if (points.length === 0) {
-    return <div className="flex h-48 items-center justify-center text-xs text-white/35">No scatter data</div>
-  }
-
-  const minX = Math.min(...points.map((point) => point.x))
-  const maxX = Math.max(...points.map((point) => point.x))
-  const minY = Math.min(...points.map((point) => point.y))
-  const maxY = Math.max(...points.map((point) => point.y))
-
-  const scaleX = (value: number) => {
-    if (maxX === minX) return 30
-    return 30 + ((value - minX) / (maxX - minX)) * 250
-  }
-  const scaleY = (value: number) => {
-    if (maxY === minY) return 120
-    return 120 - ((value - minY) / (maxY - minY)) * 90
-  }
-
-  return (
-    <svg viewBox="0 0 320 150" className="h-48 w-full">
-      <line x1="30" y1="10" x2="30" y2="125" stroke="rgba(255,255,255,0.16)" strokeWidth="1" />
-      <line x1="30" y1="125" x2="300" y2="125" stroke="rgba(255,255,255,0.16)" strokeWidth="1" />
-      {points.map((point, index) => (
-        <circle
-          key={`${point.x}-${point.y}-${index}`}
-          cx={scaleX(point.x)}
-          cy={scaleY(point.y)}
-          r="4.5"
-          fill={index === points.length - 1 ? "#ffe066" : index > points.length / 2 ? "#00f58a" : "#8d63ff"}
-          fillOpacity="0.88"
-        />
-      ))}
-      <text x="160" y="147" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.38)">Run Metres</text>
-      <text x="12" y="70" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.38)" transform="rotate(-90 12 70)">Fantasy</text>
-    </svg>
-  )
-}
-
 export default async function Home() {
-  const [fantasyPlayers, ownershipBaselineSnapshot, bettingSnapshot, availableYears, playerImages, draw2026Data] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, ownershipBaselineSnapshot, bettingSnapshot, availableYears, playerImages, draw2026Data] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
+    fetchFantasyCoachPlayersSnapshot(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
     fetchBettingOddsSnapshot(),
     fetchAvailableYears(),
@@ -523,8 +842,14 @@ export default async function Home() {
     ? await fetchFantasyPlayerStatsAllYears(fantasyPlayers[0].name)
     : []
 
-  const fantasyWeeklyRows = buildFantasyWeeklyRows(fantasyPlayers, ownershipBaselineSnapshot)
-  const spotlightFantasyPlayer = fantasyPlayers.find((player) => player.id === fantasyWeeklyRows[0]?.id) ?? fantasyPlayers[0] ?? null
+  const ownershipDeltaByPlayerId = buildFantasyOwnershipDeltaByPlayerId(fantasyPlayers, ownershipBaselineSnapshot)
+  const topOwnershipRise = getTopFantasyOwnershipRise(ownershipDeltaByPlayerId)
+  const spotlightFantasyPlayer = pickHighestPricedFantasyPlayer(fantasyPlayers)
+  const spotlightCoachPlayer = spotlightFantasyPlayer
+    ? fantasyCoachPlayers.find((player) => player.id === spotlightFantasyPlayer.id) ?? null
+    : null
+  const spotlightCoachMetrics = getFantasyCoachRoundMetrics(spotlightCoachPlayer)
+  const fantasyRoundLabel = spotlightCoachMetrics.round != null ? `Round ${spotlightCoachMetrics.round}` : "Round X"
   const spotlightRows = spotlightFantasyPlayer?.name === fantasyPlayers[0]?.name
     ? spotlightLocalRows
     : spotlightFantasyPlayer
@@ -536,7 +861,19 @@ export default async function Home() {
   const spotlightImageSources = spotlightFantasyPlayer
     ? buildPlayerImageSources(spotlightFantasyPlayer.name, spotlightTeam, playerImages)
     : ["/body-shot.png"]
-  const spotlightWeeklyDelta = fantasyWeeklyRows.find((row) => row.id === spotlightFantasyPlayer?.id)?.weeklyDelta ?? null
+  const spotlightWeeklyDelta = spotlightFantasyPlayer
+    ? ownershipDeltaByPlayerId.get(spotlightFantasyPlayer.id) ?? null
+    : null
+  const spotlightProjection = applyFantasyProjectionOffset(
+    spotlightCoachMetrics.projection ?? spotlightFantasyPlayer?.projectedAvg ?? null,
+    spotlightWeeklyDelta,
+    topOwnershipRise,
+  )
+  const spotlightBreakEven = applyFantasyBreakEvenOffset(
+    spotlightCoachMetrics.breakEven ?? spotlightFantasyPlayer?.be ?? null,
+    spotlightFantasyPlayer?.id ?? null,
+    spotlightCoachMetrics.round,
+  )
   const spotlightDrawRows = buildDrawPreviewRows(draw2026Data, spotlightTeam)
   const spotlightCardImage = spotlightFantasyPlayer
     ? {
@@ -549,15 +886,79 @@ export default async function Home() {
         last_seen_match_date: null,
       }
     : null
-  const spotlightTeamLogoUrl = spotlightTeam && draw2026Data
-    ? draw2026Data.teamLogos[normaliseTeamKey(spotlightTeam)] ?? null
-    : null
   const spotlightHeatmapRows = buildOpponentHeatmapRows(spotlightSortedRows, plotYears)
   const spotlightBoxSummaries = buildBoxSummaries(spotlightSortedRows, plotYears)
-  const spotlightScatterPoints = getScatterPoints(spotlightSortedRows)
-
   const h2hPreviews = buildH2HPreviews(bettingSnapshot)
+  const bettingLandingPreviews = h2hPreviews.length > 0 ? h2hPreviews : buildH2HPreviews(bettingSnapshot, 2, false)
   const betTrackerPreviewRows = buildBetTrackerPreviewRows(bettingSnapshot)
+  const statsPlayer1Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nathan Cleary"], 0)
+  const statsPlayer2Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nicholas Hynes", "Nicho Hynes"], 1)
+  const latestPreviewYear = previewYears[0] ?? ""
+  const [statsPlayer1RowsRaw, statsPlayer2RowsRaw, leaderSeasonRows] = await Promise.all([
+    statsPlayer1Name ? fetchFantasyPlayerStatsAllYears(statsPlayer1Name) : Promise.resolve([]),
+    statsPlayer2Name ? fetchFantasyPlayerStatsAllYears(statsPlayer2Name) : Promise.resolve([]),
+    latestPreviewYear ? fetchPlayerStats([latestPreviewYear]) : Promise.resolve([]),
+  ])
+  const statsPlayer1Rows = sortRowsByDateDesc(statsPlayer1RowsRaw)
+  const statsPlayer2Rows = sortRowsByDateDesc(statsPlayer2RowsRaw)
+  const statsPlayers = [
+    { name: statsPlayer1Name ?? "Player 1", rows: statsPlayer1Rows },
+    { name: statsPlayer2Name ?? "Player 2", rows: statsPlayer2Rows },
+  ].filter((entry) => entry.rows.length > 0)
+  const statsSummaryRows = buildStatsSummaryRows(statsPlayers, ["All Run Metres", "Kicking Metres"])
+  const statsRecentFormRows = buildRecentFormRows(statsPlayers, ["All Run Metres", "Kicking Metres"])
+  const statsPlayer1Team = primaryTeamForRows(statsPlayer1Rows)
+  const statsPlayer2Team = primaryTeamForRows(statsPlayer2Rows)
+  const statsPlayer1CardImage = statsPlayer1Name
+    ? {
+        player: statsPlayer1Name,
+        team: statsPlayer1Team,
+        number: null,
+        position: typeof statsPlayer1Rows[0]?.Position === "string" ? statsPlayer1Rows[0].Position : null,
+        head_image: null,
+        body_image: buildPlayerImageSources(statsPlayer1Name, statsPlayer1Team, playerImages).find((source) => source !== "/body-shot.png") ?? "/body-shot.png",
+        last_seen_match_date: null,
+      }
+    : null
+  const statsPlayer2CardImage = statsPlayer2Name
+    ? {
+        player: statsPlayer2Name,
+        team: statsPlayer2Team,
+        number: null,
+        position: typeof statsPlayer2Rows[0]?.Position === "string" ? statsPlayer2Rows[0].Position : null,
+        head_image: null,
+        body_image: buildPlayerImageSources(statsPlayer2Name, statsPlayer2Team, playerImages).find((source) => source !== "/body-shot.png") ?? "/body-shot.png",
+        last_seen_match_date: null,
+      }
+    : null
+  const statsPercentileRows = statsSummaryRows.map((row) => {
+    const playerPosition = row.position
+    const scopedRows = leaderSeasonRows.filter((entry) => entry.Position === playerPosition)
+    const grouped = new Map<string, number[]>()
+    for (const statRow of scopedRows) {
+      const key = `${statRow.Name}|${statRow.Team}`
+      const current = grouped.get(key) ?? []
+      const value = toFiniteNumber(statRow[row.stat])
+      if (value != null) current.push(value)
+      grouped.set(key, current)
+    }
+    const peerAverages = [...grouped.values()]
+      .map((values) => average(values))
+      .filter((value): value is number => value != null)
+    return {
+      ...row,
+      percentile: percentileRank(row.average, peerAverages),
+    }
+  })
+  const statsLeaderCards = [
+    { key: "Points", label: "Points" },
+    { key: "Tries", label: "Tries" },
+    { key: "Conversions", label: "Conversions" },
+  ].map((card) => ({
+    ...card,
+    leaders: buildPlayerLeaderEntries(leaderSeasonRows, card.key, playerImages),
+  }))
+
   return (
     <div className="relative overflow-hidden text-nrl-text">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
@@ -589,9 +990,10 @@ export default async function Home() {
         </header>
 
         <LandingHeroScrollShell>
-          <section className="grid gap-6 pb-0 pt-8 sm:gap-8 sm:pb-12 sm:pt-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-end lg:pb-0 lg:pt-14">
-            <div className="max-w-2xl">
+          <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
+            <div className="max-w-2xl lg:pb-10">
               <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
+                <LiveBroadcastIcon className="h-3.5 w-3.5" />
                 Live NRL Analysis Platform
               </div>
               <h1 className="mt-5 pb-2 text-[2.85rem] font-black leading-[0.98] tracking-tight text-white sm:text-6xl">
@@ -627,7 +1029,7 @@ export default async function Home() {
               </div>
 
               <div className="relative mt-6 flex items-end justify-center lg:hidden">
-                <div className="relative flex h-[15.5rem] w-full max-w-[26rem] items-end justify-center overflow-hidden rounded-[1.6rem] px-1 pt-3">
+                <div className="relative flex h-[15.5rem] w-full max-w-[26rem] items-end justify-center overflow-hidden px-1 pt-3">
                   <Image
                     src="/nrl_players-removebg-preview.png"
                     alt="NRL players"
@@ -642,14 +1044,14 @@ export default async function Home() {
             </div>
 
             <div className="relative hidden lg:flex lg:items-end lg:justify-center lg:self-end">
-              <div className="relative flex h-[16.5rem] w-full max-w-[30rem] items-end justify-center overflow-visible rounded-[2rem] px-1 pt-3">
+              <div className="relative flex h-[17.25rem] w-full max-w-[31.75rem] items-end justify-center overflow-visible px-1 pt-3">
                 <Image
                   src="/nrl_players-removebg-preview.png"
                   alt="NRL players"
                   width={720}
                   height={720}
                   priority
-                  className="relative z-10 translate-x-3 h-[118%] w-auto max-w-[141%] object-contain object-bottom"
+                  className="relative z-10 translate-x-4 h-[122%] w-auto max-w-[146%] object-contain object-bottom"
                   style={heroPlayerImageMaskStyle()}
                 />
               </div>
@@ -664,10 +1066,9 @@ export default async function Home() {
             <h2 className="mt-2 text-2xl font-bold text-white">Previews of the full suite</h2>
           </div>
 
-          <LandingSuiteTabs labels={["Fantasy", "Betting"]}>
           <FeatureSection
             eyebrow="Fantasy"
-            title="Ownership, pricing, game logs, and visuals in one screen"
+            title="Ownership, pricing, game logs, and visuals"
             description="Use the Fantasy dashboard to move from ownership shifts to actual player-level context. The preview rotates between the player detail view and the deeper visual layer."
             bullets={[
               "Ownership and price info",
@@ -677,24 +1078,26 @@ export default async function Home() {
             ]}
             ctaHref="/dashboard/fantasy"
             ctaLabel="Open Fantasy"
+            live
           >
             <LandingCarousel>
-              <PreviewFrame title="Fantasy / Player Detail">
+              <PreviewFrame title="Fantasy / Player Detail" live>
                 <div className="grid gap-3 sm:gap-4 xl:grid-cols-[290px_minmax(0,1fr)_220px]">
                   <div className="relative flex min-h-[12rem] items-center justify-center overflow-hidden rounded-2xl border border-white/8 bg-[#1b2140] p-2 sm:min-h-0 sm:p-3">
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
                     <div className="pointer-events-none absolute left-[8%] top-[12%] h-24 w-24 rounded-full bg-emerald-300/10 blur-2xl" />
                     <div className="pointer-events-none absolute bottom-[10%] right-[12%] h-28 w-28 rounded-full bg-violet-400/12 blur-3xl" />
-                    <div className="relative w-full max-w-[10rem] sm:max-w-[18.5rem]">
-                      <PlayerImageCard
-                        playerName={spotlightFantasyPlayer?.name ?? "Fantasy player"}
-                        imageRow={spotlightCardImage}
-                        teamLogoUrl={spotlightTeamLogoUrl}
-                        fantasyPosition={spotlightFantasyPlayer?.positionLabel ?? null}
-                        compact
-                        frameless
-                        priority
-                      />
+                    <div className="w-full max-w-[14.75rem] rounded-[1.2rem] bg-[linear-gradient(180deg,rgba(17,23,46,0.46),rgba(17,23,46,0.18))] shadow-[0_18px_40px_rgba(8,10,18,0.22)] sm:max-w-[15.5rem]">
+                      <div className="relative">
+                        <PlayerImageCard
+                          playerName={spotlightFantasyPlayer?.name ?? "Fantasy player"}
+                          imageRow={spotlightCardImage}
+                          teamLogoUrl={null}
+                          fantasyPosition={spotlightFantasyPlayer?.positionLabel ?? null}
+                          frameless
+                          priority
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -704,7 +1107,7 @@ export default async function Home() {
                       <span className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-white/55">Team: {spotlightTeam ?? "-"}</span>
                       <span className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-white/55">Status: {spotlightFantasyPlayer?.status ?? "available"}</span>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2.5 sm:mt-4 sm:min-h-[164px] sm:grid-rows-2 sm:gap-3">
+                    <div className="mt-3 grid grid-cols-2 gap-2.5 sm:mt-4 sm:min-h-[248px] sm:grid-cols-3 sm:grid-rows-2 sm:gap-3">
                       <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
                         <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Price</div>
                         <div className="mt-2 text-lg font-bold text-white sm:mt-3 sm:text-2xl">{formatCurrency(spotlightFantasyPlayer?.cost ?? null)}</div>
@@ -721,6 +1124,18 @@ export default async function Home() {
                       <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
                         <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Priced At</div>
                         <div className="mt-2 text-lg font-bold text-white sm:mt-3 sm:text-2xl">{formatNumber(spotlightFantasyPlayer?.pricedAt ?? null, 0)}</div>
+                      </div>
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">{fantasyRoundLabel} Projection</div>
+                        <div className="mt-2 text-lg font-bold text-white blur-[4px] select-none sm:mt-3 sm:text-2xl">
+                          {formatNumber(spotlightProjection, 0)}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">{fantasyRoundLabel} Breakeven</div>
+                        <div className="mt-2 text-lg font-bold text-white blur-[4px] select-none sm:mt-3 sm:text-2xl">
+                          {formatNumber(spotlightBreakEven, 0)}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -871,7 +1286,7 @@ export default async function Home() {
                 </div>
               </PreviewFrame>
 
-              <PreviewFrame title="Fantasy / Visuals">
+              <PreviewFrame title="Fantasy / Visuals" live>
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
                     <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Average vs Opponent</div>
@@ -989,15 +1404,20 @@ export default async function Home() {
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Stat vs Fantasy</div>
-                        <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/35">Run Metres</div>
+                        <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Rolling Average Plot</div>
+                        <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/35">Fantasy score bars with rolling average trend</div>
                       </div>
                       <div className="rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold text-emerald-300">
-                        games = {spotlightScatterPoints.length}
+                        {spotlightSortedRows.length} games
                       </div>
                     </div>
                     <div className="mt-3 rounded-xl border border-white/8 bg-[#171c36] p-3">
-                      <SimpleScatter points={spotlightScatterPoints} />
+                      <FantasyGameLogTrendBrush
+                        rows={spotlightSortedRows}
+                        defaultStartYear="2023"
+                        headerTitle="Fantasy Trend"
+                        primarySeriesLabel={spotlightFantasyPlayer?.name ?? "Fantasy player"}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1007,18 +1427,19 @@ export default async function Home() {
 
           <FeatureSection
             eyebrow="Betting"
-            title="Odds comparison, staking, and tracker tools together"
-            description="Open the Betting section when you want clean bookmaker comparison, staking workflows, and a tracker that keeps your week organised from edge to result."
+            title="Odds comparison, calculators, and tracker tools"
+            description="Use the betting view when you want a clean market snapshot, simple staking calculators, and a tracker that keeps positions and results in one place."
             bullets={[
               "Odds comparison for H2H, Line and Total",
-              "Staking Calculator",
-              "Bet Tracker",
+              "Staking calculators",
+              "Bet tracker summaries",
             ]}
             ctaHref="/dashboard/betting"
             ctaLabel="Open Betting"
+            live
           >
             <LandingCarousel>
-              <PreviewFrame title="Betting / Odds Comparison">
+              <PreviewFrame title="Betting / Odds Comparison" live>
                 <div className="space-y-4">
                   <div className="inline-flex rounded-md border border-white/8 bg-white/[0.03] p-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
                     <span className="rounded bg-emerald-400/16 px-3 py-1 text-emerald-300">H2H</span>
@@ -1026,46 +1447,168 @@ export default async function Home() {
                     <span className="px-3 py-1">Total</span>
                   </div>
                   <div className="space-y-3">
-                    {h2hPreviews.slice(0, 2).map((preview, previewIndex) => (
+                    {bettingLandingPreviews.length > 0 ? bettingLandingPreviews.slice(0, 2).map((preview, previewIndex) => (
                       <div key={`${preview.match}-${preview.dateLabel}-${previewIndex}`} className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
+                        {(() => {
+                          const marketPct = bestBookMarketPercentage(preview.rows)
+                          return (
                         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-white/8 pb-3">
                           <div>
                             <div className="text-sm font-semibold text-white">{preview.match ?? "Upcoming market"}</div>
                             <div className="mt-1 text-[11px] text-white/38">{preview.dateLabel ?? "Live odds"}</div>
                           </div>
-                          <div className="text-[11px] text-white/38">Best-book prices across current books</div>
-                        </div>
-                        <div className="mt-3 overflow-x-auto pb-1">
-                          <div className="min-w-[36rem]">
-                            <div className="grid grid-cols-[1.3fr_repeat(5,minmax(0,1fr))_0.7fr] items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
-                              <div>Outcome</div>
-                              {BETTING_BOOKIE_COLUMNS.map((bookie) => (
-                                <div key={bookie} className="flex justify-center"><Image src={BOOKIE_LOGOS[bookie]} alt={bookie} width={18} height={18} className="h-4 w-auto object-contain" /></div>
-                              ))}
-                              <div className="text-center">Best</div>
-                            </div>
-                            <div className="mt-2 space-y-2">
-                              {preview.rows.slice(0, 2).map((row) => (
-                                <div key={`${row.match}-${row.result}`} className="grid grid-cols-[1.3fr_repeat(5,minmax(0,1fr))_0.7fr] items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3 text-sm text-white/76">
-                                  <div className="font-semibold text-white">{row.result}</div>
-                                  {BETTING_BOOKIE_COLUMNS.map((bookie) => (
-                                    <div key={`${row.result}-${bookie}`} className="text-center font-semibold text-white/76">
-                                      {row[bookie] != null ? formatNumber(row[bookie], 2) : "-"}
-                                    </div>
-                                  ))}
-                                  <div className="text-center font-semibold text-emerald-300">{formatNumber(row.bestPrice, 2)}</div>
-                                </div>
-                              ))}
+                          <div className="text-right">
+                            <div className="text-[11px] text-white/38">Best-book prices across current books</div>
+                            <div className="mt-1 text-[11px] text-white/48">
+                              Best-book market %:{" "}
+                              <span className="font-semibold text-white/88">{formatPct(marketPct)}</span>
                             </div>
                           </div>
                         </div>
+                          )
+                        })()}
+                        <div className="mt-3 hidden overflow-x-auto pb-1 md:block">
+                          <div className="min-w-[62rem]">
+                            <div className="grid grid-cols-[1.25fr_repeat(5,minmax(0,1fr))_0.72fr_0.8fr_0.8fr_0.7fr_0.8fr_0.8fr] items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+                              <div>Outcome</div>
+                              {BETTING_BOOKIE_COLUMNS.map((bookie) => (
+                                <div key={bookie} className="flex justify-center">
+                                  <Image src={BOOKIE_LOGOS[bookie]} alt={bookie} width={18} height={18} className="h-4 w-auto object-contain" />
+                                </div>
+                              ))}
+                              <div className="text-center">Best</div>
+                              <div className="text-center">Implied</div>
+                              <div className="text-center">Model</div>
+                              <div className="text-center">Edge</div>
+                              <div className="text-center">Stake</div>
+                              <div className="text-center">Bet</div>
+                            </div>
+                            <div className="mt-2 space-y-2">
+                              {preview.rows.slice(0, 2).map((row) => {
+                                const implied = impliedProbability(row.bestPrice)
+                                const modelProbability = modelPercentToProbability(row.model)
+                                const edgePp = implied != null && modelProbability != null
+                                  ? (modelProbability - implied) * 100
+                                  : null
+                                const recommendedStake = edgePp != null && edgePp > 0 ? 40 : 0
+
+                                return (
+                                  <div key={`${row.match}-${row.result}`} className="grid grid-cols-[1.25fr_repeat(5,minmax(0,1fr))_0.72fr_0.8fr_0.8fr_0.7fr_0.8fr_0.8fr] items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3 text-sm text-white/76">
+                                    <div className="font-semibold text-white">{row.result}</div>
+                                    {BETTING_BOOKIE_COLUMNS.map((bookie) => (
+                                      <div key={`${row.result}-${bookie}`} className="text-center font-semibold text-white/76">
+                                        {row[bookie] != null ? formatNumber(row[bookie], 2) : "-"}
+                                      </div>
+                                    ))}
+                                    <div className="text-center font-semibold text-emerald-300">{formatNumber(row.bestPrice, 2)}</div>
+                                    <div className="text-center font-semibold text-white">{formatPct(implied == null ? null : implied * 100)}</div>
+                                    <div className="text-center font-semibold text-white blur-[4px] select-none">{formatPct(modelProbability == null ? null : modelProbability * 100)}</div>
+                                    <div className={`text-center font-semibold blur-[4px] select-none ${edgePp == null ? "text-white/50" : edgePp >= 0 ? "text-[#ff9d2e]" : "text-[#ff5f77]"}`}>
+                                      {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
+                                    </div>
+                                    <div className="flex justify-center">
+                                      <div className="flex h-[2.625rem] w-[5.25rem] items-center rounded-lg border border-white/8 bg-[#242b52] px-3 py-2 text-white">
+                                        <span className="block w-full blur-[4px] select-none">{recommendedStake}</span>
+                                      </div>
+                                    </div>
+                                    <div className="flex justify-center">
+                                      <div className="inline-flex min-w-[4.5rem] items-center justify-center rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-center text-sm font-semibold uppercase tracking-[0.14em] text-emerald-300">
+                                        Bet
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-3 space-y-2 md:hidden">
+                          {preview.rows.slice(0, 2).map((row) => {
+                            const availableBooks = BETTING_BOOKIE_COLUMNS.filter((bookie) => row[bookie] != null)
+                            const implied = impliedProbability(row.bestPrice)
+                            const modelProbability = modelPercentToProbability(row.model)
+                            const edgePp = implied != null && modelProbability != null
+                              ? (modelProbability - implied) * 100
+                              : null
+                            const recommendedStake = edgePp != null && edgePp > 0 ? 40 : 0
+                            return (
+                              <div key={`${row.match}-${row.result}`} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-semibold text-white">{row.result}</div>
+                                    <div className="mt-1 text-[11px] text-white/42">
+                                      {row.bestBookie ? `Best via ${row.bestBookie}` : "Current best market"}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Best</div>
+                                    <div className="mt-1 text-xl font-bold text-emerald-300">
+                                      {formatNumber(row.bestPrice, 2)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 grid grid-cols-5 gap-2">
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
+                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Implied</div>
+                                    <div className="mt-1 text-sm font-semibold text-white">{formatPct(implied == null ? null : implied * 100)}</div>
+                                  </div>
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
+                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Model</div>
+                                    <div className="mt-1 text-sm font-semibold text-white blur-[4px] select-none">{formatPct(modelProbability == null ? null : modelProbability * 100)}</div>
+                                  </div>
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
+                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Edge</div>
+                                    <div className={`mt-1 text-sm font-semibold blur-[4px] select-none ${edgePp == null ? "text-white/45" : edgePp >= 0 ? "text-[#ff9d2e]" : "text-[#ff5f77]"}`}>
+                                      {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg border border-white/8 bg-[#242b52] px-2 py-2">
+                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Stake</div>
+                                    <div className="mt-1 h-[1.25rem] text-sm font-semibold text-white">
+                                      <span className="block blur-[4px] select-none">{recommendedStake}</span>
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2 py-2">
+                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Bet</div>
+                                    <div className="mt-1 text-sm font-semibold text-emerald-300">BET</div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                  {availableBooks.length > 0 ? (
+                                    availableBooks.map((bookie) => (
+                                      <div key={`${row.result}-${bookie}`} className="rounded-lg border border-white/8 bg-[#171c36] px-2.5 py-2">
+                                        <div className="flex items-center gap-2">
+                                          <Image src={BOOKIE_LOGOS[bookie]} alt={bookie} width={16} height={16} className="h-4 w-auto object-contain" />
+                                          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/42">{bookie}</span>
+                                        </div>
+                                        <div className="mt-1 text-base font-semibold text-white">
+                                          {formatNumber(row[bookie], 2)}
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="rounded-lg border border-white/8 bg-[#171c36] px-2.5 py-2 text-sm text-white/55">
+                                      Market loading
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                    ))}
+                    )) : (
+                      <div className="rounded-2xl border border-dashed border-white/10 bg-[#1b2140] p-8 text-center text-sm text-white/55">
+                        Live odds are loading.
+                      </div>
+                    )}
                   </div>
                 </div>
               </PreviewFrame>
 
-              <PreviewFrame title="Betting / Tools">
+              <PreviewFrame title="Betting / Tools" live>
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
                     <div className="text-xs font-bold uppercase tracking-wide text-white/78">Staking Calculator</div>
@@ -1134,7 +1677,238 @@ export default async function Home() {
             </LandingCarousel>
           </FeatureSection>
 
-          </LandingSuiteTabs>
+          <FeatureSection
+            eyebrow="Stats"
+            title="Player and team statistical dashboard, stat leaders"
+            description="Use the stats section to compare players and teams directly, inspect plot comparisons, and see stat leaders across seasons."
+            bullets={[
+              "Player comparison and filtered charts",
+              "Percentile ranks and recent form",
+              "Season leader cards",
+            ]}
+            ctaHref="/dashboard/players"
+            ctaLabel="Open Stats"
+            live
+          >
+            <LandingCarousel>
+              <PreviewFrame title="Stats / Players" contentClassName="lg:min-h-[450px]" live>
+                <div className="space-y-4">
+                  <StatsPreviewNav active="players" />
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-white/42">
+                    Summary & Filtered Charts
+                  </div>
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.06fr)]">
+                    <div className="space-y-4">
+                      <div className="space-y-3">
+                        {statsPlayers.map((player) => (
+                          <div key={`stats-summary-${player.name}`}>
+                            <div className="text-lg font-bold uppercase tracking-[0.04em] text-[#00f58a]">{player.name}</div>
+                            <div className="mt-1 text-sm text-white/45">
+                              {primaryTeamForRows(player.rows) ?? "-"} · {player.rows[0]?.Position ?? "-"} · {player.rows.length} games · {formatNumber(average(player.rows.map((row) => toFiniteNumber(row["Mins Played"])).filter((value): value is number => value != null)), 0)} avg mins
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                        <div className="flex items-center justify-center">
+                          <SimplePlayerPhotoTile
+                            playerName={statsPlayer1Name ?? "Player 1"}
+                            imageRow={statsPlayer1CardImage}
+                            priority
+                            className="max-w-none"
+                            imageHeightClass="h-[9.5rem] sm:h-[15rem]"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-center">
+                          <SimplePlayerPhotoTile
+                            playerName={statsPlayer2Name ?? "Player 2"}
+                            imageRow={statsPlayer2CardImage}
+                            priority
+                            className="max-w-none"
+                            imageHeightClass="h-[9.5rem] sm:h-[15rem]"
+                          />
+                        </div>
+                      </div>
+
+                      <SimpleHistogramPreview
+                        title="All Run Metres Distribution"
+                        statLabel="All Run Metres"
+                        series={statsPlayers.map((player, index) => ({
+                          label: `${player.name} (n=${player.rows.length})`,
+                          color: index === 0 ? "#2cf596" : "#b395ff",
+                          values: player.rows
+                            .map((row) => toFiniteNumber(row["All Run Metres"]))
+                            .filter((value): value is number => value != null),
+                          mean: average(
+                            player.rows
+                              .map((row) => toFiniteNumber(row["All Run Metres"]))
+                              .filter((value): value is number => value != null)
+                          ),
+                        }))}
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="overflow-x-auto rounded-xl">
+                        <table className="min-w-full divide-y divide-white/8 text-left text-[12px] text-white/76">
+                          <thead className="text-[10px] uppercase tracking-[0.14em] text-white/35">
+                            <tr>
+                              <th className="px-3 py-2">Player</th>
+                              <th className="px-3 py-2">Stat</th>
+                              <th className="px-3 py-2 text-right">Average</th>
+                              <th className="px-3 py-2 text-right">Median</th>
+                              <th className="px-3 py-2 text-right">Min</th>
+                              <th className="px-3 py-2 text-right">Max</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/8">
+                            {statsSummaryRows.map((row) => (
+                              <tr key={`${row.playerName}-${row.stat}`}>
+                                <td className="px-3 py-2">{row.playerName}</td>
+                                <td className="px-3 py-2">{row.stat}</td>
+                                <td className="px-3 py-2 text-right">{formatNumber(row.average, 2)}</td>
+                                <td className="px-3 py-2 text-right">{formatNumber(row.median, 2)}</td>
+                                <td className="px-3 py-2 text-right">{formatNumber(row.min, 2)}</td>
+                                <td className="px-3 py-2 text-right">{formatNumber(row.max, 2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">Percentile Rank</div>
+                          <div className="inline-flex rounded-md border border-white/8 bg-white/[0.03] p-1 text-[10px] font-semibold uppercase tracking-[0.16em]">
+                            <span className="rounded bg-emerald-400/16 px-2 py-1 text-emerald-300">Position</span>
+                            <span className="px-2 py-1 text-white/38">All</span>
+                          </div>
+                        </div>
+                        <div className="mt-3 space-y-3">
+                          {statsPercentileRows.map((row) => (
+                            <div key={`stats-percentile-${row.playerName}-${row.stat}`}>
+                              <div className="flex items-center justify-between gap-3 text-[12px] text-white/72">
+                                <span>{row.playerName} — {row.stat}</span>
+                                <span className={row.percentile != null && row.percentile >= 50 ? "font-semibold text-[#2cf596]" : "font-semibold text-[#ff9d2e]"}>
+                                  {formatOrdinal(row.percentile)}
+                                </span>
+                              </div>
+                              <div className="mt-1 h-2 rounded-full bg-white/8">
+                                <div
+                                  className={`h-full rounded-full ${row.percentile != null && row.percentile >= 50 ? "bg-[#2cf596]" : "bg-[#ff9d2e]"}`}
+                                  style={{ width: `${Math.max(8, row.percentile ?? 0)}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">Recent Form (Last 5 Avg)</div>
+                        <div className="mt-3 space-y-2">
+                          {statsRecentFormRows.map((row) => (
+                            <div key={`stats-form-${row.playerName}-${row.stat}`} className="flex items-center justify-between gap-4 text-[13px]">
+                              <span className="text-white/68">{row.playerName} — {row.stat}</span>
+                              <span className={row.deltaPct != null && row.deltaPct >= 0 ? "font-semibold text-[#2cf596]" : "font-semibold text-[#ff6b99]"}>
+                                {row.deltaPct != null && row.deltaPct >= 0 ? "▲" : "▼"} {formatNumber(Math.abs(row.deltaPct ?? 0), 1)}% ({formatNumber(row.recentAverage, 1)} vs {formatNumber(row.overallAverage, 1)})
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <SimpleHistogramPreview
+                        title="Kicking Metres Distribution"
+                        statLabel="Kicking Metres"
+                        series={statsPlayers.map((player, index) => ({
+                          label: `${player.name} (n=${player.rows.length})`,
+                          color: index === 0 ? "#2cf596" : "#b395ff",
+                          values: player.rows
+                            .map((row) => toFiniteNumber(row["Kicking Metres"]))
+                            .filter((value): value is number => value != null),
+                          mean: average(
+                            player.rows
+                              .map((row) => toFiniteNumber(row["Kicking Metres"]))
+                              .filter((value): value is number => value != null)
+                          ),
+                        }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </PreviewFrame>
+
+              <PreviewFrame title="Stats / Leaders" contentClassName="lg:min-h-[640px]" live>
+                <div className="space-y-4">
+                  <StatsPreviewNav active="leaders" />
+                  <div>
+                    <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">Player Leaders</div>
+                    <div className="grid items-stretch gap-4 lg:grid-cols-3">
+                      {statsLeaderCards.map((card) => {
+                        const leader = card.leaders[0] ?? null
+                        const runnerUps = card.leaders.slice(1)
+                        return (
+                          <article key={`leader-${card.key}`} className="flex h-full flex-col overflow-hidden rounded-xl border border-white/8 bg-[#1b2140]">
+                            <div className="relative min-h-[12.5rem] overflow-hidden border-b border-white/8 bg-[linear-gradient(135deg,#3a315f_0%,#31396d_100%)]">
+                              <div className="relative flex min-h-[12.5rem] justify-between gap-3 p-4 pb-0">
+                                <div className="flex max-w-[58%] flex-col justify-between pb-4">
+                                  <div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">{card.label}</div>
+                                    <div className="mt-6 text-3xl font-bold leading-tight text-white">{leader?.name ?? "No leader"}</div>
+                                    <div className="mt-1 text-sm text-white/72">{leader?.team ?? "-"}</div>
+                                  </div>
+                                  <div className="text-5xl font-black tracking-tight text-white">
+                                    {leader ? formatNumber(leader.value, 0) : "-"}
+                                  </div>
+                                </div>
+
+                                <div className="relative flex min-w-[7rem] flex-1 items-end justify-end overflow-hidden">
+                                  {leader ? (
+                                    <ImageWithFallback
+                                      sources={leader.imageSources}
+                                      alt={leader.name}
+                                      className="max-h-[12.25rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)]"
+                                    />
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex-1 divide-y divide-white/8 bg-[#1b2140]">
+                              {runnerUps.map((entry) => (
+                                <div key={`${card.key}-${entry.name}`} className="flex items-center justify-between gap-3 px-4 py-3">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-medium text-white">{entry.name}</div>
+                                    <div className="mt-0.5 truncate text-xs text-white/55">{entry.team}</div>
+                                  </div>
+                                  <div className="text-2xl font-bold leading-none text-white">
+                                    {formatNumber(entry.value, 0)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="border-t border-white/8 bg-[#20274a] px-4 py-3 text-center">
+                              <Link
+                                href="/dashboard/players"
+                                className="inline-flex items-center gap-2 text-sm font-semibold text-white/55 transition-colors hover:text-white"
+                              >
+                                Open Players
+                                <span aria-hidden="true">→</span>
+                              </Link>
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </PreviewFrame>
+            </LandingCarousel>
+          </FeatureSection>
         </section>
       </div>
     </div>

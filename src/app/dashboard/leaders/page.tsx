@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { LeadersDashboard } from "@/components/views/leaders-dashboard"
+import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { isAccessibleSeason } from "@/lib/access/season-access"
 import {
   fetchAvailableYears,
@@ -20,6 +21,7 @@ interface LeadersPageProps {
 export default async function LeadersPage({ searchParams }: LeadersPageProps) {
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
+  const canAccessProSeason = await getServerProPlotAccess(userId)
   const { year, view } = await searchParams
 
   const [availableYears, playerImages, teamLogos] = await Promise.all([
@@ -29,7 +31,7 @@ export default async function LeadersPage({ searchParams }: LeadersPageProps) {
   ])
 
   const unlockedYears = availableYears.filter((season) =>
-    isAccessibleSeason(season, canAccessLoginSeason, "stats")
+    isAccessibleSeason(season, canAccessLoginSeason, "stats", canAccessProSeason)
   )
 
   const sortedYears = [...unlockedYears].sort((a, b) => Number(b) - Number(a))

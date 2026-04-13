@@ -1,8 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries";
 import { PlayerComparison } from "@/components/views/player-comparison";
+import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
 import { isAccessibleSeason } from "@/lib/access/season-access";
-import { hasProPlotAccess } from "@/lib/access/pro-access";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +13,14 @@ function defaultRecentYears(years: string[], maxYears = 4): string[] {
 export default async function PlayersPage() {
   const { userId } = await auth();
   const canAccessLoginSeason = Boolean(userId);
-  const canBypassPlotGate = hasProPlotAccess(userId);
+  const canBypassPlotGate = await getServerProPlotAccess(userId);
   const [availableYears, playerImages, teamLogos] = await Promise.all([
     fetchAvailableYears(),
     fetchPlayerImages(),
     fetchTeamLogos(),
   ]);
   const unlockedYears = availableYears.filter((year) =>
-    isAccessibleSeason(year, canAccessLoginSeason, "stats")
+    isAccessibleSeason(year, canAccessLoginSeason, "stats", canBypassPlotGate)
   );
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)

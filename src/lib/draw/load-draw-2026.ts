@@ -81,7 +81,10 @@ async function loadDraw2026DataUncached(): Promise<Draw2026Data> {
   const drawPath = path.join(process.cwd(), "data", "draw_2026.csv")
   const [csvRaw, teamLogos] = await Promise.all([
     readFile(drawPath, "utf8"),
-    fetchTeamLogosFromSupabase(),
+    fetchTeamLogosFromSupabase().catch((error) => {
+      console.warn("Unable to load team logos for draw data.", error)
+      return {}
+    }),
   ])
 
   return {

@@ -1,10 +1,12 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { useCallback, useEffect, useState } from "react";
 import { SignInButton } from "@clerk/nextjs";
+import { BillingPageLink } from "@/components/billing/billing-page-link";
 import { Select } from "@/components/ui/select";
 import { YearRangeSlider } from "@/components/ui/year-range-slider";
+import { hasProPlotAccess } from "@/lib/access/pro-access";
 import {
   getSeasonLockReason,
   hasProLockedHistoricalSeasons,
@@ -70,19 +72,26 @@ export function FilterBar({
   mobileColumns = 1,
 }: FilterBarProps) {
   const { isLoaded, userId } = useAuth();
+  const { user } = useUser();
   const canAccessLoginSeason = Boolean(userId);
+  const canAccessProSeason = hasProPlotAccess(userId, user?.publicMetadata);
   const disabledYearReasons = years.reduce<Record<string, string>>((acc, year) => {
-    const reason = getSeasonLockReason(year, canAccessLoginSeason, "stats");
+    const reason = getSeasonLockReason(year, canAccessLoginSeason, "stats", canAccessProSeason);
     if (reason) {
       acc[year] = reason;
     }
     return acc;
   }, {});
-  const hasHistoricalYearsLocked = hasProLockedHistoricalSeasons(years, "stats");
+  const hasHistoricalYearsLocked = hasProLockedHistoricalSeasons(
+    years,
+    "stats",
+    canAccessProSeason
+  );
   const shouldPromptLoginFor2024 = requiresLoginFor2024(
     years,
     canAccessLoginSeason,
-    "stats"
+    "stats",
+    canAccessProSeason
   );
   const shouldShowYearFooter = shouldPromptLoginFor2024 || hasHistoricalYearsLocked;
   const selectableYears = years.filter((year) => !disabledYearReasons[year]);
@@ -282,7 +291,12 @@ export function FilterBar({
                         </div>
                       )}
                       {hasHistoricalYearsLocked && (
-                        <p className="text-[9px] text-nrl-muted">Upgrade to Pro for pre-2024 data</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[9px] text-nrl-muted">Upgrade to Pro for pre-2024 data</p>
+                          <BillingPageLink className="rounded border border-nrl-accent/45 px-1.5 py-0.5 text-[8px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10">
+                            Billing
+                          </BillingPageLink>
+                        </div>
                       )}
                     </div>
                   ) : null

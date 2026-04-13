@@ -1,6 +1,7 @@
 import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
+import { BillingNavButton } from "@/components/billing/billing-action-button";
 import { TabNav } from "@/components/ui/tab-nav";
 import { ToolNav } from "@/components/ui/tool-nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -38,6 +39,7 @@ export default function DashboardLayout({
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <SignedIn>
+                <BillingNavButton />
                 <UserButton
                   appearance={{
                     elements: {

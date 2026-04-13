@@ -3,15 +3,22 @@
 import Link from "next/link"
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { SignInButton, useAuth } from "@clerk/nextjs"
+import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
 import type { Draw2026Data } from "@/lib/draw/types"
 import type {
+  FantasyCoachPlayerSnapshot,
   FantasyOwnershipBaselineSnapshot,
   FantasyPlayerSnapshot,
 } from "@/lib/fantasy/nrl"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
-import { FANTASY_POSITION_MAP } from "@/lib/fantasy/nrl"
+import {
+  applyFantasyBreakEvenOffset,
+  applyFantasyProjectionOffset,
+  FANTASY_POSITION_MAP,
+  getFantasyCoachRoundMetrics,
+  getTopFantasyOwnershipRise,
+} from "@/lib/fantasy/nrl"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import { hasProPlotAccess } from "@/lib/access/pro-access"
 import {
@@ -25,6 +32,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Select } from "@/components/ui/select"
 import { PillRadio } from "@/components/ui/pill-radio"
 import { YearRangeSlider } from "@/components/ui/year-range-slider"
+import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush"
 import {
   PlayerImageCard,
@@ -36,6 +44,7 @@ import { ScatterCorrelation } from "@/components/charts/scatter-correlation"
 
 interface FantasyDashboardProps {
   fantasyPlayers: FantasyPlayerSnapshot[]
+  fantasyCoachPlayers?: FantasyCoachPlayerSnapshot[]
   ownershipBaselineSnapshot?: FantasyOwnershipBaselineSnapshot | null
   availableYears: string[]
   defaultYears: string[]
@@ -746,6 +755,7 @@ function MetricCard({
 
 export function FantasyDashboard({
   fantasyPlayers,
+  fantasyCoachPlayers = [],
   ownershipBaselineSnapshot = null,
   availableYears,
   defaultYears,
@@ -798,7 +808,9 @@ export function FantasyDashboard({
   const [gameLogSort, setGameLogSort] = useState<{ column: GameLogColumn; direction: GameLogSortDirection } | null>(
     null
   )
-  const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId)
+  const { user } = useUser()
+  const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
+  const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata)
   const analysisLocked = !hasFantasyPlotAccess
   const playerDetailsRef = useRef<HTMLElement | null>(null)
 
@@ -822,7 +834,7 @@ export function FantasyDashboard({
   )
 
   const loadTeammateLookupRows = useCallback(async (years: string[]) => {
-    if (!canAccessLoginSeason) {
+    if (!hasLoginAccess) {
       setTeammateLookupRows([])
       return
     }
@@ -839,7 +851,7 @@ export function FantasyDashboard({
     } catch (error) {
       console.error("Failed to load teammate lookup rows", error)
     }
-  }, [canAccessLoginSeason])
+  }, [hasLoginAccess])
 
   const handleYearsChange = useCallback(async (years: string[]) => {
     const validYears = availableYears.filter((year) => years.includes(year))
@@ -865,17 +877,19 @@ export function FantasyDashboard({
     () => fantasyPlayers.find((player) => player.name === selectedFantasyName) ?? null,
     [fantasyPlayers, selectedFantasyName]
   )
+  const selectedFantasyCoachPlayer = useMemo(
+    () => selectedFantasyPlayer
+      ? fantasyCoachPlayers.find((player) => player.id === selectedFantasyPlayer.id) ?? null
+      : null,
+    [fantasyCoachPlayers, selectedFantasyPlayer]
+  )
+  const selectedFantasyCoachMetrics = useMemo(
+    () => getFantasyCoachRoundMetrics(selectedFantasyCoachPlayer),
+    [selectedFantasyCoachPlayer]
+  )
   const selectedFantasyCoachRound = useMemo(() => {
-    if (!selectedFantasyPlayer) return null
-    const roundKeys = [
-      ...Object.keys(selectedFantasyPlayer.priceHistory ?? {}),
-      ...Object.keys(selectedFantasyPlayer.scoreHistory ?? {}),
-    ]
-      .map((value) => Number.parseInt(value, 10))
-      .filter((value) => Number.isFinite(value))
-      .sort((a, b) => b - a)
-    return roundKeys[0] ?? null
-  }, [selectedFantasyPlayer])
+    return selectedFantasyCoachMetrics.round
+  }, [selectedFantasyCoachMetrics])
 
   const selectedYearData = useMemo(() => {
     if (selectedYears.length === 0) return allData
@@ -946,22 +960,22 @@ export function FantasyDashboard({
   )
 
   useEffect(() => {
-    if (!showPlayerDetails || !preloadedPlayerAllYears || !canAccessLoginSeason) return
+    if (!showPlayerDetails || !preloadedPlayerAllYears || !hasLoginAccess) return
     void loadTeammateLookupRows(selectedYears)
-  }, [canAccessLoginSeason, loadTeammateLookupRows, preloadedPlayerAllYears, selectedYears, showPlayerDetails])
+  }, [hasLoginAccess, loadTeammateLookupRows, preloadedPlayerAllYears, selectedYears, showPlayerDetails])
 
   useEffect(() => {
-    if (canAccessLoginSeason) return
+    if (hasLoginAccess) return
     setTeammate("None")
     setTeammatePosition("All")
     setTeammateMode("With")
-  }, [canAccessLoginSeason])
+  }, [hasLoginAccess])
 
   useEffect(() => {
-    if (!canAccessLoginSeason || teammate === "None") {
+    if (!hasLoginAccess || teammate === "None") {
       setShowWithWithoutPlot(false)
     }
-  }, [canAccessLoginSeason, teammate])
+  }, [hasLoginAccess, teammate])
 
   useEffect(() => {
     if (hasFantasyPlotAccess) return
@@ -1046,7 +1060,7 @@ export function FantasyDashboard({
   ])
 
   const filteredRows = useMemo(() => {
-    if (canAccessLoginSeason && teammate !== "None") {
+    if (hasLoginAccess && teammate !== "None") {
       return filterByTeammate(
         rowsBeforeTeammateFilter,
         teammate,
@@ -1058,7 +1072,7 @@ export function FantasyDashboard({
 
     return rowsBeforeTeammateFilter
   }, [
-    canAccessLoginSeason,
+    hasLoginAccess,
     rowsBeforeTeammateFilter,
     teammateLookupSourceRows,
     teammate,
@@ -1067,7 +1081,7 @@ export function FantasyDashboard({
   ])
 
   const trendFilteredRows = useMemo(() => {
-    if (canAccessLoginSeason && teammate !== "None") {
+    if (hasLoginAccess && teammate !== "None") {
       return filterByTeammate(
         trendRowsBeforeTeammateFilter,
         teammate,
@@ -1079,7 +1093,7 @@ export function FantasyDashboard({
 
     return trendRowsBeforeTeammateFilter
   }, [
-    canAccessLoginSeason,
+    hasLoginAccess,
     teammate,
     teammateLookupSourceRows,
     teammateMode,
@@ -1088,7 +1102,7 @@ export function FantasyDashboard({
   ])
 
   const withWithoutFantasyPlotData = useMemo(() => {
-    if (!canAccessLoginSeason || teammate === "None") {
+    if (!hasLoginAccess || teammate === "None") {
       return { withValues: [] as number[], withoutValues: [] as number[] }
     }
 
@@ -1116,7 +1130,7 @@ export function FantasyDashboard({
         .filter((value): value is number => value !== null),
     }
   }, [
-    canAccessLoginSeason,
+    hasLoginAccess,
     rowsBeforeTeammateFilter,
     teammate,
     teammateLookupSourceRows,
@@ -1244,6 +1258,11 @@ export function FantasyDashboard({
     return map
   }, [fantasyPlayers, ownershipBaselineByPlayerId])
 
+  const topOwnershipRise = useMemo(
+    () => getTopFantasyOwnershipRise(ownershipDeltaByPlayerId),
+    [ownershipDeltaByPlayerId]
+  )
+
   const topWeeklyByPosition = useMemo(() => {
     return POSITION_TABLES.map((position) => ({
       ...position,
@@ -1304,6 +1323,22 @@ export function FantasyDashboard({
         ? (ownershipDeltaByPlayerId.get(selectedFantasyPlayer.id) ?? null)
         : null,
     [ownershipDeltaByPlayerId, selectedFantasyPlayer]
+  )
+  const selectedAdjustedProjection = useMemo(
+    () => applyFantasyProjectionOffset(
+      selectedFantasyCoachMetrics.projection ?? selectedFantasyPlayer?.projectedAvg ?? null,
+      selectedOwnershipDelta,
+      topOwnershipRise,
+    ),
+    [selectedFantasyCoachMetrics.projection, selectedFantasyPlayer, selectedOwnershipDelta, topOwnershipRise]
+  )
+  const selectedAdjustedBreakEven = useMemo(
+    () => applyFantasyBreakEvenOffset(
+      selectedFantasyCoachMetrics.breakEven ?? selectedFantasyPlayer?.be ?? null,
+      selectedFantasyPlayer?.id ?? null,
+      selectedFantasyCoachRound,
+    ),
+    [selectedFantasyCoachMetrics.breakEven, selectedFantasyPlayer, selectedFantasyCoachRound]
   )
 
   const localPpm = useMemo(() => {
@@ -1536,52 +1571,63 @@ export function FantasyDashboard({
   }, [])
 
   const ownedCards = useMemo<OwnedCardConfig[]>(
-    () =>
-      ownershipBaselineSnapshot
-        ? [
-            {
-              key: "weekly-bought",
-              title: "TOP BOUGHT WEEKLY",
-              rows: overallTopBoughtWeekly,
-            },
-            {
-              key: "weekly-sold",
-              title: "TOP SOLD WEEKLY",
-              rows: overallTopSoldWeekly,
-            },
-            { key: "price", title: "TOP PRICE", rows: overallTopPrice },
-            ...topOwnedByPosition.map((table) => {
-              const control = positionOwnershipControls[table.code] ?? { metric: "Total" as const, direction: "desc" as const }
-              const weeklyTable = topWeeklyByPosition.find((candidate) => candidate.code === table.code)
-              return {
-                key: String(table.code),
-                title: `TOP ${table.label}`,
-                rows:
-                  control.metric === "Weekly"
-                    ? control.direction === "desc"
-                      ? (weeklyTable?.boughtRows ?? table.rows)
-                      : (weeklyTable?.soldRows ?? table.ascRows)
-                    : control.direction === "desc"
-                      ? table.rows
-                      : table.ascRows,
-                positionCode: table.code,
-              }
-            }),
-          ]
-        : [
-            {
-              key: "all",
-              title: "TOP ALL POS",
-              rows: overallTopOwned,
-            },
-            { key: "price", title: "TOP PRICE", rows: overallTopPrice },
-            ...topOwnedByPosition.map((table) => ({
+    () => {
+      if (ownershipBaselineSnapshot) {
+        return [
+          ...(overallTopBoughtWeekly.length > 0
+            ? [
+                {
+                  key: "weekly-bought",
+                  title: "TOP BOUGHT WEEKLY",
+                  rows: overallTopBoughtWeekly,
+                },
+              ]
+            : []),
+          ...(overallTopSoldWeekly.length > 0
+            ? [
+                {
+                  key: "weekly-sold",
+                  title: "TOP SOLD WEEKLY",
+                  rows: overallTopSoldWeekly,
+                },
+              ]
+            : []),
+          { key: "price", title: "TOP PRICE", rows: overallTopPrice },
+          ...topOwnedByPosition.map((table) => {
+            const control = positionOwnershipControls[table.code] ?? { metric: "Total" as const, direction: "desc" as const }
+            const weeklyTable = topWeeklyByPosition.find((candidate) => candidate.code === table.code)
+            return {
               key: String(table.code),
               title: `TOP ${table.label}`,
-              rows: table.rows,
+              rows:
+                control.metric === "Weekly"
+                  ? control.direction === "desc"
+                    ? (weeklyTable?.boughtRows ?? table.rows)
+                    : (weeklyTable?.soldRows ?? table.ascRows)
+                  : control.direction === "desc"
+                    ? table.rows
+                    : table.ascRows,
               positionCode: table.code,
-            })),
-          ],
+            }
+          }),
+        ]
+      }
+
+      return [
+        {
+          key: "all",
+          title: "TOP ALL POS",
+          rows: overallTopOwned,
+        },
+        { key: "price", title: "TOP PRICE", rows: overallTopPrice },
+        ...topOwnedByPosition.map((table) => ({
+          key: String(table.code),
+          title: `TOP ${table.label}`,
+          rows: table.rows,
+          positionCode: table.code,
+        })),
+      ]
+    },
     [
       overallTopBoughtWeekly,
       overallTopOwned,
@@ -1926,7 +1972,7 @@ export function FantasyDashboard({
 	              />
 	            </div>
 
-                {!canAccessLoginSeason ? (
+                {!hasLoginAccess ? (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <div className="text-[10px] text-nrl-muted">Sign in to access pre-2025 seasons</div>
                     <SignInButton mode="modal">
@@ -1947,14 +1993,14 @@ export function FantasyDashboard({
                     options={["None", ...teammateOptions]}
                     onChange={setTeammate}
                     placeholder="Filter by teammate..."
-                    disabled={!matchedLocalName || !canAccessLoginSeason}
+                    disabled={!matchedLocalName || !hasLoginAccess}
                   />
                 <Select
                   label="Teammate Position"
                   value={teammatePosition}
                   options={["All", ...teammatePositionOptions]}
                   onChange={setTeammatePosition}
-                  disabled={!canAccessLoginSeason}
+                  disabled={!hasLoginAccess}
                 />
                 <div className="flex flex-col gap-0.5">
                   <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
@@ -1965,13 +2011,13 @@ export function FantasyDashboard({
                       options={["With", "Without"]}
                       value={teammateMode}
                       onChange={(value) => setTeammateMode(value as TeammateMode)}
-                      disabled={teammate === "None" || !canAccessLoginSeason}
+                      disabled={teammate === "None" || !hasLoginAccess}
                     />
                   </div>
                 </div>
                 </div>
 
-                {!canAccessLoginSeason ? (
+                {!hasLoginAccess ? (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <div className="text-[10px] text-nrl-muted">Sign in to unlock teammate filtering</div>
                     <SignInButton mode="modal">
@@ -2004,17 +2050,17 @@ export function FantasyDashboard({
                   </div>
                 </div>
                 <div className={analysisLocked ? "pointer-events-none select-none opacity-40" : undefined}>
-                <div className="mb-3 grid grid-cols-2 gap-3 sm:max-w-[360px]">
+                <div className="mb-5 grid grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
                   <MetricCard
                     compact
                     label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
-                    value={formatNumber(selectedFantasyPlayer.projectedAvg, 1)}
+                    value={formatNumber(selectedAdjustedProjection, 0)}
                     blurValue={analysisLocked}
                   />
                   <MetricCard
                     compact
                     label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}
-                    value={formatNumber(selectedFantasyPlayer.be, 0)}
+                    value={formatNumber(selectedAdjustedBreakEven, 0)}
                     blurValue={analysisLocked}
                   />
                 </div>
@@ -2054,7 +2100,7 @@ export function FantasyDashboard({
                     activeLabel="Hide Stat vs Fantasy Plot"
                     inactiveLabel="Show Stat vs Fantasy Plot"
                   />
-                  {canAccessLoginSeason && teammate !== "None" ? (
+                  {hasLoginAccess && teammate !== "None" ? (
                     <FantasyPlotToggleButton
                       active={showWithWithoutPlot}
                       locked={analysisLocked}
@@ -2317,7 +2363,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                {!analysisLocked && showWithWithoutPlot && canAccessLoginSeason && teammate !== "None" ? (
+                {!analysisLocked && showWithWithoutPlot && hasLoginAccess && teammate !== "None" ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -2345,8 +2391,7 @@ export function FantasyDashboard({
 
                 {analysisLocked ? (
                   <div className="absolute inset-0 flex items-center justify-center rounded-xl">
-                    <Link
-                      href="/sign-up"
+                    <BillingPageLink
                       className="rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]"
                     >
                       <div className="rounded-[calc(1rem-1px)] bg-slate-950/80 px-4 py-3 text-center backdrop-blur-[2px]">
@@ -2357,7 +2402,7 @@ export function FantasyDashboard({
                           Unlock projections, breakevens and plots.
                         </div>
                       </div>
-                    </Link>
+                    </BillingPageLink>
                   </div>
                 ) : null}
               </div>

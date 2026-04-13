@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { createServerSupabaseClient } from "@/lib/supabase/client";
 
 type BetMarket = "H2H" | "Line" | "Total";
@@ -30,6 +31,28 @@ interface MatchResult {
   away: string;
   homeScore: number;
   awayScore: number;
+}
+
+async function requirePremiumUser() {
+  const unauthorized = {
+    userId: null,
+    response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+  } as const;
+
+  const { userId } = await auth();
+  if (!userId) {
+    return unauthorized;
+  }
+
+  const canAccessPremium = await getServerPremiumAccess(userId);
+  if (!canAccessPremium) {
+    return {
+      userId: null,
+      response: NextResponse.json({ error: "Premium access required" }, { status: 403 }),
+    } as const;
+  }
+
+  return { userId, response: null } as const;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -307,10 +330,8 @@ async function settlePendingBets(rows: UserBetRow[], userId: string): Promise<Us
 }
 
 export async function GET() {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { userId, response } = await requirePremiumUser();
+  if (response) return response;
 
   try {
     const supabase = createServerSupabaseClient();
@@ -340,10 +361,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { userId, response } = await requirePremiumUser();
+  if (response) return response;
 
   let body: unknown;
   try {
@@ -426,10 +445,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { userId, response } = await requirePremiumUser();
+  if (response) return response;
 
   let body: unknown;
   try {
@@ -523,10 +540,8 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { userId, response } = await requirePremiumUser();
+  if (response) return response;
 
   let body: unknown;
   try {

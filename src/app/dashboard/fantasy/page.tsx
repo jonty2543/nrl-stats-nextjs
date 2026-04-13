@@ -1,8 +1,9 @@
 import { auth } from "@clerk/nextjs/server"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
-import { hasProPlotAccess } from "@/lib/access/pro-access"
+import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { isAccessibleSeason } from "@/lib/access/season-access"
 import {
+  fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
 } from "@/lib/fantasy/nrl"
@@ -17,10 +18,11 @@ function defaultRecentYears(years: string[], maxYears = 4): string[] {
 export default async function FantasyPage() {
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
-  const canBypassPlotGate = hasProPlotAccess(userId)
+  const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, availableYears, ownershipBaselineSnapshot] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, availableYears, ownershipBaselineSnapshot] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
+    fetchFantasyCoachPlayersSnapshot(),
     fetchAvailableYears(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
   ])
@@ -35,6 +37,7 @@ export default async function FantasyPage() {
   return (
     <FantasyDashboard
       fantasyPlayers={fantasyPlayers}
+      fantasyCoachPlayers={fantasyCoachPlayers}
       availableYears={unlockedYears}
       defaultYears={initialYears}
       initialPlayerStats={[]}

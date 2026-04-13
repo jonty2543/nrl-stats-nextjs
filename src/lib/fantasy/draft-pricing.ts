@@ -1,5 +1,5 @@
 import type { Draw2026Data } from "@/lib/draw/types"
-import type { FantasyPlayerSnapshot } from "@/lib/fantasy/nrl"
+import { applyFantasyProjectionOffset, type FantasyPlayerSnapshot } from "@/lib/fantasy/nrl"
 
 export interface DraftPricingPlayer {
   id: number | null
@@ -1028,6 +1028,8 @@ export function buildDraftPricingPlayerPool(params: {
   fantasyPlayers: FantasyPlayerSnapshot[]
   fantasyPlayerTeams: Record<number, string | null>
   draw2026Data: Draw2026Data | null
+  ownershipDeltaByPlayerId?: Map<number, number | null>
+  topOwnershipRise?: number | null
   historicalPlayerSdRows?: DraftPricingHistoricalPlayerSd[]
   historicalPositionSdRows?: DraftPricingHistoricalPositionSd[]
 }): DraftPricingPoolPlayer[] {
@@ -1057,7 +1059,11 @@ export function buildDraftPricingPlayerPool(params: {
         positionLabel: player.positionLabel,
         positionLabels: player.positionLabels,
         status: player.status,
-        projection: projectionPoint?.projection ?? 0,
+        projection: applyFantasyProjectionOffset(
+          projectionPoint?.projection ?? 0,
+          params.ownershipDeltaByPlayerId?.get(player.id) ?? null,
+          params.topOwnershipRise ?? null,
+        ) ?? 0,
         actualScore: projectionPoint?.actualScore ?? fantasyActualScore,
         average: projectionPoint?.average ?? player.avgPoints ?? null,
         standardDeviation: resolveHistoricalStandardDeviation({

@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import Image from "next/image";
+import { BillingPageLink } from "@/components/billing/billing-page-link";
+import { hasPremiumAccess } from "@/lib/access/pro-access";
 import {
   BETTING_BOOKIE_COLUMNS,
   type BettingMarket,
@@ -13,6 +15,7 @@ import {
 
 interface BettingDashboardProps {
   snapshot: BettingOddsSnapshot;
+  canAccessPremium?: boolean;
 }
 
 interface BettingPreferences {
@@ -76,6 +79,7 @@ interface BetDraft {
 }
 
 const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total"];
+const PREMIUM_ONLY_MARKETS = new Set<BettingMarket>(["Line", "Total"]);
 const LINE_CLOSE_DIFF = 2;
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
@@ -308,8 +312,10 @@ function BookieLogo({
   );
 }
 
-export function BettingDashboard({ snapshot }: BettingDashboardProps) {
+export function BettingDashboard({ snapshot, canAccessPremium = false }: BettingDashboardProps) {
   const { isLoaded, userId } = useAuth();
+  const { user } = useUser();
+  const hasPremiumBettingAccess = canAccessPremium || hasPremiumAccess(userId, user?.publicMetadata);
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [bankroll, setBankroll] = useState(1000);
   const [stakingMode, setStakingMode] = useState<StakingMode>("percentage");
@@ -344,14 +350,32 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
       : totalGroups;
 
   const handleMarketChange = (value: string) => {
+    if (!hasPremiumBettingAccess && (value === "Line" || value === "Total")) {
+      return;
+    }
     if (value === "H2H" || value === "Line" || value === "Total") {
       setSelectedMarket(value);
     }
   };
 
   const handleStakingModeChange = (mode: StakingMode) => {
+    if (!hasPremiumBettingAccess && mode === "kelly") {
+      return;
+    }
     setStakingMode(mode);
   };
+
+  useEffect(() => {
+    if (!hasPremiumBettingAccess && selectedMarket !== "H2H") {
+      setSelectedMarket("H2H");
+    }
+  }, [hasPremiumBettingAccess, selectedMarket]);
+
+  useEffect(() => {
+    if (!hasPremiumBettingAccess && stakingMode === "kelly") {
+      setStakingMode("percentage");
+    }
+  }, [hasPremiumBettingAccess, stakingMode]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -373,7 +397,12 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
           const parsed = JSON.parse(raw) as Partial<BettingPreferences>;
           const mode = parsed.stakingMode;
           applyPreferences({
-            stakingMode: mode === "percentage" || mode === "targetProfit" || mode === "kelly" ? mode : "percentage",
+            stakingMode:
+              mode === "kelly" && !hasPremiumBettingAccess
+                ? "percentage"
+                : mode === "percentage" || mode === "targetProfit" || mode === "kelly"
+                  ? mode
+                  : "percentage",
             bankroll: Number(parsed.bankroll) || 1000,
             percentageStakePct: Number(parsed.percentageStakePct) || 2,
             targetProfitPct: Number(parsed.targetProfitPct) || 2,
@@ -402,7 +431,12 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
         if (!cancelled && payload.preferences) {
           const mode = payload.preferences.stakingMode;
           applyPreferences({
-            stakingMode: mode === "percentage" || mode === "targetProfit" || mode === "kelly" ? mode : "percentage",
+            stakingMode:
+              mode === "kelly" && !hasPremiumBettingAccess
+                ? "percentage"
+                : mode === "percentage" || mode === "targetProfit" || mode === "kelly"
+                  ? mode
+                  : "percentage",
             bankroll: Number(payload.preferences.bankroll) || 1000,
             percentageStakePct: Number(payload.preferences.percentageStakePct) || 2,
             targetProfitPct: Number(payload.preferences.targetProfitPct) || 2,
@@ -420,12 +454,12 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, userId]);
+  }, [hasPremiumBettingAccess, isLoaded, userId]);
 
   useEffect(() => {
     if (!isLoaded || !preferencesHydrated) return;
     const payload: BettingPreferences = {
-      stakingMode,
+      stakingMode: !hasPremiumBettingAccess && stakingMode === "kelly" ? "percentage" : stakingMode,
       bankroll,
       percentageStakePct,
       targetProfitPct,
@@ -455,6 +489,7 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
     return () => window.clearTimeout(timeout);
   }, [
     bankroll,
+    hasPremiumBettingAccess,
     isLoaded,
     kellyScale,
     maxEdge,
@@ -467,6 +502,13 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
 
   useEffect(() => {
     if (!isLoaded) return;
+
+    if (!hasPremiumBettingAccess) {
+      setBets([]);
+      setBetsLoading(false);
+      setBetsError(null);
+      return;
+    }
 
     if (!userId) {
       try {
@@ -516,16 +558,16 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, userId]);
+  }, [hasPremiumBettingAccess, isLoaded, userId]);
 
   useEffect(() => {
-    if (!isLoaded || userId) return;
+    if (!isLoaded || userId || !hasPremiumBettingAccess) return;
     try {
       window.localStorage.setItem(BET_TRACKER_LOCAL_KEY, JSON.stringify(bets));
     } catch {
       // Ignore storage failures.
     }
-  }, [bets, isLoaded, userId]);
+  }, [bets, hasPremiumBettingAccess, isLoaded, userId]);
 
   useEffect(() => {
     if (!betAddedMessage) return;
@@ -547,6 +589,7 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
   };
 
   const handleAddBet = async (draft: BetDraft) => {
+    if (!hasPremiumBettingAccess) return;
     if (!Number.isFinite(draft.stake) || draft.stake <= 0) return;
     if (!Number.isFinite(draft.odds) || draft.odds <= 1) return;
     const status = draft.status ?? "pending";
@@ -589,6 +632,7 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
     betId: string,
     updates: Partial<Pick<TrackedBet, "stake" | "odds" | "status">>
   ) => {
+    if (!hasPremiumBettingAccess) return;
     if (!updates || Object.keys(updates).length === 0) return;
 
     if (!userId) {
@@ -633,6 +677,7 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
   };
 
   const handleDeleteBet = async (betId: string) => {
+    if (!hasPremiumBettingAccess) return;
     if (!userId) {
       setBets((prev) => prev.filter((bet) => bet.id !== betId));
       setBetRemovedMessage("Bet removed from bet tracker");
@@ -657,6 +702,7 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
   };
 
   const handleManualAddBet = async () => {
+    if (!hasPremiumBettingAccess) return;
     setManualError(null);
 
     if (!manualMatchDate.trim()) {
@@ -739,18 +785,40 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
             <div className="mt-4 grid gap-2 md:grid-cols-3">
               {STAKING_OPTIONS.map((option) => {
                 const active = option.mode === stakingMode;
+                const locked = !hasPremiumBettingAccess && option.mode === "kelly";
+                if (locked) {
+                  return (
+                    <div
+                      key={option.mode}
+                      className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-left text-nrl-muted opacity-65"
+                    >
+                      <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
+                        <span>{option.label}</span>
+                        <span className="rounded border border-nrl-border px-1.5 py-0.5 text-[9px] text-nrl-muted">
+                          Premium
+                        </span>
+                      </div>
+                      <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
+                      <BillingPageLink className="mt-2 inline-flex rounded border border-nrl-accent/45 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10">
+                        View plans
+                      </BillingPageLink>
+                    </div>
+                  );
+                }
                 return (
                   <button
                     key={option.mode}
                     type="button"
                     onClick={() => handleStakingModeChange(option.mode)}
-                    className={`cursor-pointer rounded-md border px-3 py-2 text-left transition-colors ${
+                    className={`rounded-md border px-3 py-2 text-left transition-colors ${
                       active
                         ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                        : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                        : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
                     }`}
                   >
-                    <div className="text-xs font-bold uppercase tracking-wide">{option.label}</div>
+                    <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
+                      <span>{option.label}</span>
+                    </div>
                     <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
                   </button>
                 );
@@ -796,7 +864,7 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
                   />
                 </label>
               ) : null}
-              {stakingMode === "kelly" ? (
+              {hasPremiumBettingAccess && stakingMode === "kelly" ? (
                 <label className="flex flex-col gap-1">
                   <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Kelly Fraction</span>
                   <input
@@ -810,80 +878,83 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
                   />
                 </label>
               ) : null}
-              <label className="flex flex-col gap-1">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Max Edge</span>
-                <input
-                  type="number"
-                  value={maxEdge}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  onChange={(event) => setMaxEdge(clamp(Number(event.target.value) || 0, 0, 1))}
-                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
-                />
-              </label>
+              {hasPremiumBettingAccess ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Max Edge</span>
+                  <input
+                    type="number"
+                    value={maxEdge}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(event) => setMaxEdge(clamp(Number(event.target.value) || 0, 0, 1))}
+                    className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                  />
+                </label>
+              ) : null}
             </div>
           </>
         )}
       </section>
 
-      <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
-        <div className="space-y-3 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold uppercase tracking-wide text-nrl-text">
-              Bet Tracker ({bets.length})
-            </span>
-            <button
-              type="button"
-              onClick={() => setTrackerOpen((open) => !open)}
-              className="cursor-pointer text-xs text-nrl-muted hover:text-nrl-text"
-            >
-              {trackerOpen ? "Hide Bets" : "Show Bets"}
-            </button>
-          </div>
+      {hasPremiumBettingAccess ? (
+        <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
+          <div className="space-y-3 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold uppercase tracking-wide text-nrl-text">
+                Bet Tracker ({bets.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => setTrackerOpen((open) => !open)}
+                className="cursor-pointer text-xs text-nrl-muted hover:text-nrl-text"
+              >
+                {trackerOpen ? "Hide Bets" : "Show Bets"}
+              </button>
+            </div>
 
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Bets</div>
-              <div className="text-sm font-semibold text-nrl-text">{bets.length}</div>
-            </div>
-            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Win Rate</div>
-              <div className="text-sm font-semibold text-nrl-text">{winRate == null ? "-" : `${winRate.toFixed(1)}%`}</div>
-            </div>
-            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">P/L</div>
-              <div className={`text-sm font-semibold ${profitLoss >= 0 ? "text-nrl-accent" : "text-red-500"}`}>{formatMoney(profitLoss)}</div>
-            </div>
-            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Total Stake</div>
-              <div className="text-sm font-semibold text-nrl-text">${totalStake.toFixed(2)}</div>
-            </div>
-            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Profit Margin</div>
-              <div className={`text-sm font-semibold ${profitMargin != null && profitMargin < 0 ? "text-red-500" : "text-nrl-text"}`}>
-                {profitMargin == null ? "-" : `${profitMargin.toFixed(1)}%`}
+            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Bets</div>
+                <div className="text-sm font-semibold text-nrl-text">{bets.length}</div>
+              </div>
+              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Win Rate</div>
+                <div className="text-sm font-semibold text-nrl-text">{winRate == null ? "-" : `${winRate.toFixed(1)}%`}</div>
+              </div>
+              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">P/L</div>
+                <div className={`text-sm font-semibold ${profitLoss >= 0 ? "text-nrl-accent" : "text-red-500"}`}>{formatMoney(profitLoss)}</div>
+              </div>
+              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Total Stake</div>
+                <div className="text-sm font-semibold text-nrl-text">${totalStake.toFixed(2)}</div>
+              </div>
+              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Profit Margin</div>
+                <div className={`text-sm font-semibold ${profitMargin != null && profitMargin < 0 ? "text-red-500" : "text-nrl-text"}`}>
+                  {profitMargin == null ? "-" : `${profitMargin.toFixed(1)}%`}
+                </div>
+              </div>
+              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">W/L/P</div>
+                <div className="text-sm font-semibold text-nrl-text">
+                  {winningBets}/{losingBets}/{pushedBets}
+                </div>
               </div>
             </div>
-            <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-              <div className="text-[10px] uppercase tracking-wide text-nrl-muted">W/L/P</div>
-              <div className="text-sm font-semibold text-nrl-text">
-                {winningBets}/{losingBets}/{pushedBets}
-              </div>
-            </div>
-          </div>
 
-          {betsError ? (
-            <div className="text-xs text-red-500">{betsError}</div>
-          ) : null}
+            {betsError ? (
+              <div className="text-xs text-red-500">{betsError}</div>
+            ) : null}
 
-          {trackerOpen ? (
-            <div className="space-y-3 border-t border-nrl-border pt-3">
-              {betsLoading ? (
-                <div className="text-xs text-nrl-muted">Loading bets...</div>
-              ) : (
-                <div className="max-h-[460px] overflow-auto">
-                  <table className="w-full min-w-[960px] border-collapse text-xs">
+            {trackerOpen ? (
+              <div className="space-y-3 border-t border-nrl-border pt-3">
+                {betsLoading ? (
+                  <div className="text-xs text-nrl-muted">Loading bets...</div>
+                ) : (
+                  <div className="max-h-[460px] overflow-auto">
+                    <table className="w-full min-w-[960px] border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-nrl-border text-left text-nrl-muted">
                         <th className="py-2 pr-2 font-semibold">Date</th>
@@ -1080,16 +1151,26 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                </div>
-              )}
-              {!userId && isLoaded ? (
-                <div className="text-[10px] text-nrl-muted">Sign in to save bets across sessions.</div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </section>
+                    </table>
+                  </div>
+                )}
+                {!userId && isLoaded ? (
+                  <div className="text-[10px] text-nrl-muted">Sign in to save bets across sessions.</div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : (
+        <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
+          <div className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-3 text-sm text-nrl-muted">
+            <div>Bet tracker is Premium-only.</div>
+            <BillingPageLink className="mt-3 inline-flex rounded-md border border-nrl-accent/45 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10">
+              View billing
+            </BillingPageLink>
+          </div>
+        </section>
+      )}
 
       {betAddedMessage ? (
         <div className="fixed bottom-4 right-4 z-[120] rounded-md border border-nrl-accent/40 bg-nrl-panel px-3 py-2 text-xs font-semibold text-nrl-accent shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
@@ -1107,26 +1188,44 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
         <div className="flex flex-wrap gap-2">
           {MARKET_TABS.map((tab) => {
             const active = tab === selectedMarket;
+            const locked = !hasPremiumBettingAccess && PREMIUM_ONLY_MARKETS.has(tab);
+            if (locked) {
+              return (
+                <BillingPageLink
+                  key={tab}
+                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-4 py-2 text-xs font-bold uppercase tracking-wide text-nrl-muted opacity-65 transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <span>{tab}</span>
+                    <span className="rounded border border-nrl-border px-1.5 py-0.5 text-[9px] text-nrl-muted">
+                      Premium
+                    </span>
+                  </span>
+                </BillingPageLink>
+              );
+            }
             return (
               <button
                 key={tab}
                 type="button"
                 onClick={() => handleMarketChange(tab)}
-                className={`cursor-pointer rounded-md border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
+                className={`rounded-md border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
                   active
                     ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                    : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
                 }`}
               >
-                {tab}
+                <span className="inline-flex items-center gap-2">
+                  <span>{tab}</span>
+                </span>
               </button>
             );
           })}
         </div>
-
         <section className="min-w-0 rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
           <MarketSection
             groups={selectedMarketGroups}
+            canAccessPremium={hasPremiumBettingAccess}
             bankroll={bankroll}
             stakingMode={stakingMode}
             percentageStakePct={percentageStakePct}
@@ -1145,6 +1244,7 @@ export function BettingDashboard({ snapshot }: BettingDashboardProps) {
 
 function MarketSection({
   groups,
+  canAccessPremium,
   bankroll,
   stakingMode,
   percentageStakePct,
@@ -1156,6 +1256,7 @@ function MarketSection({
   onAddBet,
 }: {
   groups: EventGroup[];
+  canAccessPremium: boolean;
   bankroll?: number;
   stakingMode: StakingMode;
   percentageStakePct?: number;
@@ -1210,6 +1311,7 @@ function MarketSection({
           {dateGroups.map((group) => {
             const { home, away } = parseMatch(group.match);
             const showModelColumns = group.market === "Line" || group.market === "H2H";
+            const blurPremiumColumns = !canAccessPremium && showModelColumns;
             return (
               <article key={group.key} className="rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
                 <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
@@ -1245,10 +1347,10 @@ function MarketSection({
                           <>
                             <th className="py-2 pr-3 font-semibold">Model</th>
                             <th className="py-2 pr-3 font-semibold">Edge</th>
-                            <th className="py-2 pr-0 font-semibold">Stake</th>
-                            <th className="py-2 pl-3 pr-0 font-semibold">Bet</th>
                           </>
                         ) : null}
+                        <th className="py-2 pr-0 font-semibold">Stake</th>
+                        <th className="py-2 pl-3 pr-0 font-semibold">Bet</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1271,7 +1373,13 @@ function MarketSection({
                           ? kellyFraction(modelProbability, row.bestPriceComputed)
                           : null;
                         let scaledStake: number | null = null;
-                        if (modelProbability != null && row.bestPriceComputed != null && row.bestPriceComputed > 1) {
+                        if (!canAccessPremium && row.bestPriceComputed != null && row.bestPriceComputed > 1) {
+                          if (stakingMode === "percentage") {
+                            scaledStake = bankrollValue * percentageStakeDecimal;
+                          } else if (stakingMode === "targetProfit") {
+                            scaledStake = (bankrollValue * targetProfitDecimal) / (row.bestPriceComputed - 1);
+                          }
+                        } else if (modelProbability != null && row.bestPriceComputed != null && row.bestPriceComputed > 1) {
                           if (!hasPositiveEdge || overEdgeCliff) {
                             scaledStake = 0;
                           } else if (stakingMode === "percentage") {
@@ -1283,7 +1391,9 @@ function MarketSection({
                           }
                         }
                         const edgeClass =
-                          edgePp == null
+                          !canAccessPremium
+                            ? "text-nrl-text"
+                            : edgePp == null
                             ? "text-nrl-text"
                             : edgePp < 0
                               ? "text-red-500"
@@ -1296,7 +1406,8 @@ function MarketSection({
                         const betRowKey = `${group.date}|${group.match}|${group.market}|${row.result}|${row.value ?? ""}`;
                         const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                         const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
-                        const canPlaceBet = modelProbability != null
+                        const canPlaceBet = canAccessPremium
+                          && modelProbability != null
                           && implied != null
                           && row.bestPriceComputed != null
                           && Number.isFinite(stakeValue)
@@ -1377,51 +1488,61 @@ function MarketSection({
                             {showModelColumns ? (
                               <>
                                 <td className="py-2 pr-3 text-nrl-text">
-                                  {formatPct(modelProbability == null ? null : modelProbability * 100)}
+                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
+                                    {formatPct(modelProbability == null ? null : modelProbability * 100)}
+                                  </span>
                                 </td>
                                 <td className={`py-2 pr-3 ${edgeClass}`}>
-                                  {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
-                                </td>
-                                <td className="py-2 pr-0 text-nrl-text">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step={1}
-                                    value={Number.isFinite(stakeValue) ? stakeValue : 0}
-                                    onChange={(event) => onStakeOverride(betRowKey, Math.max(0, Number(event.target.value) || 0))}
-                                    className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
-                                  />
-                                </td>
-                                <td className="py-2 pl-3 pr-0">
-                                  <button
-                                    type="button"
-                                    disabled={!canPlaceBet}
-                                    onClick={() => {
-                                      if (!canPlaceBet || row.bestPriceComputed == null) return;
-                                      void onAddBet({
-                                        market: group.market,
-                                        matchDate: group.date,
-                                        matchName: group.match,
-                                        selection: row.result,
-                                        lineValue: row.value,
-                                        odds: row.bestPriceComputed,
-                                        stake: stakeValue,
-                                        modelProb: modelProbability,
-                                        impliedProb: implied,
-                                        edgePp,
-                                      });
-                                    }}
-                                    className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                                      canPlaceBet
-                                        ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
-                                        : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
-                                    }`}
-                                  >
-                                    Bet
-                                  </button>
+                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
+                                    {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
+                                  </span>
                                 </td>
                               </>
                             ) : null}
+                            <td className="py-2 pr-0 text-nrl-text">
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={Number.isFinite(stakeValue) ? stakeValue : 0}
+                                onChange={(event) => onStakeOverride(betRowKey, Math.max(0, Number(event.target.value) || 0))}
+                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                              />
+                            </td>
+                            <td className="py-2 pl-3 pr-0">
+                              {canAccessPremium ? (
+                                <button
+                                  type="button"
+                                  disabled={!canPlaceBet}
+                                  onClick={() => {
+                                    if (!canPlaceBet || row.bestPriceComputed == null) return;
+                                    void onAddBet({
+                                      market: group.market,
+                                      matchDate: group.date,
+                                      matchName: group.match,
+                                      selection: row.result,
+                                      lineValue: row.value,
+                                      odds: row.bestPriceComputed,
+                                      stake: stakeValue,
+                                      modelProb: modelProbability,
+                                      impliedProb: implied,
+                                      edgePp,
+                                    });
+                                  }}
+                                  className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                    canPlaceBet
+                                      ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                                      : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
+                                  }`}
+                                >
+                                  Bet
+                                </button>
+                              ) : (
+                                <BillingPageLink className="inline-flex rounded-md border border-nrl-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted opacity-75 transition-colors hover:border-nrl-accent hover:text-nrl-text">
+                                  Locked
+                                </BillingPageLink>
+                              )}
+                            </td>
                           </tr>
                         );
                       })}

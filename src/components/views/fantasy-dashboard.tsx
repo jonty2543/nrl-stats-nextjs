@@ -1874,7 +1874,7 @@ export function FantasyDashboard({
                       </div>
                     </div>
 
-                    <div className={`grid items-start gap-3 pt-4 sm:gap-4 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5 ${fantasyCardPlayerName ? "grid-cols-[minmax(0,1fr)_8.15rem] sm:grid-cols-[minmax(0,1fr)_14.25rem]" : "grid-cols-1"}`}>
+                    <div className={`grid items-start gap-3 pt-4 sm:gap-4 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5 ${fantasyCardPlayerName ? "grid-cols-1 sm:grid-cols-[minmax(0,1fr)_14.25rem]" : "grid-cols-1"}`}>
                       <div className="grid w-full auto-rows-fr grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                         <MetricCard compact mobileTight label="Price" value={formatPrice(selectedFantasyPlayer.cost)} />
                         <MetricCard compact mobileTight label="PPM" value={formatNumber(localPpm, 2)} />
@@ -1898,8 +1898,8 @@ export function FantasyDashboard({
                       </div>
 
                       {fantasyCardPlayerName ? (
-                        <div className="flex self-start items-start justify-center sm:-mt-4 sm:justify-end xl:hidden">
-                          <div className="w-full max-w-[8.15rem] rounded-[1.05rem] bg-[linear-gradient(180deg,rgba(17,23,46,0.46),rgba(17,23,46,0.18))] shadow-[0_18px_40px_rgba(8,10,18,0.22)] sm:max-w-[14.25rem] sm:rounded-[1.2rem] lg:max-w-[15.25rem]">
+                        <div className="flex self-start items-start justify-center pt-1 sm:-mt-4 sm:justify-end sm:pt-0 xl:hidden">
+                          <div className="w-full max-w-[11rem] rounded-[1.05rem] bg-[linear-gradient(180deg,rgba(17,23,46,0.46),rgba(17,23,46,0.18))] shadow-[0_18px_40px_rgba(8,10,18,0.22)] sm:max-w-[14.25rem] sm:rounded-[1.2rem] lg:max-w-[15.25rem]">
                             <div className="relative">
                               <PlayerImageCard
                                 playerName={fantasyCardPlayerName}

@@ -113,7 +113,7 @@ export function BillingNavButton() {
     <BillingPageLink
       className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
     >
-      {hasProAccess ? "Manage billing" : "Billing"}
+      {hasProAccess ? "Manage" : "Billing"}
     </BillingPageLink>
   );
 }

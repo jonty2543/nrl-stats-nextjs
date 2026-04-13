@@ -5,11 +5,6 @@ import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import type { PlayerStat, TeamStat } from "@/lib/data/types";
 import { TEAM_STATS } from "@/lib/data/constants";
 import {
-  filterByPosition,
-  filterByMinutes,
-  filterByFinals,
-  filterByYear,
-  aggregateTeamStats,
   computeSummary,
   computePercentileRanks,
   computeRecentForm,
@@ -26,7 +21,7 @@ import { hasProPlotAccess } from "@/lib/access/pro-access";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
 interface TeamComparisonProps {
-  initialData: PlayerStat[];
+  initialData: TeamStat[];
   availableYears: string[];
   defaultYears: string[];
   canBypassPlotGate?: boolean;
@@ -52,6 +47,23 @@ function toFiniteNumber(value: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+function isFinalsGame(row: TeamStat): boolean {
+  if (row.Round >= 28) return true;
+  const roundLabel = (row.Round_Label ?? "").toString().toUpperCase();
+  return roundLabel === "GF" || roundLabel.startsWith("FW") || roundLabel.includes("FINAL");
+}
+
+function filterTeamRowsByYear(rows: TeamStat[], years: string[]): TeamStat[] {
+  if (years.length === 0) return rows;
+  const set = new Set(years);
+  return rows.filter((row) => set.has(row.Year));
+}
+
+function filterTeamRowsByFinals(rows: TeamStat[], mode: "Yes" | "No"): TeamStat[] {
+  if (mode === "Yes") return rows;
+  return rows.filter((row) => !isFinalsGame(row));
 }
 
 function buildAgainstTeamStats(rows: TeamStat[]): TeamStat[] {
@@ -88,7 +100,7 @@ export function TeamComparison({
   const canAccessLoginSeason = Boolean(userId);
   const hasClientProPlotAccess =
     canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata);
-  const [allData, setAllData] = useState<PlayerStat[]>(initialData);
+  const [allData, setAllData] = useState<TeamStat[]>(initialData);
   const unlockedYears = useMemo(
     () =>
       availableYears.filter((year) =>
@@ -122,7 +134,7 @@ export function TeamComparison({
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/player-stats?years=${unlockedYears.join(",")}`);
+      const res = await fetch(`/api/team-stats?years=${unlockedYears.join(",")}`);
       if (res.ok) {
         const data = await res.json();
         setAllData(data);
@@ -136,57 +148,34 @@ export function TeamComparison({
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
     setSelectedYears(validYears);
   }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
-  const [position, setPosition] = useState("All");
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minMinutes, setMinMinutes] = useState(0);
   const [minutesMode, setMinutesMode] = useState("All");
 
   const dfYear = useMemo(
-    () => filterByYear(allData, selectedYears),
+    () => filterTeamRowsByYear(allData, selectedYears),
     [allData, selectedYears]
   );
   const dfYearFinals = useMemo(
-    () => filterByFinals(dfYear, finalsMode as "Yes" | "No"),
+    () => filterTeamRowsByFinals(dfYear, finalsMode as "Yes" | "No"),
     [dfYear, finalsMode]
   );
   const plotDfYear = useMemo(
-    () => filterByYear(allData, unlockedYears),
+    () => filterTeamRowsByYear(allData, unlockedYears),
     [allData, unlockedYears]
   );
   const plotDfYearFinals = useMemo(
-    () => filterByFinals(plotDfYear, finalsMode as "Yes" | "No"),
+    () => filterTeamRowsByFinals(plotDfYear, finalsMode as "Yes" | "No"),
     [plotDfYear, finalsMode]
   );
-  const dfPosition = useMemo(
-    () => filterByPosition(dfYearFinals, position),
-    [dfYearFinals, position]
-  );
-  const plotDfPosition = useMemo(
-    () => filterByPosition(plotDfYearFinals, position),
-    [plotDfYearFinals, position]
-  );
-  const df = useMemo(
-    () => filterByMinutes(dfPosition, minMinutes, minutesMode as "All" | "Over" | "Under"),
-    [dfPosition, minMinutes, minutesMode]
-  );
-  const plotDf = useMemo(
-    () => filterByMinutes(plotDfPosition, minMinutes, minutesMode as "All" | "Over" | "Under"),
-    [plotDfPosition, minMinutes, minutesMode]
-  );
-
-  const teamDf = useMemo(() => aggregateTeamStats(df), [df]);
-  const plotTeamDf = useMemo(() => aggregateTeamStats(plotDf), [plotDf]);
+  const teamDf = useMemo(() => dfYearFinals, [dfYearFinals]);
+  const plotTeamDf = useMemo(() => plotDfYearFinals, [plotDfYearFinals]);
   const teamAgainstDf = useMemo(() => buildAgainstTeamStats(teamDf), [teamDf]);
   const plotTeamAgainstDf = useMemo(() => buildAgainstTeamStats(plotTeamDf), [plotTeamDf]);
 
-  const positions = useMemo(
-    () => [...new Set(dfYearFinals.map((r) => r.Position))].filter(Boolean).sort(),
-    [dfYearFinals]
-  );
-
   const teamList = useMemo(
-    () => [...new Set(dfPosition.map((r) => r.Team))].sort(),
-    [dfPosition]
+    () => [...new Set(teamDf.map((r) => r.Team))].sort(),
+    [teamDf]
   );
 
   const statList = useMemo(
@@ -546,9 +535,6 @@ export function TeamComparison({
         years={availableYears}
         selectedYears={selectedYears}
         onYearsChange={handleYearsChange}
-        positions={positions}
-        selectedPosition={position}
-        onPositionChange={setPosition}
         finalsMode={finalsMode}
         onFinalsModeChange={setFinalsMode}
         minutesThreshold={minMinutes}

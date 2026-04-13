@@ -5,7 +5,7 @@ import {
   FINALS_MAP,
   FINALS_LABEL_MAP,
 } from "@/lib/data/constants";
-import type { PlayerStat, Match, TeammateLookupRow } from "@/lib/data/types";
+import type { PlayerStat, Match, TeamStat, TeammateLookupRow } from "@/lib/data/types";
 import {
   filterPlayerStatsRowsByYears,
   readPlayerStatsServerCache,
@@ -766,6 +766,146 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
   );
 
   return fetchCached();
+}
+
+function buildTeamStatsRowsFromMatches(rawMatches: Record<string, unknown>[]): TeamStat[] {
+  return rawMatches.map((raw) => {
+    const matchDate = String(raw.match_date ?? "");
+    const year = matchDate ? new Date(matchDate).getFullYear().toString() : "";
+    const round = roundToSort(raw.round as string) ?? 0;
+    const roundLabel = roundToLabel(raw.round as string);
+    const team = String(raw.team ?? "").replace(/-/g, " ");
+    const opponent = String(raw.opponent_team ?? "").replace(/-/g, " ").trim() || null;
+
+    return {
+      Team: team as TeamStat["Team"],
+      Year: year,
+      Round: round,
+      Round_Label: roundLabel,
+      Opponent: opponent,
+      Points: Number(raw.score ?? 0),
+      Tries: Number(raw.tries ?? 0),
+      Conversions: Number(raw.conversions_made ?? 0),
+      "Conversion Attempts": Number(raw.conversions_attempted ?? 0),
+      "Penalty Goals": Number(raw.penalty_goals_made ?? 0),
+      "1 Point Field Goals": Number(raw.field_goals_made ?? 0),
+      "2 Point Field Goals": 0,
+      "All Runs": Number(raw.all_runs ?? 0),
+      "All Run Metres": toFiniteNumber(raw.all_run_metres) ?? 0,
+      "Kick Return Metres": toFiniteNumber(raw.kick_return_metres) ?? 0,
+      "Post Contact Metres": toFiniteNumber(raw.post_contact_metres) ?? 0,
+      "Line Breaks": Number(raw.line_breaks ?? 0),
+      "Line Break Assists": Number(raw.line_break_assists ?? 0),
+      "Try Assists": Number(raw.try_assists ?? 0),
+      "Line Engaged Runs": 0,
+      "Tackle Breaks": Number(raw.tackle_breaks ?? 0),
+      "Hit Ups": 0,
+      "Play The Ball": 0,
+      "Dummy Half Runs": 0,
+      "Dummy Half Run Metres": 0,
+      "One on One Steal": 0,
+      Offloads: Number(raw.offloads ?? 0),
+      "Dummy Passes": Number(raw.dummy_passes ?? 0),
+      Passes: Number(raw.total_passes ?? 0),
+      Receipts: Number(raw.receipts ?? 0),
+      "Tackles Made": Number(raw.tackles_made ?? 0),
+      "Missed Tackles": Number(raw.missed_tackles ?? 0),
+      "Ineffective Tackles": Number(raw.ineffective_tackles ?? 0),
+      Intercepts: Number(raw.intercepts ?? 0),
+      "Kicks Defused": 0,
+      Kicks: Number(raw.kicks ?? 0),
+      "Kicking Metres": toFiniteNumber(raw.kicking_metres) ?? 0,
+      "Forced Drop Outs": Number(raw.forced_drop_outs ?? 0),
+      "Bomb Kicks": Number(raw.bombs ?? 0),
+      Grubbers: Number(raw.grubbers ?? 0),
+      "40/20": 0,
+      "20/40": 0,
+      "Cross Field Kicks": 0,
+      "Kicked Dead": 0,
+      Errors: Number(raw.errors ?? 0),
+      "Handling Errors": 0,
+      "One on One Lost": 0,
+      Penalties: Number(raw.penalties_conceded ?? 0),
+      "Ruck Infringements": Number(raw.ruck_infringements ?? 0),
+      "Inside 10 Metres": Number(raw.inside_10_metres ?? 0),
+      "On Report": Number(raw.on_reports ?? 0),
+      "Sin Bins": Number(raw.sin_bins ?? 0),
+      "Send Offs": 0,
+    }
+  })
+}
+
+export async function fetchTeamStatsFromSupabase(years?: string[]): Promise<TeamStat[]> {
+  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches", {
+    years,
+    columns: [
+      "match_date",
+      "round",
+      "team",
+      "opponent_team",
+      "score",
+      "tries",
+      "conversions_made",
+      "conversions_attempted",
+      "penalty_goals_made",
+      "field_goals_made",
+      "all_runs",
+      "all_run_metres",
+      "kick_return_metres",
+      "post_contact_metres",
+      "line_breaks",
+      "line_break_assists",
+      "try_assists",
+      "tackle_breaks",
+      "offloads",
+      "receipts",
+      "total_passes",
+      "dummy_passes",
+      "kicks",
+      "kicking_metres",
+      "forced_drop_outs",
+      "bombs",
+      "grubbers",
+      "tackles_made",
+      "missed_tackles",
+      "intercepts",
+      "ineffective_tackles",
+      "errors",
+      "penalties_conceded",
+      "ruck_infringements",
+      "inside_10_metres",
+      "on_reports",
+      "sin_bins",
+    ].join(","),
+  })
+
+  if (rawMatches.length === 0) return [];
+
+  return buildTeamStatsRowsFromMatches(rawMatches)
+    .filter((row) => row.Team && row.Year)
+    .sort((a, b) => {
+      if (a.Year !== b.Year) return b.Year.localeCompare(a.Year)
+      if (a.Round !== b.Round) return (b.Round ?? 0) - (a.Round ?? 0)
+      return a.Team.localeCompare(b.Team)
+    })
+}
+
+export async function fetchTeamStats(years?: string[]): Promise<TeamStat[]> {
+  const normalizedYears = (years ?? []).filter(Boolean).sort()
+  const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all"
+  const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined
+
+  if (process.env.NODE_ENV !== "production") {
+    return fetchTeamStatsFromSupabase(normalizedArg)
+  }
+
+  const fetchCached = unstable_cache(
+    async () => fetchTeamStatsFromSupabase(normalizedArg),
+    ["team-stats-v1", key],
+    { revalidate: DAILY_REVALIDATE_SECONDS }
+  )
+
+  return fetchCached()
 }
 
 export async function fetchTeammateLookupRowsFromSupabase(

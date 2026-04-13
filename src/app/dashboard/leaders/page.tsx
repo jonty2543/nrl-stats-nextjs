@@ -6,6 +6,7 @@ import {
   fetchAvailableYears,
   fetchPlayerImages,
   fetchPlayerStats,
+  fetchTeamStats,
   fetchTeamLogos,
 } from "@/lib/supabase/queries"
 
@@ -37,14 +38,20 @@ export default async function LeadersPage({ searchParams }: LeadersPageProps) {
   const sortedYears = [...unlockedYears].sort((a, b) => Number(b) - Number(a))
   const selectedYear = year && sortedYears.includes(year) ? year : (sortedYears[0] ?? "")
   const selectedView = view === "teams" ? "teams" : "players"
-  const rows = selectedYear ? await fetchPlayerStats([selectedYear]) : []
+  const [playerRows, teamRows] = selectedYear
+    ? await Promise.all([
+        fetchPlayerStats([selectedYear]),
+        fetchTeamStats([selectedYear]),
+      ])
+    : [[], []]
 
   return (
     <LeadersDashboard
       selectedYear={selectedYear}
       selectedView={selectedView}
       availableYears={sortedYears}
-      rows={rows}
+      playerRows={playerRows}
+      teamRows={teamRows}
       playerImages={playerImages}
       teamLogos={teamLogos}
     />

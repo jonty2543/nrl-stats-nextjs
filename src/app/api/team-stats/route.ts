@@ -1,0 +1,42 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
+import { fetchAvailableYears, fetchTeamStats } from "@/lib/supabase/queries";
+import { isAccessibleSeason } from "@/lib/access/season-access";
+
+export async function GET(request: NextRequest) {
+  try {
+    const { userId } = await auth();
+    const canAccessLoginSeason = Boolean(userId);
+    const canAccessProSeason = await getServerProPlotAccess(userId);
+    const { searchParams } = request.nextUrl;
+    const yearsParam = searchParams.get("years");
+    const requestedYears = yearsParam
+      ? yearsParam
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : null;
+
+    const allowedYears = requestedYears
+      ? requestedYears.filter((year) =>
+          isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
+        )
+      : (await fetchAvailableYears()).filter((year) =>
+          isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
+        );
+
+    if (allowedYears.length === 0) {
+      return NextResponse.json([]);
+    }
+
+    const data = await fetchTeamStats(allowedYears);
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("Error fetching team stats:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch team stats" },
+      { status: 500 }
+    );
+  }
+}

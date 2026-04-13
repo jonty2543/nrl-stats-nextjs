@@ -1,14 +1,18 @@
+"use client"
+
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { TEAM_COLOURS } from "@/lib/data/constants"
-import type { PlayerStat } from "@/lib/data/types"
+import type { PlayerStat, TeamStat } from "@/lib/data/types"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 
 interface LeadersDashboardProps {
   selectedYear: string
   selectedView: "players" | "teams"
   availableYears: string[]
-  rows: PlayerStat[]
+  playerRows: PlayerStat[]
+  teamRows: TeamStat[]
   playerImages: PlayerImageRecord[]
   teamLogos: Record<string, string>
 }
@@ -26,6 +30,8 @@ interface TeamLeaderEntry {
   value: number
   logoUrl: string | null
 }
+
+type LeaderValueMode = "total" | "average"
 
 type PlayerLeaderStatKey =
   | "Points"
@@ -90,10 +96,6 @@ type TeamLeaderStatKey =
   | "Line Break Assists"
   | "Try Assists"
   | "Tackle Breaks"
-  | "Hit Ups"
-  | "Dummy Half Runs"
-  | "Dummy Half Run Metres"
-  | "One on One Steal"
   | "Offloads"
   | "Dummy Passes"
   | "Passes"
@@ -102,24 +104,16 @@ type TeamLeaderStatKey =
   | "Missed Tackles"
   | "Ineffective Tackles"
   | "Intercepts"
-  | "Kicks Defused"
   | "Kicks"
   | "Kicking Metres"
   | "Forced Drop Outs"
   | "Bomb Kicks"
   | "Grubbers"
-  | "40/20"
-  | "20/40"
-  | "Cross Field Kicks"
-  | "Kicked Dead"
   | "Errors"
-  | "Handling Errors"
-  | "One on One Lost"
   | "Penalties"
   | "Ruck Infringements"
   | "On Report"
   | "Sin Bins"
-  | "Send Offs"
 
 interface PlayerLeaderStatConfig {
   key: PlayerLeaderStatKey
@@ -216,10 +210,6 @@ const TEAM_LEADER_STATS: TeamLeaderStatConfig[] = [
   { key: "Line Break Assists", label: "Line Break Assists" },
   { key: "Try Assists", label: "Try Assists" },
   { key: "Tackle Breaks", label: "Tackle Breaks" },
-  { key: "Hit Ups", label: "Hit Ups" },
-  { key: "Dummy Half Runs", label: "Dummy Half Runs" },
-  { key: "Dummy Half Run Metres", label: "Dummy Half Run Metres" },
-  { key: "One on One Steal", label: "One on One Steals" },
   { key: "Offloads", label: "Offloads" },
   { key: "Dummy Passes", label: "Dummy Passes" },
   { key: "Passes", label: "Passes" },
@@ -228,24 +218,16 @@ const TEAM_LEADER_STATS: TeamLeaderStatConfig[] = [
   { key: "Missed Tackles", label: "Missed Tackles" },
   { key: "Ineffective Tackles", label: "Ineffective Tackles" },
   { key: "Intercepts", label: "Intercepts" },
-  { key: "Kicks Defused", label: "Kicks Defused" },
   { key: "Kicks", label: "Kicks" },
   { key: "Kicking Metres", label: "Kicking Metres" },
   { key: "Forced Drop Outs", label: "Forced Drop Outs" },
   { key: "Bomb Kicks", label: "Bomb Kicks" },
   { key: "Grubbers", label: "Grubbers" },
-  { key: "40/20", label: "40/20s" },
-  { key: "20/40", label: "20/40s" },
-  { key: "Cross Field Kicks", label: "Cross Field Kicks" },
-  { key: "Kicked Dead", label: "Kicked Dead" },
   { key: "Errors", label: "Errors" },
-  { key: "Handling Errors", label: "Handling Errors" },
-  { key: "One on One Lost", label: "One on One Lost" },
   { key: "Penalties", label: "Penalties" },
   { key: "Ruck Infringements", label: "Ruck Infringements" },
   { key: "On Report", label: "On Report" },
   { key: "Sin Bins", label: "Sin Bins" },
-  { key: "Send Offs", label: "Send Offs" },
 ]
 
 function normalisePersonName(value: string): string {
@@ -440,7 +422,7 @@ function getPlayerStatValue(row: PlayerStat, statKey: PlayerLeaderStatKey): numb
   return toFiniteNumber(row[statKey])
 }
 
-function getTeamStatValue(row: PlayerStat, statKey: TeamLeaderStatKey): number | null {
+function getTeamStatValue(row: TeamStat, statKey: TeamLeaderStatKey): number | null {
   if (statKey === "Field Goals") {
     const onePoint = toFiniteNumber(row["1 Point Field Goals"]) ?? 0
     const twoPoint = toFiniteNumber(row["2 Point Field Goals"]) ?? 0
@@ -450,16 +432,17 @@ function getTeamStatValue(row: PlayerStat, statKey: TeamLeaderStatKey): number |
   return toFiniteNumber(row[statKey])
 }
 
-function formatLeaderValue(stat: string, value: number): string {
+function formatLeaderValue(stat: string, value: number, mode: LeaderValueMode): string {
   if (!Number.isFinite(value)) return "-"
-  if (ONE_DECIMAL_STATS.has(stat)) return value.toFixed(1)
+  if (mode === "average" || ONE_DECIMAL_STATS.has(stat)) return value.toFixed(1)
   return Math.round(value).toLocaleString()
 }
 
 function buildPlayerLeaderCards(
   rows: PlayerStat[],
   playerImages: PlayerImageRecord[],
-  teamLogos: Record<string, string>
+  teamLogos: Record<string, string>,
+  valueMode: LeaderValueMode
 ): PlayerLeaderCardData[] {
   return PLAYER_LEADER_STATS.map((statConfig) => {
     const byPlayer = new Map<string, { team: string; total: number; tackles: number; count: number; latestDate: string }>()
@@ -501,7 +484,11 @@ function buildPlayerLeaderCards(
           ? aggregate.count > 0
             ? aggregate.total / aggregate.count
             : 0
-          : aggregate.total
+          : valueMode === "average"
+            ? aggregate.count > 0
+              ? aggregate.total / aggregate.count
+              : 0
+            : aggregate.total
 
         return {
           name,
@@ -513,7 +500,6 @@ function buildPlayerLeaderCards(
       })
       .filter((entry): entry is PlayerLeaderEntry => entry !== null)
       .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name))
-      .slice(0, 5)
 
     return {
       ...statConfig,
@@ -522,26 +508,32 @@ function buildPlayerLeaderCards(
   })
 }
 
-function buildTeamLeaderCards(rows: PlayerStat[], teamLogos: Record<string, string>): TeamLeaderCardData[] {
+function buildTeamLeaderCards(
+  rows: TeamStat[],
+  teamLogos: Record<string, string>,
+  valueMode: LeaderValueMode
+): TeamLeaderCardData[] {
   return TEAM_LEADER_STATS.map((statConfig) => {
-    const byTeam = new Map<string, number>()
+    const byTeam = new Map<string, { total: number; count: number }>()
 
     for (const row of rows) {
       const team = typeof row.Team === "string" ? row.Team.trim() : ""
       if (!team) continue
       const value = getTeamStatValue(row, statConfig.key)
       if (value == null) continue
-      byTeam.set(team, (byTeam.get(team) ?? 0) + value)
+      const current = byTeam.get(team) ?? { total: 0, count: 0 }
+      current.total += value
+      current.count += 1
+      byTeam.set(team, current)
     }
 
     const leaders = [...byTeam.entries()]
-      .map(([team, value]) => ({
+      .map(([team, aggregate]) => ({
         team,
-        value,
+        value: valueMode === "average" ? aggregate.total / Math.max(aggregate.count, 1) : aggregate.total,
         logoUrl: resolveTeamLogoUrl(team, teamLogos),
       }))
       .sort((a, b) => b.value - a.value || a.team.localeCompare(b.team))
-      .slice(0, 5)
 
     return {
       ...statConfig,
@@ -577,32 +569,69 @@ function LeaderModeToggle({ selectedYear, selectedView }: { selectedYear: string
   )
 }
 
-function PlayerLeaderCard({ card }: { card: PlayerLeaderCardData }) {
-  const leader = card.leaders[0] ?? null
-  const runnerUps = card.leaders.slice(1)
+function ValueModeToggle({
+  valueMode,
+  onChange,
+}: {
+  valueMode: LeaderValueMode
+  onChange: (next: LeaderValueMode) => void
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-nrl-border bg-nrl-panel-2 p-1">
+      {([
+        { key: "total", label: "Total" },
+        { key: "average", label: "Average" },
+      ] as const).map((option) => {
+        const active = option.key === valueMode
+        return (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => onChange(option.key)}
+            className={`cursor-pointer rounded px-3 py-1.5 text-xs font-semibold transition-colors ${
+              active
+                ? "bg-nrl-accent/15 text-nrl-accent"
+                : "text-nrl-muted hover:text-nrl-text"
+            }`}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function PlayerLeaderCard({ card, valueMode }: { card: PlayerLeaderCardData; valueMode: LeaderValueMode }) {
+  const [expanded, setExpanded] = useState(false)
+  const visibleCount = expanded ? Math.min(card.leaders.length, 20) : Math.min(card.leaders.length, 5)
+  const visibleLeaders = card.leaders.slice(0, visibleCount)
+  const leader = visibleLeaders[0] ?? null
+  const runnerUps = visibleLeaders.slice(1)
   const teamColour = resolveTeamColour(leader?.team ?? "")
+  const canExpand = card.leaders.length > 5
 
   return (
     <article className="overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
       <div
-        className="relative min-h-[12.25rem] overflow-hidden border-b border-nrl-border bg-nrl-panel-2"
+        className="relative min-h-[14.5rem] overflow-hidden border-b border-nrl-border bg-nrl-panel-2 sm:min-h-[15.5rem]"
         style={{
           backgroundImage: `linear-gradient(135deg, ${hexToRgba(teamColour, 0.28)} 0%, rgba(114, 66, 214, 0.2) 100%)`,
         }}
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.06),transparent_42%)]" />
         {leader?.logoUrl ? (
-          <div className="pointer-events-none absolute left-3 top-9 opacity-[0.12]">
+          <div className="pointer-events-none absolute right-4 top-4 z-10 opacity-[0.95]">
             <ImageWithFallback
               sources={[leader.logoUrl]}
               alt=""
-              className="h-24 w-24 object-contain grayscale"
+              className="h-12 w-12 object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.22)] sm:h-14 sm:w-14"
             />
           </div>
         ) : null}
 
-        <div className="relative flex min-h-[12.25rem] flex-col gap-3 p-4 sm:flex-row sm:justify-between sm:pb-0">
-          <div className="flex min-w-0 flex-col justify-between pb-0 sm:max-w-[58%] sm:pb-4">
+        <div className="relative flex min-h-[14.5rem] flex-col gap-3 p-4 pb-0 sm:min-h-[15.5rem] sm:flex-row sm:justify-between">
+          <div className="flex min-w-0 flex-col justify-between pb-0 sm:max-w-[56%] sm:pb-4">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">{card.label}</div>
               <div className="mt-4 text-[1.8rem] font-bold leading-tight text-white sm:mt-6 sm:text-3xl">
@@ -611,16 +640,16 @@ function PlayerLeaderCard({ card }: { card: PlayerLeaderCardData }) {
               <div className="mt-1 text-sm text-white/72">{leader?.team ?? "-"}</div>
             </div>
             <div className="text-4xl font-black tracking-tight text-white sm:text-5xl">
-              {leader ? formatLeaderValue(card.key, leader.value) : "-"}
+              {leader ? formatLeaderValue(card.key, leader.value, valueMode) : "-"}
             </div>
           </div>
 
-          <div className="relative flex min-h-[7.5rem] items-end justify-center overflow-hidden sm:min-w-[7rem] sm:flex-1 sm:justify-end">
+          <div className="relative flex min-h-[9.5rem] items-end justify-end overflow-visible sm:min-w-[7rem] sm:flex-1">
             {leader ? (
               <ImageWithFallback
                 sources={leader.imageSources}
                 alt={leader.name}
-                className="mx-auto max-h-[9rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[12.25rem]"
+                className="mx-auto max-h-[12.75rem] w-auto self-end object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[16.75rem]"
               />
             ) : null}
           </div>
@@ -635,29 +664,46 @@ function PlayerLeaderCard({ card }: { card: PlayerLeaderCardData }) {
               <div className="mt-0.5 truncate text-xs text-white/72">{entry.team}</div>
             </div>
             <div className="text-2xl font-bold leading-none text-nrl-text">
-              {formatLeaderValue(card.key, entry.value)}
+              {formatLeaderValue(card.key, entry.value, valueMode)}
             </div>
           </div>
         ))}
       </div>
 
-      <div className="border-t border-nrl-border bg-nrl-panel-2 px-4 py-3 text-center">
-        <Link
-          href="/dashboard/players"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-accent"
-        >
-          Open Players
-          <span aria-hidden="true">→</span>
-        </Link>
+      <div className="border-t border-nrl-border bg-nrl-panel-2 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          {canExpand ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((current) => !current)}
+              className="cursor-pointer text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-accent"
+            >
+              {expanded ? "Show Top 5" : `Show Top ${Math.min(card.leaders.length, 20)}`}
+            </button>
+          ) : (
+            <div />
+          )}
+          <Link
+            href="/dashboard/players"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-accent"
+          >
+            Open Players
+            <span aria-hidden="true">→</span>
+          </Link>
+        </div>
       </div>
     </article>
   )
 }
 
-function TeamLeaderCard({ card }: { card: TeamLeaderCardData }) {
-  const leader = card.leaders[0] ?? null
-  const runnerUps = card.leaders.slice(1)
+function TeamLeaderCard({ card, valueMode }: { card: TeamLeaderCardData; valueMode: LeaderValueMode }) {
+  const [expanded, setExpanded] = useState(false)
+  const visibleCount = expanded ? card.leaders.length : Math.min(card.leaders.length, 5)
+  const visibleLeaders = card.leaders.slice(0, visibleCount)
+  const leader = visibleLeaders[0] ?? null
+  const runnerUps = visibleLeaders.slice(1)
   const teamColour = resolveTeamColour(leader?.team ?? "")
+  const canExpand = card.leaders.length > 5
 
   return (
     <article className="overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
@@ -668,7 +714,7 @@ function TeamLeaderCard({ card }: { card: TeamLeaderCardData }) {
         }}
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.05),transparent_42%)]" />
-        <div className="relative grid min-h-[11rem] grid-cols-[minmax(0,1fr)_112px] gap-4 p-4">
+        <div className="relative grid min-h-[11rem] grid-cols-[minmax(0,1fr)_minmax(8.5rem,44%)] gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_9.25rem]">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">{card.label}</div>
             <div className="mt-6 text-3xl font-bold leading-tight text-white">{leader?.team ?? "No leader"}</div>
@@ -687,8 +733,8 @@ function TeamLeaderCard({ card }: { card: TeamLeaderCardData }) {
               <div />
             )}
 
-            <div className="w-full text-right text-5xl font-black tracking-tight text-white">
-              {leader ? formatLeaderValue(card.key, leader.value) : "-"}
+            <div className="w-full overflow-visible text-right text-[clamp(2.5rem,12vw,4rem)] font-black leading-[0.9] tracking-tight text-white">
+              {leader ? formatLeaderValue(card.key, leader.value, valueMode) : "-"}
             </div>
           </div>
         </div>
@@ -701,20 +747,33 @@ function TeamLeaderCard({ card }: { card: TeamLeaderCardData }) {
               <div className="truncate text-sm font-medium text-nrl-text">{entry.team}</div>
             </div>
             <div className="text-2xl font-bold leading-none text-nrl-text">
-              {formatLeaderValue(card.key, entry.value)}
+              {formatLeaderValue(card.key, entry.value, valueMode)}
             </div>
           </div>
         ))}
       </div>
 
-      <div className="border-t border-nrl-border bg-nrl-panel-2 px-4 py-3 text-center">
-        <Link
-          href="/dashboard/teams"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-accent"
-        >
-          Open Teams
-          <span aria-hidden="true">→</span>
-        </Link>
+      <div className="border-t border-nrl-border bg-nrl-panel-2 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          {canExpand ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((current) => !current)}
+              className="cursor-pointer text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-accent"
+            >
+              {expanded ? "Show Top 5" : "Show All Teams"}
+            </button>
+          ) : (
+            <div />
+          )}
+          <Link
+            href="/dashboard/teams"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-accent"
+          >
+            Open Teams
+            <span aria-hidden="true">→</span>
+          </Link>
+        </div>
       </div>
     </article>
   )
@@ -724,25 +783,39 @@ export function LeadersDashboard({
   selectedYear,
   selectedView,
   availableYears,
-  rows,
+  playerRows,
+  teamRows,
   playerImages,
   teamLogos,
 }: LeadersDashboardProps) {
-  const playerCards = buildPlayerLeaderCards(rows, playerImages, teamLogos)
-  const teamCards = buildTeamLeaderCards(rows, teamLogos)
+  const [valueMode, setValueMode] = useState<LeaderValueMode>("total")
+  const playerCards = useMemo(
+    () => buildPlayerLeaderCards(playerRows, playerImages, teamLogos, valueMode),
+    [playerImages, playerRows, teamLogos, valueMode]
+  )
+  const teamCards = useMemo(
+    () => buildTeamLeaderCards(teamRows, teamLogos, valueMode),
+    [teamLogos, teamRows, valueMode]
+  )
   const cards = selectedView === "players" ? playerCards : teamCards
 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">Leaders</div>
-            <h1 className="mt-2 text-2xl font-bold text-nrl-text">Season leaders</h1>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">Leaders</div>
+              <h1 className="mt-2 text-2xl font-bold text-nrl-text">Season leaders</h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <ValueModeToggle valueMode={valueMode} onChange={setValueMode} />
+              <LeaderModeToggle selectedYear={selectedYear} selectedView={selectedView} />
+            </div>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <LeaderModeToggle selectedYear={selectedYear} selectedView={selectedView} />
-            <div className="flex flex-wrap gap-2">
+
+          <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="inline-flex min-w-max gap-2">
               {availableYears.map((year) => {
                 const active = year === selectedYear
                 return (
@@ -766,8 +839,12 @@ export function LeadersDashboard({
 
       <section className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
         {selectedView === "players"
-          ? cards.map((card) => <PlayerLeaderCard key={`player-${card.key}`} card={card as PlayerLeaderCardData} />)
-          : cards.map((card) => <TeamLeaderCard key={`team-${card.key}`} card={card as TeamLeaderCardData} />)}
+          ? cards.map((card) => (
+              <PlayerLeaderCard key={`player-${card.key}`} card={card as PlayerLeaderCardData} valueMode={valueMode} />
+            ))
+          : cards.map((card) => (
+              <TeamLeaderCard key={`team-${card.key}`} card={card as TeamLeaderCardData} valueMode={valueMode} />
+            ))}
       </section>
     </div>
   )

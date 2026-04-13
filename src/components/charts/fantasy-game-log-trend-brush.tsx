@@ -589,7 +589,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
           <svg
             ref={mainChartRef}
             viewBox={`0 0 ${MAIN_CHART_WIDTH} ${MAIN_CHART_HEIGHT}`}
-            className="h-[145px] w-full sm:h-[220px]"
+            className="rolling-trend-main-chart h-[145px] w-full sm:h-[220px]"
           >
             {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
               const value = selectedMaxScore * tick

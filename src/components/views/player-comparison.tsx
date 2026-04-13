@@ -382,14 +382,14 @@ export function PlayerImageCard({
   const isFramelessScale = frameless && !compact;
   const nameTextClass = compact
     ? isFramelessCompact
-      ? "text-[10.2px]"
+      ? "px-1 text-[11.8px] leading-[1.04]"
       : "text-[10px]"
     : isFramelessScale
       ? "text-[clamp(7.8px,0.6vw,9.8px)]"
       : "text-[clamp(11px,1.4vw,15px)]";
   const teamTextClass = compact
     ? isFramelessCompact
-      ? "text-[6.2px] tracking-[0.12em]"
+      ? "px-1 text-[7.6px] tracking-[0.14em]"
       : "text-[6px] tracking-[0.12em]"
     : isFramelessScale
       ? "text-[4.5px] tracking-[0.1em]"
@@ -453,6 +453,8 @@ export function PlayerImageCard({
   const frameContentClass = frameless
     ? "absolute inset-[4%] z-30"
     : "absolute inset-[12%] z-30";
+  const displayPlayerName = playerName || "No player selected";
+  const displayTeamName = imageRow?.team ?? "";
   const cardVisual = (
     <div
       className={
@@ -536,11 +538,19 @@ export function PlayerImageCard({
             className={`${infoPanelBoundsClass} ${panelPaddingClass}`}
           >
             <div className={showStats ? undefined : "flex h-full flex-col items-center justify-center"}>
-              <div className={`truncate text-center font-extrabold tracking-wide text-white ${nameTextClass}`}>
-                {(playerName || "No player selected").toUpperCase()}
+              <div
+                className={`text-center font-extrabold tracking-wide text-white ${nameTextClass} ${
+                  isFramelessCompact ? "line-clamp-2 whitespace-normal text-balance" : "truncate"
+                }`}
+              >
+                {isFramelessCompact ? displayPlayerName : displayPlayerName.toUpperCase()}
               </div>
-              <div className={`${teamRowMarginClass} truncate text-center font-semibold text-[#a9f5cf]/90 ${teamTextClass}`}>
-                {(imageRow?.team ?? "").toUpperCase()}
+              <div
+                className={`${teamRowMarginClass} text-center font-semibold text-[#d7ffe9] drop-shadow-[0_1px_2px_rgba(0,0,0,0.72)] ${teamTextClass} ${
+                  isFramelessCompact ? "line-clamp-1 whitespace-normal" : "truncate"
+                }`}
+              >
+                {displayTeamName.toUpperCase()}
               </div>
               {showStats ? (
                 <div className={statGridClass}>

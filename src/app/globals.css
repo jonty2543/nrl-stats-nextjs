@@ -115,6 +115,12 @@ button:disabled {
   height: min(72vh, 760px) !important;
 }
 
+@media (max-width: 767px) and (orientation: landscape) {
+  .rolling-trend-main-chart {
+    height: 190px !important;
+  }
+}
+
 /* Scale in-plot distribution SVG content down in fullscreen. */
 .chart-fullscreen .distribution-svg {
   transform: scale(0.92);

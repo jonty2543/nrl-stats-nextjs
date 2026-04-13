@@ -410,7 +410,7 @@ const BASE_FANTASY_COMPONENTS: Array<{
 }> = [
   { aliases: ["All Run Metres", "Run Metres"], pointsPerUnit: 1, divideThenFloor: 10 },
   { aliases: ["Tackles Made", "Tackles"], pointsPerUnit: 1 },
-  { aliases: ["Kicking Metres", "Kick Metres"], pointsPerUnit: 1, divideThenFloor: 20 },
+  { aliases: ["Kicking Metres", "Kick Metres"], pointsPerUnit: 1, divideThenFloor: 30 },
   { aliases: ["Conversions"], pointsPerUnit: 2 },
 ]
 

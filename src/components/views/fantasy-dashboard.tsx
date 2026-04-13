@@ -1842,30 +1842,32 @@ export function FantasyDashboard({
                   <div className="min-w-0 space-y-3 xl:order-2">
                     <div className="min-w-0 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-2xl font-bold text-nrl-text">{selectedFantasyPlayer.name}</h2>
-                        <span className="rounded-md bg-nrl-accent/15 px-2 py-0.5 text-xs font-semibold text-nrl-accent">
+                        <h2 className="text-[1.05rem] font-bold leading-tight text-nrl-text sm:text-2xl">
+                          {selectedFantasyPlayer.name}
+                        </h2>
+                        <span className="rounded-md bg-nrl-accent/15 px-1.5 py-0.5 text-[11px] font-semibold text-nrl-accent sm:px-2 sm:text-xs">
                           {formatPrice(selectedFantasyPlayer.cost)}
                         </span>
-                        <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-0.5 text-xs text-nrl-muted">
+                        <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1.5 py-0.5 text-[11px] text-nrl-muted sm:px-2 sm:text-xs">
                           {selectedFantasyPlayer.positionLabel}
                         </span>
                         {selectedFantasyPlayer.isBye ? (
-                          <span className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                          <span className="rounded-md border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300 sm:px-2 sm:text-xs">
                             Bye
                           </span>
                         ) : null}
                       </div>
-                      <div className="flex flex-wrap gap-3 text-xs">
+                      <div className="flex flex-wrap gap-2 text-[11px] sm:gap-3 sm:text-xs">
                         {latestLocalRow ? (
-                          <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-nrl-muted">
+                          <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1.5 py-0.75 text-nrl-muted sm:px-2 sm:py-1">
                             Team: {latestLocalRow.Team}
                           </span>
                         ) : null}
-                        <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-nrl-muted">
+                        <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1.5 py-0.75 text-nrl-muted sm:px-2 sm:py-1">
                           Status: {selectedFantasyPlayer.status ?? "N/A"}
                         </span>
                         {isLoadingStats ? (
-                          <span className="rounded-md border border-nrl-accent/30 bg-nrl-accent/10 px-2 py-1 text-nrl-accent">
+                          <span className="rounded-md border border-nrl-accent/30 bg-nrl-accent/10 px-1.5 py-0.75 text-nrl-accent sm:px-2 sm:py-1">
                             Loading season data…
                           </span>
                         ) : null}

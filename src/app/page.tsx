@@ -640,21 +640,21 @@ function StatsPreviewNav({ active }: { active: "players" | "leaders" }) {
   ] as const
 
   return (
-    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-[#00f58a]">Short Side</span>
-          <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-white/72">
+    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-2 py-2 sm:px-3 sm:py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <span className="text-xs font-semibold text-[#00f58a] sm:text-sm">Short Side</span>
+          <span className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold text-white/72 sm:px-2 sm:py-1 sm:text-[11px]">
             Stats
           </span>
         </div>
-        <div className="inline-flex rounded-lg border border-white/10 bg-[#171c36] p-1 text-[11px] font-semibold">
+        <div className="inline-flex rounded-lg border border-white/10 bg-[#171c36] p-0.5 text-[9px] font-semibold sm:p-1 sm:text-[11px]">
           {tabs.map((tab) => {
             const isActive = tab.key === active
             return (
               <span
                 key={tab.key}
-                className={`rounded-md px-3 py-1.5 transition-colors ${
+                className={`rounded-md px-2 py-1 transition-colors sm:px-3 sm:py-1.5 ${
                   isActive ? "bg-emerald-400/16 text-emerald-300" : "text-white/45"
                 }`}
               >
@@ -680,8 +680,8 @@ function SimpleHistogramPreview({
   const nonEmptySeries = series.filter((entry) => entry.values.length > 0)
   if (nonEmptySeries.length === 0) {
     return (
-      <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
-        <div className="text-sm font-semibold text-white">{title}</div>
+      <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-2 sm:p-3">
+        <div className="text-xs font-semibold text-white sm:text-sm">{title}</div>
         <div className="mt-8 text-center text-xs text-white/35">No distribution data</div>
       </div>
     )
@@ -706,25 +706,25 @@ function SimpleHistogramPreview({
   )
 
   return (
-    <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-2 sm:p-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div>
-          <div className="text-sm font-semibold text-white">{title}</div>
-          <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-white/35">n &gt; 20 — showing histogram + mean</div>
+          <div className="text-xs font-semibold text-white sm:text-sm">{title}</div>
+          <div className="mt-1 text-[8px] uppercase tracking-[0.12em] text-white/35 sm:text-[10px] sm:tracking-[0.14em]">n &gt; 20 — showing histogram + mean</div>
         </div>
-        <div className="space-y-1 text-[10px] text-white/72">
+        <div className="space-y-1 text-[8px] text-white/72 sm:text-[10px]">
           {nonEmptySeries.map((entry) => (
-            <div key={entry.label} className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
-              <span>{entry.label}</span>
+            <div key={entry.label} className="flex items-center gap-1.5 sm:gap-2">
+              <span className="h-2 w-2 rounded-sm sm:h-2.5 sm:w-2.5" style={{ backgroundColor: entry.color }} />
+              <span className="max-w-[6.5rem] truncate sm:max-w-none">{entry.label}</span>
             </div>
           ))}
         </div>
       </div>
-      <div className="mt-4">
-        <div className="grid h-40 grid-cols-6 items-end gap-2">
+      <div className="mt-3 sm:mt-4">
+        <div className="grid h-24 grid-cols-6 items-end gap-1 sm:h-40 sm:gap-2">
           {Array.from({ length: binCount }, (_, binIndex) => (
-            <div key={`${title}-bin-${binIndex}`} className="relative flex h-full items-end gap-1">
+            <div key={`${title}-bin-${binIndex}`} className="relative flex h-full items-end gap-0.5 sm:gap-1">
               {nonEmptySeries.map((entry) => {
                 const counts = Array.from({ length: binCount }, () => 0)
                 for (const value of entry.values) {
@@ -748,12 +748,12 @@ function SimpleHistogramPreview({
             </div>
           ))}
         </div>
-        <div className="mt-3 flex justify-between text-[10px] uppercase tracking-[0.12em] text-white/35">
+        <div className="mt-2 flex justify-between text-[8px] uppercase tracking-[0.1em] text-white/35 sm:mt-3 sm:text-[10px] sm:tracking-[0.12em]">
           <span>{Math.round(min)}</span>
           <span>{statLabel}</span>
           <span>{Math.round(max)}</span>
         </div>
-        <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-white/72">
+        <div className="mt-1.5 flex flex-wrap gap-2 text-[9px] text-white/72 sm:mt-2 sm:gap-4 sm:text-[11px]">
           {nonEmptySeries.map((entry) => (
             <span key={`${title}-${entry.label}-mean`} style={{ color: entry.color }}>
               {entry.label.split(" (")[0]} {entry.mean == null ? "-" : entry.mean.toFixed(1)}
@@ -1460,26 +1460,26 @@ export default async function Home() {
           >
             <LandingCarousel>
               <PreviewFrame title="Betting / Odds Comparison" live>
-                <div className="space-y-4">
-                  <div className="inline-flex rounded-md border border-white/8 bg-white/[0.03] p-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">
-                    <span className="rounded bg-emerald-400/16 px-3 py-1 text-emerald-300">H2H</span>
-                    <span className="px-3 py-1">Line</span>
-                    <span className="px-3 py-1">Total</span>
+                <div className="space-y-2 sm:space-y-4">
+                  <div className="inline-flex rounded-md border border-white/8 bg-white/[0.03] p-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/42 sm:p-1 sm:text-[10px] sm:tracking-[0.16em]">
+                    <span className="rounded bg-emerald-400/16 px-2 py-0.5 text-emerald-300 sm:px-3 sm:py-1">H2H</span>
+                    <span className="px-2 py-0.5 sm:px-3 sm:py-1">Line</span>
+                    <span className="px-2 py-0.5 sm:px-3 sm:py-1">Total</span>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     {bettingLandingPreviews.length > 0 ? bettingLandingPreviews.slice(0, 1).map((preview, previewIndex) => (
-                      <div key={`${preview.match}-${preview.dateLabel}-${previewIndex}`} className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
+                      <div key={`${preview.match}-${preview.dateLabel}-${previewIndex}`} className="rounded-2xl border border-white/8 bg-[#1b2140] p-2.5 sm:p-4">
                         {(() => {
                           const marketPct = bestBookMarketPercentage(preview.rows)
                           return (
-                        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-white/8 pb-3">
+                        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-white/8 pb-2 sm:gap-3 sm:pb-3">
                           <div>
-                            <div className="text-sm font-semibold text-white">{preview.match ?? "Upcoming market"}</div>
-                            <div className="mt-1 text-[11px] text-white/38">{preview.dateLabel ?? "Live odds"}</div>
+                            <div className="text-xs font-semibold text-white sm:text-sm">{preview.match ?? "Upcoming market"}</div>
+                            <div className="mt-1 text-[9px] text-white/38 sm:text-[11px]">{preview.dateLabel ?? "Live odds"}</div>
                           </div>
                           <div className="text-right">
-                            <div className="text-[11px] text-white/38">Best-book prices across current books</div>
-                            <div className="mt-1 text-[11px] text-white/48">
+                            <div className="text-[9px] text-white/38 sm:text-[11px]">Best-book prices across current books</div>
+                            <div className="mt-1 text-[9px] text-white/48 sm:text-[11px]">
                               Best-book market %:{" "}
                               <span className="font-semibold text-white/88">{formatPct(marketPct)}</span>
                             </div>
@@ -1542,7 +1542,7 @@ export default async function Home() {
                             </div>
                           </div>
                         </div>
-                        <div className="mt-3 space-y-2 md:hidden">
+                        <div className="mt-2 space-y-1.5 md:hidden sm:mt-3 sm:space-y-2">
                           {preview.rows.slice(0, 2).map((row) => {
                             const availableBooks = BETTING_BOOKIE_COLUMNS.filter((bookie) => row[bookie] != null)
                             const implied = impliedProbability(row.bestPrice)
@@ -1552,70 +1552,70 @@ export default async function Home() {
                               : null
                             const recommendedStake = edgePp != null && edgePp > 0 ? 40 : 0
                             return (
-                              <div key={`${row.match}-${row.result}`} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3">
-                                <div className="flex items-start justify-between gap-3">
+                              <div key={`${row.match}-${row.result}`} className="rounded-xl border border-white/8 bg-white/[0.03] px-2 py-2">
+                                <div className="flex items-start justify-between gap-2">
                                   <div className="min-w-0">
-                                    <div className="truncate text-sm font-semibold text-white">{row.result}</div>
-                                    <div className="mt-1 text-[11px] text-white/42">
+                                    <div className="truncate text-[11px] font-semibold text-white">{row.result}</div>
+                                    <div className="mt-0.5 text-[9px] text-white/42">
                                       {`Odds ${formatNumber(row.bestPrice, 2)}${row.bestBookie ? ` · ${row.bestBookie}` : ""}`}
                                     </div>
                                   </div>
                                   <div className="text-right">
-                                    <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Odds</div>
-                                    <div className="mt-1 text-xl font-bold text-emerald-300">
+                                    <div className="text-[8px] uppercase tracking-[0.14em] text-white/35">Odds</div>
+                                    <div className="mt-0.5 text-base font-bold text-emerald-300">
                                       {formatNumber(row.bestPrice, 2)}
                                     </div>
                                   </div>
                                 </div>
 
-                                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
-                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Odds</div>
-                                    <div className="mt-1 text-sm font-semibold text-emerald-300">
+                                <div className="mt-2 grid grid-cols-2 gap-1 sm:mt-3 sm:grid-cols-3 sm:gap-2">
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-1.5 py-1.5 sm:px-2 sm:py-2">
+                                    <div className="text-[8px] font-semibold uppercase tracking-[0.1em] text-white/35 sm:text-[9px] sm:tracking-[0.12em]">Odds</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-emerald-300 sm:mt-1 sm:text-sm">
                                       {formatNumber(row.bestPrice, 2)}
                                     </div>
                                   </div>
-                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
-                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Edge</div>
-                                    <div className="mt-1 text-sm font-semibold text-white/72 blur-[4px] select-none">
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-1.5 py-1.5 sm:px-2 sm:py-2">
+                                    <div className="text-[8px] font-semibold uppercase tracking-[0.1em] text-white/35 sm:text-[9px] sm:tracking-[0.12em]">Edge</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-white/72 blur-[4px] select-none sm:mt-1 sm:text-sm">
                                       {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
                                     </div>
                                   </div>
-                                  <div className="rounded-lg border border-white/8 bg-[#242b52] px-2 py-2">
-                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Stake</div>
-                                    <div className="mt-1 h-[1.25rem] text-sm font-semibold text-white">
+                                  <div className="rounded-lg border border-white/8 bg-[#242b52] px-1.5 py-1.5 sm:px-2 sm:py-2">
+                                    <div className="text-[8px] font-semibold uppercase tracking-[0.1em] text-white/35 sm:text-[9px] sm:tracking-[0.12em]">Stake</div>
+                                    <div className="mt-0.5 h-[1rem] text-[11px] font-semibold text-white sm:mt-1 sm:h-[1.25rem] sm:text-sm">
                                       <span className="block blur-[4px] select-none">{recommendedStake}</span>
                                     </div>
                                   </div>
-                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
-                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Implied</div>
-                                    <div className="mt-1 text-sm font-semibold text-white">{formatPct(implied == null ? null : implied * 100)}</div>
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-1.5 py-1.5 sm:px-2 sm:py-2">
+                                    <div className="text-[8px] font-semibold uppercase tracking-[0.1em] text-white/35 sm:text-[9px] sm:tracking-[0.12em]">Implied</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-white sm:mt-1 sm:text-sm">{formatPct(implied == null ? null : implied * 100)}</div>
                                   </div>
-                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
-                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Model</div>
-                                    <div className="mt-1 text-sm font-semibold text-white blur-[4px] select-none">{formatPct(modelProbability == null ? null : modelProbability * 100)}</div>
+                                  <div className="rounded-lg border border-white/8 bg-[#171c36] px-1.5 py-1.5 sm:px-2 sm:py-2">
+                                    <div className="text-[8px] font-semibold uppercase tracking-[0.1em] text-white/35 sm:text-[9px] sm:tracking-[0.12em]">Model</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-white blur-[4px] select-none sm:mt-1 sm:text-sm">{formatPct(modelProbability == null ? null : modelProbability * 100)}</div>
                                   </div>
-                                  <div className="col-span-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2 py-2 sm:col-auto">
-                                    <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Bet</div>
-                                    <div className="mt-1 text-sm font-semibold text-emerald-300">BET</div>
+                                  <div className="col-span-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-1.5 py-1.5 sm:col-auto sm:px-2 sm:py-2">
+                                    <div className="text-[8px] font-semibold uppercase tracking-[0.1em] text-white/35 sm:text-[9px] sm:tracking-[0.12em]">Bet</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-emerald-300 sm:mt-1 sm:text-sm">BET</div>
                                   </div>
                                 </div>
 
-                                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                <div className="mt-2 grid grid-cols-2 gap-1 sm:mt-3 sm:grid-cols-3 sm:gap-2">
                                   {availableBooks.length > 0 ? (
                                     availableBooks.map((bookie) => (
-                                      <div key={`${row.result}-${bookie}`} className="rounded-lg border border-white/8 bg-[#171c36] px-2.5 py-2">
-                                        <div className="flex items-center gap-2">
-                                          <Image src={BOOKIE_LOGOS[bookie]} alt={bookie} width={16} height={16} className="h-4 w-auto object-contain" />
-                                          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/42">{bookie}</span>
+                                      <div key={`${row.result}-${bookie}`} className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-1.5 sm:px-2.5 sm:py-2">
+                                        <div className="flex items-center gap-1.5 sm:gap-2">
+                                          <Image src={BOOKIE_LOGOS[bookie]} alt={bookie} width={12} height={12} className="h-3 w-auto object-contain sm:h-4" />
+                                          <span className="text-[8px] font-semibold uppercase tracking-[0.1em] text-white/42 sm:text-[10px] sm:tracking-[0.12em]">{bookie}</span>
                                         </div>
-                                        <div className="mt-1 text-base font-semibold text-white">
+                                        <div className="mt-0.5 text-[11px] font-semibold text-white sm:mt-1 sm:text-base">
                                           {formatNumber(row[bookie], 2)}
                                         </div>
                                       </div>
                                     ))
                                   ) : (
-                                    <div className="rounded-lg border border-white/8 bg-[#171c36] px-2.5 py-2 text-sm text-white/55">
+                                    <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-1.5 text-[11px] text-white/55 sm:px-2.5 sm:py-2 sm:text-sm">
                                       Market loading
                                     </div>
                                   )}
@@ -1718,32 +1718,32 @@ export default async function Home() {
           >
             <LandingCarousel>
               <PreviewFrame title="Stats / Players" contentClassName="lg:min-h-[450px]" live>
-                <div className="space-y-4">
+                <div className="space-y-2.5 sm:space-y-4">
                   <StatsPreviewNav active="players" />
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-white/42">
                     Summary & Filtered Charts
                   </div>
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.06fr)]">
-                    <div className="space-y-4">
-                      <div className="space-y-3">
+                  <div className="grid gap-2.5 sm:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.06fr)]">
+                    <div className="space-y-2.5 sm:space-y-4">
+                      <div className="space-y-2 sm:space-y-3">
                         {statsPlayers.map((player) => (
                           <div key={`stats-summary-${player.name}`}>
-                            <div className="text-lg font-bold uppercase tracking-[0.04em] text-[#00f58a]">{player.name}</div>
-                            <div className="mt-1 text-sm text-white/45">
+                            <div className="text-sm font-bold uppercase tracking-[0.03em] text-[#00f58a] sm:text-lg sm:tracking-[0.04em]">{player.name}</div>
+                            <div className="mt-0.5 text-[10px] leading-4 text-white/45 sm:mt-1 sm:text-sm">
                               {primaryTeamForRows(player.rows) ?? "-"} · {player.rows[0]?.Position ?? "-"} · {player.rows.length} games · {formatNumber(average(player.rows.map((row) => toFiniteNumber(row["Mins Played"])).filter((value): value is number => value != null)), 0)} avg mins
                             </div>
                           </div>
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                      <div className="grid grid-cols-2 gap-1.5 sm:gap-4">
                         <div className="min-w-0 flex items-center justify-center">
                           <SimplePlayerPhotoTile
                             playerName={statsPlayer1Name ?? "Player 1"}
                             imageRow={statsPlayer1CardImage}
                             priority
-                            className="mx-auto w-full max-w-[7.1rem] sm:max-w-none"
-                            imageHeightClass="h-[7.25rem] sm:h-[15rem]"
+                            className="mx-auto w-full max-w-[5.4rem] sm:max-w-none"
+                            imageHeightClass="h-[5.75rem] sm:h-[15rem]"
                           />
                         </div>
 
@@ -1752,8 +1752,8 @@ export default async function Home() {
                             playerName={statsPlayer2Name ?? "Player 2"}
                             imageRow={statsPlayer2CardImage}
                             priority
-                            className="mx-auto w-full max-w-[7.1rem] sm:max-w-none"
-                            imageHeightClass="h-[7.25rem] sm:h-[15rem]"
+                            className="mx-auto w-full max-w-[5.4rem] sm:max-w-none"
+                            imageHeightClass="h-[5.75rem] sm:h-[15rem]"
                           />
                         </div>
                       </div>
@@ -1776,28 +1776,28 @@ export default async function Home() {
                       />
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-2.5 sm:space-y-4">
                       <div className="overflow-x-auto rounded-xl">
-                        <table className="min-w-full divide-y divide-white/8 text-left text-[12px] text-white/76">
-                          <thead className="text-[10px] uppercase tracking-[0.14em] text-white/35">
+                        <table className="min-w-full divide-y divide-white/8 text-left text-[10px] text-white/76 sm:text-[12px]">
+                          <thead className="text-[8px] uppercase tracking-[0.1em] text-white/35 sm:text-[10px] sm:tracking-[0.14em]">
                             <tr>
-                              <th className="px-3 py-2">Player</th>
-                              <th className="px-3 py-2">Stat</th>
-                              <th className="px-3 py-2 text-right">Average</th>
-                              <th className="px-3 py-2 text-right">Median</th>
-                              <th className="px-3 py-2 text-right">Min</th>
-                              <th className="px-3 py-2 text-right">Max</th>
+                              <th className="px-1.5 py-1.5 sm:px-3 sm:py-2">Player</th>
+                              <th className="px-1.5 py-1.5 sm:px-3 sm:py-2">Stat</th>
+                              <th className="px-1.5 py-1.5 text-right sm:px-3 sm:py-2">Average</th>
+                              <th className="px-1.5 py-1.5 text-right sm:px-3 sm:py-2">Median</th>
+                              <th className="px-1.5 py-1.5 text-right sm:px-3 sm:py-2">Min</th>
+                              <th className="px-1.5 py-1.5 text-right sm:px-3 sm:py-2">Max</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-white/8">
                             {statsSummaryRows.map((row) => (
                               <tr key={`${row.playerName}-${row.stat}`}>
-                                <td className="px-3 py-2">{row.playerName}</td>
-                                <td className="px-3 py-2">{row.stat}</td>
-                                <td className="px-3 py-2 text-right">{formatNumber(row.average, 2)}</td>
-                                <td className="px-3 py-2 text-right">{formatNumber(row.median, 2)}</td>
-                                <td className="px-3 py-2 text-right">{formatNumber(row.min, 2)}</td>
-                                <td className="px-3 py-2 text-right">{formatNumber(row.max, 2)}</td>
+                                <td className="px-1.5 py-1.5 sm:px-3 sm:py-2">{row.playerName}</td>
+                                <td className="px-1.5 py-1.5 sm:px-3 sm:py-2">{row.stat}</td>
+                                <td className="px-1.5 py-1.5 text-right sm:px-3 sm:py-2">{formatNumber(row.average, 2)}</td>
+                                <td className="px-1.5 py-1.5 text-right sm:px-3 sm:py-2">{formatNumber(row.median, 2)}</td>
+                                <td className="px-1.5 py-1.5 text-right sm:px-3 sm:py-2">{formatNumber(row.min, 2)}</td>
+                                <td className="px-1.5 py-1.5 text-right sm:px-3 sm:py-2">{formatNumber(row.max, 2)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1806,22 +1806,22 @@ export default async function Home() {
 
                       <div>
                         <div className="flex items-center justify-between gap-3">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">Percentile Rank</div>
-                          <div className="inline-flex rounded-md border border-white/8 bg-white/[0.03] p-1 text-[10px] font-semibold uppercase tracking-[0.16em]">
-                            <span className="rounded bg-emerald-400/16 px-2 py-1 text-emerald-300">Position</span>
-                            <span className="px-2 py-1 text-white/38">All</span>
+                          <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-white/42 sm:text-[10px] sm:tracking-[0.16em]">Percentile Rank</div>
+                          <div className="inline-flex rounded-md border border-white/8 bg-white/[0.03] p-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] sm:p-1 sm:text-[10px] sm:tracking-[0.16em]">
+                            <span className="rounded bg-emerald-400/16 px-1.5 py-0.5 text-emerald-300 sm:px-2 sm:py-1">Position</span>
+                            <span className="px-1.5 py-0.5 text-white/38 sm:px-2 sm:py-1">All</span>
                           </div>
                         </div>
-                        <div className="mt-3 space-y-3">
+                        <div className="mt-2 space-y-2 sm:mt-3 sm:space-y-3">
                           {statsPercentileRows.map((row) => (
                             <div key={`stats-percentile-${row.playerName}-${row.stat}`}>
-                              <div className="flex items-center justify-between gap-3 text-[12px] text-white/72">
+                              <div className="flex items-center justify-between gap-2 text-[10px] text-white/72 sm:gap-3 sm:text-[12px]">
                                 <span>{row.playerName} — {row.stat}</span>
                                 <span className={row.percentile != null && row.percentile >= 50 ? "font-semibold text-[#2cf596]" : "font-semibold text-[#ff9d2e]"}>
                                   {formatOrdinal(row.percentile)}
                                 </span>
                               </div>
-                              <div className="mt-1 h-2 rounded-full bg-white/8">
+                              <div className="mt-1 h-1.5 rounded-full bg-white/8 sm:h-2">
                                 <div
                                   className={`h-full rounded-full ${row.percentile != null && row.percentile >= 50 ? "bg-[#2cf596]" : "bg-[#ff9d2e]"}`}
                                   style={{ width: `${Math.max(8, row.percentile ?? 0)}%` }}
@@ -1833,10 +1833,10 @@ export default async function Home() {
                       </div>
 
                       <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">Recent Form (Last 5 Avg)</div>
-                        <div className="mt-3 space-y-2">
+                        <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-white/42 sm:text-[10px] sm:tracking-[0.16em]">Recent Form (Last 5 Avg)</div>
+                        <div className="mt-2 space-y-1.5 sm:mt-3 sm:space-y-2">
                           {statsRecentFormRows.map((row) => (
-                            <div key={`stats-form-${row.playerName}-${row.stat}`} className="flex items-center justify-between gap-4 text-[13px]">
+                            <div key={`stats-form-${row.playerName}-${row.stat}`} className="flex items-center justify-between gap-2 text-[10px] sm:gap-4 sm:text-[13px]">
                               <span className="text-white/68">{row.playerName} — {row.stat}</span>
                               <span className={row.deltaPct != null && row.deltaPct >= 0 ? "font-semibold text-[#2cf596]" : "font-semibold text-[#ff6b99]"}>
                                 {row.deltaPct != null && row.deltaPct >= 0 ? "▲" : "▼"} {formatNumber(Math.abs(row.deltaPct ?? 0), 1)}% ({formatNumber(row.recentAverage, 1)} vs {formatNumber(row.overallAverage, 1)})

@@ -32,6 +32,8 @@ interface TeamComparisonProps {
   canBypassPlotGate?: boolean;
 }
 
+type TeamPerspective = "For" | "Against";
+
 const DEFAULT_TEAM_1_CANDIDATES = ["Broncos", "Brisbane Broncos"];
 const DEFAULT_TEAM_2_CANDIDATES = ["Storm", "Melbourne Storm"];
 
@@ -50,6 +52,33 @@ function toFiniteNumber(value: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+function buildAgainstTeamStats(rows: TeamStat[]): TeamStat[] {
+  const rowsByTeamRound = new Map<string, TeamStat>(
+    rows.map((row) => [`${row.Year}|${row.Round}|${row.Team}`, row])
+  );
+
+  return rows.map((row) => {
+    const opponentRow = row.Opponent
+      ? rowsByTeamRound.get(`${row.Year}|${row.Round}|${row.Opponent}`)
+      : null;
+    const againstRow = {
+      ...row,
+      ...Object.fromEntries(
+        (TEAM_STATS as unknown as string[]).map((stat) => [
+          stat,
+          opponentRow ? (toFiniteNumber(opponentRow[stat]) ?? 0) : 0,
+        ])
+      ),
+    } as TeamStat;
+
+    if (opponentRow) {
+      againstRow["Possession %"] = toFiniteNumber(opponentRow["Possession %"]) ?? 0;
+    }
+
+    return againstRow;
+  });
 }
 
 export function TeamComparison({
@@ -151,6 +180,8 @@ export function TeamComparison({
 
   const teamDf = useMemo(() => aggregateTeamStats(df), [df]);
   const plotTeamDf = useMemo(() => aggregateTeamStats(plotDf), [plotDf]);
+  const teamAgainstDf = useMemo(() => buildAgainstTeamStats(teamDf), [teamDf]);
+  const plotTeamAgainstDf = useMemo(() => buildAgainstTeamStats(plotTeamDf), [plotTeamDf]);
 
   const positions = useMemo(
     () => [...new Set(dfYearFinals.map((r) => r.Position))].filter(Boolean).sort(),
@@ -172,6 +203,8 @@ export function TeamComparison({
 
   const [team1, setTeam1] = useState("Broncos");
   const [team2, setTeam2] = useState("Storm");
+  const [team1Perspective, setTeam1Perspective] = useState<TeamPerspective>("For");
+  const [team2Perspective, setTeam2Perspective] = useState<TeamPerspective>("For");
   const [stat1, setStat1] = useState("Points");
   const [stat2, setStat2] = useState("All Run Metres");
 
@@ -256,22 +289,28 @@ export function TeamComparison({
   }, [allData, loadAllUnlockedYears, unlockedYears]);
 
   const effectiveT1 = team1 || teamList[0] || "";
+  const effectiveT1Label = team1Perspective === "Against" ? `${effectiveT1} Against` : effectiveT1;
+  const effectiveT2Label = team2Perspective === "Against" ? `${team2} Against` : team2;
+  const t1BaseRows = team1Perspective === "Against" ? teamAgainstDf : teamDf;
+  const t2BaseRows = team2Perspective === "Against" ? teamAgainstDf : teamDf;
+  const t1PlotBaseRows = team1Perspective === "Against" ? plotTeamAgainstDf : plotTeamDf;
+  const t2PlotBaseRows = team2Perspective === "Against" ? plotTeamAgainstDf : plotTeamDf;
 
   const t1Rows = useMemo(
-    () => teamDf.filter((r) => r.Team === effectiveT1),
-    [teamDf, effectiveT1]
+    () => t1BaseRows.filter((r) => r.Team === effectiveT1),
+    [effectiveT1, t1BaseRows]
   );
   const t2Rows = useMemo(
-    () => (team2 !== "None" ? teamDf.filter((r) => r.Team === team2) : []),
-    [teamDf, team2]
+    () => (team2 !== "None" ? t2BaseRows.filter((r) => r.Team === team2) : []),
+    [t2BaseRows, team2]
   );
   const t1PlotRows = useMemo(
-    () => plotTeamDf.filter((r) => r.Team === effectiveT1),
-    [plotTeamDf, effectiveT1]
+    () => t1PlotBaseRows.filter((r) => r.Team === effectiveT1),
+    [effectiveT1, t1PlotBaseRows]
   );
   const t2PlotRows = useMemo(
-    () => (team2 !== "None" ? plotTeamDf.filter((r) => r.Team === team2) : []),
-    [plotTeamDf, team2]
+    () => (team2 !== "None" ? t2PlotBaseRows.filter((r) => r.Team === team2) : []),
+    [t2PlotBaseRows, team2]
   );
 
   const statsToShow = useMemo(
@@ -280,40 +319,48 @@ export function TeamComparison({
   );
 
   const summaryRows = useMemo(() => {
-    const rows = computeSummary(effectiveT1, t1Rows as unknown as PlayerStat[], statsToShow);
+    const rows = computeSummary(effectiveT1Label, t1Rows as unknown as PlayerStat[], statsToShow);
     if (team2 !== "None") {
-      rows.push(...computeSummary(team2, t2Rows as unknown as PlayerStat[], statsToShow));
+      rows.push(...computeSummary(effectiveT2Label, t2Rows as unknown as PlayerStat[], statsToShow));
     }
     return rows;
-  }, [effectiveT1, t1Rows, team2, t2Rows, statsToShow]);
+  }, [effectiveT1Label, effectiveT2Label, t1Rows, team2, t2Rows, statsToShow]);
 
   const entities = useMemo(() => {
-    const e = [{ name: effectiveT1, rows: t1Rows as (PlayerStat | TeamStat)[] }];
-    if (team2 !== "None") e.push({ name: team2, rows: t2Rows as (PlayerStat | TeamStat)[] });
+    const e = [{ name: effectiveT1Label, rows: t1Rows as (PlayerStat | TeamStat)[] }];
+    if (team2 !== "None") e.push({ name: effectiveT2Label, rows: t2Rows as (PlayerStat | TeamStat)[] });
     return e;
-  }, [effectiveT1, t1Rows, team2, t2Rows]);
+  }, [effectiveT1Label, effectiveT2Label, t1Rows, team2, t2Rows]);
 
   const percentileResults = useMemo(() => {
     const results = computePercentileRanks(
-      effectiveT1, t1Rows as unknown as PlayerStat[], teamDf as unknown as PlayerStat[], statsToShow, "Team"
-    );
+      effectiveT1,
+      t1Rows as unknown as PlayerStat[],
+      t1BaseRows as unknown as PlayerStat[],
+      statsToShow,
+      "Team"
+    ).map((result) => ({ ...result, entity: effectiveT1Label }));
     if (team2 !== "None") {
       results.push(
         ...computePercentileRanks(
-          team2, t2Rows as unknown as PlayerStat[], teamDf as unknown as PlayerStat[], statsToShow, "Team"
-        )
+          team2,
+          t2Rows as unknown as PlayerStat[],
+          t2BaseRows as unknown as PlayerStat[],
+          statsToShow,
+          "Team"
+        ).map((result) => ({ ...result, entity: effectiveT2Label }))
       );
     }
     return results;
-  }, [effectiveT1, t1Rows, team2, t2Rows, teamDf, statsToShow]);
+  }, [effectiveT1, effectiveT1Label, effectiveT2Label, t1Rows, t1BaseRows, t2BaseRows, team2, t2Rows, statsToShow]);
 
   const recentFormResults = useMemo(() => {
-    const results = computeRecentForm(effectiveT1, t1Rows as unknown as PlayerStat[], statsToShow);
+    const results = computeRecentForm(effectiveT1Label, t1Rows as unknown as PlayerStat[], statsToShow);
     if (team2 !== "None") {
-      results.push(...computeRecentForm(team2, t2Rows as unknown as PlayerStat[], statsToShow));
+      results.push(...computeRecentForm(effectiveT2Label, t2Rows as unknown as PlayerStat[], statsToShow));
     }
     return results;
-  }, [effectiveT1, t1Rows, team2, t2Rows, statsToShow]);
+  }, [effectiveT1Label, effectiveT2Label, t1Rows, team2, t2Rows, statsToShow]);
 
   const chartPanels = useMemo(() => {
     const panels: { id: string; title: string; content: React.ReactNode; wide?: boolean }[] = [];
@@ -323,28 +370,28 @@ export function TeamComparison({
     if (hasTwoStats) {
       panels.push({
         id: "corr-t1",
-        title: `${effectiveT1}: ${stat1} vs ${stat2}`,
+        title: `${effectiveT1Label}: ${stat1} vs ${stat2}`,
         content: (
           <ScatterCorrelation
             rows={t1Rows as unknown as PlayerStat[]}
             statX={stat1}
             statY={stat2}
-            title={`${effectiveT1} \u2014 ${stat1} vs ${stat2}`}
-            label={effectiveT1}
+            title={`${effectiveT1Label} \u2014 ${stat1} vs ${stat2}`}
+            label={effectiveT1Label}
           />
         ),
       });
       if (hasTwoTeams) {
         panels.push({
           id: "corr-t2",
-          title: `${team2}: ${stat1} vs ${stat2}`,
+          title: `${effectiveT2Label}: ${stat1} vs ${stat2}`,
           content: (
             <ScatterCorrelation
               rows={t2Rows as unknown as PlayerStat[]}
               statX={stat1}
               statY={stat2}
-              title={`${team2} \u2014 ${stat1} vs ${stat2}`}
-              label={team2}
+              title={`${effectiveT2Label} \u2014 ${stat1} vs ${stat2}`}
+              label={effectiveT2Label}
             />
           ),
         });
@@ -355,16 +402,16 @@ export function TeamComparison({
       id: "dist-1",
       title: `${stat1} Distribution`,
       content: (
-        <KDEDistribution
-          title={`${stat1} Distribution`}
-          stat={stat1}
-          series={[
-            { label: effectiveT1, values: t1Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null) },
-            ...(hasTwoTeams
-              ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "var(--color-chart-secondary)" }]
-              : []),
-          ]}
-        />
+          <KDEDistribution
+            title={`${stat1} Distribution`}
+            stat={stat1}
+            series={[
+              { label: effectiveT1Label, values: t1Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null) },
+              ...(hasTwoTeams
+                ? [{ label: effectiveT2Label, values: t2Rows.map((r) => toFiniteNumber(r[stat1])).filter((v): v is number => v !== null), color: "var(--color-chart-secondary)" }]
+                : []),
+            ]}
+          />
       ),
     });
     if (hasTwoStats) {
@@ -376,9 +423,9 @@ export function TeamComparison({
             title={`${stat2} Distribution`}
             stat={stat2}
             series={[
-              { label: effectiveT1, values: t1Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null) },
+              { label: effectiveT1Label, values: t1Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null) },
               ...(hasTwoTeams
-                ? [{ label: team2, values: t2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "var(--color-chart-secondary)" }]
+                ? [{ label: effectiveT2Label, values: t2Rows.map((r) => toFiniteNumber(r[stat2])).filter((v): v is number => v !== null), color: "var(--color-chart-secondary)" }]
                 : []),
             ]}
           />
@@ -388,14 +435,14 @@ export function TeamComparison({
 
     panels.push({
       id: "rolling-t1",
-      title: `${effectiveT1}: ${stat1} Rolling Average`,
+      title: `${effectiveT1Label}: ${stat1} Rolling Average`,
       wide: true,
       content: (
         <FantasyGameLogTrendBrush
           rows={t1PlotRows}
           headerTitle="Rolling Average Plot"
           valueLabel={stat1}
-          primarySeriesLabel={effectiveT1}
+          primarySeriesLabel={effectiveT1Label}
           valueAccessor={(row) => toFiniteNumber(row[stat1]) ?? 0}
         />
       ),
@@ -403,14 +450,14 @@ export function TeamComparison({
     if (hasTwoTeams) {
       panels.push({
         id: "rolling-t2",
-        title: `${team2}: ${stat1} Rolling Average`,
+        title: `${effectiveT2Label}: ${stat1} Rolling Average`,
         wide: true,
         content: (
           <FantasyGameLogTrendBrush
             rows={t2PlotRows}
             headerTitle="Rolling Average Plot"
             valueLabel={stat1}
-            primarySeriesLabel={team2}
+            primarySeriesLabel={effectiveT2Label}
             primaryBarColor="rgba(180, 112, 255, 0.42)"
             valueAccessor={(row) => toFiniteNumber(row[stat1]) ?? 0}
           />
@@ -420,14 +467,14 @@ export function TeamComparison({
     if (hasTwoStats) {
       panels.push({
         id: "rolling-t1-stat2",
-        title: `${effectiveT1}: ${stat2} Rolling Average`,
+        title: `${effectiveT1Label}: ${stat2} Rolling Average`,
         wide: true,
         content: (
           <FantasyGameLogTrendBrush
             rows={t1PlotRows}
             headerTitle="Rolling Average Plot"
             valueLabel={stat2}
-            primarySeriesLabel={effectiveT1}
+            primarySeriesLabel={effectiveT1Label}
             valueAccessor={(row) => toFiniteNumber(row[stat2]) ?? 0}
           />
         ),
@@ -435,14 +482,14 @@ export function TeamComparison({
       if (hasTwoTeams) {
         panels.push({
           id: "rolling-t2-stat2",
-          title: `${team2}: ${stat2} Rolling Average`,
+          title: `${effectiveT2Label}: ${stat2} Rolling Average`,
           wide: true,
           content: (
             <FantasyGameLogTrendBrush
               rows={t2PlotRows}
               headerTitle="Rolling Average Plot"
               valueLabel={stat2}
-              primarySeriesLabel={team2}
+              primarySeriesLabel={effectiveT2Label}
               primaryBarColor="rgba(180, 112, 255, 0.42)"
               valueAccessor={(row) => toFiniteNumber(row[stat2]) ?? 0}
             />
@@ -453,14 +500,14 @@ export function TeamComparison({
 
     panels.push({
       id: "opp-t1",
-      title: `${effectiveT1}: ${stat1} Avg vs Opponent`,
+      title: `${effectiveT1Label}: ${stat1} Avg vs Opponent`,
       wide: true,
       content: <OpponentAverageHeatmap rows={t1PlotRows} stat={stat1} />,
     });
     if (hasTwoTeams) {
       panels.push({
         id: "opp-t2",
-        title: `${team2}: ${stat1} Avg vs Opponent`,
+        title: `${effectiveT2Label}: ${stat1} Avg vs Opponent`,
         wide: true,
         content: <OpponentAverageHeatmap rows={t2PlotRows} stat={stat1} />,
       });
@@ -468,14 +515,14 @@ export function TeamComparison({
     if (hasTwoStats) {
       panels.push({
         id: "opp-t1-stat2",
-        title: `${effectiveT1}: ${stat2} Avg vs Opponent`,
+        title: `${effectiveT1Label}: ${stat2} Avg vs Opponent`,
         wide: true,
         content: <OpponentAverageHeatmap rows={t1PlotRows} stat={stat2} />,
       });
       if (hasTwoTeams) {
         panels.push({
           id: "opp-t2-stat2",
-          title: `${team2}: ${stat2} Avg vs Opponent`,
+          title: `${effectiveT2Label}: ${stat2} Avg vs Opponent`,
           wide: true,
           content: <OpponentAverageHeatmap rows={t2PlotRows} stat={stat2} />,
         });
@@ -484,7 +531,7 @@ export function TeamComparison({
 
     return panels;
   }, [
-    effectiveT1, team2, stat1, stat2, t1Rows, t2Rows, t1PlotRows, t2PlotRows,
+    effectiveT1Label, effectiveT2Label, team2, stat1, stat2, t1Rows, t2Rows, t1PlotRows, t2PlotRows,
   ]);
 
   const filteredChartPanels = useMemo(
@@ -520,8 +567,12 @@ export function TeamComparison({
           teamList={teamList}
           team1={effectiveT1}
           onTeam1Change={setTeam1}
+          team1Perspective={team1Perspective}
+          onTeam1PerspectiveChange={setTeam1Perspective}
           team2={team2}
           onTeam2Change={setTeam2}
+          team2Perspective={team2Perspective}
+          onTeam2PerspectiveChange={setTeam2Perspective}
           statList={statList}
           stat1={stat1}
           onStat1Change={setStat1}

@@ -620,7 +620,7 @@ function PlayerLeaderCard({ card }: { card: PlayerLeaderCardData }) {
               <ImageWithFallback
                 sources={leader.imageSources}
                 alt={leader.name}
-                className="max-h-[9.5rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[12.25rem]"
+                className="mx-auto max-h-[9rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[12.25rem]"
               />
             ) : null}
           </div>

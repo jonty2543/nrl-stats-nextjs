@@ -137,6 +137,7 @@ export const TEAM_STATS = [
   "Line Engaged Runs",
   "Tackle Breaks",
   "Hit Ups",
+  "Play The Ball",
   "Dummy Half Runs",
   "Dummy Half Run Metres",
   "One on One Steal",
@@ -167,6 +168,7 @@ export const TEAM_STATS = [
   "On Report",
   "Sin Bins",
   "Send Offs",
+  "Possession %",
 ] as const;
 
 export const PLAYER_LABELS = [

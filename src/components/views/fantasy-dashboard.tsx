@@ -730,14 +730,14 @@ function MetricCard({
   return (
     <div
       className={`rounded-lg border border-nrl-border bg-nrl-panel-2 ${
-        compact ? "px-1.5 py-4 xl:px-1.5 xl:py-2.5" : "px-3 py-2"
+        compact ? "px-2 py-3 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5" : "px-3 py-2"
       }`}
     >
       <div className={`${compact ? "text-[7px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
         {label}
       </div>
       <div
-        className={`${compact ? "mt-1 text-[1.5rem] leading-none" : "mt-1 text-xl"} font-bold text-nrl-text ${
+        className={`${compact ? "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${
           blurValue ? "select-none blur-[5px]" : ""
         }`}
         aria-hidden={blurValue || undefined}
@@ -745,7 +745,7 @@ function MetricCard({
         {value}
       </div>
       {sublabel ? (
-        <div className={`${compact ? "mt-1 text-[8px]" : "mt-0.5 text-[10px]"} text-nrl-muted`}>
+        <div className={`${compact ? "mt-1 text-[8px] leading-tight" : "mt-0.5 text-[10px]"} text-nrl-muted`}>
           {sublabel}
         </div>
       ) : null}
@@ -1866,7 +1866,7 @@ export function FantasyDashboard({
                       </div>
                     </div>
 
-                    <div className="pt-6 grid grid-cols-[minmax(0,1fr)_13rem] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_14.25rem] sm:gap-4 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5">
+                    <div className="grid grid-cols-1 items-start gap-4 pt-6 sm:grid-cols-[minmax(0,1fr)_14.25rem] sm:gap-4 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5">
                       <div className="grid w-full grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                         <MetricCard compact label="Price" value={formatPrice(selectedFantasyPlayer.cost)} />
                         <MetricCard compact label="PPM" value={formatNumber(localPpm, 2)} />

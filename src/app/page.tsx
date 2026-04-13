@@ -888,8 +888,8 @@ export default async function Home() {
     : null
   const spotlightHeatmapRows = buildOpponentHeatmapRows(spotlightSortedRows, plotYears)
   const spotlightBoxSummaries = buildBoxSummaries(spotlightSortedRows, plotYears)
-  const h2hPreviews = buildH2HPreviews(bettingSnapshot)
-  const bettingLandingPreviews = h2hPreviews.length > 0 ? h2hPreviews : buildH2HPreviews(bettingSnapshot, 2, false)
+  const h2hPreviews = buildH2HPreviews(bettingSnapshot, 1)
+  const bettingLandingPreviews = h2hPreviews.length > 0 ? h2hPreviews : buildH2HPreviews(bettingSnapshot, 1, false)
   const betTrackerPreviewRows = buildBetTrackerPreviewRows(bettingSnapshot)
   const statsPlayer1Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nathan Cleary"], 0)
   const statsPlayer2Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nicholas Hynes", "Nicho Hynes"], 1)
@@ -1447,7 +1447,7 @@ export default async function Home() {
                     <span className="px-3 py-1">Total</span>
                   </div>
                   <div className="space-y-3">
-                    {bettingLandingPreviews.length > 0 ? bettingLandingPreviews.slice(0, 2).map((preview, previewIndex) => (
+                    {bettingLandingPreviews.length > 0 ? bettingLandingPreviews.slice(0, 1).map((preview, previewIndex) => (
                       <div key={`${preview.match}-${preview.dateLabel}-${previewIndex}`} className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
                         {(() => {
                           const marketPct = bestBookMarketPercentage(preview.rows)
@@ -1503,7 +1503,7 @@ export default async function Home() {
                                     <div className="text-center font-semibold text-emerald-300">{formatNumber(row.bestPrice, 2)}</div>
                                     <div className="text-center font-semibold text-white">{formatPct(implied == null ? null : implied * 100)}</div>
                                     <div className="text-center font-semibold text-white blur-[4px] select-none">{formatPct(modelProbability == null ? null : modelProbability * 100)}</div>
-                                    <div className={`text-center font-semibold blur-[4px] select-none ${edgePp == null ? "text-white/50" : edgePp >= 0 ? "text-[#ff9d2e]" : "text-[#ff5f77]"}`}>
+                                    <div className="text-center font-semibold text-white/72 blur-[4px] select-none">
                                       {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
                                     </div>
                                     <div className="flex justify-center">
@@ -1537,11 +1537,11 @@ export default async function Home() {
                                   <div className="min-w-0">
                                     <div className="truncate text-sm font-semibold text-white">{row.result}</div>
                                     <div className="mt-1 text-[11px] text-white/42">
-                                      {row.bestBookie ? `Best via ${row.bestBookie}` : "Current best market"}
+                                      {`Odds ${formatNumber(row.bestPrice, 2)}${row.bestBookie ? ` · ${row.bestBookie}` : ""}`}
                                     </div>
                                   </div>
                                   <div className="text-right">
-                                    <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Best</div>
+                                    <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Odds</div>
                                     <div className="mt-1 text-xl font-bold text-emerald-300">
                                       {formatNumber(row.bestPrice, 2)}
                                     </div>
@@ -1559,7 +1559,7 @@ export default async function Home() {
                                   </div>
                                   <div className="rounded-lg border border-white/8 bg-[#171c36] px-2 py-2">
                                     <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">Edge</div>
-                                    <div className={`mt-1 text-sm font-semibold blur-[4px] select-none ${edgePp == null ? "text-white/45" : edgePp >= 0 ? "text-[#ff9d2e]" : "text-[#ff5f77]"}`}>
+                                    <div className="mt-1 text-sm font-semibold text-white/72 blur-[4px] select-none">
                                       {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
                                     </div>
                                   </div>
@@ -1710,14 +1710,14 @@ export default async function Home() {
                         ))}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                         <div className="flex items-center justify-center">
                           <SimplePlayerPhotoTile
                             playerName={statsPlayer1Name ?? "Player 1"}
                             imageRow={statsPlayer1CardImage}
                             priority
-                            className="max-w-none"
-                            imageHeightClass="h-[9.5rem] sm:h-[15rem]"
+                            className="mx-auto w-full max-w-[13rem] sm:max-w-none"
+                            imageHeightClass="h-[13rem] sm:h-[15rem]"
                           />
                         </div>
 
@@ -1726,8 +1726,8 @@ export default async function Home() {
                             playerName={statsPlayer2Name ?? "Player 2"}
                             imageRow={statsPlayer2CardImage}
                             priority
-                            className="max-w-none"
-                            imageHeightClass="h-[9.5rem] sm:h-[15rem]"
+                            className="mx-auto w-full max-w-[13rem] sm:max-w-none"
+                            imageHeightClass="h-[13rem] sm:h-[15rem]"
                           />
                         </div>
                       </div>
@@ -1872,7 +1872,7 @@ export default async function Home() {
                                     <ImageWithFallback
                                       sources={leader.imageSources}
                                       alt={leader.name}
-                                      className="max-h-[9.5rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[12.25rem]"
+                                      className="mx-auto max-h-[9rem] w-auto object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[12.25rem]"
                                     />
                                   ) : null}
                                 </div>

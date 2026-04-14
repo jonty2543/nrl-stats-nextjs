@@ -1012,9 +1012,8 @@ export default async function Home() {
         <LandingHeroScrollShell>
           <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
             <div className="max-w-2xl lg:pb-10">
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
-                <LiveBroadcastIcon className="h-3.5 w-3.5" />
-                Live NRL Analysis Platform
+              <div className="inline-flex items-center rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
+                NRL Analysis Platform
               </div>
               <h1 className="mt-5 pb-2 text-[2.85rem] font-black leading-[0.98] tracking-tight text-white sm:text-6xl">
                 Smarter Analysis for

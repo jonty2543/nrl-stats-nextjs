@@ -54,9 +54,9 @@ interface YearBoundary {
 
 const ROLLING_WINDOW_OPTIONS = [3, 5, 10, 20] as const
 const MAIN_CHART_WIDTH = 960
-const MAIN_CHART_HEIGHT = 220
+const MAIN_CHART_HEIGHT = 320
 const OVERVIEW_CHART_WIDTH = 960
-const OVERVIEW_CHART_HEIGHT = 88
+const OVERVIEW_CHART_HEIGHT = 100
 const MAIN_PADDING = { top: 14, right: 18, bottom: 28, left: 30 }
 const OVERVIEW_PADDING = { top: 8, right: 18, bottom: 24, left: 18 }
 
@@ -534,15 +534,19 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
       }))
     : []
   const resolvedPrimarySeriesLabel = primarySeriesLabel ?? valueLabel
+  const hasHeaderInfo = Boolean(headerTitle) || compareSeriesData.length > 0
 
   return (
     <div className="border-b border-nrl-border bg-nrl-panel-2/30 px-2 py-3 sm:px-4 sm:py-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 sm:mb-3 sm:gap-3">
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-wide text-nrl-accent sm:text-xs">
-            {headerTitle}
-          </div>
-          {compareSeriesData.length > 0 ? (
+      <div className={`mb-2 flex flex-wrap items-center gap-2 sm:mb-3 sm:gap-3 ${hasHeaderInfo ? "justify-between" : "justify-end"}`}>
+        {hasHeaderInfo ? (
+          <div>
+            {headerTitle ? (
+              <div className="text-[11px] font-bold uppercase tracking-wide text-nrl-accent sm:text-xs">
+                {headerTitle}
+              </div>
+            ) : null}
+            {compareSeriesData.length > 0 ? (
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-nrl-muted">
               <div className="flex items-center gap-2">
                 <span className="inline-block h-2.5 w-2.5 rounded-full bg-nrl-accent" />
@@ -558,8 +562,9 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
                 </div>
               ))}
             </div>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
             Rolling Avg
@@ -589,7 +594,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
           <svg
             ref={mainChartRef}
             viewBox={`0 0 ${MAIN_CHART_WIDTH} ${MAIN_CHART_HEIGHT}`}
-            className="rolling-trend-main-chart h-[145px] w-full sm:h-[220px]"
+            className="rolling-trend-main-chart h-[240px] w-full sm:h-[320px]"
           >
             {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
               const value = selectedMaxScore * tick
@@ -779,7 +784,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
           <svg
             ref={overviewRef}
             viewBox={`0 0 ${OVERVIEW_CHART_WIDTH} ${OVERVIEW_CHART_HEIGHT}`}
-            className="h-[56px] w-full touch-none select-none sm:h-[88px]"
+            className="h-[72px] w-full touch-none select-none sm:h-[100px]"
           >
             <rect
               x={0}

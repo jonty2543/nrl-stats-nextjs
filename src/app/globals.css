@@ -117,7 +117,7 @@ button:disabled {
 
 @media (max-width: 767px) and (orientation: landscape) {
   .rolling-trend-main-chart {
-    height: 190px !important;
+    height: 260px !important;
   }
 }
 

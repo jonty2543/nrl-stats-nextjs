@@ -382,14 +382,14 @@ export function PlayerImageCard({
   const isFramelessScale = frameless && !compact;
   const nameTextClass = compact
     ? isFramelessCompact
-      ? "px-1 text-[11.8px] leading-[1.04]"
+      ? "px-1 text-[5.4px] leading-none tracking-[0.08em]"
       : "text-[10px]"
     : isFramelessScale
       ? "text-[clamp(7.8px,0.6vw,9.8px)]"
       : "text-[clamp(11px,1.4vw,15px)]";
   const teamTextClass = compact
     ? isFramelessCompact
-      ? "px-1 text-[7.6px] tracking-[0.14em]"
+      ? "px-1 text-[3.9px] tracking-[0.18em]"
       : "text-[6px] tracking-[0.12em]"
     : isFramelessScale
       ? "text-[4.5px] tracking-[0.1em]"
@@ -417,12 +417,12 @@ export function PlayerImageCard({
       : "text-[9px]";
   const panelPaddingClass = compact
     ? isFramelessCompact
-      ? "px-2.5 py-1.5"
+      ? "px-2 py-1"
       : "px-2 pt-1.5 pb-1"
     : isFramelessScale
       ? "px-3 py-2"
       : "px-3 pt-2 pb-1.5";
-  const teamRowMarginClass = frameless ? "mt-0" : "mt-0.5";
+  const teamRowMarginClass = isFramelessCompact ? "mt-0.5" : frameless ? "mt-0" : "mt-0.5";
   const positionTextClass = compact
     ? isFramelessCompact
       ? "text-[10.4px]"
@@ -438,7 +438,7 @@ export function PlayerImageCard({
       ? "min-w-[1.95rem]"
       : "min-w-[2.2rem]";
   const infoPanelBoundsClass = isFramelessCompact
-    ? "absolute inset-x-[21%] top-[60.2%] bottom-[22.8%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62"
+    ? "absolute inset-x-[18.5%] top-[58.8%] bottom-[20.8%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62"
     : isFramelessScale
       ? "absolute inset-x-[21.2%] top-[60.4%] bottom-[23%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62"
       : "absolute inset-x-[20%] top-[47.8%] bottom-[23%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62";
@@ -537,17 +537,17 @@ export function PlayerImageCard({
           <div
             className={`${infoPanelBoundsClass} ${panelPaddingClass}`}
           >
-            <div className={showStats ? undefined : "flex h-full flex-col items-center justify-center"}>
+            <div className={showStats ? undefined : "flex h-full flex-col items-center justify-center gap-[1px]"}>
               <div
                 className={`text-center font-extrabold tracking-wide text-white ${nameTextClass} ${
-                  isFramelessCompact ? "line-clamp-2 whitespace-normal text-balance" : "truncate"
+                  isFramelessCompact ? "w-full truncate whitespace-nowrap" : "truncate"
                 }`}
               >
-                {isFramelessCompact ? displayPlayerName : displayPlayerName.toUpperCase()}
+                {isFramelessCompact ? displayPlayerName.toUpperCase() : displayPlayerName.toUpperCase()}
               </div>
               <div
                 className={`${teamRowMarginClass} text-center font-semibold text-[#d7ffe9] drop-shadow-[0_1px_2px_rgba(0,0,0,0.72)] ${teamTextClass} ${
-                  isFramelessCompact ? "line-clamp-1 whitespace-normal" : "truncate"
+                  isFramelessCompact ? "w-full truncate whitespace-nowrap" : "truncate"
                 }`}
               >
                 {displayTeamName.toUpperCase()}

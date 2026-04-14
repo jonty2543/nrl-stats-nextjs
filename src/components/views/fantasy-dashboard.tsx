@@ -11,6 +11,7 @@ import type {
   FantasyOwnershipBaselineSnapshot,
   FantasyPlayerSnapshot,
 } from "@/lib/fantasy/nrl"
+import { PLAYER_STATS } from "@/lib/data/constants"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   applyFantasyBreakEvenOffset,
@@ -125,6 +126,7 @@ const STAT_VS_FANTASY_OPTIONS = [
 ] as const
 
 type StatVsFantasyOptionLabel = (typeof STAT_VS_FANTASY_OPTIONS)[number]["label"]
+const ROLLING_AVERAGE_STAT_OPTIONS = PLAYER_STATS as readonly string[]
 
 const HEATMAP_LOW_SCORE = 20
 const HEATMAP_MID_SCORE = 45
@@ -801,11 +803,12 @@ export function FantasyDashboard({
   const [teammateMode, setTeammateMode] = useState<TeammateMode>("With")
   const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any")
   const [minutesUnderFilter, setMinutesUnderFilter] = useState<string>("Any")
-  const [showRollingAveragePlot, setShowRollingAveragePlot] = useState(true)
+  const [showRollingAveragePlot, setShowRollingAveragePlot] = useState(false)
   const [showBaseUpsideBars, setShowBaseUpsideBars] = useState(false)
   const [showOpponentHeatmap, setShowOpponentHeatmap] = useState(false)
   const [showFantasyBoxPlot, setShowFantasyBoxPlot] = useState(false)
   const [showStatVsFantasyPlot, setShowStatVsFantasyPlot] = useState(false)
+  const [selectedRollingAverageStat, setSelectedRollingAverageStat] = useState<string>("Fantasy")
   const [selectedStatVsFantasyLabel, setSelectedStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [showWithWithoutPlot, setShowWithWithoutPlot] = useState(false)
   const [positionOwnershipControls, setPositionOwnershipControls] = useState<Partial<Record<number, PositionOwnershipControl>>>(
@@ -1377,12 +1380,16 @@ export function FantasyDashboard({
     () => [...trendFilteredRows].sort(sortRoundsAsc),
     [trendFilteredRows]
   )
+  const rollingAverageValueAccessor = useCallback(
+    (row: PlayerStat) => toFiniteNumber(row[selectedRollingAverageStat]) ?? 0,
+    [selectedRollingAverageStat]
+  )
   const gameLogChartKey = useMemo(
     () =>
       chronologicalTrendRows
-        .map((row) => `${row.Year}-${row.Round}-${String(row.match_date ?? "")}`)
+        .map((row) => `${selectedRollingAverageStat}-${row.Year}-${row.Round}-${String(row.match_date ?? "")}`)
         .join("|"),
-    [chronologicalTrendRows]
+    [chronologicalTrendRows, selectedRollingAverageStat]
   )
 
   const gameLogAverages = useMemo(() => {
@@ -1874,7 +1881,7 @@ export function FantasyDashboard({
                       </div>
                     </div>
 
-                    <div className={`grid items-start gap-3 pt-4 sm:gap-4 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5 ${fantasyCardPlayerName ? "grid-cols-1 sm:grid-cols-[minmax(0,1fr)_14.25rem]" : "grid-cols-1"}`}>
+                    <div className={`grid items-start gap-3 pt-4 sm:gap-4 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5 ${fantasyCardPlayerName ? "grid-cols-[minmax(0,1fr)_10.75rem] min-[420px]:grid-cols-[minmax(0,1fr)_11.5rem] sm:grid-cols-[minmax(0,1fr)_14.25rem]" : "grid-cols-1"}`}>
                       <div className="grid w-full auto-rows-fr grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                         <MetricCard compact mobileTight label="Price" value={formatPrice(selectedFantasyPlayer.cost)} />
                         <MetricCard compact mobileTight label="PPM" value={formatNumber(localPpm, 2)} />
@@ -1898,8 +1905,8 @@ export function FantasyDashboard({
                       </div>
 
                       {fantasyCardPlayerName ? (
-                        <div className="flex self-start items-start justify-center pt-1 sm:-mt-4 sm:justify-end sm:pt-0 xl:hidden">
-                          <div className="w-full max-w-[11rem] rounded-[1.05rem] bg-[linear-gradient(180deg,rgba(17,23,46,0.46),rgba(17,23,46,0.18))] shadow-[0_18px_40px_rgba(8,10,18,0.22)] sm:max-w-[14.25rem] sm:rounded-[1.2rem] lg:max-w-[15.25rem]">
+                        <div className="flex self-start items-start justify-center sm:justify-end xl:hidden">
+                          <div className="w-full max-w-[10.75rem] rounded-[1.05rem] bg-[linear-gradient(180deg,rgba(17,23,46,0.46),rgba(17,23,46,0.18))] shadow-[0_18px_40px_rgba(8,10,18,0.22)] min-[420px]:max-w-[11.5rem] sm:max-w-[14.25rem] sm:rounded-[1.2rem] lg:max-w-[15.25rem]">
                             <div className="relative">
                               <PlayerImageCard
                                 playerName={fantasyCardPlayerName}
@@ -2136,17 +2143,26 @@ export function FantasyDashboard({
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
                         Rolling Average Plot
                       </div>
-                      <div className="text-[10px] text-nrl-muted">
-                        Fantasy score bars with rolling average trend
-                      </div>
                     </div>
-	                    <FantasyGameLogTrendBrush
-	                      key={gameLogChartKey}
-	                      rows={chronologicalTrendRows}
-	                      defaultStartYear="2023"
-	                    />
-	                  </div>
-	                ) : null}
+                    <div className="mb-3 max-w-[240px]">
+                      <Select
+                        label="Stat"
+                        value={selectedRollingAverageStat}
+                        options={ROLLING_AVERAGE_STAT_OPTIONS as string[]}
+                        onChange={setSelectedRollingAverageStat}
+                      />
+                    </div>
+                    <FantasyGameLogTrendBrush
+                      key={gameLogChartKey}
+                      rows={chronologicalTrendRows}
+                      defaultStartYear="2023"
+                      headerTitle=""
+                      valueLabel={selectedRollingAverageStat}
+                      primarySeriesLabel={selectedRollingAverageStat}
+                      valueAccessor={rollingAverageValueAccessor}
+                    />
+                  </div>
+                ) : null}
 
                 {!analysisLocked && showOpponentHeatmap ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">

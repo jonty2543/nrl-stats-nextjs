@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
+import { BillingPageLink } from "@/components/billing/billing-page-link";
 import { Expander } from "@/components/ui/expander";
 
 interface ChartPanel {
@@ -18,14 +19,23 @@ interface ChartPanelGridProps {
 
 function ProLockedChart({ children }: { children: ReactNode }) {
   return (
-    <div className="relative min-h-[240px]">
+    <div className="relative min-h-[200px] sm:min-h-[240px]">
       <div aria-hidden="true" className="pointer-events-none select-none blur-[6px] opacity-35">
         {children}
       </div>
-      <div className="absolute inset-0 z-10 flex items-center justify-center">
-        <div className="rounded-lg border border-nrl-accent/30 bg-nrl-panel/90 px-4 py-2 text-center shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
-          <div className="text-sm font-semibold text-nrl-accent">Pro coming soon</div>
-        </div>
+      <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl">
+        <BillingPageLink
+          className="rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]"
+        >
+          <div className="rounded-[calc(1rem-1px)] bg-slate-950/80 px-4 py-3 text-center backdrop-blur-[2px]">
+            <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
+              Sign Up To Pro
+            </div>
+            <div className="mt-1 text-xs text-slate-400">
+              Unlock all stats plots.
+            </div>
+          </div>
+        </BillingPageLink>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
@@ -17,20 +17,22 @@ import {
   buildFantasyRank,
 } from "@/lib/data/transform";
 import { FilterBar } from "@/components/filters/filter-bar";
-import { PlayerSelectors } from "@/components/filters/player-selectors";
 import { ProfileCard } from "@/components/summary/profile-card";
 import { StatsTable } from "@/components/summary/stats-table";
 import { PercentileRanks } from "@/components/summary/percentile-ranks";
 import { RecentForm } from "@/components/summary/recent-form";
 import { ChartPanelGrid } from "@/components/charts/chart-panel-grid";
 import { ScatterCorrelation } from "@/components/charts/scatter-correlation";
-import { LineRound } from "@/components/charts/line-round";
 import { KDEDistribution } from "@/components/charts/kde-distribution";
 import { WithWithoutLine } from "@/components/charts/with-without-line";
 import { WithWithoutKDE } from "@/components/charts/with-without-kde";
+import { OpponentAverageHeatmap } from "@/components/charts/opponent-average-heatmap";
+import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush";
 import { PillRadio } from "@/components/ui/pill-radio";
 import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SectionDivider } from "@/components/ui/section-divider";
+import { hasProPlotAccess } from "@/lib/access/pro-access";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
 interface PlayerComparisonProps {
@@ -41,6 +43,9 @@ interface PlayerComparisonProps {
   defaultYears: string[];
   canBypassPlotGate?: boolean;
 }
+
+const DEFAULT_PLAYER_1_CANDIDATES = ["Nathan Cleary"];
+const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
 
 const MINUTES_FILTER_OPTIONS = [
   "Any",
@@ -138,6 +143,62 @@ function parsePersonName(value: string): { first: string; last: string } {
 }
 
 const preferredImageIndexByCandidatesKey = new Map<string, number>();
+const PLAYER_IMAGE_FALLBACK_URL = "/body-shot.png";
+
+function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const push = (value: string | null | undefined) => {
+    if (!value || typeof value !== "string") return;
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    out.push(trimmed);
+  };
+
+  const normalizeRemoteAxd = (value: string): string[] => {
+    const variants: string[] = [];
+    const seenVariants = new Set<string>();
+    const pushVariant = (candidate: string | null | undefined) => {
+      if (!candidate) return;
+      const trimmed = candidate.trim();
+      if (!trimmed || seenVariants.has(trimmed)) return;
+      seenVariants.add(trimmed);
+      variants.push(trimmed);
+    };
+
+    if (value.startsWith("http://")) {
+      pushVariant(`https://${value.slice("http://".length)}`);
+    }
+    if (value.includes("/remote.axd?http://")) {
+      pushVariant(value.replace("/remote.axd?http://", "/remote.axd?https://"));
+    }
+    const marker = "/remote.axd?";
+    const idx = value.indexOf(marker);
+    if (idx >= 0) {
+      const nested = value.slice(idx + marker.length);
+      if (nested) {
+        const httpsNested = nested.startsWith("http://")
+          ? `https://${nested.slice("http://".length)}`
+          : nested;
+        pushVariant(httpsNested);
+      }
+    }
+    pushVariant(value);
+    return variants;
+  };
+
+  for (const source of [imageRow?.body_image, imageRow?.head_image]) {
+    if (!source) continue;
+    for (const variant of normalizeRemoteAxd(source)) {
+      push(variant);
+    }
+  }
+
+  push(PLAYER_IMAGE_FALLBACK_URL);
+  return out;
+}
 
 export function resolvePlayerImage(
   playerName: string,
@@ -274,59 +335,7 @@ export function PlayerImageCard({
   frameless?: boolean;
   priority?: boolean;
 }) {
-  const imageCandidates = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-
-    const push = (value: string | null | undefined) => {
-      if (!value || typeof value !== "string") return;
-      const trimmed = value.trim();
-      if (!trimmed || seen.has(trimmed)) return;
-      seen.add(trimmed);
-      out.push(trimmed);
-    };
-
-    const normalizeRemoteAxd = (value: string): string[] => {
-      const variants: string[] = [];
-      const seenVariants = new Set<string>();
-      const pushVariant = (candidate: string | null | undefined) => {
-        if (!candidate) return;
-        const trimmed = candidate.trim();
-        if (!trimmed || seenVariants.has(trimmed)) return;
-        seenVariants.add(trimmed);
-        variants.push(trimmed);
-      };
-
-      if (value.startsWith("http://")) {
-        pushVariant(`https://${value.slice("http://".length)}`);
-      }
-      if (value.includes("/remote.axd?http://")) {
-        pushVariant(value.replace("/remote.axd?http://", "/remote.axd?https://"));
-      }
-      const marker = "/remote.axd?";
-      const idx = value.indexOf(marker);
-      if (idx >= 0) {
-        const nested = value.slice(idx + marker.length);
-        if (nested) {
-          const httpsNested = nested.startsWith("http://")
-            ? `https://${nested.slice("http://".length)}`
-            : nested;
-          pushVariant(httpsNested);
-        }
-      }
-      pushVariant(value);
-      return variants;
-    };
-
-    for (const source of [imageRow?.body_image, imageRow?.head_image]) {
-      if (!source) continue;
-      for (const variant of normalizeRemoteAxd(source)) {
-        push(variant);
-      }
-    }
-
-    return out;
-  }, [imageRow?.body_image, imageRow?.head_image]);
+  const imageCandidates = useMemo(() => buildPlayerImageCandidates(imageRow), [imageRow]);
   const imageCandidatesKey = imageCandidates.join("|");
   const [imageAttemptState, setImageAttemptState] = useState<{ key: string; index: number }>({
     key: "",
@@ -373,14 +382,14 @@ export function PlayerImageCard({
   const isFramelessScale = frameless && !compact;
   const nameTextClass = compact
     ? isFramelessCompact
-      ? "text-[10.2px]"
+      ? "px-1 text-[5.4px] leading-none tracking-[0.08em]"
       : "text-[10px]"
     : isFramelessScale
       ? "text-[clamp(7.8px,0.6vw,9.8px)]"
       : "text-[clamp(11px,1.4vw,15px)]";
   const teamTextClass = compact
     ? isFramelessCompact
-      ? "text-[6.2px] tracking-[0.12em]"
+      ? "px-1 text-[3.9px] tracking-[0.18em]"
       : "text-[6px] tracking-[0.12em]"
     : isFramelessScale
       ? "text-[4.5px] tracking-[0.1em]"
@@ -408,12 +417,12 @@ export function PlayerImageCard({
       : "text-[9px]";
   const panelPaddingClass = compact
     ? isFramelessCompact
-      ? "px-2.5 py-1.5"
+      ? "px-2 py-1"
       : "px-2 pt-1.5 pb-1"
     : isFramelessScale
       ? "px-3 py-2"
       : "px-3 pt-2 pb-1.5";
-  const teamRowMarginClass = frameless ? "mt-0" : "mt-0.5";
+  const teamRowMarginClass = isFramelessCompact ? "mt-0.5" : frameless ? "mt-0" : "mt-0.5";
   const positionTextClass = compact
     ? isFramelessCompact
       ? "text-[10.4px]"
@@ -429,7 +438,7 @@ export function PlayerImageCard({
       ? "min-w-[1.95rem]"
       : "min-w-[2.2rem]";
   const infoPanelBoundsClass = isFramelessCompact
-    ? "absolute inset-x-[21%] top-[60.2%] bottom-[22.8%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62"
+    ? "absolute inset-x-[18.5%] top-[58.8%] bottom-[20.8%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62"
     : isFramelessScale
       ? "absolute inset-x-[21.2%] top-[60.4%] bottom-[23%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62"
       : "absolute inset-x-[20%] top-[47.8%] bottom-[23%] z-40 rounded-lg border border-[#1adb70]/15 bg-[#021021]/62";
@@ -444,6 +453,8 @@ export function PlayerImageCard({
   const frameContentClass = frameless
     ? "absolute inset-[4%] z-30"
     : "absolute inset-[12%] z-30";
+  const displayPlayerName = playerName || "No player selected";
+  const displayTeamName = imageRow?.team ?? "";
   const cardVisual = (
     <div
       className={
@@ -526,12 +537,20 @@ export function PlayerImageCard({
           <div
             className={`${infoPanelBoundsClass} ${panelPaddingClass}`}
           >
-            <div className={showStats ? undefined : "flex h-full flex-col items-center justify-center"}>
-              <div className={`truncate text-center font-extrabold tracking-wide text-white ${nameTextClass}`}>
-                {(playerName || "No player selected").toUpperCase()}
+            <div className={showStats ? undefined : "flex h-full flex-col items-center justify-center gap-[1px]"}>
+              <div
+                className={`text-center font-extrabold tracking-wide text-white ${nameTextClass} ${
+                  isFramelessCompact ? "w-full truncate whitespace-nowrap" : "truncate"
+                }`}
+              >
+                {isFramelessCompact ? displayPlayerName.toUpperCase() : displayPlayerName.toUpperCase()}
               </div>
-              <div className={`${teamRowMarginClass} truncate text-center font-semibold text-[#a9f5cf]/90 ${teamTextClass}`}>
-                {(imageRow?.team ?? "").toUpperCase()}
+              <div
+                className={`${teamRowMarginClass} text-center font-semibold text-[#d7ffe9] drop-shadow-[0_1px_2px_rgba(0,0,0,0.72)] ${teamTextClass} ${
+                  isFramelessCompact ? "w-full truncate whitespace-nowrap" : "truncate"
+                }`}
+              >
+                {displayTeamName.toUpperCase()}
               </div>
               {showStats ? (
                 <div className={statGridClass}>
@@ -575,10 +594,73 @@ export function PlayerImageCard({
   );
 }
 
+export function SimplePlayerPhotoTile({
+  playerName,
+  imageRow,
+  priority = false,
+  className,
+  imageHeightClass,
+}: {
+  playerName: string;
+  imageRow: PlayerImageRecord | null;
+  priority?: boolean;
+  className?: string;
+  imageHeightClass?: string;
+}) {
+  const imageCandidates = useMemo(() => buildPlayerImageCandidates(imageRow), [imageRow]);
+  const imageCandidatesKey = imageCandidates.join("|");
+  const [imageAttemptState, setImageAttemptState] = useState<{ key: string; index: number }>({
+    key: "",
+    index: 0,
+  });
+  const cachedPreferredIndex = preferredImageIndexByCandidatesKey.get(imageCandidatesKey) ?? 0;
+  const initialIndex = Math.max(0, Math.min(cachedPreferredIndex, Math.max(0, imageCandidates.length - 1)));
+  const imageIndex =
+    imageAttemptState.key === imageCandidatesKey ? imageAttemptState.index : initialIndex;
+  const imageUrl = imageCandidates[imageIndex] ?? null;
+
+  return (
+    <div className={`min-w-0 w-full overflow-hidden rounded-2xl border border-[#1d3a63] bg-[#0b1832] shadow-[0_18px_40px_rgba(0,0,0,0.28)] ${className ?? "max-w-[8rem] sm:max-w-[15rem]"}`}>
+      <div className={`relative flex items-end justify-center overflow-hidden bg-[radial-gradient(circle_at_top,rgba(92,132,255,0.2),transparent_60%),linear-gradient(180deg,#112347,#0a1327)] ${imageHeightClass ?? "h-[7.5rem] sm:h-[15rem]"}`}>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
+        <div className="pointer-events-none absolute left-[8%] top-[12%] h-20 w-20 rounded-full bg-emerald-300/10 blur-2xl" />
+        <div className="pointer-events-none absolute bottom-[10%] right-[12%] h-24 w-24 rounded-full bg-violet-400/12 blur-3xl" />
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt={`${playerName} player image`}
+            className="relative z-10 max-h-[96%] w-auto object-contain"
+            loading="eager"
+            fetchPriority={priority ? "high" : "auto"}
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onLoad={() => {
+              preferredImageIndexByCandidatesKey.set(imageCandidatesKey, imageIndex);
+            }}
+            onError={() => {
+              setImageAttemptState((prev) => ({
+                key: imageCandidatesKey,
+                index: (prev.key === imageCandidatesKey ? prev.index : 0) + 1,
+              }));
+            }}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs text-nrl-muted">
+            Image unavailable
+          </div>
+        )}
+      </div>
+      <div className="border-t border-[#1d3a63] px-2.5 py-2 text-center sm:px-4 sm:py-3">
+        <div className="truncate text-[12px] font-semibold text-white sm:text-sm">{playerName || "No player selected"}</div>
+      </div>
+    </div>
+  );
+}
+
 export function PlayerComparison({
   initialData,
   playerImages,
-  teamLogos,
   availableYears,
   defaultYears,
   canBypassPlotGate = false,
@@ -586,13 +668,18 @@ export function PlayerComparison({
   type TeammateMode = "both" | "with" | "without";
   type PercentileScope = "Position" | "All Players";
   const { userId } = useAuth();
+  const { user } = useUser();
   const canAccessLoginSeason = Boolean(userId);
+  const hasClientProPlotAccess =
+    canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata);
 
   const [allData, setAllData] = useState<PlayerStat[]>(initialData);
   const unlockedYears = useMemo(
     () =>
-      availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason, "stats")),
-    [availableYears, canAccessLoginSeason]
+      availableYears.filter((year) =>
+        isAccessibleSeason(year, canAccessLoginSeason, "stats", hasClientProPlotAccess)
+      ),
+    [availableYears, canAccessLoginSeason, hasClientProPlotAccess]
   );
   const initialYears = useMemo(() => {
     const validDefaultYears = defaultYears.filter((year) => unlockedYears.includes(year));
@@ -613,17 +700,14 @@ export function PlayerComparison({
     [unlockedYears]
   );
 
-  // Re-fetch when years change
-  const handleYearsChange = useCallback(async (years: string[]) => {
-    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
-    setSelectedYears(validYears);
-    if (validYears.length === 0) {
+  const loadAllUnlockedYears = useCallback(async () => {
+    if (unlockedYears.length === 0) {
       setAllData([]);
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/player-stats?years=${validYears.join(",")}`);
+      const res = await fetch(`/api/player-stats?years=${unlockedYears.join(",")}`);
       if (res.ok) {
         const data = await res.json();
         setAllData(data);
@@ -631,6 +715,11 @@ export function PlayerComparison({
     } finally {
       setLoading(false);
     }
+  }, [unlockedYears]);
+
+  const handleYearsChange = useCallback(async (years: string[]) => {
+    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    setSelectedYears(validYears);
   }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any");
@@ -646,6 +735,14 @@ export function PlayerComparison({
     () => filterByFinals(dfYear, finalsMode as "Yes" | "No"),
     [dfYear, finalsMode]
   );
+  const plotDfYear = useMemo(
+    () => filterByYear(allData, unlockedYears),
+    [allData, unlockedYears]
+  );
+  const plotDfYearFinals = useMemo(
+    () => filterByFinals(plotDfYear, finalsMode as "Yes" | "No"),
+    [plotDfYear, finalsMode]
+  );
   const filteredByMinutes = useMemo(() => {
     const overThreshold = parseMinutesFilterOption(minutesOverFilter);
     const underThreshold = parseMinutesFilterOption(minutesUnderFilter);
@@ -656,8 +753,19 @@ export function PlayerComparison({
       return true;
     });
   }, [dfYearFinals, minutesOverFilter, minutesUnderFilter]);
+  const plotFilteredByMinutes = useMemo(() => {
+    const overThreshold = parseMinutesFilterOption(minutesOverFilter);
+    const underThreshold = parseMinutesFilterOption(minutesUnderFilter);
+    return plotDfYearFinals.filter((row) => {
+      const mins = toFiniteNumber(row["Mins Played"]) ?? 0;
+      if (overThreshold > 0 && mins < overThreshold) return false;
+      if (underThreshold > 0 && mins > underThreshold) return false;
+      return true;
+    });
+  }, [plotDfYearFinals, minutesOverFilter, minutesUnderFilter]);
   const df = useMemo(() => filteredByMinutes, [filteredByMinutes]);
   const dfAllPositions = useMemo(() => filteredByMinutes, [filteredByMinutes]);
+  const plotDf = useMemo(() => plotFilteredByMinutes, [plotFilteredByMinutes]);
 
   const positions = useMemo(
     () => [...new Set(dfYearFinals.map((r) => r.Position))].filter(Boolean).sort(),
@@ -675,8 +783,8 @@ export function PlayerComparison({
   );
 
   // Player selections
-  const [player1, setPlayer1] = useState("Reece Walsh");
-  const [player2, setPlayer2] = useState("Kalyn Ponga");
+  const [player1, setPlayer1] = useState("");
+  const [player2, setPlayer2] = useState("");
   const [player1Position, setPlayer1Position] = useState("All");
   const [player2Position, setPlayer2Position] = useState("All");
   const [teammate1, setTeammate1] = useState("None");
@@ -685,157 +793,9 @@ export function PlayerComparison({
   const [teammate2Position, setTeammate2Position] = useState("All");
   const [teammateMode1, setTeammateMode1] = useState<TeammateMode>("both");
   const [teammateMode2, setTeammateMode2] = useState<TeammateMode>("both");
-  const [stat1, setStat1] = useState("Fantasy");
-  const [stat2, setStat2] = useState("All Runs");
+  const [stat1, setStat1] = useState("All Run Metres");
+  const [stat2, setStat2] = useState("Kicking Metres");
   const [wwYear, setWwYear] = useState(selectedYears[0] ?? "");
-  const [roundYear, setRoundYear] = useState(selectedYears[0] ?? "");
-
-  const presetPayload = useMemo<Record<string, unknown>>(
-    () => ({
-      selectedYears,
-      finalsMode,
-      minutesOverFilter,
-      minutesUnderFilter,
-      percentileScope,
-      player1,
-      player2,
-      player1Position,
-      player2Position,
-      teammate1,
-      teammate2,
-      teammate1Position,
-      teammate2Position,
-      teammateMode1,
-      teammateMode2,
-      stat1,
-      stat2,
-      wwYear,
-      roundYear,
-    }),
-    [
-      selectedYears,
-      finalsMode,
-      minutesOverFilter,
-      minutesUnderFilter,
-      percentileScope,
-      player1,
-      player2,
-      player1Position,
-      player2Position,
-      teammate1,
-      teammate2,
-      teammate1Position,
-      teammate2Position,
-      teammateMode1,
-      teammateMode2,
-      stat1,
-      stat2,
-      wwYear,
-      roundYear,
-    ]
-  );
-
-  const applyPreset = useCallback(
-    async (payload: Record<string, unknown>) => {
-      const validYears = Array.isArray(payload.selectedYears)
-        ? payload.selectedYears
-            .filter((value): value is string => typeof value === "string")
-            .filter((year) => unlockedYears.includes(year))
-        : [];
-
-      if (validYears.length > 0) {
-        await handleYearsChange(validYears);
-      }
-
-      const fallbackYear = validYears[0] ?? selectedYears[0] ?? "";
-
-      if (payload.finalsMode === "Yes" || payload.finalsMode === "No") {
-        setFinalsMode(payload.finalsMode);
-      }
-      if (typeof payload.minutesOverFilter === "string") {
-        setMinutesOverFilter(payload.minutesOverFilter);
-      }
-      if (typeof payload.minutesUnderFilter === "string") {
-        setMinutesUnderFilter(payload.minutesUnderFilter);
-      }
-      // Backward compatibility for older presets using single minutes mode/threshold.
-      if (
-        typeof payload.minMinutes === "number" &&
-        Number.isFinite(payload.minMinutes) &&
-        (payload.minutesMode === "All" || payload.minutesMode === "Over" || payload.minutesMode === "Under")
-      ) {
-        const legacyMinutes = Math.max(0, Math.round(payload.minMinutes));
-        const legacyValue =
-          legacyMinutes <= 0
-            ? "Any"
-            : [...MINUTES_FILTER_OPTIONS]
-                .filter((opt) => opt !== "Any")
-                .reduce((best, opt) => {
-                  const current = parseMinutesFilterOption(opt);
-                  const bestValue = parseMinutesFilterOption(best);
-                  return Math.abs(current - legacyMinutes) < Math.abs(bestValue - legacyMinutes) ? opt : best;
-                }, "10 Mins");
-        if (payload.minutesMode === "All") {
-          setMinutesOverFilter("Any");
-          setMinutesUnderFilter("Any");
-        } else if (payload.minutesMode === "Over") {
-          setMinutesOverFilter(legacyValue);
-        } else if (payload.minutesMode === "Under") {
-          setMinutesUnderFilter(legacyValue);
-        }
-      }
-      if (
-        payload.percentileScope === "Position" ||
-        payload.percentileScope === "All Players"
-      ) {
-        setPercentileScope(payload.percentileScope);
-      }
-
-      if (typeof payload.player1 === "string") setPlayer1(payload.player1);
-      if (typeof payload.player2 === "string") setPlayer2(payload.player2);
-      if (typeof payload.player1Position === "string") {
-        setPlayer1Position(payload.player1Position);
-      }
-      if (typeof payload.player2Position === "string") {
-        setPlayer2Position(payload.player2Position);
-      }
-      if (typeof payload.teammate1 === "string") setTeammate1(payload.teammate1);
-      if (typeof payload.teammate2 === "string") setTeammate2(payload.teammate2);
-      if (typeof payload.teammate1Position === "string") {
-        setTeammate1Position(payload.teammate1Position);
-      }
-      if (typeof payload.teammate2Position === "string") {
-        setTeammate2Position(payload.teammate2Position);
-      }
-      if (
-        payload.teammateMode1 === "both" ||
-        payload.teammateMode1 === "with" ||
-        payload.teammateMode1 === "without"
-      ) {
-        setTeammateMode1(payload.teammateMode1);
-      }
-      if (
-        payload.teammateMode2 === "both" ||
-        payload.teammateMode2 === "with" ||
-        payload.teammateMode2 === "without"
-      ) {
-        setTeammateMode2(payload.teammateMode2);
-      }
-      if (typeof payload.stat1 === "string") setStat1(payload.stat1);
-      if (typeof payload.stat2 === "string") setStat2(payload.stat2);
-      if (typeof payload.wwYear === "string") {
-        setWwYear(payload.wwYear);
-      } else if (fallbackYear) {
-        setWwYear(fallbackYear);
-      }
-      if (typeof payload.roundYear === "string") {
-        setRoundYear(payload.roundYear);
-      } else if (fallbackYear) {
-        setRoundYear(fallbackYear);
-      }
-    },
-    [handleYearsChange, selectedYears, unlockedYears]
-  );
 
   useEffect(() => {
     if (selectedYears.length > 0 || unlockedYears.length === 0) return;
@@ -848,10 +808,10 @@ export function PlayerComparison({
       hasBootstrappedFetch.current = true;
       return;
     }
-    if (selectedYears.length === 0) return;
+    if (unlockedYears.length === 0) return;
     hasBootstrappedFetch.current = true;
-    void handleYearsChange(selectedYears);
-  }, [allData.length, handleYearsChange, initialData.length, selectedYears]);
+    void loadAllUnlockedYears();
+  }, [allData.length, initialData.length, loadAllUnlockedYears, unlockedYears.length]);
 
   useEffect(() => {
     const validYears = selectedYears.filter((year) => unlockedYears.includes(year));
@@ -861,6 +821,14 @@ export function PlayerComparison({
     if (!hasChanged) return;
     void handleYearsChange(validYears);
   }, [handleYearsChange, selectedYears, unlockedYears]);
+
+  useEffect(() => {
+    const loadedYears = [...new Set(allData.map((row) => row.Year))];
+    const missingUnlockedYear = unlockedYears.some((year) => !loadedYears.includes(year));
+    const hasLockedYearLoaded = loadedYears.some((year) => !unlockedYears.includes(year));
+    if (!missingUnlockedYear && !hasLockedYearLoaded) return;
+    void loadAllUnlockedYears();
+  }, [allData, loadAllUnlockedYears, unlockedYears]);
 
   const sortPlayersByRank = useCallback((names: string[]) => {
     return [...names].sort((a, b) => {
@@ -923,10 +891,38 @@ export function PlayerComparison({
 
   useEffect(() => {
     if (!hasLoadedData) return;
-    if (!player1 && p1PlayerOptions.length > 0) {
-      setPlayer1(p1PlayerOptions[0]);
+    const findPreferredPlayer = (options: string[], candidates: string[], exclude?: string) => {
+      for (const candidate of candidates) {
+        const exact = options.find(
+          (name) => name !== exclude && name.toLowerCase() === candidate.toLowerCase()
+        );
+        if (exact) return exact;
+      }
+      for (const candidate of candidates) {
+        const partial = options.find(
+          (name) => name !== exclude && name.toLowerCase().includes(candidate.toLowerCase())
+        );
+        if (partial) return partial;
+      }
+      return options.find((name) => name !== exclude) ?? "";
+    };
+
+    const nextPlayer1 = p1PlayerOptions.includes(player1)
+      ? player1
+      : findPreferredPlayer(p1PlayerOptions, DEFAULT_PLAYER_1_CANDIDATES);
+    if (nextPlayer1 !== player1) {
+      setPlayer1(nextPlayer1);
+      return;
     }
-  }, [hasLoadedData, player1, p1PlayerOptions]);
+
+    if (player2 === "None") return;
+    const nextPlayer2 = p2PlayerOptions.includes(player2)
+      ? player2
+      : (findPreferredPlayer(p2PlayerOptions, DEFAULT_PLAYER_2_CANDIDATES, nextPlayer1) || "None");
+    if (nextPlayer2 !== player2) {
+      setPlayer2(nextPlayer2);
+    }
+  }, [hasLoadedData, p1PlayerOptions, p2PlayerOptions, player1, player2]);
 
   const handleTeammate1Change = useCallback((value: string) => {
     setTeammate1(value);
@@ -982,6 +978,27 @@ export function PlayerComparison({
   );
 
   // Filter by teammate
+  const p1PlotBaseRows = useMemo(
+    () =>
+      plotDf.filter(
+        (r) =>
+          r.Name === effectiveP1 &&
+          (effectiveP1Position === "All" || r.Position === effectiveP1Position)
+      ),
+    [plotDf, effectiveP1, effectiveP1Position]
+  );
+  const p2PlotBaseRows = useMemo(
+    () =>
+      !hasTwoPlayers
+        ? []
+        : plotDf.filter(
+            (r) =>
+              r.Name === player2 &&
+              (player2Position === "All" || r.Position === player2Position)
+          ),
+    [plotDf, hasTwoPlayers, player2, player2Position]
+  );
+
   const p1Rows = useMemo(() => {
     if (effectiveP1Teammate === "None" || effectiveP1TeammateMode === "both") return p1BaseRows;
     return filterByTeammate(
@@ -1004,6 +1021,27 @@ export function PlayerComparison({
       teammate2Position
     );
   }, [hasTwoPlayers, p2BaseRows, teammate2, teammateMode2, dfYearFinals, teammate2Position]);
+  const p1PlotRows = useMemo(() => {
+    if (effectiveP1Teammate === "None" || effectiveP1TeammateMode === "both") return p1PlotBaseRows;
+    return filterByTeammate(
+      p1PlotBaseRows,
+      effectiveP1Teammate,
+      effectiveP1TeammateMode === "with",
+      plotDfYearFinals,
+      effectiveP1TeammatePosition
+    );
+  }, [effectiveP1Teammate, effectiveP1TeammateMode, effectiveP1TeammatePosition, p1PlotBaseRows, plotDfYearFinals]);
+  const p2PlotRows = useMemo(() => {
+    if (!hasTwoPlayers) return [];
+    if (teammate2 === "None" || teammateMode2 === "both") return p2PlotBaseRows;
+    return filterByTeammate(
+      p2PlotBaseRows,
+      teammate2,
+      teammateMode2 === "with",
+      plotDfYearFinals,
+      teammate2Position
+    );
+  }, [hasTwoPlayers, p2PlotBaseRows, plotDfYearFinals, teammate2, teammate2Position, teammateMode2]);
 
   // Stats
   const statsToShow = useMemo(
@@ -1035,30 +1073,11 @@ export function PlayerComparison({
   );
   const p1CardImage = useMemo(
     () => resolvePlayerImage(effectiveP1, p1CardTeam, playerImages),
-    [effectiveP1, p1CardTeam, p1AllRows, playerImages]
-  );
-  const p1CardPosition = useMemo(
-    () => primaryValueForLatestSelectedYear(p1AllRows, selectedYears, "Position"),
-    [p1AllRows, selectedYears]
+    [effectiveP1, p1CardTeam, playerImages]
   );
   const p2CardImage = useMemo(
     () => (hasTwoPlayers ? resolvePlayerImage(player2, p2CardTeam, playerImages) : null),
-    [hasTwoPlayers, player2, p2CardTeam, p2AllRows, playerImages]
-  );
-  const p2CardPosition = useMemo(
-    () => (hasTwoPlayers ? primaryValueForLatestSelectedYear(p2AllRows, selectedYears, "Position") : null),
-    [hasTwoPlayers, p2AllRows, selectedYears]
-  );
-  const p1CardLogoUrl = useMemo(
-    () => resolveTeamLogoUrl(p1CardImage?.team ?? p1CardTeam, teamLogos),
-    [p1CardImage?.team, p1CardTeam, teamLogos]
-  );
-  const p2CardLogoUrl = useMemo(
-    () =>
-      hasTwoPlayers
-        ? resolveTeamLogoUrl(p2CardImage?.team ?? p2CardTeam, teamLogos)
-        : null,
-    [hasTwoPlayers, p2CardImage?.team, p2CardTeam, teamLogos]
+    [hasTwoPlayers, player2, p2CardTeam, playerImages]
   );
 
   const percentileResults = useMemo(() => {
@@ -1111,25 +1130,6 @@ export function PlayerComparison({
     return results;
   }, [effectiveP1, effectiveP1Label, p1Rows, hasTwoPlayers, player2, player2Label, p2Rows, statsToShow]);
 
-  // Chart data — filtered to a single year for round charts
-  const effectiveRoundYear =
-    selectedYears.includes(roundYear) ? roundYear : (selectedYears[0] || "");
-  const p1RoundRows = useMemo(
-    () => p1Rows.filter((r) => r.Year === effectiveRoundYear),
-    [p1Rows, effectiveRoundYear]
-  );
-  const p2RoundRows = useMemo(
-    () => p2Rows.filter((r) => r.Year === effectiveRoundYear),
-    [p2Rows, effectiveRoundYear]
-  );
-  const p1RoundData = useMemo(
-    () => computeRoundData(p1RoundRows, stat1),
-    [p1RoundRows, stat1]
-  );
-  const p2RoundData = useMemo(
-    () => (hasTwoPlayers ? computeRoundData(p2RoundRows, stat1) : []),
-    [p2RoundRows, hasTwoPlayers, stat1]
-  );
   // Build chart panels
   const chartPanels = useMemo(() => {
     const panels: { id: string; title: string; content: React.ReactNode; wide?: boolean }[] = [];
@@ -1214,70 +1214,100 @@ export function PlayerComparison({
       });
     }
 
-    // Round (full-width when 2 stats, since it shows side-by-side)
-    const roundYearPicker = selectedYears.length > 1 ? (
-      <div className="mb-3">
-        <PillRadio options={selectedYears} value={effectiveRoundYear} onChange={setRoundYear} />
-      </div>
-    ) : null;
-
     panels.push({
-      id: "round-1",
-      title: `${stat1}: Stat Comparison by Round`,
+      id: "rolling-p1",
+      title: `${effectiveP1Label}: ${stat1} Rolling Average`,
       wide: true,
       content: (
-        <div>
-          {roundYearPicker}
-          <LineRound
-            title={
-              hasTwoPlayers
-                ? `${stat1}: ${effectiveP1Label} vs ${player2Label}`
-                : `${effectiveP1Label} \u2014 ${stat1} by Round`
-            }
-            stat={stat1}
-            series={
-              hasTwoPlayers
-                ? [
-                    { label: effectiveP1Label, data: p1RoundData },
-                    { label: player2Label, data: p2RoundData },
-                  ]
-                : [{ label: effectiveP1Label, data: p1RoundData }]
-            }
-            mode={hasTwoPlayers ? "compare" : "single"}
-          />
-        </div>
+        <FantasyGameLogTrendBrush
+          rows={p1PlotRows}
+          headerTitle="Rolling Average Plot"
+          valueLabel={stat1}
+          primarySeriesLabel={effectiveP1Label}
+          valueAccessor={(row) => toFiniteNumber(row[stat1]) ?? 0}
+        />
       ),
     });
-    if (hasTwoStats) {
-      const p1Stat2Data = computeRoundData(p1RoundRows, stat2);
-      const p2Stat2Data = hasTwoPlayers ? computeRoundData(p2RoundRows, stat2) : [];
+    if (hasTwoPlayers) {
       panels.push({
-        id: "round-2",
-        title: `${stat2}: Stat Comparison by Round`,
+        id: "rolling-p2",
+        title: `${player2Label}: ${stat1} Rolling Average`,
         wide: true,
         content: (
-          <div>
-            {roundYearPicker}
-            <LineRound
-              title={
-                hasTwoPlayers
-                  ? `${stat2}: ${effectiveP1Label} vs ${player2Label}`
-                  : `${effectiveP1Label} \u2014 ${stat2} by Round`
-              }
-              stat={stat2}
-              series={
-                hasTwoPlayers
-                  ? [
-                      { label: effectiveP1Label, data: p1Stat2Data },
-                      { label: player2Label, data: p2Stat2Data },
-                    ]
-                  : [{ label: effectiveP1Label, data: p1Stat2Data }]
-              }
-              mode={hasTwoPlayers ? "compare" : "single"}
-            />
-          </div>
+          <FantasyGameLogTrendBrush
+            rows={p2PlotRows}
+            headerTitle="Rolling Average Plot"
+            valueLabel={stat1}
+            primarySeriesLabel={player2Label}
+            primaryBarColor="rgba(180, 112, 255, 0.42)"
+            valueAccessor={(row) => toFiniteNumber(row[stat1]) ?? 0}
+          />
         ),
       });
+    }
+    if (hasTwoStats) {
+      panels.push({
+        id: "rolling-p1-stat2",
+        title: `${effectiveP1Label}: ${stat2} Rolling Average`,
+        wide: true,
+        content: (
+          <FantasyGameLogTrendBrush
+            rows={p1PlotRows}
+            headerTitle="Rolling Average Plot"
+            valueLabel={stat2}
+            primarySeriesLabel={effectiveP1Label}
+            valueAccessor={(row) => toFiniteNumber(row[stat2]) ?? 0}
+          />
+        ),
+      });
+      if (hasTwoPlayers) {
+        panels.push({
+          id: "rolling-p2-stat2",
+          title: `${player2Label}: ${stat2} Rolling Average`,
+          wide: true,
+          content: (
+            <FantasyGameLogTrendBrush
+              rows={p2PlotRows}
+              headerTitle="Rolling Average Plot"
+              valueLabel={stat2}
+              primarySeriesLabel={player2Label}
+              primaryBarColor="rgba(180, 112, 255, 0.42)"
+              valueAccessor={(row) => toFiniteNumber(row[stat2]) ?? 0}
+            />
+          ),
+        });
+      }
+    }
+
+    panels.push({
+      id: "opp-p1",
+      title: `${effectiveP1Label}: ${stat1} Avg vs Opponent`,
+      wide: true,
+      content: <OpponentAverageHeatmap rows={p1PlotRows} stat={stat1} />,
+    });
+    if (hasTwoPlayers) {
+      panels.push({
+        id: "opp-p2",
+        title: `${player2Label}: ${stat1} Avg vs Opponent`,
+        wide: true,
+        content: <OpponentAverageHeatmap rows={p2PlotRows} stat={stat1} />,
+      });
+    }
+    if (hasTwoStats) {
+      panels.push({
+        id: "opp-p1-stat2",
+        title: `${effectiveP1Label}: ${stat2} Avg vs Opponent`,
+        wide: true,
+        content: <OpponentAverageHeatmap rows={p1PlotRows} stat={stat2} />,
+      });
+      if (hasTwoPlayers) {
+        panels.push({
+          id: "opp-p2-stat2",
+          title: `${player2Label}: ${stat2} Avg vs Opponent`,
+          wide: true,
+          content: <OpponentAverageHeatmap rows={p2PlotRows} stat={stat2} />,
+        });
+      }
     }
 
     const effectiveWwYear =
@@ -1391,104 +1421,51 @@ export function PlayerComparison({
 
     return panels;
   }, [
-    effectiveP1, effectiveP1Label, player2, player2Label, stat1, stat2, p1Rows, p2Rows,
-    p1RoundData, p2RoundData,
-    p1RoundRows, p2RoundRows, effectiveRoundYear, setRoundYear,
+    effectiveP1, effectiveP1Label, player2, player2Label, stat1, stat2, p1Rows, p2Rows, p1PlotRows, p2PlotRows,
     hasTwoPlayers, effectiveP1Teammate, teammate1Label, teammate2, teammate2Label, effectiveP1TeammatePosition, teammate2Position, dfYearFinals, wwYear, selectedYears,
     p1BaseRows, p2BaseRows,
   ]);
 
+  const filteredChartPanels = useMemo(
+    () => chartPanels.filter((panel) => !/Rolling Average|Avg vs Opponent/i.test(panel.title)),
+    [chartPanels]
+  );
+
+  const historyChartPanels = useMemo(
+    () => chartPanels.filter((panel) => /Rolling Average|Avg vs Opponent/i.test(panel.title)),
+    [chartPanels]
+  );
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
-        <FilterBar
-          years={availableYears}
-          selectedYears={selectedYears}
-          onYearsChange={handleYearsChange}
-          finalsMode={finalsMode}
-          onFinalsModeChange={setFinalsMode}
-          minutesThreshold={0}
-          onMinutesThresholdChange={() => {}}
-          minutesMode="All"
-          onMinutesModeChange={() => {}}
-          showPosition={false}
-          showMinutes={false}
-          showPresets={false}
-          embedded
-          showYear
-          showFinals
-          mobileColumns={2}
-        />
-
-        <div className="mt-4 grid grid-cols-2 gap-4">
-          <Select
-            label="Minutes Over"
-            value={minutesOverFilter}
-            options={[...MINUTES_FILTER_OPTIONS]}
-            onChange={setMinutesOverFilter}
-          />
-          <Select
-            label="Minutes Under"
-            value={minutesUnderFilter}
-            options={[...MINUTES_FILTER_OPTIONS]}
-            onChange={setMinutesUnderFilter}
-          />
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+          Players & Stats
         </div>
-
-        <div className="mt-6">
-          <PlayerSelectors
-            positions={positions}
-            playerList={p1PlayerOptions}
-            player1={player1 || p1PlayerOptions[0] || ""}
-            onPlayer1Change={setPlayer1}
-            player1Position={player1Position}
-            onPlayer1PositionChange={setPlayer1Position}
-            teammate1Options={tm1Options}
-            teammate1={teammate1}
-            onTeammate1Change={handleTeammate1Change}
-            teammate1Position={teammate1Position}
-            onTeammate1PositionChange={setTeammate1Position}
-            teammateMode1={teammateMode1}
-            onTeammateMode1Change={setTeammateMode1}
-            player2Options={p2PlayerOptions}
-            player2={player2}
-            onPlayer2Change={setPlayer2}
-            player2Position={player2Position}
-            onPlayer2PositionChange={setPlayer2Position}
-            teammate2Options={tm2Options}
-            teammate2={teammate2}
-            onTeammate2Change={handleTeammate2Change}
-            teammate2Position={teammate2Position}
-            onTeammate2PositionChange={setTeammate2Position}
-            teammateMode2={teammateMode2}
-            onTeammateMode2Change={setTeammateMode2}
-            statList={statList}
-            stat1={stat1}
-            onStat1Change={setStat1}
-            stat2={stat2}
-            onStat2Change={setStat2}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <SearchableSelect
+            label="Player 1"
+            value={player1 || p1PlayerOptions[0] || ""}
+            options={player2 !== "None" ? ["None", ...p1PlayerOptions] : p1PlayerOptions}
+            onChange={setPlayer1}
           />
-        </div>
-
-        <div className="mt-6 border-t border-nrl-border pt-3">
-          <FilterBar
-            years={availableYears}
-            selectedYears={selectedYears}
-            onYearsChange={handleYearsChange}
-            finalsMode={finalsMode}
-            onFinalsModeChange={setFinalsMode}
-            minutesThreshold={0}
-            onMinutesThresholdChange={() => {}}
-            minutesMode="All"
-            onMinutesModeChange={() => {}}
-            presetsScope="player"
-            presetPayload={presetPayload}
-            onApplyPreset={applyPreset}
-            showYear={false}
-            showPosition={false}
-            showFinals={false}
-            showMinutes={false}
-            embedded
+          <SearchableSelect
+            label="Player 2 (Optional)"
+            value={player2}
+            options={["None", ...p2PlayerOptions]}
+            onChange={setPlayer2}
+          />
+          <SearchableSelect
+            label="Stat 1"
+            value={stat1}
+            options={statList}
+            onChange={setStat1}
+          />
+          <SearchableSelect
+            label="Stat 2 (Optional)"
+            value={stat2}
+            options={["None", ...statList]}
+            onChange={setStat2}
           />
         </div>
       </div>
@@ -1507,8 +1484,140 @@ export function PlayerComparison({
         </div>
       )}
       {allData.length > 0 && (
-        <>
-          <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
+        <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+            Filters & Analysis
+          </div>
+
+          <div className="mt-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+              Analysis Filters
+            </div>
+            <FilterBar
+              years={availableYears}
+              selectedYears={selectedYears}
+              onYearsChange={handleYearsChange}
+              finalsMode={finalsMode}
+              onFinalsModeChange={setFinalsMode}
+              minutesThreshold={0}
+              onMinutesThresholdChange={() => {}}
+              minutesMode="All"
+              onMinutesModeChange={() => {}}
+              showPosition={false}
+              showMinutes={false}
+              showPresets={false}
+              embedded
+              showYear
+              showFinals
+              mobileColumns={2}
+            />
+
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <Select
+                label="Minutes Over"
+                value={minutesOverFilter}
+                options={[...MINUTES_FILTER_OPTIONS]}
+                onChange={setMinutesOverFilter}
+              />
+              <Select
+                label="Minutes Under"
+                value={minutesUnderFilter}
+                options={[...MINUTES_FILTER_OPTIONS]}
+                onChange={setMinutesUnderFilter}
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[170px_1fr_auto] lg:items-end">
+                <Select
+                  label="Player 1 Position"
+                  value={player1Position}
+                  options={["All", ...positions]}
+                  onChange={setPlayer1Position}
+                />
+                <SearchableSelect
+                  label="Player 1 Teammate"
+                  value={teammate1}
+                  options={["None", ...tm1Options]}
+                  onChange={handleTeammate1Change}
+                  disabled={player1 === "None"}
+                />
+                <div className="pb-0.5">
+                  {teammate1 !== "None" ? (
+                    <div className="flex flex-col gap-0.5">
+                      <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
+                        With / Without
+                      </div>
+                      <div className="min-h-[30px] flex items-center -mt-0.5 lg:-mt-1">
+                        <PillRadio
+                          options={["Both", "With", "Without"]}
+                          value={teammateMode1[0].toUpperCase() + teammateMode1.slice(1)}
+                          onChange={(value) => setTeammateMode1(value.toLowerCase() as typeof teammateMode1)}
+                          disabled={player1 === "None"}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                {teammate1 !== "None" ? (
+                  <Select
+                    label="Player 1 Tm Position"
+                    value={teammate1Position}
+                    options={["All", ...positions]}
+                    onChange={setTeammate1Position}
+                    disabled={player1 === "None"}
+                  />
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[170px_1fr_auto] lg:items-end">
+                <Select
+                  label="Player 2 Position"
+                  value={player2Position}
+                  options={["All", ...positions]}
+                  onChange={setPlayer2Position}
+                />
+                <SearchableSelect
+                  label="Player 2 Teammate"
+                  value={teammate2}
+                  options={["None", ...tm2Options]}
+                  onChange={handleTeammate2Change}
+                  disabled={player2 === "None"}
+                />
+                <div className="pb-0.5">
+                  {teammate2 !== "None" ? (
+                    <div className="flex flex-col gap-0.5">
+                      <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
+                        With / Without
+                      </div>
+                      <div className="min-h-[30px] flex items-center -mt-0.5 lg:-mt-1">
+                        <PillRadio
+                          options={["Both", "With", "Without"]}
+                          value={teammateMode2[0].toUpperCase() + teammateMode2.slice(1)}
+                          onChange={(value) => setTeammateMode2(value.toLowerCase() as typeof teammateMode2)}
+                          disabled={player2 === "None"}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                {teammate2 !== "None" ? (
+                  <Select
+                    label="Player 2 Tm Position"
+                    value={teammate2Position}
+                    options={["All", ...positions]}
+                    onChange={setTeammate2Position}
+                    disabled={player2 === "None"}
+                  />
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-nrl-border pt-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+              Summary & Filtered Charts
+            </div>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <div className="flex h-full flex-col">
                 {entities.map((e, i) => (
@@ -1528,23 +1637,17 @@ export function PlayerComparison({
                       hasTwoPlayers ? "" : "mx-auto max-w-[14rem] xl:max-w-[16rem]"
                     }`}
                   >
-                    <PlayerImageCard
+                    <SimplePlayerPhotoTile
                       playerName={effectiveP1}
                       imageRow={p1CardImage}
-                      teamLogoUrl={p1CardLogoUrl}
-                      fantasyPosition={p1CardPosition}
-                      frameless
                       priority
                     />
                   </div>
                   {hasTwoPlayers ? (
                     <div className="flex h-full w-full items-center justify-center">
-                      <PlayerImageCard
+                      <SimplePlayerPhotoTile
                         playerName={player2}
                         imageRow={p2CardImage}
-                        teamLogoUrl={p2CardLogoUrl}
-                        fantasyPosition={p2CardPosition}
-                        frameless
                         priority
                       />
                     </div>
@@ -1566,10 +1669,20 @@ export function PlayerComparison({
                 <RecentForm results={recentFormResults} single={!hasTwoPlayers} />
               </div>
             </div>
+            <ChartPanelGrid panels={filteredChartPanels} unlockAll={hasClientProPlotAccess} />
           </div>
-
-          <ChartPanelGrid panels={chartPanels} unlockAll={canBypassPlotGate} />
-        </>
+        </div>
+      )}
+      {allData.length > 0 && historyChartPanels.length > 0 && (
+        <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+            Full History Plots
+          </div>
+          <div className="mt-4 text-xs text-nrl-muted">
+            Rolling average and avg vs opponent use the full unlocked-year history rather than the filters above.
+          </div>
+          <ChartPanelGrid panels={historyChartPanels} unlockAll={hasClientProPlotAccess} />
+        </div>
       )}
     </div>
   );

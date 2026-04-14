@@ -4,7 +4,6 @@ export const BETTING_BOOKIE_COLUMNS = [
   "Unibet",
   "Palmerbet",
   "Betright",
-  "Betr",
 ] as const;
 
 export type BettingBookie = (typeof BETTING_BOOKIE_COLUMNS)[number];

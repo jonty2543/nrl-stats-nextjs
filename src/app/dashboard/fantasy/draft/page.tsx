@@ -1,0 +1,72 @@
+import { auth } from "@clerk/nextjs/server"
+import { FantasyDraftPricingPage } from "@/components/views/fantasy-draft-pricing-page"
+import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
+import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
+import { fetchFantasyPlayersSnapshot, fetchLatestFantasyOwnershipBaselineSnapshot } from "@/lib/fantasy/nrl"
+import {
+  fetchPlayerFantasySd5yFromSupabase,
+  fetchPlayerImages,
+  fetchPositionFantasySd5yFromSupabase,
+} from "@/lib/supabase/queries"
+
+export const dynamic = "force-dynamic"
+
+async function fetchCoachProjectionsRaw(): Promise<unknown> {
+  try {
+    const response = await fetch("https://fantasy.nrl.com/data/nrl/coach/players.json", {
+      cache: "no-store",
+      headers: {
+        accept: "application/json",
+        "user-agent": "shortside/1.0",
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Coach projections fetch failed: ${response.status} ${response.statusText}`)
+    }
+
+    return response.json()
+  } catch (error) {
+    console.warn("Unable to fetch coach projections; continuing with empty projection payload.", error)
+    return null
+  }
+}
+
+export default async function FantasyDraftPricingRoutePage() {
+  const { userId } = await auth()
+  const locked = !(await getServerProPlotAccess(userId))
+
+  const [playerImages, fantasyPlayers, coachProjectionsRaw, ownershipBaselineSnapshot, draw2026Data, rawPlayerFantasySdRows, rawPositionFantasySdRows] = await Promise.all([
+    fetchPlayerImages(),
+    fetchFantasyPlayersSnapshot(),
+    fetchCoachProjectionsRaw(),
+    fetchLatestFantasyOwnershipBaselineSnapshot(),
+    loadDraw2026Data().catch(() => null),
+    fetchPlayerFantasySd5yFromSupabase().catch(() => []),
+    fetchPositionFantasySd5yFromSupabase().catch(() => []),
+  ])
+  const playerFantasySdRows = rawPlayerFantasySdRows.map((row) => ({
+    player: row.player,
+    primaryPosition: row.primary_position,
+    games: row.games,
+    fantasySd: row.fantasy_sd,
+  }))
+  const positionFantasySdRows = rawPositionFantasySdRows.map((row) => ({
+    position: row.position,
+    games: row.games,
+    fantasySd: row.fantasy_sd,
+  }))
+
+  return (
+    <FantasyDraftPricingPage
+      playerImages={playerImages}
+      fantasyPlayers={fantasyPlayers}
+      coachProjectionsRaw={coachProjectionsRaw}
+      ownershipBaselineSnapshot={ownershipBaselineSnapshot}
+      draw2026Data={draw2026Data}
+      playerFantasySdRows={playerFantasySdRows}
+      positionFantasySdRows={positionFantasySdRows}
+      locked={locked}
+    />
+  )
+}

@@ -4,7 +4,11 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/dashboard(.*)",
   "/api/player-stats(.*)",
+  "/api/stripe/checkout(.*)",
+  "/api/stripe/portal(.*)",
+  "/api/stripe/webhook(.*)",
   "/api/admin/rebuild-public-player-stats(.*)",
+  "/api/admin/capture-fantasy-ownership-snapshot(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
 ]);

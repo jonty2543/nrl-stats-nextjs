@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
 import { fetchAvailableYears, fetchPlayerStats } from "@/lib/supabase/queries";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
@@ -7,6 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth();
     const canAccessLoginSeason = Boolean(userId);
+    const canAccessProSeason = await getServerProPlotAccess(userId);
     const { searchParams } = request.nextUrl;
     const yearsParam = searchParams.get("years");
     const requestedYears = yearsParam
@@ -17,9 +19,11 @@ export async function GET(request: NextRequest) {
       : null;
 
     const allowedYears = requestedYears
-      ? requestedYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason, "stats"))
+      ? requestedYears.filter((year) =>
+          isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
+        )
       : (await fetchAvailableYears()).filter((year) =>
-          isAccessibleSeason(year, canAccessLoginSeason, "stats")
+          isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
         );
 
     if (allowedYears.length === 0) {

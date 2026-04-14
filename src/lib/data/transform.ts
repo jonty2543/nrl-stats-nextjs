@@ -408,7 +408,7 @@ export function aggregateTeamStats(playerRows: PlayerStat[]): TeamStat[] {
     }
   }
 
-  return [...groups.values()].map((g) => ({
+  const aggregatedRows = [...groups.values()].map((g) => ({
     Team: g.team as TeamStat["Team"],
     Year: g.year,
     Round: g.round,
@@ -418,6 +418,8 @@ export function aggregateTeamStats(playerRows: PlayerStat[]): TeamStat[] {
       TEAM_STATS.map((s) => [s, g.sums[s] ?? 0])
     ),
   })) as TeamStat[];
+
+  return aggregatedRows;
 }
 
 // ---------------------------------------------------------------------------

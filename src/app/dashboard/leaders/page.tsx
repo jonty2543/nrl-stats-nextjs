@@ -1,0 +1,59 @@
+import { auth } from "@clerk/nextjs/server"
+import { LeadersDashboard } from "@/components/views/leaders-dashboard"
+import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
+import { isAccessibleSeason } from "@/lib/access/season-access"
+import {
+  fetchAvailableYears,
+  fetchPlayerImages,
+  fetchPlayerStats,
+  fetchTeamStats,
+  fetchTeamLogos,
+} from "@/lib/supabase/queries"
+
+export const dynamic = "force-dynamic"
+
+interface LeadersPageProps {
+  searchParams: Promise<{
+    year?: string
+    view?: string
+  }>
+}
+
+export default async function LeadersPage({ searchParams }: LeadersPageProps) {
+  const { userId } = await auth()
+  const canAccessLoginSeason = Boolean(userId)
+  const canAccessProSeason = await getServerProPlotAccess(userId)
+  const { year, view } = await searchParams
+
+  const [availableYears, playerImages, teamLogos] = await Promise.all([
+    fetchAvailableYears(),
+    fetchPlayerImages(),
+    fetchTeamLogos(),
+  ])
+
+  const unlockedYears = availableYears.filter((season) =>
+    isAccessibleSeason(season, canAccessLoginSeason, "stats", canAccessProSeason)
+  )
+
+  const sortedYears = [...unlockedYears].sort((a, b) => Number(b) - Number(a))
+  const selectedYear = year && sortedYears.includes(year) ? year : (sortedYears[0] ?? "")
+  const selectedView = view === "teams" ? "teams" : "players"
+  const [playerRows, teamRows] = selectedYear
+    ? await Promise.all([
+        fetchPlayerStats([selectedYear]),
+        fetchTeamStats([selectedYear]),
+      ])
+    : [[], []]
+
+  return (
+    <LeadersDashboard
+      selectedYear={selectedYear}
+      selectedView={selectedView}
+      availableYears={sortedYears}
+      playerRows={playerRows}
+      teamRows={teamRows}
+      playerImages={playerImages}
+      teamLogos={teamLogos}
+    />
+  )
+}

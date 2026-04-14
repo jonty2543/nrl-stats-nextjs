@@ -117,6 +117,7 @@ export interface TeamStat {
   "Line Engaged Runs": number;
   "Tackle Breaks": number;
   "Hit Ups": number;
+  "Play The Ball": number;
   "Dummy Half Runs": number;
   "Dummy Half Run Metres": number;
   "One on One Steal": number;

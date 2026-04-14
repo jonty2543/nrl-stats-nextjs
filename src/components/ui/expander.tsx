@@ -38,7 +38,6 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
           <div className="min-w-0 flex-1 text-sm font-semibold leading-5 text-nrl-text">
             <span
               className="block overflow-hidden break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
-              title={title}
             >
               {title}
             </span>
@@ -72,7 +71,6 @@ export function Expander({ title, defaultExpanded = true, children }: ExpanderPr
               <div className="min-w-0 flex-1 text-sm font-semibold leading-5 text-nrl-text">
                 <span
                   className="block overflow-hidden break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
-                  title={title}
                 >
                   {title}
                 </span>

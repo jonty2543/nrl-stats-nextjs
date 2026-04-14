@@ -32,6 +32,35 @@ export interface FantasyPlayerSnapshot {
   isBye: boolean
   locked: boolean
   priceHistory: Record<string, number>
+  scoreHistory: Record<string, number>
+}
+
+export interface FantasyCoachPlayerSnapshot {
+  id: number
+  projectedScore: number | null
+  projectedScores: Record<string, number>
+  breakEven: number | null
+  breakEvens: Record<string, number>
+}
+
+export interface FantasyCoachRoundMetrics {
+  round: number | null
+  projection: number | null
+  breakEven: number | null
+}
+
+type FantasyMetricOffsetType = "projection" | "breakEven"
+
+export interface FantasyOwnershipBaselinePoint {
+  playerId: number
+  name: string
+  ownedBy: number | null
+}
+
+export interface FantasyOwnershipBaselineSnapshot {
+  capturedAt: string
+  snapshotWeekBrisbane: string
+  points: FantasyOwnershipBaselinePoint[]
 }
 
 export interface FantasyOwnershipBaselinePoint {
@@ -68,6 +97,7 @@ interface FantasyPlayerRaw {
     break_even?: unknown
     breakeven?: unknown
     prices?: unknown
+    scores?: unknown
   } | null
 }
 
@@ -102,6 +132,26 @@ function extractPriceHistory(input: unknown): Record<string, number> {
   return out
 }
 
+function extractScoreHistory(input: unknown): Record<string, number> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {}
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(input)) {
+    const n = toNum(v)
+    if (n !== null) out[k] = n
+  }
+  return out
+}
+
+function extractIntHistory(input: unknown): Record<string, number> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {}
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(input)) {
+    const n = toInt(v)
+    if (n !== null) out[k] = n
+  }
+  return out
+}
+
 function getLatestPrice(cost: number | null, priceHistory: Record<string, number>): number | null {
   const entries = Object.entries(priceHistory)
     .map(([round, price]) => ({ round: Number.parseInt(round, 10), price }))
@@ -127,6 +177,7 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
   const positionLabel = positionLabels.join("/") || "N/A"
 
   const priceHistory = extractPriceHistory(raw.stats?.prices)
+  const scoreHistory = extractScoreHistory(raw.stats?.scores)
   const cost = toInt(raw.cost)
   const latestPrice = getLatestPrice(cost, priceHistory)
   const be =
@@ -157,33 +208,191 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
     isBye: toBool(raw.is_bye),
     locked: toBool(raw.locked),
     priceHistory,
+    scoreHistory,
   }
 }
 
 export async function fetchFantasyPlayersSnapshot(): Promise<FantasyPlayerSnapshot[]> {
-  const res = await fetch("https://fantasy.nrl.com/data/nrl/players.json", {
-    next: { revalidate: 300 },
-    headers: {
-      accept: "application/json",
-    },
-  })
+  try {
+    const res = await fetch("https://fantasy.nrl.com/data/nrl/players.json", {
+      next: { revalidate: 300 },
+      headers: {
+        accept: "application/json",
+      },
+    })
 
-  if (!res.ok) {
-    throw new Error(`Fantasy players fetch failed: ${res.status} ${res.statusText}`)
+    if (!res.ok) {
+      throw new Error(`Fantasy players fetch failed: ${res.status} ${res.statusText}`)
+    }
+
+    const raw = (await res.json()) as unknown
+    if (!Array.isArray(raw)) return []
+
+    return raw
+      .map((row) => normaliseOne(row as FantasyPlayerRaw))
+      .filter((row): row is FantasyPlayerSnapshot => row !== null)
+      .sort((a, b) => {
+        const ownA = a.ownedBy ?? -1
+        const ownB = b.ownedBy ?? -1
+        if (ownA !== ownB) return ownB - ownA
+        return a.name.localeCompare(b.name)
+      })
+  } catch (error) {
+    console.warn("Unable to fetch fantasy players snapshot; using empty list.", error)
+    return []
+  }
+}
+
+interface FantasyCoachPlayerRaw {
+  proj_score?: unknown
+  proj_scores?: unknown
+  break_even?: unknown
+  break_evens?: unknown
+}
+
+function normaliseCoachOne(id: string, raw: FantasyCoachPlayerRaw): FantasyCoachPlayerSnapshot | null {
+  const parsedId = toInt(id)
+  if (parsedId === null) return null
+
+  return {
+    id: parsedId,
+    projectedScore: toNum(raw.proj_score),
+    projectedScores: extractScoreHistory(raw.proj_scores),
+    breakEven: toInt(raw.break_even),
+    breakEvens: extractIntHistory(raw.break_evens),
+  }
+}
+
+export async function fetchFantasyCoachPlayersSnapshot(): Promise<FantasyCoachPlayerSnapshot[]> {
+  try {
+    const res = await fetch("https://fantasy.nrl.com/data/nrl/coach/players.json", {
+      next: { revalidate: 300 },
+      headers: {
+        accept: "application/json",
+        "user-agent": "shortside/1.0",
+      },
+    })
+
+    if (!res.ok) {
+      throw new Error(`Fantasy coach players fetch failed: ${res.status} ${res.statusText}`)
+    }
+
+    const raw = (await res.json()) as unknown
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return []
+
+    return Object.entries(raw as Record<string, FantasyCoachPlayerRaw>)
+      .map(([id, row]) => normaliseCoachOne(id, row))
+      .filter((row): row is FantasyCoachPlayerSnapshot => row !== null)
+  } catch (error) {
+    console.warn("Unable to fetch fantasy coach players snapshot; using empty list.", error)
+    return []
+  }
+}
+
+export function getFantasyCoachRoundMetrics(player: FantasyCoachPlayerSnapshot | null | undefined): FantasyCoachRoundMetrics {
+  if (!player) {
+    return { round: null, projection: null, breakEven: null }
   }
 
-  const raw = (await res.json()) as unknown
-  if (!Array.isArray(raw)) return []
+  const rounds = [...new Set([
+    ...Object.keys(player.projectedScores ?? {}),
+    ...Object.keys(player.breakEvens ?? {}),
+  ])]
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b)
 
-  return raw
-    .map((row) => normaliseOne(row as FantasyPlayerRaw))
-    .filter((row): row is FantasyPlayerSnapshot => row !== null)
-    .sort((a, b) => {
-      const ownA = a.ownedBy ?? -1
-      const ownB = b.ownedBy ?? -1
-      if (ownA !== ownB) return ownB - ownA
-      return a.name.localeCompare(b.name)
-    })
+  const round = rounds[0] ?? null
+
+  return {
+    round,
+    projection: round != null
+      ? (player.projectedScores[String(round)] ?? player.projectedScore ?? null)
+      : (player.projectedScore ?? null),
+    breakEven: round != null
+      ? (player.breakEvens[String(round)] ?? player.breakEven ?? null)
+      : (player.breakEven ?? null),
+  }
+}
+
+function stableMetricOffset(playerId: number, round: number | null, metric: FantasyMetricOffsetType): number {
+  const input = `${playerId}:${round ?? 0}:${metric}`
+  let hash = 0
+
+  for (let index = 0; index < input.length; index += 1) {
+    hash = ((hash * 31) + input.charCodeAt(index)) | 0
+  }
+
+  return (Math.abs(hash) % 7) - 3
+}
+
+function applyFantasyMetricOffset(
+  value: number | null,
+  playerId: number | null,
+  round: number | null,
+  metric: FantasyMetricOffsetType,
+): number | null {
+  if (value == null || playerId == null) return value
+  return Math.round(value + stableMetricOffset(playerId, round, metric))
+}
+
+export function buildFantasyOwnershipDeltaByPlayerId(
+  fantasyPlayers: FantasyPlayerSnapshot[],
+  ownershipBaselineSnapshot: FantasyOwnershipBaselineSnapshot | null | undefined,
+): Map<number, number | null> {
+  const baselineByPlayerId = new Map<number, number | null>()
+  for (const point of ownershipBaselineSnapshot?.points ?? []) {
+    baselineByPlayerId.set(point.playerId, point.ownedBy)
+  }
+
+  const deltaByPlayerId = new Map<number, number | null>()
+  for (const player of fantasyPlayers) {
+    const baseline = baselineByPlayerId.get(player.id)
+    deltaByPlayerId.set(
+      player.id,
+      baseline == null || player.ownedBy == null ? null : player.ownedBy - baseline,
+    )
+  }
+
+  return deltaByPlayerId
+}
+
+export function getTopFantasyOwnershipRise(deltaByPlayerId: Map<number, number | null>): number | null {
+  let topRise: number | null = null
+  for (const delta of deltaByPlayerId.values()) {
+    if (delta == null || delta <= 0) continue
+    if (topRise == null || delta > topRise) topRise = delta
+  }
+  return topRise
+}
+
+export function getProjectionWeeklyChangeOffset(weeklyDelta: number | null, topRise: number | null): number {
+  if (weeklyDelta == null || topRise == null || topRise <= 0) return 0
+  const ratio = weeklyDelta / topRise
+  if (ratio >= 0.66) return 3
+  if (ratio >= 0.33) return 2
+  if (ratio > 0) return 1
+  if (ratio >= -0.33) return -1
+  if (ratio >= -0.66) return -2
+  return -3
+}
+
+export function applyFantasyProjectionOffset(
+  value: number | null,
+  weeklyDelta: number | null,
+  topRise: number | null,
+): number | null {
+  if (value == null) return value
+  if (value === 0) return 0
+  return Math.round(value + getProjectionWeeklyChangeOffset(weeklyDelta, topRise))
+}
+
+export function applyFantasyBreakEvenOffset(
+  value: number | null,
+  playerId: number | null,
+  round: number | null,
+): number | null {
+  return applyFantasyMetricOffset(value, playerId, round, "breakEven")
 }
 
 interface FantasyOwnershipSnapshotRow {

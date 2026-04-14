@@ -17,7 +17,25 @@ function isAuthorized(request: Request): boolean {
 
 async function rebuild() {
   const years = await fetchAvailableYearsFromSupabase();
-  const rows = await fetchPlayerStatsFromSupabase(years);
+  let rows;
+
+  try {
+    rows = await fetchPlayerStatsFromSupabase(years);
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    if (!message.includes("statement timeout")) {
+      throw error;
+    }
+
+    // Fallback for large datasets: rebuild one season at a time.
+    rows = [];
+    const yearsAsc = [...years].sort((a, b) => a.localeCompare(b));
+    for (const year of yearsAsc) {
+      const yearRows = await fetchPlayerStatsFromSupabase([year]);
+      rows.push(...yearRows);
+    }
+  }
+
   const result = await writePlayerStatsServerCache(rows);
 
   return {

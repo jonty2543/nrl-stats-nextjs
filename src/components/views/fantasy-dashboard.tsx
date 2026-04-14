@@ -804,6 +804,7 @@ export function FantasyDashboard({
   const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any")
   const [minutesUnderFilter, setMinutesUnderFilter] = useState<string>("Any")
   const [showRollingAveragePlot, setShowRollingAveragePlot] = useState(false)
+  const [selectedRollingAverageWindow, setSelectedRollingAverageWindow] = useState<number>(5)
   const [showBaseUpsideBars, setShowBaseUpsideBars] = useState(false)
   const [showOpponentHeatmap, setShowOpponentHeatmap] = useState(false)
   const [showFantasyBoxPlot, setShowFantasyBoxPlot] = useState(false)
@@ -2139,24 +2140,50 @@ export function FantasyDashboard({
 
                 {!analysisLocked && showRollingAveragePlot && trendFilteredRows.length > 0 ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
                         Rolling Average Plot
                       </div>
-                    </div>
-                    <div className="mb-3 max-w-[240px]">
-                      <Select
-                        label="Stat"
-                        value={selectedRollingAverageStat}
-                        options={ROLLING_AVERAGE_STAT_OPTIONS as string[]}
-                        onChange={setSelectedRollingAverageStat}
-                      />
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div className="w-full max-w-[240px]">
+                          <Select
+                            label="Stat"
+                            value={selectedRollingAverageStat}
+                            options={ROLLING_AVERAGE_STAT_OPTIONS as string[]}
+                            onChange={setSelectedRollingAverageStat}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                            Rolling Avg
+                          </span>
+                          <div className="flex items-center overflow-hidden rounded-md border border-nrl-border bg-nrl-panel">
+                            {[3, 5, 10, 20].map((option) => (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() => setSelectedRollingAverageWindow(option)}
+                                className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                                  selectedRollingAverageWindow === option
+                                    ? "bg-nrl-accent/15 text-nrl-accent"
+                                    : "text-nrl-muted hover:text-nrl-text"
+                                }`}
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                     <FantasyGameLogTrendBrush
                       key={gameLogChartKey}
                       rows={chronologicalTrendRows}
                       defaultStartYear="2023"
                       headerTitle=""
+                      rollingWindow={selectedRollingAverageWindow}
+                      onRollingWindowChange={setSelectedRollingAverageWindow}
+                      showInternalControls={false}
                       valueLabel={selectedRollingAverageStat}
                       primarySeriesLabel={selectedRollingAverageStat}
                       valueAccessor={rollingAverageValueAccessor}

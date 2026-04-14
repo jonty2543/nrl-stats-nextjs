@@ -16,6 +16,9 @@ interface FantasyGameLogTrendBrushProps<T extends TrendBrushRow = PlayerStat> {
   rows: T[]
   defaultStartYear?: string
   headerTitle?: string
+  rollingWindow?: number
+  onRollingWindowChange?: (value: number) => void
+  showInternalControls?: boolean
   valueLabel?: string
   primarySeriesLabel?: string
   primaryBarColor?: string
@@ -167,6 +170,9 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   rows,
   defaultStartYear,
   headerTitle = "Fantasy Trend",
+  rollingWindow: controlledRollingWindow,
+  onRollingWindowChange,
+  showInternalControls = true,
   valueLabel = "Fantasy",
   primarySeriesLabel,
   primaryBarColor = "rgba(0, 245, 138, 0.42)",
@@ -175,7 +181,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   primaryLineColor = "rgba(245, 247, 255, 0.95)",
   compareSeries = [],
 }: FantasyGameLogTrendBrushProps<T>) {
-  const [rollingWindow, setRollingWindow] = useState<number>(5)
+  const [rollingWindowState, setRollingWindowState] = useState<number>(5)
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [hoveredHandle, setHoveredHandle] = useState<DragMode | null>(null)
   const [hoveredChartPoint, setHoveredChartPoint] = useState<HoveredChartPoint | null>(null)
@@ -185,6 +191,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   })
   const overviewRef = useRef<SVGSVGElement | null>(null)
   const mainChartRef = useRef<SVGSVGElement | null>(null)
+  const rollingWindow = controlledRollingWindow ?? rollingWindowState
 
   const orderedRows = useMemo(() => sortTrendRows(rows), [rows])
   const orderedCompareSeries = useMemo(
@@ -465,6 +472,16 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
     }
   }, [dragState, getIndexFromClientX, orderedRows.length, snapRange])
 
+  const handleRollingWindowChange = useCallback(
+    (value: number) => {
+      if (controlledRollingWindow == null) {
+        setRollingWindowState(value)
+      }
+      onRollingWindowChange?.(value)
+    },
+    [controlledRollingWindow, onRollingWindowChange]
+  )
+
   if (orderedRows.length === 0) {
     return null
   }
@@ -535,9 +552,11 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
     : []
   const resolvedPrimarySeriesLabel = primarySeriesLabel ?? valueLabel
   const hasHeaderInfo = Boolean(headerTitle) || compareSeriesData.length > 0
+  const showTopRow = hasHeaderInfo || showInternalControls
 
   return (
-    <div className="border-b border-nrl-border bg-nrl-panel-2/30 px-2 py-3 sm:px-4 sm:py-4">
+    <div className={`border-b border-nrl-border bg-nrl-panel-2/30 ${showTopRow ? "px-2 py-3 sm:px-4 sm:py-4" : "px-0 py-0"}`}>
+      {showTopRow ? (
       <div className={`mb-2 flex flex-wrap items-center gap-2 sm:mb-3 sm:gap-3 ${hasHeaderInfo ? "justify-between" : "justify-end"}`}>
         {hasHeaderInfo ? (
           <div>
@@ -565,6 +584,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
             ) : null}
           </div>
         ) : null}
+        {showInternalControls ? (
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
             Rolling Avg
@@ -574,7 +594,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
               <button
                 key={option}
                 type="button"
-                onClick={() => setRollingWindow(option)}
+                onClick={() => handleRollingWindowChange(option)}
                 className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${
                   rollingWindow === option
                     ? "bg-nrl-accent/15 text-nrl-accent"
@@ -586,9 +606,11 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
             ))}
           </div>
         </div>
+        ) : null}
       </div>
+      ) : null}
 
-      <div className="w-full">
+      <div className={`w-full ${showTopRow ? "" : "px-2 py-3 sm:px-4 sm:py-4"}`}>
         <div className="w-full space-y-2 sm:space-y-3">
           <div className="relative">
           <svg

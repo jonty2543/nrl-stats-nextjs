@@ -371,6 +371,7 @@ export function applyFantasyProjectionOffset(
   topRise: number | null,
 ): number | null {
   if (value == null) return value
+  if (value === 0) return 0
   return Math.round(value + getProjectionWeeklyChangeOffset(weeklyDelta, topRise))
 }
 

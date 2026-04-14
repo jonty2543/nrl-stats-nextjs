@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { FantasyDraftPricingPage } from "@/components/views/fantasy-draft-pricing-page"
-import { hasProPlotAccess } from "@/lib/access/pro-access"
+import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import { fetchFantasyPlayersSnapshot, fetchLatestFantasyOwnershipBaselineSnapshot } from "@/lib/fantasy/nrl"
 import {
@@ -34,7 +34,7 @@ async function fetchCoachProjectionsRaw(): Promise<unknown> {
 
 export default async function FantasyDraftPricingRoutePage() {
   const { userId } = await auth()
-  const locked = !hasProPlotAccess(userId)
+  const locked = !(await getServerProPlotAccess(userId))
 
   const [playerImages, fantasyPlayers, coachProjectionsRaw, ownershipBaselineSnapshot, draw2026Data, rawPlayerFantasySdRows, rawPositionFantasySdRows] = await Promise.all([
     fetchPlayerImages(),

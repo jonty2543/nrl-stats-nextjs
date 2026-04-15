@@ -235,10 +235,18 @@ function buildSlotOptionLists(
   playerPool: DraftPricingPoolPlayer[],
   optionLabelById: Map<number, string>,
   slotLabels: readonly string[],
+  allowCrossTeamDuplicates = false,
 ): string[][] {
-  const globallySelected = new Set<number>(
-    [...currentSlots, ...otherSlots].filter((playerId): playerId is number => playerId != null)
+  // In H2H mode players can appear on both teams, so only deduplicate within
+  // the current team's own slots. In draft mode deduplicate globally.
+  const ownSelected = new Set<number>(
+    currentSlots.filter((playerId): playerId is number => playerId != null)
   )
+  const otherSelected = allowCrossTeamDuplicates
+    ? new Set<number>()
+    : new Set<number>(otherSlots.filter((playerId): playerId is number => playerId != null))
+
+  const globallySelected = new Set<number>([...ownSelected, ...otherSelected])
 
   return currentSlots.map((currentId, index) =>
     playerPool
@@ -844,13 +852,15 @@ export function FantasyDraftPricingPage({
     [playerPool]
   )
 
+  const isH2h = matchupMode === "h2h"
+
   const homeSlotOptions = useMemo(
-    () => buildSlotOptionLists(homeSlots, awaySlots, playerPool, optionLabelById, slotLabels),
-    [homeSlots, awaySlots, playerPool, optionLabelById, slotLabels]
+    () => buildSlotOptionLists(homeSlots, awaySlots, playerPool, optionLabelById, slotLabels, isH2h),
+    [homeSlots, awaySlots, playerPool, optionLabelById, slotLabels, isH2h]
   )
   const awaySlotOptions = useMemo(
-    () => buildSlotOptionLists(awaySlots, homeSlots, playerPool, optionLabelById, slotLabels),
-    [awaySlots, homeSlots, playerPool, optionLabelById, slotLabels]
+    () => buildSlotOptionLists(awaySlots, homeSlots, playerPool, optionLabelById, slotLabels, isH2h),
+    [awaySlots, homeSlots, playerPool, optionLabelById, slotLabels, isH2h]
   )
 
   const duplicateSelectedIds = useMemo(() => {
@@ -874,7 +884,8 @@ export function FantasyDraftPricingPage({
   const awayComplete = awaySlots.every((playerId) => playerId != null)
 
   const marketSummary = useMemo(() => {
-    if (!homeComplete || !awayComplete || duplicateSelectedIds.size > 0) return null
+    // In H2H mode, duplicate players across teams are allowed so don't block odds calculation.
+    if (!homeComplete || !awayComplete || (!isH2h && duplicateSelectedIds.size > 0)) return null
 
     const homePlayers = slotLabels.map((slotLabel, index) => buildBoardPlayer(homeSlots[index], slotLabel, playerPoolById))
     const awayPlayers = slotLabels.map((slotLabel, index) => buildBoardPlayer(awaySlots[index], slotLabel, playerPoolById))

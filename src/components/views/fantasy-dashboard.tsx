@@ -86,8 +86,9 @@ interface OpponentHeatmapCell {
 }
 
 interface OpponentHeatmapColumn {
-  opponent: string
+  opponent: string | null
   round: number | null
+  isBye: boolean
 }
 
 interface OpponentHeatmapRow {
@@ -410,11 +411,11 @@ const BASE_FANTASY_COMPONENTS: Array<{
   pointsPerUnit: number
   divideThenFloor?: number
 }> = [
-  { aliases: ["All Run Metres", "Run Metres"], pointsPerUnit: 1, divideThenFloor: 10 },
-  { aliases: ["Tackles Made", "Tackles"], pointsPerUnit: 1 },
-  { aliases: ["Kicking Metres", "Kick Metres"], pointsPerUnit: 1, divideThenFloor: 30 },
-  { aliases: ["Conversions"], pointsPerUnit: 2 },
-]
+    { aliases: ["All Run Metres", "Run Metres"], pointsPerUnit: 1, divideThenFloor: 10 },
+    { aliases: ["Tackles Made", "Tackles"], pointsPerUnit: 1 },
+    { aliases: ["Kicking Metres", "Kick Metres"], pointsPerUnit: 1, divideThenFloor: 30 },
+    { aliases: ["Conversions"], pointsPerUnit: 2 },
+  ]
 
 function getBaseUpsideSplit(row: PlayerStat): BaseUpsideSplit {
   const basePoints = BASE_FANTASY_COMPONENTS.reduce((sum, component) => {
@@ -703,13 +704,12 @@ function FantasyPlotToggleButton({
       type="button"
       disabled={locked}
       onClick={onClick}
-      className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-        locked
-          ? "cursor-not-allowed border-white/8 bg-white/[0.035] text-slate-500 shadow-none"
-          : active
-            ? "cursor-pointer border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
-            : "cursor-pointer border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-      }`}
+      className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${locked
+        ? "cursor-not-allowed border-white/8 bg-white/[0.035] text-slate-500 shadow-none"
+        : active
+          ? "cursor-pointer border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
+          : "cursor-pointer border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+        }`}
     >
       {locked ? inactiveLabel : active ? activeLabel : inactiveLabel}
     </button>
@@ -733,21 +733,19 @@ function MetricCard({
 }) {
   return (
     <div
-      className={`rounded-lg border border-nrl-border bg-nrl-panel-2 ${
-        compact
-          ? mobileTight
-            ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
-            : "px-2 py-3 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5"
-          : "px-3 py-2"
-      }`}
+      className={`rounded-lg border border-nrl-border bg-nrl-panel-2 ${compact
+        ? mobileTight
+          ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
+          : "px-2 py-3 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5"
+        : "px-3 py-2"
+        }`}
     >
       <div className={`${compact ? mobileTight ? "text-[6.5px] sm:text-[7px]" : "text-[7px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
         {label}
       </div>
       <div
-        className={`${compact ? mobileTight ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${
-          blurValue ? "select-none blur-[5px]" : ""
-        }`}
+        className={`${compact ? mobileTight ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${blurValue ? "select-none blur-[5px]" : ""
+          }`}
         aria-hidden={blurValue || undefined}
       >
         {value}
@@ -1424,18 +1422,26 @@ export function FantasyDashboard({
   }, [averageBaseUpsideSplit, filteredRows])
 
   const opponentHeatmap = useMemo(() => {
-    const seasonOpponentSums = new Map<string, { sum: number; count: number }>()
-    const allOpponentSums = new Map<string, { sum: number; count: number }>()
-    const seasons = new Set<string>()
-    const opponents = new Set<string>()
-    const drawOpponentFirstRound = new Map<string, number>()
+    // Build columns from the draw strip (one per round), including byes.
+    // Then append any historical opponents not covered by the draw.
+    const drawColumns: OpponentHeatmapColumn[] = draw2026StripRows.map((stripRow) => ({
+      round: stripRow.round,
+      opponent: stripRow.isBye ? null : formatOpponent(stripRow.opponent),
+      isBye: stripRow.isBye,
+    }))
 
-    for (const row of draw2026StripRows) {
-      if (!row.opponent || row.isBye) continue
-      const opponent = formatOpponent(row.opponent)
-      if (!opponent || opponent === "-" || drawOpponentFirstRound.has(opponent)) continue
-      drawOpponentFirstRound.set(opponent, row.round)
-    }
+    // Track which opponent names are already covered by the draw (case-insensitive).
+    const drawOpponentKeys = new Set<string>(
+      drawColumns
+        .filter((col) => !col.isBye && col.opponent)
+        .map((col) => normaliseTeamKey(col.opponent!))
+    )
+
+    // Collect (season, opponent, fantasy) tuples from filtered rows.
+    interface HeatEntry { season: string; opponent: string; fantasy: number }
+    const entries: HeatEntry[] = []
+    const historicalOpponents = new Set<string>()
+    const seasons = new Set<string>()
 
     for (const row of trendFilteredRows) {
       const opponent = formatOpponent(row.Opponent)
@@ -1444,51 +1450,70 @@ export function FantasyDashboard({
 
       const season = String(row.Year ?? "").trim() || "Unknown"
       seasons.add(season)
-      opponents.add(opponent)
+      entries.push({ season, opponent, fantasy })
 
-      const seasonOpponentKey = `${season}|||${opponent}`
-      const seasonCurrent = seasonOpponentSums.get(seasonOpponentKey) ?? { sum: 0, count: 0 }
-      seasonCurrent.sum += fantasy
-      seasonCurrent.count += 1
-      seasonOpponentSums.set(seasonOpponentKey, seasonCurrent)
-
-      const allCurrent = allOpponentSums.get(opponent) ?? { sum: 0, count: 0 }
-      allCurrent.sum += fantasy
-      allCurrent.count += 1
-      allOpponentSums.set(opponent, allCurrent)
+      // If this opponent isn't in the draw, we'll show it as an extra columns.
+      if (!drawOpponentKeys.has(normaliseTeamKey(opponent))) {
+        historicalOpponents.add(opponent)
+      }
     }
 
-    const columns: OpponentHeatmapColumn[] = [...opponents]
-      .sort((a, b) => {
-        const aRound = drawOpponentFirstRound.get(a)
-        const bRound = drawOpponentFirstRound.get(b)
-        if (aRound != null && bRound != null && aRound !== bRound) return aRound - bRound
-        if (aRound != null) return -1
-        if (bRound != null) return 1
-        return a.localeCompare(b)
-      })
-      .map((opponent) => ({
-        opponent,
-        round: drawOpponentFirstRound.get(opponent) ?? null,
-      }))
+    // Extra columns for opponents only seen historically (not in current draw).
+    const extraColumns: OpponentHeatmapColumn[] = [...historicalOpponents]
+      .sort((a, b) => a.localeCompare(b))
+      .map((opponent) => ({ round: null, opponent, isBye: false }))
+
+    const columns: OpponentHeatmapColumn[] = [...drawColumns, ...extraColumns]
+
+    if (columns.length === 0) return { columns: [], rows: [] }
+
+    // Build lookups: seasonOpponentKey -> { sum, count } and opponent -> { sum, count }.
+    const bySeasonOpponent = new Map<string, { sum: number; count: number }>()
+    const byOpponent = new Map<string, { sum: number; count: number }>()
+
+    for (const { season, opponent, fantasy } of entries) {
+      // season+opponent key (used for per-season rows)
+      const soKey = `${season}|||${normaliseTeamKey(opponent)}`
+      const curSo = bySeasonOpponent.get(soKey) ?? { sum: 0, count: 0 }
+      curSo.sum += fantasy
+      curSo.count += 1
+      bySeasonOpponent.set(soKey, curSo)
+
+      // opponent-only key (for "All" row aggregation)
+      const oppKey = normaliseTeamKey(opponent)
+      const curOpp = byOpponent.get(oppKey) ?? { sum: 0, count: 0 }
+      curOpp.sum += fantasy
+      curOpp.count += 1
+      byOpponent.set(oppKey, curOpp)
+    }
+
+    function cellForColumn(col: OpponentHeatmapColumn, season: string | null): OpponentHeatmapCell {
+      if (col.isBye || !col.opponent) return { average: null, games: 0 }
+
+      // Season rows: average of ALL games vs this opponent in that season.
+      if (season !== null) {
+        const soKey = `${season}|||${normaliseTeamKey(col.opponent)}`
+        const hit = bySeasonOpponent.get(soKey)
+        if (hit && hit.count > 0) return { average: hit.sum / hit.count, games: hit.count }
+        return { average: null, games: 0 }
+      }
+
+      // "All" row: aggregate all games vs this opponent across all seasons.
+      const hit = byOpponent.get(normaliseTeamKey(col.opponent))
+      if (hit && hit.count > 0) return { average: hit.sum / hit.count, games: hit.count }
+      return { average: null, games: 0 }
+    }
+
     const seasonList = [...seasons].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
 
     const allRow: OpponentHeatmapRow = {
       label: "All",
-      cells: columns.map(({ opponent }) => {
-        const total = allOpponentSums.get(opponent)
-        if (!total || total.count === 0) return { average: null, games: 0 }
-        return { average: total.sum / total.count, games: total.count }
-      }),
+      cells: columns.map((col) => cellForColumn(col, null)),
     }
 
     const seasonRows: OpponentHeatmapRow[] = seasonList.map((season) => ({
       label: season,
-      cells: columns.map(({ opponent }) => {
-        const total = seasonOpponentSums.get(`${season}|||${opponent}`)
-        if (!total || total.count === 0) return { average: null, games: 0 }
-        return { average: total.sum / total.count, games: total.count }
-      }),
+      cells: columns.map((col) => cellForColumn(col, season)),
     }))
 
     return {
@@ -1590,21 +1615,21 @@ export function FantasyDashboard({
         return [
           ...(overallTopBoughtWeekly.length > 0
             ? [
-                {
-                  key: "weekly-bought",
-                  title: "TOP BOUGHT WEEKLY",
-                  rows: overallTopBoughtWeekly,
-                },
-              ]
+              {
+                key: "weekly-bought",
+                title: "TOP BOUGHT WEEKLY",
+                rows: overallTopBoughtWeekly,
+              },
+            ]
             : []),
           ...(overallTopSoldWeekly.length > 0
             ? [
-                {
-                  key: "weekly-sold",
-                  title: "TOP SOLD WEEKLY",
-                  rows: overallTopSoldWeekly,
-                },
-              ]
+              {
+                key: "weekly-sold",
+                title: "TOP SOLD WEEKLY",
+                rows: overallTopSoldWeekly,
+              },
+            ]
             : []),
           { key: "price", title: "TOP PRICE", rows: overallTopPrice },
           ...topOwnedByPosition.map((table) => {
@@ -1783,11 +1808,10 @@ export function FantasyDashboard({
                                 type="button"
                                 onClick={() => setPositionOwnershipMetric(card.positionCode!, "Total")}
                                 title="Sort by total ownership"
-                                className={`cursor-pointer px-3 py-1 text-[9px] font-semibold uppercase tracking-wide transition-colors ${
-                                  control.metric === "Total"
-                                    ? "bg-nrl-accent/15 text-nrl-accent"
-                                    : "text-nrl-muted hover:text-nrl-text"
-                                }`}
+                                className={`cursor-pointer px-3 py-1 text-[9px] font-semibold uppercase tracking-wide transition-colors ${control.metric === "Total"
+                                  ? "bg-nrl-accent/15 text-nrl-accent"
+                                  : "text-nrl-muted hover:text-nrl-text"
+                                  }`}
                               >
                                 Total
                               </button>
@@ -1795,11 +1819,10 @@ export function FantasyDashboard({
                                 type="button"
                                 onClick={() => setPositionOwnershipMetric(card.positionCode!, "Weekly")}
                                 title="Sort by weekly ownership change"
-                                className={`cursor-pointer border-l border-nrl-border px-3 py-1 text-[9px] font-semibold uppercase tracking-wide transition-colors ${
-                                  control.metric === "Weekly"
-                                    ? "bg-nrl-accent/15 text-nrl-accent"
-                                    : "text-nrl-muted hover:text-nrl-text"
-                                }`}
+                                className={`cursor-pointer border-l border-nrl-border px-3 py-1 text-[9px] font-semibold uppercase tracking-wide transition-colors ${control.metric === "Weekly"
+                                  ? "bg-nrl-accent/15 text-nrl-accent"
+                                  : "text-nrl-muted hover:text-nrl-text"
+                                  }`}
                               >
                                 Weekly
                               </button>
@@ -1809,9 +1832,8 @@ export function FantasyDashboard({
                                 type="button"
                                 onClick={() => setPositionOwnershipDirection(card.positionCode!, "desc")}
                                 title={control.metric === "Weekly" ? "Sort by biggest weekly buys" : "Sort by highest ownership"}
-                                className={`cursor-pointer px-2 py-1 transition-colors hover:text-nrl-text ${
-                                  control.direction === "desc" ? "bg-nrl-accent/15 text-nrl-accent" : "text-nrl-muted"
-                                }`}
+                                className={`cursor-pointer px-2 py-1 transition-colors hover:text-nrl-text ${control.direction === "desc" ? "bg-nrl-accent/15 text-nrl-accent" : "text-nrl-muted"
+                                  }`}
                               >
                                 ↑
                               </button>
@@ -1819,9 +1841,8 @@ export function FantasyDashboard({
                                 type="button"
                                 onClick={() => setPositionOwnershipDirection(card.positionCode!, "asc")}
                                 title={control.metric === "Weekly" ? "Sort by biggest weekly sells" : "Sort by lowest ownership"}
-                                className={`cursor-pointer border-l border-nrl-border px-2 py-1 transition-colors hover:text-nrl-text ${
-                                  control.direction === "asc" ? "bg-nrl-accent/15 text-nrl-accent" : "text-nrl-muted"
-                                }`}
+                                className={`cursor-pointer border-l border-nrl-border px-2 py-1 transition-colors hover:text-nrl-text ${control.direction === "asc" ? "bg-nrl-accent/15 text-nrl-accent" : "text-nrl-muted"
+                                  }`}
                               >
                                 ↓
                               </button>
@@ -2051,15 +2072,13 @@ export function FantasyDashboard({
               </div>
 
               <div
-                className={`relative rounded-xl border p-4 ${
-                  analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel"
-                }`}
+                className={`relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel"
+                  }`}
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div
-                    className={`text-xs font-bold uppercase tracking-wide ${
-                      analysisLocked ? "text-slate-400" : "text-nrl-accent"
-                    }`}
+                    className={`text-xs font-bold uppercase tracking-wide ${analysisLocked ? "text-slate-400" : "text-nrl-accent"
+                      }`}
                   >
                     Analysis
                   </div>
@@ -2068,74 +2087,74 @@ export function FantasyDashboard({
                   </div>
                 </div>
                 <div className={analysisLocked ? "pointer-events-none select-none opacity-40" : undefined}>
-                <div className="mb-5 grid grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
-                  <MetricCard
-                    compact
-                    label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
-                    value={formatNumber(selectedAdjustedProjection, 0)}
-                    blurValue={analysisLocked}
-                  />
-                  <MetricCard
-                    compact
-                    label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}
-                    value={formatNumber(selectedAdjustedBreakEven, 0)}
-                    blurValue={analysisLocked}
-                  />
-                </div>
-                <div className="flex flex-wrap items-center justify-start gap-2">
-                  <FantasyPlotToggleButton
-                    active={showRollingAveragePlot}
-                    locked={analysisLocked}
-                    onClick={() => setShowRollingAveragePlot((prev) => !prev)}
-                    activeLabel="Hide Rolling Average Plot"
-                    inactiveLabel="Show Rolling Average Plot"
-                  />
-                  <FantasyPlotToggleButton
-                    active={showBaseUpsideBars}
-                    locked={analysisLocked}
-                    onClick={() => setShowBaseUpsideBars((prev) => !prev)}
-                    activeLabel="Hide Base vs Upside"
-                    inactiveLabel="Show Base vs Upside"
-                  />
-                  <FantasyPlotToggleButton
-                    active={showOpponentHeatmap}
-                    locked={analysisLocked}
-                    onClick={() => setShowOpponentHeatmap((prev) => !prev)}
-                    activeLabel="Hide Avg vs Opp Heatmap"
-                    inactiveLabel="Show Avg vs Opp Heatmap"
-                  />
-                  <FantasyPlotToggleButton
-                    active={showFantasyBoxPlot}
-                    locked={analysisLocked}
-                    onClick={() => setShowFantasyBoxPlot((prev) => !prev)}
-                    activeLabel="Hide Fantasy Box Plot"
-                    inactiveLabel="Show Fantasy Box Plot"
-                  />
-                  <FantasyPlotToggleButton
-                    active={showStatVsFantasyPlot}
-                    locked={analysisLocked}
-                    onClick={() => setShowStatVsFantasyPlot((prev) => !prev)}
-                    activeLabel="Hide Stat vs Fantasy Plot"
-                    inactiveLabel="Show Stat vs Fantasy Plot"
-                  />
-                  {hasLoginAccess && teammate !== "None" ? (
-                    <FantasyPlotToggleButton
-                      active={showWithWithoutPlot}
-                      locked={analysisLocked}
-                      onClick={() => setShowWithWithoutPlot((prev) => !prev)}
-                      activeLabel="Hide With vs Without Plot"
-                      inactiveLabel="Show With vs Without Plot"
+                  <div className="mb-5 grid grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
+                    <MetricCard
+                      compact
+                      label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
+                      value={formatNumber(selectedAdjustedProjection, 0)}
+                      blurValue={analysisLocked}
                     />
-                  ) : null}
-                  {showBaseUpsideBars ? (
-                    <div className="flex items-center gap-2 text-[10px] text-nrl-muted">
-                      <span className="inline-block h-2.5 w-2.5 rounded-sm bg-nrl-accent" />
-                      <span>Base</span>
-                      <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-400" />
-                      <span>Upside</span>
-                    </div>
-                  ) : null}
-                </div>
+                    <MetricCard
+                      compact
+                      label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}
+                      value={formatNumber(selectedAdjustedBreakEven, 0)}
+                      blurValue={analysisLocked}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-start gap-2">
+                    <FantasyPlotToggleButton
+                      active={showRollingAveragePlot}
+                      locked={analysisLocked}
+                      onClick={() => setShowRollingAveragePlot((prev) => !prev)}
+                      activeLabel="Hide Rolling Average Plot"
+                      inactiveLabel="Show Rolling Average Plot"
+                    />
+                    <FantasyPlotToggleButton
+                      active={showBaseUpsideBars}
+                      locked={analysisLocked}
+                      onClick={() => setShowBaseUpsideBars((prev) => !prev)}
+                      activeLabel="Hide Base vs Upside"
+                      inactiveLabel="Show Base vs Upside"
+                    />
+                    <FantasyPlotToggleButton
+                      active={showOpponentHeatmap}
+                      locked={analysisLocked}
+                      onClick={() => setShowOpponentHeatmap((prev) => !prev)}
+                      activeLabel="Hide Avg vs Opp Heatmap"
+                      inactiveLabel="Show Avg vs Opp Heatmap"
+                    />
+                    <FantasyPlotToggleButton
+                      active={showFantasyBoxPlot}
+                      locked={analysisLocked}
+                      onClick={() => setShowFantasyBoxPlot((prev) => !prev)}
+                      activeLabel="Hide Fantasy Box Plot"
+                      inactiveLabel="Show Fantasy Box Plot"
+                    />
+                    <FantasyPlotToggleButton
+                      active={showStatVsFantasyPlot}
+                      locked={analysisLocked}
+                      onClick={() => setShowStatVsFantasyPlot((prev) => !prev)}
+                      activeLabel="Hide Stat vs Fantasy Plot"
+                      inactiveLabel="Show Stat vs Fantasy Plot"
+                    />
+                    {hasLoginAccess && teammate !== "None" ? (
+                      <FantasyPlotToggleButton
+                        active={showWithWithoutPlot}
+                        locked={analysisLocked}
+                        onClick={() => setShowWithWithoutPlot((prev) => !prev)}
+                        activeLabel="Hide With vs Without Plot"
+                        inactiveLabel="Show With vs Without Plot"
+                      />
+                    ) : null}
+                    {showBaseUpsideBars ? (
+                      <div className="flex items-center gap-2 text-[10px] text-nrl-muted">
+                        <span className="inline-block h-2.5 w-2.5 rounded-sm bg-nrl-accent" />
+                        <span>Base</span>
+                        <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-400" />
+                        <span>Upside</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 {!analysisLocked && showRollingAveragePlot && trendFilteredRows.length > 0 ? (
@@ -2163,11 +2182,10 @@ export function FantasyDashboard({
                                 key={option}
                                 type="button"
                                 onClick={() => setSelectedRollingAverageWindow(option)}
-                                className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${
-                                  selectedRollingAverageWindow === option
-                                    ? "bg-nrl-accent/15 text-nrl-accent"
-                                    : "text-nrl-muted hover:text-nrl-text"
-                                }`}
+                                className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${selectedRollingAverageWindow === option
+                                  ? "bg-nrl-accent/15 text-nrl-accent"
+                                  : "text-nrl-muted hover:text-nrl-text"
+                                  }`}
                               >
                                 {option}
                               </button>
@@ -2208,16 +2226,22 @@ export function FantasyDashboard({
                               <th className="sticky left-0 z-20 border-b border-r border-nrl-border bg-nrl-panel-2 px-2 py-1 text-left text-[10px] uppercase tracking-wide text-nrl-muted">
                                 Season
                               </th>
-                              {opponentHeatmap.columns.map((column) => (
+                              {opponentHeatmap.columns.map((column, colIndex) => (
                                 <th
-                                  key={`heat-head-${column.opponent}`}
-                                  className="border-b border-nrl-border px-2 py-1 text-center text-[10px] uppercase tracking-wide text-nrl-muted whitespace-nowrap"
+                                  key={`heat-head-${column.round ?? "x"}-${column.opponent ?? "bye"}-${colIndex}`}
+                                  className={`border-b border-nrl-border px-2 py-1 text-center text-[10px] uppercase tracking-wide whitespace-nowrap ${column.isBye ? "text-amber-400/60" : "text-nrl-muted"}`}
                                 >
                                   <div className="flex flex-col items-center gap-0.5">
-                                    <span className="text-[8px] font-semibold tracking-normal text-nrl-accent">
+                                    <span className={`text-[8px] font-semibold tracking-normal ${column.isBye ? "text-amber-400/70" : "text-nrl-accent"}`}>
                                       {column.round != null ? `R${column.round}` : "-"}
                                     </span>
-                                    <span>{column.opponent}</span>
+                                    {column.isBye ? (
+                                      <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-amber-400/70">
+                                        BYE
+                                      </span>
+                                    ) : (
+                                      <span>{column.opponent ?? "-"}</span>
+                                    )}
                                   </div>
                                 </th>
                               ))}
@@ -2229,26 +2253,32 @@ export function FantasyDashboard({
                                 <th className="sticky left-0 z-10 border-r border-nrl-border bg-nrl-panel-2 px-2 py-1 text-left text-[10px] font-semibold text-nrl-text whitespace-nowrap">
                                   {row.label}
                                 </th>
-                                {row.cells.map((cell, index) => (
-                                  <td
-                                    key={`heat-cell-${row.label}-${opponentHeatmap.columns[index]?.opponent ?? index}`}
-                                    className="min-w-[74px] border-l border-nrl-border/60 px-2 py-1.5 text-center"
-                                    style={
-                                      cell.average === null
-                                        ? undefined
-                                        : { backgroundColor: getHeatColorForAverage(cell.average) }
-                                    }
-                                  >
-                                    {cell.average === null ? (
-                                      <span className="text-[10px] text-nrl-muted">-</span>
-                                    ) : (
-                                      <div>
-                                        <div className="text-xs font-semibold text-nrl-text">{cell.average.toFixed(1)}</div>
-                                        <div className="text-[9px] text-nrl-muted">n={cell.games}</div>
-                                      </div>
-                                    )}
-                                  </td>
-                                ))}
+                                {row.cells.map((cell, index) => {
+                                  const col = opponentHeatmap.columns[index]
+                                  const isByeCol = col?.isBye ?? false
+                                  return (
+                                    <td
+                                      key={`heat-cell-${row.label}-${col?.round ?? "x"}-${col?.opponent ?? "bye"}-${index}`}
+                                      className={`min-w-[74px] border-l border-nrl-border/60 px-2 py-1.5 text-center ${isByeCol ? "bg-amber-400/5" : ""}`}
+                                      style={
+                                        isByeCol || cell.average === null
+                                          ? undefined
+                                          : { backgroundColor: getHeatColorForAverage(cell.average) }
+                                      }
+                                    >
+                                      {isByeCol ? (
+                                        <span className="text-[9px] font-semibold tracking-wider text-amber-400/50">BYE</span>
+                                      ) : cell.average === null ? (
+                                        <span className="text-[10px] text-nrl-muted">-</span>
+                                      ) : (
+                                        <div>
+                                          <div className="text-xs font-semibold text-nrl-text">{cell.average.toFixed(1)}</div>
+                                          <div className="text-[9px] text-nrl-muted">n={cell.games}</div>
+                                        </div>
+                                      )}
+                                    </td>
+                                  )
+                                })}
                               </tr>
                             ))}
                           </tbody>
@@ -2427,7 +2457,7 @@ export function FantasyDashboard({
                       </div>
                     </div>
                     {withWithoutFantasyPlotData.withValues.length === 0 ||
-                    withWithoutFantasyPlotData.withoutValues.length === 0 ? (
+                      withWithoutFantasyPlotData.withoutValues.length === 0 ? (
                       <div className="text-xs text-nrl-muted">
                         Need games in both teammate states to draw this plot.
                       </div>
@@ -2498,20 +2528,16 @@ export function FantasyDashboard({
                               </th>
                             ) : null}
                             <th
-                              className={`sticky top-0 z-10 border-b border-nrl-border py-2 text-[10px] font-semibold uppercase tracking-normal text-nrl-muted whitespace-nowrap ${
-                                getGameLogCellPaddingClass(column.key)
-                              } ${
-                                column.align === "right" ? "text-right" : "text-left"
-                              }`}
+                              className={`sticky top-0 z-10 border-b border-nrl-border py-2 text-[10px] font-semibold uppercase tracking-normal text-nrl-muted whitespace-nowrap ${getGameLogCellPaddingClass(column.key)
+                                } ${column.align === "right" ? "text-right" : "text-left"
+                                }`}
                             >
                               <button
                                 type="button"
                                 onClick={() => toggleGameLogSort(column.key)}
-                                className={`flex w-full items-center gap-1 ${
-                                  column.align === "right" ? "justify-end" : "justify-start"
-                                } hover:text-nrl-text ${
-                                  gameLogSort?.column === column.key ? "text-nrl-accent" : ""
-                                }`}
+                                className={`flex w-full items-center gap-1 ${column.align === "right" ? "justify-end" : "justify-start"
+                                  } hover:text-nrl-text ${gameLogSort?.column === column.key ? "text-nrl-accent" : ""
+                                  }`}
                                 title={`Sort by ${column.label}`}
                               >
                                 <span>{column.label}</span>
@@ -2591,11 +2617,9 @@ export function FantasyDashboard({
                                     </td>
                                   ) : null}
                                   <td
-                                    className={`py-2 text-xs font-semibold whitespace-nowrap ${
-                                      getGameLogCellPaddingClass(column.key)
-                                    } ${
-                                      column.align === "right" ? "text-right" : "text-left"
-                                    } ${isFantasy ? "text-nrl-accent" : "text-nrl-muted"}`}
+                                    className={`py-2 text-xs font-semibold whitespace-nowrap ${getGameLogCellPaddingClass(column.key)
+                                      } ${column.align === "right" ? "text-right" : "text-left"
+                                      } ${isFantasy ? "text-nrl-accent" : "text-nrl-muted"}`}
                                   >
                                     {display}
                                   </td>
@@ -2643,11 +2667,9 @@ export function FantasyDashboard({
                                       </td>
                                     ) : null}
                                     <td
-                                      className={`py-2 text-xs whitespace-nowrap ${
-                                        getGameLogCellPaddingClass(column.key)
-                                      } ${
-                                        column.align === "right" ? "text-right" : "text-left"
-                                      } ${isFantasy ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
+                                      className={`py-2 text-xs whitespace-nowrap ${getGameLogCellPaddingClass(column.key)
+                                        } ${column.align === "right" ? "text-right" : "text-left"
+                                        } ${isFantasy ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
                                     >
                                       {display}
                                     </td>

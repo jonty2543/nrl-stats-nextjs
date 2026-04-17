@@ -9,6 +9,9 @@ interface SearchableSelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  className?: string;
+  inputClassName?: string;
+  dropdownClassName?: string;
 }
 
 export function SearchableSelect({
@@ -18,6 +21,9 @@ export function SearchableSelect({
   onChange,
   placeholder = "Search...",
   disabled = false,
+  className = "",
+  inputClassName = "",
+  dropdownClassName = "",
 }: SearchableSelectProps) {
   const [query, setQuery] = useState(value);
   const [open, setOpen] = useState(false);
@@ -74,7 +80,7 @@ export function SearchableSelect({
   };
 
   return (
-    <div className={`relative flex flex-col gap-0.5 ${open ? "z-[300]" : "z-0"}`} ref={containerRef}>
+    <div className={`relative flex flex-col gap-0.5 ${open ? "z-[300]" : "z-0"} ${className}`} ref={containerRef}>
       {label ? (
         <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
           {label}
@@ -123,11 +129,11 @@ export function SearchableSelect({
               }
             }
           }}
-          className="w-full rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className={`w-full rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-50 ${inputClassName}`}
         />
 
         {open && !disabled && (
-          <div className="absolute left-0 top-full z-[200] mt-1 max-h-56 w-max min-w-[14rem] max-w-[18rem] overflow-auto rounded-md border border-nrl-border bg-nrl-panel shadow-lg">
+          <div className={`absolute left-0 top-full z-[200] mt-1 max-h-56 w-max min-w-[14rem] max-w-[18rem] overflow-auto rounded-md border border-nrl-border bg-nrl-panel shadow-lg ${dropdownClassName}`}>
             {filtered.length === 0 ? (
               <div className="px-2 py-1 text-[10px] text-nrl-muted">No matches</div>
             ) : (

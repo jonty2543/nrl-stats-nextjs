@@ -16,6 +16,7 @@ interface FantasyGameLogTrendBrushProps<T extends TrendBrushRow = PlayerStat> {
   rows: T[]
   defaultStartYear?: string
   headerTitle?: string
+  mainChartClassName?: string
   rollingWindow?: number
   onRollingWindowChange?: (value: number) => void
   showInternalControls?: boolean
@@ -57,7 +58,7 @@ interface YearBoundary {
 
 const ROLLING_WINDOW_OPTIONS = [3, 5, 10, 20] as const
 const MAIN_CHART_WIDTH = 960
-const MAIN_CHART_HEIGHT = 320
+const MAIN_CHART_HEIGHT = 400
 const OVERVIEW_CHART_WIDTH = 960
 const OVERVIEW_CHART_HEIGHT = 100
 const MAIN_PADDING = { top: 14, right: 18, bottom: 28, left: 30 }
@@ -170,6 +171,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   rows,
   defaultStartYear,
   headerTitle = "Fantasy Trend",
+  mainChartClassName = "h-[400px] w-full sm:h-[320px]",
   rollingWindow: controlledRollingWindow,
   onRollingWindowChange,
   showInternalControls = true,
@@ -303,7 +305,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   }, [compareSeriesData, fantasyScores, overviewRollingSeries])
 
   const selectedLinePath = useMemo(
-    () => buildLinePath(rollingSeries, MAIN_CHART_WIDTH, 400, MAIN_PADDING, selectedMaxScore),
+    () => buildLinePath(rollingSeries, MAIN_CHART_WIDTH, MAIN_CHART_HEIGHT, MAIN_PADDING, selectedMaxScore),
     [rollingSeries, selectedMaxScore]
   )
   const overviewLinePath = useMemo(
@@ -340,7 +342,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
         path: buildLinePath(
           series.rollingSelected,
           MAIN_CHART_WIDTH,
-          400,
+          MAIN_CHART_HEIGHT,
           MAIN_PADDING,
           selectedMaxScore
         ),
@@ -614,15 +616,15 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
           <div className="relative">
             <svg
               ref={mainChartRef}
-              viewBox={`0 0 ${MAIN_CHART_WIDTH} 400`}
-              className="rolling-trend-main-chart h-[400px] w-full sm:h-[320px]"
+              viewBox={`0 0 ${MAIN_CHART_WIDTH} ${MAIN_CHART_HEIGHT}`}
+              className={`rolling-trend-main-chart ${mainChartClassName}`}
             >
               {/* Axis Lines (to match the user's red 'L' drawing) */}
               <line
                 x1={MAIN_PADDING.left}
                 x2={MAIN_PADDING.left}
                 y1={MAIN_PADDING.top}
-                y2={400 - MAIN_PADDING.bottom}
+                y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
                 stroke="rgba(154,164,191,0.35)"
                 strokeWidth="1.5"
                 strokeLinecap="round"
@@ -630,8 +632,8 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
               <line
                 x1={MAIN_PADDING.left}
                 x2={MAIN_CHART_WIDTH - MAIN_PADDING.right}
-                y1={400 - MAIN_PADDING.bottom}
-                y2={400 - MAIN_PADDING.bottom}
+                y1={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
+                y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
                 stroke="rgba(154,164,191,0.35)"
                 strokeWidth="1.5"
                 strokeLinecap="round"
@@ -688,13 +690,13 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
                         x1={x}
                         x2={x}
                         y1={MAIN_PADDING.top}
-                        y2={400 - MAIN_PADDING.bottom}
+                        y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
                         stroke="rgba(154,164,191,0.12)"
                         strokeWidth="1"
                       />
                       <text
                         x={x + 4}
-                        y={400 - 8}
+                        y={MAIN_CHART_HEIGHT - 8}
                         className="fill-nrl-muted text-[9px] font-semibold"
                       >
                         {boundary.year}
@@ -778,7 +780,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
                     (hoveredChartPoint.index / selectedCountDenominator) * mainInnerWidth
                   }
                   y1={MAIN_PADDING.top}
-                  y2={400 - MAIN_PADDING.bottom}
+                  y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
                   stroke="rgba(245,247,255,0.28)"
                   strokeWidth="1"
                   strokeDasharray="4 4"

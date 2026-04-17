@@ -1,9 +1,4 @@
-import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
-import Link from "next/link";
-import Image from "next/image";
-import { BillingNavButton } from "@/components/billing/billing-action-button";
-import { TabNav } from "@/components/ui/tab-nav";
-import { ToolNav } from "@/components/ui/tool-nav";
+import { AppHeader } from "@/components/layout/app-header";
 
 export default function DashboardLayout({
   children,
@@ -11,65 +6,16 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <header className="border-b border-nrl-border bg-nrl-panel/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-2 sm:h-14 sm:py-0">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <Link
-                href="/dashboard/fantasy"
-                className="flex shrink-0 items-center gap-2 whitespace-nowrap text-base font-bold text-nrl-accent sm:text-lg"
-              >
-                <Image
-                  src="/logo-mark.svg"
-                  alt="Short Side Stats logo"
-                  width={28}
-                  height={28}
-                  priority
-                />
-                <span>Short Side</span>
-              </Link>
-              <ToolNav />
-              <div className="hidden sm:block">
-                <TabNav />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <SignedIn>
-                <BillingNavButton />
-                <UserButton
-                  appearance={{
-                    elements: {
-                      avatarBox: "h-8 w-8",
-                    },
-                  }}
-                />
-              </SignedIn>
-              <SignedOut>
-                <SignInButton mode="modal">
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
-                  >
-                    Sign in
-                  </button>
-                </SignInButton>
-              </SignedOut>
-            </div>
-          </div>
-          <div className="pb-2 sm:hidden">
-            <div className="overflow-x-auto">
-              <TabNav />
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="relative overflow-hidden text-nrl-text">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-      {/* Content */}
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-        {children}
-      </main>
+      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col pb-16">
+        <AppHeader sticky showBillingNav showStatsTabs />
+
+        <main className="px-4 pb-5 pt-2 sm:px-6 sm:pb-6 sm:pt-3 lg:px-8 lg:pb-8 lg:pt-4">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

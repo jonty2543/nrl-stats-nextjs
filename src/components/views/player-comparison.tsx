@@ -1439,9 +1439,6 @@ export function PlayerComparison({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-          Players & Stats
-        </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <SearchableSelect
             label="Player 1"

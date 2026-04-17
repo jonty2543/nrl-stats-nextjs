@@ -32,25 +32,27 @@ export function TabNav() {
   }
 
   return (
-    <nav className="flex gap-1">
-      {tabs.map((tab) => {
-        const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            prefetch
-            aria-current={active ? "page" : undefined}
-            className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              active
-                ? "bg-nrl-accent/15 text-nrl-accent"
-                : "text-nrl-muted hover:text-nrl-text hover:bg-nrl-panel-2"
-            }`}
-          >
-            {tab.label}
-          </Link>
-        );
-      })}
-    </nav>
+    <div className="-mx-1 mt-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav className="inline-flex min-w-max gap-1 rounded-full border border-white/10 bg-[#121833]/82 p-1 backdrop-blur">
+        {tabs.map((tab) => {
+          const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              prefetch
+              aria-current={active ? "page" : undefined}
+              className={`cursor-pointer rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors sm:px-4 sm:text-xs sm:tracking-[0.18em] ${
+                active
+                  ? "bg-emerald-400/14 text-emerald-300"
+                  : "text-white/48 hover:text-white/80"
+              }`}
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
   );
 }

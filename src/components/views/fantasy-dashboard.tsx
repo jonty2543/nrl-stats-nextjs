@@ -1742,20 +1742,15 @@ export function FantasyDashboard({
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
         <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-bold text-nrl-text">Fantasy</h1>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end lg:justify-end">
-              <div className="grid grid-cols-1 gap-3 sm:min-w-[260px] lg:min-w-[420px]">
-                <SearchableSelect
-                  label=""
-                  value={selectedFantasyName}
-                  options={playerSearchOptions}
-                  onChange={navigateToPlayer}
-                  placeholder="Search player..."
-                />
-              </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-3">
+              <SearchableSelect
+                label=""
+                value={selectedFantasyName}
+                options={playerSearchOptions}
+                onChange={navigateToPlayer}
+                placeholder="Search player..."
+              />
             </div>
           </div>
         </section>
@@ -1765,14 +1760,14 @@ export function FantasyDashboard({
             {hasFantasyPlotAccess ? (
               <Link
                 href="/dashboard/fantasy/draft"
-                className="inline-flex h-full min-h-[72px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[linear-gradient(135deg,rgba(91,61,173,0.34),rgba(12,93,74,0.3))] px-3 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
+                className="inline-flex h-full min-h-[72px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
               >
                 Draft / H2H Projection and Odds
               </Link>
             ) : (
               <Link
                 href="/dashboard/fantasy/draft"
-                className="flex h-full min-h-[72px] w-full flex-col items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[linear-gradient(135deg,rgba(91,61,173,0.34),rgba(12,93,74,0.3))] px-4 py-3 text-center transition-colors hover:border-nrl-accent xl:min-h-[100%]"
+                className="flex h-full min-h-[72px] w-full flex-col items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-4 py-3 text-center transition-colors hover:border-nrl-accent xl:min-h-[100%]"
               >
                 <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-nrl-accent">
                   Pro
@@ -2199,6 +2194,7 @@ export function FantasyDashboard({
                       rows={chronologicalTrendRows}
                       defaultStartYear="2023"
                       headerTitle=""
+                      mainChartClassName="w-full h-auto sm:h-[320px]"
                       rollingWindow={selectedRollingAverageWindow}
                       onRollingWindowChange={setSelectedRollingAverageWindow}
                       showInternalControls={false}

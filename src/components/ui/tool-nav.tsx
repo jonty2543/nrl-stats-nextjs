@@ -2,21 +2,30 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 
 const tools = [
   { label: "Home", href: "/" },
-  { label: "Stats", href: "/dashboard/players" },
   { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "Betting", href: "/dashboard/betting" },
+  { label: "Stats", href: "/dashboard/players" },
   { label: "About", href: "/dashboard/about" },
 ];
 
-export function ToolNav() {
+interface ToolNavProps {
+  className?: string;
+  mobileFullWidth?: boolean;
+}
+
+export function ToolNav({ className, mobileFullWidth = false }: ToolNavProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const isStatsRoute =
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/players") ||
+    pathname.startsWith("/dashboard/teams") ||
+    pathname.startsWith("/dashboard/leaders");
 
   useEffect(() => {
     tools.forEach((tool) => {
@@ -24,82 +33,44 @@ export function ToolNav() {
     });
   }, [router]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const onPointerDown = (event: MouseEvent) => {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsOpen(false);
-      }
-    };
-
-    window.addEventListener("mousedown", onPointerDown);
-    window.addEventListener("keydown", onEscape);
-
-    return () => {
-      window.removeEventListener("mousedown", onPointerDown);
-      window.removeEventListener("keydown", onEscape);
-    };
-  }, [isOpen]);
-
-  const currentLabel = pathname.startsWith("/dashboard/about")
-    ? "About"
-    : pathname.startsWith("/dashboard/betting")
-      ? "Betting"
-    : pathname.startsWith("/dashboard/fantasy")
-      ? "Fantasy"
-      : pathname === "/"
-        ? "Home"
-      : "Stats";
-
   return (
-    <div className="relative" ref={menuRef}>
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1.5 text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
-        aria-label="Open page menu"
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
+    <nav
+      className={`-mx-1 flex w-full overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 ${
+        mobileFullWidth ? "justify-stretch" : "justify-center"
+      } ${className ?? ""}`}
+    >
+      <div
+        className={`inline-flex rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur lg:min-w-max ${
+          mobileFullWidth ? "min-w-full w-full" : "min-w-max"
+        }`}
       >
-        <span className="text-sm font-medium text-nrl-text">{currentLabel}</span>
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <path d="M4 7h16" />
-          <path d="M4 12h16" />
-          <path d="M4 17h16" />
-        </svg>
-      </button>
+        {tools.map((tool) => {
+          const active = tool.href === "/"
+            ? pathname === "/"
+            : tool.href === "/dashboard/players"
+              ? isStatsRoute
+              : pathname === tool.href || pathname.startsWith(`${tool.href}/`);
 
-      {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-44 rounded-md border border-nrl-border bg-nrl-panel p-1 shadow-lg">
-          {tools.map((tool) => {
-            const active = pathname === tool.href || pathname.startsWith(`${tool.href}/`);
-            return (
-              <Link
-                key={tool.href}
-                href={tool.href}
-                prefetch
-                aria-current={active ? "page" : undefined}
-                onClick={() => setIsOpen(false)}
-                className={`block rounded px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-nrl-accent/15 text-nrl-accent"
-                    : "text-nrl-muted hover:bg-nrl-panel-2 hover:text-nrl-text"
-                }`}
-              >
-                {tool.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
+          return (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              prefetch
+              aria-current={active ? "page" : undefined}
+              className={`text-center font-semibold uppercase transition-colors ${
+                active
+                  ? "bg-emerald-400/14 text-emerald-300"
+                  : "text-white/55 hover:text-white"
+              } ${mobileFullWidth
+                ? "flex-1 rounded-full px-2 py-2 text-[10px] tracking-[0.14em] sm:px-3 sm:text-[11px] sm:tracking-[0.16em] lg:flex-none lg:px-4 lg:text-xs lg:tracking-[0.18em]"
+                : "rounded-full px-3 py-2 text-[11px] tracking-[0.16em] sm:px-4 sm:text-xs sm:tracking-[0.18em]"
+              }`}
+            >
+              {tool.label}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

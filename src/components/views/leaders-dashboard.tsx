@@ -803,15 +803,9 @@ export function LeadersDashboard({
     <div className="space-y-6">
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
         <div className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">Leaders</div>
-              <h1 className="mt-2 text-2xl font-bold text-nrl-text">Season leaders</h1>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <ValueModeToggle valueMode={valueMode} onChange={setValueMode} />
-              <LeaderModeToggle selectedYear={selectedYear} selectedView={selectedView} />
-            </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ValueModeToggle valueMode={valueMode} onChange={setValueMode} />
+            <LeaderModeToggle selectedYear={selectedYear} selectedView={selectedView} />
           </div>
 
           <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

@@ -3,6 +3,7 @@ import Link from "next/link"
 import type { CSSProperties } from "react"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush"
+import { AppHeader } from "@/components/layout/app-header"
 import { LandingCarousel } from "@/components/views/landing-carousel"
 import { LandingHeroScrollShell } from "@/components/views/landing-hero-scroll-shell"
 import {
@@ -963,51 +964,8 @@ export default async function Home() {
     <div className="relative overflow-hidden text-nrl-text">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-        <header className="flex items-center justify-between gap-4 border-b border-white/8 pb-4">
-          <Link href="/" className="inline-flex items-center gap-3">
-            <Image src="/logo-mark.svg" alt="Short Side logo" width={30} height={30} priority />
-            <div>
-              <div className="text-[9px] font-semibold uppercase tracking-[0.28em] text-white/45">Short Side</div>
-              <div className="text-sm font-semibold text-white/92">NRL Analytics Hub</div>
-            </div>
-          </Link>
-
-          <nav className="hidden items-center gap-5 text-xs text-white/55 md:flex">
-            <Link href="/" className="transition-colors hover:text-white">Home</Link>
-            <Link href="/dashboard/fantasy" className="transition-colors hover:text-white">Fantasy</Link>
-            <Link href="/dashboard/betting" className="transition-colors hover:text-white">Betting</Link>
-            <Link href="/dashboard/players" className="transition-colors hover:text-white">Stats</Link>
-          </nav>
-
-          <div className="flex items-center gap-2">
-            <Link
-              href="/sign-in"
-              className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white"
-            >
-              Sign in
-            </Link>
-          </div>
-        </header>
-
-        <div className="mt-3 md:hidden">
-          <nav className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="inline-flex min-w-max rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur">
-              <Link href="/" className="rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
-                Home
-              </Link>
-              <Link href="/dashboard/fantasy" className="rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55 transition-colors hover:text-white">
-                Fantasy
-              </Link>
-              <Link href="/dashboard/betting" className="rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55 transition-colors hover:text-white">
-                Betting
-              </Link>
-              <Link href="/dashboard/players" className="rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55 transition-colors hover:text-white">
-                Stats
-              </Link>
-            </div>
-          </nav>
-        </div>
+      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col pb-16">
+        <AppHeader sticky />
 
         <LandingHeroScrollShell>
           <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
@@ -1305,7 +1263,7 @@ export default async function Home() {
                 </div>
               </PreviewFrame>
 
-              <PreviewFrame title="Fantasy / Visuals" live>
+              <PreviewFrame title="Fantasy / Visuals" contentClassName="lg:min-h-[440px]" live>
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
                     <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Average vs Opponent</div>
@@ -1435,6 +1393,7 @@ export default async function Home() {
                         rows={spotlightSortedRows}
                         defaultStartYear="2023"
                         headerTitle="Fantasy Trend"
+                        mainChartClassName="h-[220px] w-full sm:h-[240px]"
                         primarySeriesLabel={spotlightFantasyPlayer?.name ?? "Fantasy player"}
                       />
                     </div>

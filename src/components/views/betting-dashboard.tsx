@@ -768,10 +768,6 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
-        <h1 className="text-xl font-bold text-nrl-text">Betting</h1>
-      </section>
-
-      <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-nrl-text">Staking Calculator</h2>
         {stakingPreferencesLoading ? (
           <div className="mt-3 text-xs text-nrl-muted">Loading staking…</div>

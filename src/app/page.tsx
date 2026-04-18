@@ -358,6 +358,7 @@ function buildDrawPreviewRows(draw2026Data: Draw2026Data | null, team: string | 
 
 function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2, requirePrices = true): BettingMatchPreview[] {
   const grouped = new Map<string, BettingMatchPreview>()
+  const todayIso = new Date().toISOString().slice(0, 10)
 
   for (const row of snapshot.h2h) {
     const key = `${row.date}|${row.match}`
@@ -370,7 +371,7 @@ function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2, requirePrice
     grouped.set(key, current)
   }
 
-  return [...grouped.values()]
+  const validGroups = [...grouped.values()]
     .filter((group) => {
       if (group.rows.length < 2) return false
       if (!requirePrices) return true
@@ -380,6 +381,16 @@ function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2, requirePrice
           BETTING_BOOKIE_COLUMNS.some((bookie) => row[bookie] != null),
       )
     })
+
+  const upcomingGroups = validGroups
+    .filter((group) => group.rows[0]?.date >= todayIso)
+    .sort((a, b) => a.rows[0].date.localeCompare(b.rows[0].date) || a.match.localeCompare(b.match))
+
+  if (upcomingGroups.length > 0) {
+    return upcomingGroups.slice(0, limit)
+  }
+
+  return validGroups
     .sort((a, b) => b.rows[0].date.localeCompare(a.rows[0].date) || a.match.localeCompare(b.match))
     .slice(0, limit)
 }

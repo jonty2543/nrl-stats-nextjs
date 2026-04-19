@@ -11,11 +11,13 @@ import {
   readPlayerStatsServerCache,
   readPlayerStatsServerCacheMetadata,
 } from "@/lib/data/player-stats-server-cache";
-import type {
-  BettingMarket,
-  BettingOddsRow,
-  BettingOddsSnapshot,
-  BettingOddsTable,
+import {
+  BETTING_BOOKIE_COLUMNS,
+  type BettingBookie,
+  type BettingMarket,
+  type BettingOddsRow,
+  type BettingOddsSnapshot,
+  type BettingOddsTable,
 } from "@/lib/betting/types";
 
 const PAGE_SIZE = 1000;
@@ -528,11 +530,49 @@ function mapBettingMarket(table: BettingOddsTable, rawMarket: unknown): BettingM
   return "H2H";
 }
 
-function mapBettingRow(table: BettingOddsTable, raw: Record<string, unknown>): BettingOddsRow {
+function createEmptyBettingBookieFields(): Record<BettingBookie, number | null> {
   return {
+    Sportsbet: null,
+    Pointsbet: null,
+    Unibet: null,
+    Palmerbet: null,
+    Betright: null,
+  };
+}
+
+function computeBestBookieFromRow(
+  row: Pick<BettingOddsRow, BettingBookie | "bestBookie" | "bestPrice">
+): Pick<BettingOddsRow, "bestBookie" | "bestPrice"> {
+  if (row.bestBookie != null && row.bestPrice != null) {
+    return {
+      bestBookie: row.bestBookie,
+      bestPrice: row.bestPrice,
+    };
+  }
+
+  let bestBookie: BettingBookie | null = null;
+  let bestPrice: number | null = null;
+
+  for (const bookie of BETTING_BOOKIE_COLUMNS) {
+    const price = row[bookie];
+    if (price == null) continue;
+    if (bestPrice == null || price > bestPrice) {
+      bestBookie = bookie;
+      bestPrice = price;
+    }
+  }
+
+  return {
+    bestBookie: row.bestBookie ?? bestBookie,
+    bestPrice: row.bestPrice ?? bestPrice,
+  };
+}
+
+function mapLegacyBettingRow(table: BettingOddsTable, raw: Record<string, unknown>): BettingOddsRow {
+  const row: BettingOddsRow = {
     table,
     market: mapBettingMarket(table, raw.Market),
-    date: typeof raw.Date === "string" ? raw.Date : "",
+    date: toIsoDate(raw.Date),
     match: typeof raw.Match === "string" ? raw.Match : "",
     result: typeof raw.Result === "string" ? raw.Result : "",
     value: toNullableFinite(raw.Value),
@@ -547,6 +587,58 @@ function mapBettingRow(table: BettingOddsTable, raw: Record<string, unknown>): B
     Betright: toNullableOdds(raw.Betright),
     Betr: toNullableOdds(raw.Betr),
   };
+
+  return {
+    ...row,
+    ...computeBestBookieFromRow(row),
+  };
+}
+
+function hasBookSpecificOddsColumns(raw: Record<string, unknown>): boolean {
+  return BETTING_BOOKIE_COLUMNS.some(
+    (bookie) => `${bookie}_odds` in raw || `${bookie}_line` in raw
+  );
+}
+
+function mapBookSpecificBettingRows(
+  table: BettingOddsTable,
+  raw: Record<string, unknown>
+): BettingOddsRow[] {
+  const market = mapBettingMarket(table, raw.Market);
+  const date = toIsoDate(raw.Date);
+  const match = typeof raw.Match === "string" ? raw.Match : "";
+  const result = typeof raw.Result === "string" ? raw.Result : "";
+  const model = toNullableFinite(raw.Model);
+
+  return BETTING_BOOKIE_COLUMNS.flatMap((bookie) => {
+    const price = toNullableOdds(raw[`${bookie}_odds`]);
+    const value = toNullableFinite(raw[`${bookie}_line`]);
+    if (price == null || value == null) return [];
+
+    return [{
+      table,
+      market,
+      date,
+      match,
+      result,
+      value,
+      model,
+      bestBookie: bookie,
+      bestPrice: price,
+      marketPercentage: null,
+      ...createEmptyBettingBookieFields(),
+      [bookie]: price,
+      Betr: null,
+    }];
+  });
+}
+
+function mapBettingRows(table: BettingOddsTable, raw: Record<string, unknown>): BettingOddsRow[] {
+  if ((table === "NRL Line Odds" || table === "NRL Total Odds") && hasBookSpecificOddsColumns(raw)) {
+    return mapBookSpecificBettingRows(table, raw);
+  }
+
+  return [mapLegacyBettingRow(table, raw)];
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,7 +1191,7 @@ export async function fetchMatches(years?: string[]): Promise<Match[]> {
 async function fetchBettingOddsTableFromSupabase(table: BettingOddsTable): Promise<BettingOddsRow[]> {
   const rawRows = await fetchAllRowsFromSchema<Record<string, unknown>>("public", table);
   return rawRows
-    .map((row) => mapBettingRow(table, row))
+    .flatMap((row) => mapBettingRows(table, row))
     .filter((row) => row.match.length > 0 && row.result.length > 0 && row.date.length > 0)
     .sort((a, b) => {
       if (a.date !== b.date) return b.date.localeCompare(a.date);
@@ -1134,7 +1226,7 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
 
 const fetchBettingOddsSnapshotCached = unstable_cache(
   async (): Promise<BettingOddsSnapshot> => fetchBettingOddsSnapshotFromSupabase(),
-  ["betting-odds-v2"],
+  ["betting-odds-v3"],
   { revalidate: 120 }
 );
 

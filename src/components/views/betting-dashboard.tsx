@@ -27,9 +27,21 @@ interface BettingPreferences {
   maxEdge: number;
 }
 
-interface OutcomeRow extends BettingOddsRow {
-  bookiePrices: Record<BettingBookie, number | null>;
+interface BookieOffer {
+  bookie: BettingBookie;
+  price: number;
+  value: number | null;
+  model: number | null;
+}
+
+interface OutcomeRow {
+  market: BettingOddsRow["market"];
+  result: string;
+  bookieOffers: Record<BettingBookie, BookieOffer | null>;
+  bestOfferComputed: BookieOffer | null;
   bestPriceComputed: number | null;
+  bestValueComputed: number | null;
+  bestModelComputed: number | null;
   bestBookiesComputed: BettingBookie[];
 }
 
@@ -38,7 +50,6 @@ interface EventGroup {
   date: string;
   match: string;
   market: BettingOddsRow["market"];
-  value: number | null;
   outcomes: OutcomeRow[];
   marketPctFromBest: number | null;
 }
@@ -80,9 +91,10 @@ interface BetDraft {
 
 const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total"];
 const PREMIUM_ONLY_MARKETS = new Set<BettingMarket>(["Line", "Total"]);
-const LINE_CLOSE_DIFF = 2;
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
+const IMPLIED_LINE_SIGMA = 16.85;
+const IMPLIED_TOTAL_SIGMA = 16.85;
 const STAKING_OPTIONS: Array<{
   mode: StakingMode;
   label: string;
@@ -175,88 +187,222 @@ function formatDateLabel(value: string): string {
   });
 }
 
-function computeBestPrices(row: BettingOddsRow): {
-  bookiePrices: Record<BettingBookie, number | null>;
-  bestPrice: number | null;
-  bestBookies: BettingBookie[];
-} {
-  const bookiePrices = {
-    Sportsbet: row.Sportsbet,
-    Pointsbet: row.Pointsbet,
-    Unibet: row.Unibet,
-    Palmerbet: row.Palmerbet,
-    Betright: row.Betright,
-    Betr: row.Betr,
+function createBookieRecord<T>(factory: () => T): Record<BettingBookie, T> {
+  return {
+    Sportsbet: factory(),
+    Pointsbet: factory(),
+    Unibet: factory(),
+    Palmerbet: factory(),
+    Betright: factory(),
   };
-
-  let bestPrice: number | null = null;
-  const bestBookies: BettingBookie[] = [];
-
-  for (const bookie of BETTING_BOOKIE_COLUMNS) {
-    const price = bookiePrices[bookie];
-    if (price == null) continue;
-    if (bestPrice == null || price > bestPrice) {
-      bestPrice = price;
-      bestBookies.length = 0;
-      bestBookies.push(bookie);
-      continue;
-    }
-    if (price === bestPrice) {
-      bestBookies.push(bookie);
-    }
-  }
-
-  return { bookiePrices, bestPrice, bestBookies };
 }
 
-function getEventGroupingValue(row: BettingOddsRow): number | null {
-  if (row.value == null) return null;
-  if (row.market === "Line") return Math.abs(row.value);
-  return row.value;
+function inverseNormalCdf(probability: number): number | null {
+  if (!Number.isFinite(probability) || probability <= 0 || probability >= 1) return null;
+
+  const a = [
+    -39.69683028665376,
+    220.9460984245205,
+    -275.9285104469687,
+    138.357751867269,
+    -30.66479806614716,
+    2.506628277459239,
+  ];
+  const b = [
+    -54.47609879822406,
+    161.5858368580409,
+    -155.6989798598866,
+    66.80131188771972,
+    -13.28068155288572,
+  ];
+  const c = [
+    -0.007784894002430293,
+    -0.3223964580411365,
+    -2.400758277161838,
+    -2.549732539343734,
+    4.374664141464968,
+    2.938163982698783,
+  ];
+  const d = [
+    0.007784695709041462,
+    0.3224671290700398,
+    2.445134137142996,
+    3.754408661907416,
+  ];
+  const pLow = 0.02425;
+  const pHigh = 1 - pLow;
+
+  if (probability < pLow) {
+    const q = Math.sqrt(-2 * Math.log(probability));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
+      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+
+  if (probability > pHigh) {
+    const q = Math.sqrt(-2 * Math.log(1 - probability));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
+      / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+
+  const q = probability - 0.5;
+  const r = q * q;
+  return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
+    / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+function marketOfferScore(offer: BookieOffer, market: BettingMarket, result: string): number | null {
+  const implied = impliedProbability(offer.price);
+  const z = implied == null ? null : inverseNormalCdf(implied);
+  if (market === "H2H") return offer.price;
+  if (offer.value == null || z == null) return null;
+
+  if (market === "Line") {
+    return offer.value - (IMPLIED_LINE_SIGMA * z);
+  }
+
+  const normalizedResult = result.trim().toLowerCase();
+  if (normalizedResult.startsWith("over")) {
+    return -(offer.value + (IMPLIED_TOTAL_SIGMA * z));
+  }
+  if (normalizedResult.startsWith("under")) {
+    return offer.value - (IMPLIED_TOTAL_SIGMA * z);
+  }
+  return null;
+}
+
+function compareOfferValue(a: number | null, b: number | null, market: BettingMarket, result: string): number {
+  if (a == null || b == null) return 0;
+  if (market === "Line") return a - b;
+  if (market === "Total") {
+    const normalizedResult = result.trim().toLowerCase();
+    if (normalizedResult.startsWith("over")) return b - a;
+    if (normalizedResult.startsWith("under")) return a - b;
+  }
+  return 0;
+}
+
+function compareBookieOffers(a: BookieOffer, b: BookieOffer, market: BettingMarket, result: string): number {
+  const aScore = marketOfferScore(a, market, result);
+  const bScore = marketOfferScore(b, market, result);
+  if (aScore != null || bScore != null) {
+    if (aScore == null) return -1;
+    if (bScore == null) return 1;
+    if (Math.abs(aScore - bScore) > 1e-9) return aScore - bScore;
+  }
+
+  const valueComparison = compareOfferValue(a.value, b.value, market, result);
+  if (valueComparison !== 0) return valueComparison;
+  if (Math.abs(a.price - b.price) > 1e-9) return a.price - b.price;
+  return 0;
+}
+
+function pickBestOffer(offers: BookieOffer[], market: BettingMarket, result: string): BookieOffer | null {
+  if (offers.length === 0) return null;
+  return offers.reduce<BookieOffer>((best, offer) => (
+    compareBookieOffers(offer, best, market, result) > 0 ? offer : best
+  ), offers[0]);
 }
 
 function buildEventGroups(rows: BettingOddsRow[]): EventGroup[] {
-  const groups = new Map<string, EventGroup>();
+  const groups = new Map<string, {
+    key: string;
+    date: string;
+    match: string;
+    market: BettingOddsRow["market"];
+    outcomes: Map<string, {
+      market: BettingOddsRow["market"];
+      result: string;
+      candidateOffers: Record<BettingBookie, BookieOffer[]>;
+    }>;
+  }>();
 
   for (const row of rows) {
-    const groupingValue = getEventGroupingValue(row);
-    const eventKey = `${row.date}|${row.match}|${row.market}|${groupingValue ?? ""}`;
-    const existing = groups.get(eventKey);
-    const { bookiePrices, bestPrice, bestBookies } = computeBestPrices(row);
-
-    const outcome: OutcomeRow = {
-      ...row,
-      bookiePrices,
-      bestPriceComputed: bestPrice,
-      bestBookiesComputed: bestBookies,
-    };
-
-    if (!existing) {
+    const eventKey = `${row.date}|${row.match}|${row.market}`;
+    const existingGroup = groups.get(eventKey);
+    if (!existingGroup) {
       groups.set(eventKey, {
         key: eventKey,
         date: row.date,
         match: row.match,
         market: row.market,
-        value: groupingValue,
-        outcomes: [outcome],
-        marketPctFromBest: null,
+        outcomes: new Map(),
       });
-      continue;
     }
 
-    existing.outcomes.push(outcome);
+    const group = groups.get(eventKey);
+    if (!group) continue;
+
+    const existingOutcome = group.outcomes.get(row.result);
+    if (!existingOutcome) {
+      group.outcomes.set(row.result, {
+        market: row.market,
+        result: row.result,
+        candidateOffers: createBookieRecord(() => [] as BookieOffer[]),
+      });
+    }
+
+    const outcome = group.outcomes.get(row.result);
+    if (!outcome) continue;
+
+    for (const bookie of BETTING_BOOKIE_COLUMNS) {
+      const price = row[bookie];
+      if (price == null) continue;
+      outcome.candidateOffers[bookie].push({
+        bookie,
+        price,
+        value: row.value,
+        model: row.model,
+      });
+    }
   }
 
   const out = [...groups.values()].map((group) => {
-    const inverseSum = group.outcomes
+    const outcomes = [...group.outcomes.values()].map<OutcomeRow>((outcome) => {
+      const bookieOffers = createBookieRecord<BookieOffer | null>(() => null);
+      for (const bookie of BETTING_BOOKIE_COLUMNS) {
+        bookieOffers[bookie] = pickBestOffer(outcome.candidateOffers[bookie], outcome.market, outcome.result);
+      }
+
+      const selectedOffers = BETTING_BOOKIE_COLUMNS
+        .map((bookie) => bookieOffers[bookie])
+        .filter((offer): offer is BookieOffer => offer != null);
+      const bestOffer = selectedOffers.reduce<BookieOffer | null>((best, offer) => {
+        if (best == null) return offer;
+        return compareBookieOffers(offer, best, outcome.market, outcome.result) > 0 ? offer : best;
+      }, null);
+      const bestBookies = bestOffer == null
+        ? []
+        : BETTING_BOOKIE_COLUMNS.filter((bookie) => {
+            const offer = bookieOffers[bookie];
+            return offer != null
+              && offer.price === bestOffer.price
+              && offer.value === bestOffer.value;
+          });
+
+      return {
+        market: outcome.market,
+        result: outcome.result,
+        bookieOffers,
+        bestOfferComputed: bestOffer,
+        bestPriceComputed: bestOffer?.price ?? null,
+        bestValueComputed: bestOffer?.value ?? null,
+        bestModelComputed: bestOffer?.model ?? null,
+        bestBookiesComputed: bestBookies,
+      };
+    });
+
+    const inverseSum = (group.market === "H2H" ? outcomes : [])
       .map((row) => row.bestPriceComputed)
       .filter((value): value is number => value != null)
       .reduce((sum, price) => sum + 1 / price, 0);
     const marketPctFromBest = inverseSum > 0 ? inverseSum * 100 : null;
 
     return {
-      ...group,
-      outcomes: [...group.outcomes].sort((a, b) => a.result.localeCompare(b.result)),
+      key: group.key,
+      date: group.date,
+      match: group.match,
+      market: group.market,
+      outcomes: outcomes.sort((a, b) => a.result.localeCompare(b.result)),
       marketPctFromBest,
     };
   });
@@ -1252,24 +1398,6 @@ function MarketSection({
   onStakeOverride: (key: string, value: number) => void;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
-  const lineOutcomeIndex = useMemo(() => {
-    const index = new Map<string, OutcomeRow[]>();
-    for (const group of groups) {
-      if (group.market !== "Line") continue;
-      for (const row of group.outcomes) {
-        if (row.value == null) continue;
-        const key = `${group.date}|${group.match}|${row.result}`;
-        const list = index.get(key);
-        if (list) {
-          list.push(row);
-          continue;
-        }
-        index.set(key, [row]);
-      }
-    }
-    return index;
-  }, [groups]);
-
   if (groups.length === 0) {
     return (
       <div>
@@ -1295,7 +1423,7 @@ function MarketSection({
           <h2 className="text-base font-semibold text-nrl-text">{formatDateLabel(date)}</h2>
           {dateGroups.map((group) => {
             const { home, away } = parseMatch(group.match);
-            const showModelColumns = group.market === "Line" || group.market === "H2H";
+            const showModelColumns = true;
             const blurPremiumColumns = !canAccessPremium && showModelColumns;
             return (
               <article key={group.key} className="rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
@@ -1305,15 +1433,14 @@ function MarketSection({
                       {home}
                       {away ? ` vs ${away}` : ""}
                     </div>
+                    <div className="text-xs text-nrl-muted">{group.market}</div>
+                  </div>
+                  {group.marketPctFromBest != null ? (
                     <div className="text-xs text-nrl-muted">
-                      {group.market}
-                      {group.value != null ? ` ${group.value > 0 ? `${group.value}` : group.value}` : ""}
+                      Best-book market %:{" "}
+                      <span className="font-semibold text-nrl-text">{formatPct(group.marketPctFromBest)}</span>
                     </div>
-                  </div>
-                  <div className="text-xs text-nrl-muted">
-                    Best-book market %:{" "}
-                    <span className="font-semibold text-nrl-text">{formatPct(group.marketPctFromBest)}</span>
-                  </div>
+                  ) : null}
                 </div>
 
                 <div className="overflow-x-auto">
@@ -1342,7 +1469,7 @@ function MarketSection({
                       {group.outcomes.map((row) => {
                         const implied = impliedProbability(row.bestPriceComputed);
                         const supabaseModelProbability = showModelColumns
-                          ? modelPercentToProbability(row.model)
+                          ? modelPercentToProbability(row.bestModelComputed)
                           : null;
                         const modelProbability = supabaseModelProbability;
                         const edgeDecimal = modelProbability != null && implied != null
@@ -1385,10 +1512,8 @@ function MarketSection({
                               : overEdgeCliff
                                 ? "text-orange-500"
                                 : "text-nrl-accent";
-                        const outcomeLabel = group.market === "Line" && row.value != null
-                          ? `${row.result} ${row.value > 0 ? `+${row.value}` : row.value}`
-                          : row.result;
-                        const betRowKey = `${group.date}|${group.match}|${group.market}|${row.result}|${row.value ?? ""}`;
+                        const outcomeLabel = row.result;
+                        const betRowKey = `${group.date}|${group.match}|${group.market}|${row.result}|${row.bestValueComputed ?? ""}`;
                         const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                         const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
                         const canPlaceBet = canAccessPremium
@@ -1402,50 +1527,22 @@ function MarketSection({
                           <tr key={`${group.key}-${row.result}`} className="border-b border-nrl-border/50">
                             <td className="py-2 pr-3 font-medium text-nrl-text">{outcomeLabel}</td>
                             {BETTING_BOOKIE_COLUMNS.map((bookie) => {
-                              const directPrice = row.bookiePrices[bookie];
-                              const outcomeKey = `${group.date}|${group.match}|${row.result}`;
-                              const lineAnchor = group.value ?? (row.value == null ? null : Math.abs(row.value));
-                              const candidates = directPrice == null && group.market === "Line" && lineAnchor != null
-                                ? (lineOutcomeIndex.get(outcomeKey) ?? [])
-                                    .map((candidate) => {
-                                      const candidatePrice = candidate.bookiePrices[bookie];
-                                      if (candidatePrice == null || candidate.value == null) return null;
-                                      const diff = Math.abs(Math.abs(candidate.value) - lineAnchor);
-                                      return {
-                                        price: candidatePrice,
-                                        value: candidate.value,
-                                        diff,
-                                      };
-                                    })
-                                    .filter((candidate): candidate is { price: number; value: number; diff: number } => candidate != null)
-                                    .sort((a, b) => {
-                                      if (a.diff !== b.diff) return a.diff - b.diff;
-                                      return b.price - a.price;
-                                    })
-                                : [];
-                              const closeCandidates = candidates.filter((candidate) => candidate.diff <= LINE_CLOSE_DIFF);
-                              const bestAlt = closeCandidates[0] ?? null;
-                              const displayPrice = directPrice ?? bestAlt?.price ?? null;
-                              const isAltLine = directPrice == null && bestAlt != null;
-                              const isBest = !isAltLine && row.bestBookiesComputed.includes(bookie);
-                              const altTitle = isAltLine
-                                ? `${bookie} nearby lines: ${closeCandidates
-                                    .slice(0, 3)
-                                    .map((candidate) => `${formatLineValue(candidate.value)} @ ${candidate.price.toFixed(2)}`)
-                                    .join(" | ")}`
-                                : undefined;
+                              const offer = row.bookieOffers[bookie];
+                              const isBest = offer != null
+                                && row.bestBookiesComputed.includes(bookie)
+                                && row.bestPriceComputed === offer.price
+                                && row.bestValueComputed === offer.value;
                               return (
                                 <td
                                   key={`${group.key}-${row.result}-${bookie}`}
-                                  title={altTitle}
                                   className={`py-2 pr-3 ${isBest ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
                                 >
-                                  {displayPrice == null ? "-" : (
+                                  {offer == null ? "-" : (
                                     <div className="leading-tight">
-                                      <div>{formatPrice(displayPrice)}</div>
-                                      {isAltLine ? (
+                                      <div>{formatPrice(offer.price)}</div>
+                                      {(group.market === "Line" || group.market === "Total") && offer.value != null ? (
                                         <div className="text-[10px] text-nrl-muted">
-                                          {formatLineValue(bestAlt.value)}
+                                          {formatLineValue(offer.value)}
                                         </div>
                                       ) : null}
                                     </div>
@@ -1455,7 +1552,14 @@ function MarketSection({
                             })}
                             <td className="py-2 pr-3 text-nrl-text">
                               <div className="flex items-center gap-2">
-                                <span>{formatPrice(row.bestPriceComputed)}</span>
+                                <div className="leading-tight">
+                                  <div>{formatPrice(row.bestPriceComputed)}</div>
+                                  {(group.market === "Line" || group.market === "Total") && row.bestValueComputed != null ? (
+                                    <div className="text-[10px] text-nrl-muted">
+                                      {formatLineValue(row.bestValueComputed)}
+                                    </div>
+                                  ) : null}
+                                </div>
                                 {row.bestBookiesComputed.length > 0 ? (
                                   <div className="flex flex-wrap items-center gap-1">
                                     {row.bestBookiesComputed.map((bookie) => (
@@ -1506,7 +1610,7 @@ function MarketSection({
                                       matchDate: group.date,
                                       matchName: group.match,
                                       selection: row.result,
-                                      lineValue: row.value,
+                                      lineValue: row.bestValueComputed,
                                       odds: row.bestPriceComputed,
                                       stake: stakeValue,
                                       modelProb: modelProbability,

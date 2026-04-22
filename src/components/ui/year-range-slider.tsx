@@ -68,8 +68,8 @@ export function YearRangeSlider({
     [committedRange.endIndex, committedRange.startIndex, options]
   );
   const maxIndex = Math.max(options.length - 1, 0);
-  const startPercent = maxIndex > 0 ? ((maxIndex - draftRange.startIndex) / maxIndex) * 100 : 100;
-  const endPercent = maxIndex > 0 ? ((maxIndex - draftRange.endIndex) / maxIndex) * 100 : 0;
+  const fillStartPercent = maxIndex > 0 ? (draftRange.startIndex / maxIndex) * 100 : 0;
+  const fillEndPercent = maxIndex > 0 ? (draftRange.endIndex / maxIndex) * 100 : 100;
 
   const commitDraft = useCallback(() => {
     const nextYears = options.slice(draftRange.startIndex, draftRange.endIndex + 1);
@@ -86,7 +86,7 @@ export function YearRangeSlider({
     const rect = trackRef.current?.getBoundingClientRect();
     if (!rect || rect.width <= 0 || maxIndex <= 0) return 0;
     const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
-    return clamp(Math.round((1 - ratio) * maxIndex), 0, maxIndex);
+    return clamp(Math.round(ratio * maxIndex), 0, maxIndex);
   }, [maxIndex]);
 
   const updateHandle = useCallback((handle: RangeHandle, index: number) => {
@@ -227,22 +227,19 @@ export function YearRangeSlider({
                     <div
                       className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-accent"
                       style={{
-                        left: `${endPercent}%`,
-                        width: `${Math.max(startPercent - endPercent, 0)}%`,
+                        left: `${fillStartPercent}%`,
+                        width: `${Math.max(fillEndPercent - fillStartPercent, 0)}%`,
                       }}
                     />
                     {(["start", "end"] as const).map((handle) => {
                       const isStart = handle === "start";
-                      const percent = isStart ? startPercent : endPercent;
-                      const singleYearTransform = isStart
-                        ? "translate(0, -50%)"
-                        : "translate(-100%, -50%)";
+                      const percent = isStart ? fillStartPercent : fillEndPercent;
                       return (
                         <button
                           key={handle}
                           type="button"
-                          aria-label={isStart ? "Drag range start" : "Drag range end"}
-                          title={isStart ? "Drag range start" : "Drag range end"}
+                          aria-label={isStart ? "Drag newer year" : "Drag older year"}
+                          title={isStart ? "Drag newer year" : "Drag older year"}
                           onPointerDown={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
@@ -251,21 +248,14 @@ export function YearRangeSlider({
                           className={`absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-nrl-bg bg-nrl-accent shadow-[0_0_0_1px_rgba(0,245,138,0.6)] transition-transform ${
                             activeHandle === handle ? "scale-110" : "hover:scale-105"
                           }`}
-                          style={{
-                            left: `${percent}%`,
-                            transform:
-                              draftRange.startIndex === draftRange.endIndex
-                                ? singleYearTransform
-                                : "translate(-50%, -50%)",
-                            zIndex: activeHandle === handle ? 2 : isStart ? 2 : 1,
-                          }}
+                          style={{ left: `${percent}%`, zIndex: activeHandle === handle ? 2 : isStart ? 1 : 2 }}
                         />
                       );
                     })}
                   </div>
                   <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-nrl-muted">
-                    <span>{options[draftRange.endIndex]}</span>
                     <span>{options[draftRange.startIndex]}</span>
+                    <span>{options[draftRange.endIndex]}</span>
                   </div>
                 </div>
 

@@ -31,7 +31,7 @@ function normalizeRange(
   }
 
   return {
-    startIndex: 0,
+    startIndex: Math.min(...selectedIndexes),
     endIndex: Math.max(...selectedIndexes),
   };
 }
@@ -64,10 +64,11 @@ export function YearRangeSlider({
     [committedRange.endIndex, committedRange.startIndex, options]
   );
   const maxIndex = Math.max(options.length - 1, 0);
-  const fillPercent = maxIndex > 0 ? (draftRange.endIndex / maxIndex) * 100 : 100;
+  const fillStartPercent = maxIndex > 0 ? (draftRange.startIndex / maxIndex) * 100 : 0;
+  const fillEndPercent = maxIndex > 0 ? (draftRange.endIndex / maxIndex) * 100 : 100;
 
   const commitDraft = useCallback(() => {
-    const nextYears = options.slice(0, draftRange.endIndex + 1);
+    const nextYears = options.slice(draftRange.startIndex, draftRange.endIndex + 1);
     const currentYears = committedYears;
     const hasChanged =
       nextYears.length !== currentYears.length ||
@@ -75,7 +76,18 @@ export function YearRangeSlider({
     if (hasChanged) {
       onChange(nextYears);
     }
-  }, [committedYears, draftRange.endIndex, onChange, options]);
+  }, [committedYears, draftRange.endIndex, draftRange.startIndex, onChange, options]);
+
+  const shiftDraftRange = useCallback((direction: -1 | 1) => {
+    setDraftRange((prev) => {
+      const width = prev.endIndex - prev.startIndex;
+      const nextStartIndex = clamp(prev.startIndex + direction, 0, maxIndex - width);
+      return {
+        startIndex: nextStartIndex,
+        endIndex: nextStartIndex + width,
+      };
+    });
+  }, [maxIndex]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -162,29 +174,51 @@ export function YearRangeSlider({
                 </div>
 
                 <div className="space-y-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={maxIndex}
-                    step={1}
-                    value={draftRange.endIndex}
-                    onChange={(event) => {
-                      const nextIndex = Number.parseInt(event.target.value, 10);
-                      setDraftRange({
-                        startIndex: 0,
-                        endIndex: clamp(nextIndex, 0, maxIndex),
-                      });
-                    }}
-                    className="year-range-slider h-6 w-full appearance-none bg-transparent"
-                    style={{
-                      backgroundImage: `linear-gradient(to right, rgba(0,245,138,0.72) 0%, rgba(0,245,138,0.72) ${fillPercent}%, rgba(42,51,86,0.95) ${fillPercent}%, rgba(42,51,86,0.95) 100%)`,
-                      backgroundSize: "100% 0.35rem",
-                      backgroundPosition: "center",
-                      backgroundRepeat: "no-repeat",
-                    }}
-                  />
+                  <div className="grid grid-cols-[2rem_1fr_2rem] items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="Move year range older"
+                      title="Move year range older"
+                      disabled={draftRange.endIndex >= maxIndex}
+                      onClick={() => shiftDraftRange(1)}
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      {"<"}
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={maxIndex}
+                      step={1}
+                      value={draftRange.endIndex}
+                      onChange={(event) => {
+                        const nextIndex = Number.parseInt(event.target.value, 10);
+                        setDraftRange((prev) => ({
+                          startIndex: prev.startIndex,
+                          endIndex: clamp(nextIndex, prev.startIndex, maxIndex),
+                        }));
+                      }}
+                      className="year-range-slider h-6 w-full appearance-none bg-transparent"
+                      style={{
+                        backgroundImage: `linear-gradient(to right, rgba(42,51,86,0.95) 0%, rgba(42,51,86,0.95) ${fillStartPercent}%, rgba(0,245,138,0.72) ${fillStartPercent}%, rgba(0,245,138,0.72) ${fillEndPercent}%, rgba(42,51,86,0.95) ${fillEndPercent}%, rgba(42,51,86,0.95) 100%)`,
+                        backgroundSize: "100% 0.35rem",
+                        backgroundPosition: "center",
+                        backgroundRepeat: "no-repeat",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      aria-label="Move year range newer"
+                      title="Move year range newer"
+                      disabled={draftRange.startIndex <= 0}
+                      onClick={() => shiftDraftRange(-1)}
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      {">"}
+                    </button>
+                  </div>
                   <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-nrl-muted">
-                    <span>{options[0]}</span>
+                    <span>{options[draftRange.startIndex]}</span>
                     <span>{options[draftRange.endIndex]}</span>
                   </div>
                 </div>

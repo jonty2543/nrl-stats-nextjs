@@ -747,8 +747,8 @@ export function PlayerComparison({
     [dfYear, finalsMode]
   );
   const plotDfYear = useMemo(
-    () => filterByYear(allData, unlockedYears),
-    [allData, unlockedYears]
+    () => filterByYear(allData, selectedYears),
+    [allData, selectedYears]
   );
   const plotDfYearFinals = useMemo(
     () => filterByFinals(plotDfYear, finalsMode as "Yes" | "No"),
@@ -1681,7 +1681,7 @@ export function PlayerComparison({
             Full History Plots
           </div>
           <div className="mt-4 text-xs text-nrl-muted">
-            Rolling average and avg vs opponent use the full unlocked-year history rather than the filters above.
+            Rolling average and avg vs opponent use the selected year range.
           </div>
           <ChartPanelGrid panels={historyChartPanels} unlockAll={hasClientProPlotAccess} />
         </div>

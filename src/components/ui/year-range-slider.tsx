@@ -151,6 +151,26 @@ export function YearRangeSlider({
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
+                      aria-label="Move year range older"
+                      title="Move year range older"
+                      disabled={draftRange.endIndex >= maxIndex}
+                      onClick={() => shiftDraftRange(1)}
+                      className="rounded-sm border border-nrl-border bg-nrl-panel-2 px-2 py-0.5 text-[9px] font-semibold text-nrl-muted transition-colors hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      Older
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Move year range newer"
+                      title="Move year range newer"
+                      disabled={draftRange.startIndex <= 0}
+                      onClick={() => shiftDraftRange(-1)}
+                      className="rounded-sm border border-nrl-border bg-nrl-panel-2 px-2 py-0.5 text-[9px] font-semibold text-nrl-muted transition-colors hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      Newer
+                    </button>
+                    <button
+                      type="button"
                       onClick={() =>
                         setDraftRange({
                           startIndex: 0,
@@ -174,49 +194,27 @@ export function YearRangeSlider({
                 </div>
 
                 <div className="space-y-3">
-                  <div className="grid grid-cols-[2rem_1fr_2rem] items-center gap-2">
-                    <button
-                      type="button"
-                      aria-label="Move year range older"
-                      title="Move year range older"
-                      disabled={draftRange.endIndex >= maxIndex}
-                      onClick={() => shiftDraftRange(1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-35"
-                    >
-                      {"<"}
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={maxIndex}
-                      step={1}
-                      value={draftRange.endIndex}
-                      onChange={(event) => {
-                        const nextIndex = Number.parseInt(event.target.value, 10);
-                        setDraftRange((prev) => ({
-                          startIndex: prev.startIndex,
-                          endIndex: clamp(nextIndex, prev.startIndex, maxIndex),
-                        }));
-                      }}
-                      className="year-range-slider h-6 w-full appearance-none bg-transparent"
-                      style={{
-                        backgroundImage: `linear-gradient(to right, rgba(42,51,86,0.95) 0%, rgba(42,51,86,0.95) ${fillStartPercent}%, rgba(0,245,138,0.72) ${fillStartPercent}%, rgba(0,245,138,0.72) ${fillEndPercent}%, rgba(42,51,86,0.95) ${fillEndPercent}%, rgba(42,51,86,0.95) 100%)`,
-                        backgroundSize: "100% 0.35rem",
-                        backgroundPosition: "center",
-                        backgroundRepeat: "no-repeat",
-                      }}
-                    />
-                    <button
-                      type="button"
-                      aria-label="Move year range newer"
-                      title="Move year range newer"
-                      disabled={draftRange.startIndex <= 0}
-                      onClick={() => shiftDraftRange(-1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-35"
-                    >
-                      {">"}
-                    </button>
-                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxIndex}
+                    step={1}
+                    value={draftRange.endIndex}
+                    onChange={(event) => {
+                      const nextIndex = Number.parseInt(event.target.value, 10);
+                      setDraftRange((prev) => ({
+                        startIndex: prev.startIndex,
+                        endIndex: clamp(nextIndex, prev.startIndex, maxIndex),
+                      }));
+                    }}
+                    className="year-range-slider h-6 w-full appearance-none bg-transparent"
+                    style={{
+                      backgroundImage: `linear-gradient(to right, rgba(42,51,86,0.95) 0%, rgba(42,51,86,0.95) ${fillStartPercent}%, rgba(0,245,138,0.72) ${fillStartPercent}%, rgba(0,245,138,0.72) ${fillEndPercent}%, rgba(42,51,86,0.95) ${fillEndPercent}%, rgba(42,51,86,0.95) 100%)`,
+                      backgroundSize: "100% 0.35rem",
+                      backgroundPosition: "center",
+                      backgroundRepeat: "no-repeat",
+                    }}
+                  />
                   <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-nrl-muted">
                     <span>{options[draftRange.startIndex]}</span>
                     <span>{options[draftRange.endIndex]}</span>

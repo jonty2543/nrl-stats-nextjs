@@ -41,6 +41,7 @@ interface PlayerComparisonProps {
   teamLogos: Record<string, string>;
   availableYears: string[];
   defaultYears: string[];
+  initialCanAccessLoginSeason?: boolean;
   canBypassPlotGate?: boolean;
 }
 
@@ -663,13 +664,16 @@ export function PlayerComparison({
   playerImages,
   availableYears,
   defaultYears,
+  initialCanAccessLoginSeason = false,
   canBypassPlotGate = false,
 }: PlayerComparisonProps) {
   type TeammateMode = "both" | "with" | "without";
   type PercentileScope = "Position" | "All Players";
-  const { userId } = useAuth();
+  const { isLoaded: isAuthLoaded, userId } = useAuth();
   const { user } = useUser();
-  const canAccessLoginSeason = Boolean(userId);
+  const canAccessLoginSeason = isAuthLoaded
+    ? Boolean(userId)
+    : initialCanAccessLoginSeason;
   const hasClientProPlotAccess =
     canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata);
 

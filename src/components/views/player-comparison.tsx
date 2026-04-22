@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth, useUser } from "@clerk/nextjs";
-import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import { PLAYER_STATS } from "@/lib/data/constants";
@@ -694,7 +694,6 @@ export function PlayerComparison({
   const [loading, setLoading] = useState(
     initialData.length === 0 && initialYears.length > 0
   );
-  const hasBootstrappedFetch = useRef(false);
   const filterUnlockedYears = useCallback(
     (years: string[]) => years.filter((year) => unlockedYears.includes(year)),
     [unlockedYears]
@@ -704,22 +703,30 @@ export function PlayerComparison({
     [unlockedYears]
   );
 
-  const loadAllUnlockedYears = useCallback(async () => {
-    if (unlockedYears.length === 0) {
-      setAllData([]);
-      return;
-    }
+  const loadedYears = useMemo(
+    () => new Set(allData.map((row) => String(row.Year ?? ""))),
+    [allData]
+  );
+
+  const loadYears = useCallback(async (years: string[]) => {
+    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    if (validYears.length === 0) return;
+
     setLoading(true);
     try {
-      const res = await fetch(`/api/player-stats?years=${unlockedYears.join(",")}`);
+      const res = await fetch(`/api/player-stats?years=${validYears.join(",")}`);
       if (res.ok) {
-        const data = await res.json();
-        setAllData(data);
+        const data = (await res.json()) as PlayerStat[];
+        const fetchedYears = new Set(validYears);
+        setAllData((prev) => [
+          ...prev.filter((row) => !fetchedYears.has(String(row.Year ?? ""))),
+          ...data,
+        ]);
       }
     } finally {
       setLoading(false);
     }
-  }, [unlockedYears]);
+  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
 
   const handleYearsChange = useCallback(async (years: string[]) => {
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
@@ -807,15 +814,10 @@ export function PlayerComparison({
   }, [selectedYears.length, unlockedYears]);
 
   useEffect(() => {
-    if (hasBootstrappedFetch.current) return;
-    if (initialData.length > 0 || allData.length > 0) {
-      hasBootstrappedFetch.current = true;
-      return;
-    }
-    if (unlockedYears.length === 0) return;
-    hasBootstrappedFetch.current = true;
-    void loadAllUnlockedYears();
-  }, [allData.length, initialData.length, loadAllUnlockedYears, unlockedYears.length]);
+    const missingSelectedYears = selectedYears.filter((year) => !loadedYears.has(year));
+    if (missingSelectedYears.length === 0) return;
+    void loadYears(missingSelectedYears);
+  }, [loadYears, loadedYears, selectedYears]);
 
   useEffect(() => {
     const validYears = selectedYears.filter((year) => unlockedYears.includes(year));
@@ -827,12 +829,11 @@ export function PlayerComparison({
   }, [handleYearsChange, selectedYears, unlockedYears]);
 
   useEffect(() => {
-    const loadedYears = [...new Set(allData.map((row) => row.Year))];
-    const missingUnlockedYear = unlockedYears.some((year) => !loadedYears.includes(year));
-    const hasLockedYearLoaded = loadedYears.some((year) => !unlockedYears.includes(year));
-    if (!missingUnlockedYear && !hasLockedYearLoaded) return;
-    void loadAllUnlockedYears();
-  }, [allData, loadAllUnlockedYears, unlockedYears]);
+    setAllData((prev) => {
+      const next = prev.filter((row) => unlockedYears.includes(String(row.Year ?? "")));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [unlockedYears]);
 
   const sortPlayersByRank = useCallback((names: string[]) => {
     return [...names].sort((a, b) => {

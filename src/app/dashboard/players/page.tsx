@@ -25,7 +25,7 @@ export default async function PlayersPage() {
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
   );
-  const initialData = unlockedYears.length > 0 ? await fetchPlayerStats(unlockedYears) : [];
+  const initialData = initialYears.length > 0 ? await fetchPlayerStats(initialYears) : [];
 
   return (
     <PlayerComparison

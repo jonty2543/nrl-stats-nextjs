@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 interface YearRangeSliderProps {
   label: string;
@@ -9,6 +9,8 @@ interface YearRangeSliderProps {
   onChange: (value: string[]) => void;
   openFooter?: ReactNode;
 }
+
+type RangeHandle = "start" | "end";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -31,7 +33,7 @@ function normalizeRange(
   }
 
   return {
-    startIndex: 0,
+    startIndex: Math.min(...selectedIndexes),
     endIndex: Math.max(...selectedIndexes),
   };
 }
@@ -51,7 +53,15 @@ export function YearRangeSlider({
 }: YearRangeSliderProps) {
   const [open, setOpen] = useState(false);
   const [draftRange, setDraftRange] = useState(() => normalizeRange(options, value));
+  const [activeHandle, setActiveHandle] = useState<RangeHandle | null>(null);
+  const [fieldBottom, setFieldBottom] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  const measureField = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) setFieldBottom(rect.bottom);
+  }, []);
 
   const selectedYears = useMemo(
     () => options.slice(draftRange.startIndex, draftRange.endIndex + 1),
@@ -64,10 +74,11 @@ export function YearRangeSlider({
     [committedRange.endIndex, committedRange.startIndex, options]
   );
   const maxIndex = Math.max(options.length - 1, 0);
-  const fillPercent = maxIndex > 0 ? (draftRange.endIndex / maxIndex) * 100 : 100;
+  const fillStartPercent = maxIndex > 0 ? (draftRange.startIndex / maxIndex) * 100 : 0;
+  const fillEndPercent = maxIndex > 0 ? (draftRange.endIndex / maxIndex) * 100 : 100;
 
   const commitDraft = useCallback(() => {
-    const nextYears = options.slice(0, draftRange.endIndex + 1);
+    const nextYears = options.slice(draftRange.startIndex, draftRange.endIndex + 1);
     const currentYears = committedYears;
     const hasChanged =
       nextYears.length !== currentYears.length ||
@@ -75,7 +86,36 @@ export function YearRangeSlider({
     if (hasChanged) {
       onChange(nextYears);
     }
-  }, [committedYears, draftRange.endIndex, onChange, options]);
+  }, [committedYears, draftRange.endIndex, draftRange.startIndex, onChange, options]);
+
+  const indexFromClientX = useCallback((clientX: number): number => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || maxIndex <= 0) return 0;
+    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+    return clamp(Math.round(ratio * maxIndex), 0, maxIndex);
+  }, [maxIndex]);
+
+  const updateHandle = useCallback((handle: RangeHandle, index: number) => {
+    setDraftRange((prev) => {
+      if (handle === "start") {
+        return { ...prev, startIndex: clamp(index, 0, prev.endIndex) };
+      }
+      return { ...prev, endIndex: clamp(index, prev.startIndex, maxIndex) };
+    });
+  }, [maxIndex]);
+
+  const startDrag = useCallback((handle: RangeHandle, clientX: number) => {
+    setActiveHandle(handle);
+    updateHandle(handle, indexFromClientX(clientX));
+  }, [indexFromClientX, updateHandle]);
+
+  const startTrackDrag = useCallback((clientX: number) => {
+    const index = indexFromClientX(clientX);
+    const startDistance = Math.abs(index - draftRange.startIndex);
+    const endDistance = Math.abs(index - draftRange.endIndex);
+    const handle: RangeHandle = startDistance <= endDistance ? "start" : "end";
+    startDrag(handle, clientX);
+  }, [draftRange.endIndex, draftRange.startIndex, indexFromClientX, startDrag]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -89,6 +129,36 @@ export function YearRangeSlider({
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [commitDraft, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const animationFrame = window.requestAnimationFrame(measureField);
+    window.addEventListener("resize", measureField);
+    window.addEventListener("scroll", measureField, true);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", measureField);
+      window.removeEventListener("scroll", measureField, true);
+    };
+  }, [measureField, open]);
+
+  useEffect(() => {
+    if (!activeHandle) return;
+
+    const onPointerMove = (event: PointerEvent) => {
+      updateHandle(activeHandle, indexFromClientX(event.clientX));
+    };
+    const onPointerUp = () => {
+      setActiveHandle(null);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [activeHandle, indexFromClientX, updateHandle]);
 
   return (
     <div className={`relative min-w-0 flex flex-col gap-0.5 ${open ? "z-[320]" : "z-0"}`}>
@@ -105,6 +175,7 @@ export function YearRangeSlider({
               return;
             }
             setDraftRange(normalizeRange(options, value));
+            measureField();
             setOpen(true);
           }}
           aria-expanded={open}
@@ -129,7 +200,10 @@ export function YearRangeSlider({
         </button>
 
         {open && (
-          <div className="absolute left-0 right-0 top-full z-[220] mt-1 w-full max-w-[calc(100vw-2rem)] rounded-md border border-nrl-border bg-nrl-panel p-4 shadow-lg sm:right-auto sm:w-[36rem] sm:max-w-[36rem] sm:p-6">
+          <div
+            className="fixed inset-x-2 top-[var(--year-popup-top)] z-[220] rounded-md border border-nrl-border bg-nrl-panel p-4 shadow-lg sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-1 sm:w-[36rem] sm:max-w-[36rem] sm:p-6"
+            style={{ "--year-popup-top": `${(fieldBottom ?? 0) + 4}px` } as CSSProperties}
+          >
             {options.length > 0 ? (
               <div className="flex flex-col gap-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -162,29 +236,80 @@ export function YearRangeSlider({
                 </div>
 
                 <div className="space-y-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={maxIndex}
-                    step={1}
-                    value={draftRange.endIndex}
-                    onChange={(event) => {
-                      const nextIndex = Number.parseInt(event.target.value, 10);
-                      setDraftRange({
-                        startIndex: 0,
-                        endIndex: clamp(nextIndex, 0, maxIndex),
-                      });
+                  <div
+                    ref={trackRef}
+                    role="presentation"
+                    className="relative h-8 touch-none"
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      startTrackDrag(event.clientX);
                     }}
-                    className="year-range-slider h-6 w-full appearance-none bg-transparent"
-                    style={{
-                      backgroundImage: `linear-gradient(to right, rgba(0,245,138,0.72) 0%, rgba(0,245,138,0.72) ${fillPercent}%, rgba(42,51,86,0.95) ${fillPercent}%, rgba(42,51,86,0.95) 100%)`,
-                      backgroundSize: "100% 0.35rem",
-                      backgroundPosition: "center",
-                      backgroundRepeat: "no-repeat",
-                    }}
-                  />
+                  >
+                    <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-border/90" />
+                    <div
+                      className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-accent"
+                      style={{
+                        left: `${fillStartPercent}%`,
+                        width: `${Math.max(fillEndPercent - fillStartPercent, 0)}%`,
+                      }}
+                    />
+                    {draftRange.startIndex === draftRange.endIndex ? (
+                      <div
+                        className="absolute top-1/2 h-5 w-14 -translate-x-1/2 -translate-y-1/2 [--single-half:1.75rem] sm:h-3 sm:w-8 sm:[--single-half:1rem]"
+                        style={{
+                          left: `clamp(var(--single-half), ${fillStartPercent}%, calc(100% - var(--single-half)))`,
+                        }}
+                      >
+                        {(["start", "end"] as const).map((handle) => {
+                          const isStart = handle === "start";
+                          return (
+                            <button
+                              key={handle}
+                              type="button"
+                              aria-label={isStart ? "Drag newer year" : "Drag older year"}
+                              title={isStart ? "Drag newer year" : "Drag older year"}
+                              onPointerDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                startDrag(handle, event.clientX);
+                              }}
+                              className={`absolute top-0 h-5 w-5 rounded-full border-2 border-nrl-bg bg-nrl-accent shadow-[0_0_0_1px_rgba(0,245,138,0.6)] transition-transform sm:h-3 sm:w-3 sm:border ${
+                                isStart ? "left-0" : "right-0"
+                              } ${activeHandle === handle ? "scale-110" : "hover:scale-105"}`}
+                              style={{ zIndex: activeHandle === handle ? 2 : 1 }}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      (["start", "end"] as const).map((handle) => {
+                        const isStart = handle === "start";
+                        const percent = isStart ? fillStartPercent : fillEndPercent;
+                        return (
+                          <button
+                            key={handle}
+                            type="button"
+                            aria-label={isStart ? "Drag newer year" : "Drag older year"}
+                            title={isStart ? "Drag newer year" : "Drag older year"}
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              startDrag(handle, event.clientX);
+                            }}
+                            className={`absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-nrl-bg bg-nrl-accent shadow-[0_0_0_1px_rgba(0,245,138,0.6)] transition-transform sm:h-3 sm:w-3 sm:border ${
+                              activeHandle === handle ? "scale-125" : "hover:scale-110"
+                            }`}
+                            style={{
+                              left: `${percent}%`,
+                              zIndex: activeHandle === handle ? 2 : isStart ? 1 : 2,
+                            }}
+                          />
+                        );
+                      })
+                    )}
+                  </div>
                   <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-nrl-muted">
-                    <span>{options[0]}</span>
+                    <span>{options[draftRange.startIndex]}</span>
                     <span>{options[draftRange.endIndex]}</span>
                   </div>
                 </div>

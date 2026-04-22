@@ -34,6 +34,7 @@ export default async function PlayersPage() {
       teamLogos={teamLogos}
       availableYears={availableYears}
       defaultYears={initialYears}
+      initialCanAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
     />
   );

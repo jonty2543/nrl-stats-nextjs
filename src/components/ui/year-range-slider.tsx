@@ -10,6 +10,8 @@ interface YearRangeSliderProps {
   openFooter?: ReactNode;
 }
 
+type RangeHandle = "start" | "end";
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -51,7 +53,9 @@ export function YearRangeSlider({
 }: YearRangeSliderProps) {
   const [open, setOpen] = useState(false);
   const [draftRange, setDraftRange] = useState(() => normalizeRange(options, value));
+  const [activeHandle, setActiveHandle] = useState<RangeHandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
 
   const selectedYears = useMemo(
     () => options.slice(draftRange.startIndex, draftRange.endIndex + 1),
@@ -78,16 +82,34 @@ export function YearRangeSlider({
     }
   }, [committedYears, draftRange.endIndex, draftRange.startIndex, onChange, options]);
 
-  const shiftDraftRange = useCallback((direction: -1 | 1) => {
+  const indexFromClientX = useCallback((clientX: number): number => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || maxIndex <= 0) return 0;
+    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+    return clamp(Math.round(ratio * maxIndex), 0, maxIndex);
+  }, [maxIndex]);
+
+  const updateHandle = useCallback((handle: RangeHandle, index: number) => {
     setDraftRange((prev) => {
-      const width = prev.endIndex - prev.startIndex;
-      const nextStartIndex = clamp(prev.startIndex + direction, 0, maxIndex - width);
-      return {
-        startIndex: nextStartIndex,
-        endIndex: nextStartIndex + width,
-      };
+      if (handle === "start") {
+        return { ...prev, startIndex: clamp(index, 0, prev.endIndex) };
+      }
+      return { ...prev, endIndex: clamp(index, prev.startIndex, maxIndex) };
     });
   }, [maxIndex]);
+
+  const startDrag = useCallback((handle: RangeHandle, clientX: number) => {
+    setActiveHandle(handle);
+    updateHandle(handle, indexFromClientX(clientX));
+  }, [indexFromClientX, updateHandle]);
+
+  const startTrackDrag = useCallback((clientX: number) => {
+    const index = indexFromClientX(clientX);
+    const startDistance = Math.abs(index - draftRange.startIndex);
+    const endDistance = Math.abs(index - draftRange.endIndex);
+    const handle: RangeHandle = startDistance <= endDistance ? "start" : "end";
+    startDrag(handle, clientX);
+  }, [draftRange.endIndex, draftRange.startIndex, indexFromClientX, startDrag]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -101,6 +123,24 @@ export function YearRangeSlider({
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [commitDraft, open]);
+
+  useEffect(() => {
+    if (!activeHandle) return;
+
+    const onPointerMove = (event: PointerEvent) => {
+      updateHandle(activeHandle, indexFromClientX(event.clientX));
+    };
+    const onPointerUp = () => {
+      setActiveHandle(null);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [activeHandle, indexFromClientX, updateHandle]);
 
   return (
     <div className={`relative min-w-0 flex flex-col gap-0.5 ${open ? "z-[320]" : "z-0"}`}>
@@ -151,26 +191,6 @@ export function YearRangeSlider({
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      aria-label="Move year range older"
-                      title="Move year range older"
-                      disabled={draftRange.endIndex >= maxIndex}
-                      onClick={() => shiftDraftRange(1)}
-                      className="rounded-sm border border-nrl-border bg-nrl-panel-2 px-2 py-0.5 text-[9px] font-semibold text-nrl-muted transition-colors hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-35"
-                    >
-                      Older
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Move year range newer"
-                      title="Move year range newer"
-                      disabled={draftRange.startIndex <= 0}
-                      onClick={() => shiftDraftRange(-1)}
-                      className="rounded-sm border border-nrl-border bg-nrl-panel-2 px-2 py-0.5 text-[9px] font-semibold text-nrl-muted transition-colors hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-35"
-                    >
-                      Newer
-                    </button>
-                    <button
-                      type="button"
                       onClick={() =>
                         setDraftRange({
                           startIndex: 0,
@@ -194,27 +214,45 @@ export function YearRangeSlider({
                 </div>
 
                 <div className="space-y-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={maxIndex}
-                    step={1}
-                    value={draftRange.endIndex}
-                    onChange={(event) => {
-                      const nextIndex = Number.parseInt(event.target.value, 10);
-                      setDraftRange((prev) => ({
-                        startIndex: prev.startIndex,
-                        endIndex: clamp(nextIndex, prev.startIndex, maxIndex),
-                      }));
+                  <div
+                    ref={trackRef}
+                    role="presentation"
+                    className="relative h-8 touch-none"
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      startTrackDrag(event.clientX);
                     }}
-                    className="year-range-slider h-6 w-full appearance-none bg-transparent"
-                    style={{
-                      backgroundImage: `linear-gradient(to right, rgba(42,51,86,0.95) 0%, rgba(42,51,86,0.95) ${fillStartPercent}%, rgba(0,245,138,0.72) ${fillStartPercent}%, rgba(0,245,138,0.72) ${fillEndPercent}%, rgba(42,51,86,0.95) ${fillEndPercent}%, rgba(42,51,86,0.95) 100%)`,
-                      backgroundSize: "100% 0.35rem",
-                      backgroundPosition: "center",
-                      backgroundRepeat: "no-repeat",
-                    }}
-                  />
+                  >
+                    <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-border/90" />
+                    <div
+                      className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-accent"
+                      style={{
+                        left: `${fillStartPercent}%`,
+                        width: `${Math.max(fillEndPercent - fillStartPercent, 0)}%`,
+                      }}
+                    />
+                    {(["start", "end"] as const).map((handle) => {
+                      const isStart = handle === "start";
+                      const percent = isStart ? fillStartPercent : fillEndPercent;
+                      return (
+                        <button
+                          key={handle}
+                          type="button"
+                          aria-label={isStart ? "Drag newer year" : "Drag older year"}
+                          title={isStart ? "Drag newer year" : "Drag older year"}
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            startDrag(handle, event.clientX);
+                          }}
+                          className={`absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-nrl-bg bg-nrl-accent shadow-[0_0_0_1px_rgba(0,245,138,0.6)] transition-transform ${
+                            activeHandle === handle ? "scale-110" : "hover:scale-105"
+                          }`}
+                          style={{ left: `${percent}%`, zIndex: activeHandle === handle ? 2 : isStart ? 1 : 2 }}
+                        />
+                      );
+                    })}
+                  </div>
                   <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-nrl-muted">
                     <span>{options[draftRange.startIndex]}</span>
                     <span>{options[draftRange.endIndex]}</span>

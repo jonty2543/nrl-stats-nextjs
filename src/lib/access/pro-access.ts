@@ -57,8 +57,23 @@ export function hasProAccessFromMetadata(metadata: unknown): boolean {
     return explicitValue;
   }
 
+  const explicitPremiumValue = metadata.shortsideIsPremium;
+  if (explicitPremiumValue === true) {
+    return true;
+  }
+
   const statusValue = metadata.shortsideSubscriptionStatus;
-  return typeof statusValue === "string" && hasEntitledSubscriptionStatus(statusValue);
+  if (typeof statusValue === "string") {
+    return hasEntitledSubscriptionStatus(statusValue);
+  }
+
+  const tierValue = metadata.shortsideTier;
+  if (typeof tierValue === "string" && /^(pro|premium)$/i.test(tierValue)) {
+    return true;
+  }
+
+  const planValue = metadata.shortsidePlan;
+  return typeof planValue === "string" && /(pro|premium)/i.test(planValue);
 }
 
 export function hasPremiumAccessFromMetadata(metadata: unknown): boolean {
@@ -86,6 +101,7 @@ export function hasProPlotAccess(
   if (!userId) return false;
   const allowlistedUserIds = getProPlotAllowlist();
   if (allowlistedUserIds.has(userId)) return true;
+  if (getPremiumAllowlist().has(userId)) return true;
   return hasProAccessFromMetadata(metadata);
 }
 
@@ -97,5 +113,6 @@ export function hasPremiumAccess(
   if (!userId) return false;
   const allowlistedUserIds = getPremiumAllowlist();
   if (allowlistedUserIds.has(userId)) return true;
+  if (getProPlotAllowlist().has(userId)) return true;
   return hasPremiumAccessFromMetadata(metadata);
 }

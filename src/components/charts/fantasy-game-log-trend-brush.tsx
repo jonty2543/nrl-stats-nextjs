@@ -16,6 +16,7 @@ interface FantasyGameLogTrendBrushProps<T extends TrendBrushRow = PlayerStat> {
   rows: T[]
   defaultStartYear?: string
   headerTitle?: string
+  mainChartClassName?: string
   rollingWindow?: number
   onRollingWindowChange?: (value: number) => void
   showInternalControls?: boolean
@@ -170,6 +171,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   rows,
   defaultStartYear,
   headerTitle = "Fantasy Trend",
+  mainChartClassName,
   rollingWindow: controlledRollingWindow,
   onRollingWindowChange,
   showInternalControls = true,
@@ -616,7 +618,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
           <svg
             ref={mainChartRef}
             viewBox={`0 0 ${MAIN_CHART_WIDTH} ${MAIN_CHART_HEIGHT}`}
-            className="rolling-trend-main-chart h-[240px] w-full sm:h-[320px]"
+            className={`rolling-trend-main-chart ${mainChartClassName ?? "h-[240px] w-full sm:h-[320px]"}`}
           >
             {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
               const value = selectedMaxScore * tick

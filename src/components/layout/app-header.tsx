@@ -17,7 +17,7 @@ export function AppHeader({
   showStatsTabs = false,
 }: AppHeaderProps) {
   return (
-    <header className={sticky ? "sticky top-0 z-50" : undefined}>
+    <header className={sticky ? "sticky top-0 z-50 backdrop-blur" : undefined}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="relative flex items-center justify-between gap-4 border-b border-white/8 pb-4 pt-6">
           <Link href="/" className="relative z-10 inline-flex min-w-0 items-center gap-3">

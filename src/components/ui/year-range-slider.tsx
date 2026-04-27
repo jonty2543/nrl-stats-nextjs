@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 interface YearRangeSliderProps {
   label: string;
@@ -54,8 +54,14 @@ export function YearRangeSlider({
   const [open, setOpen] = useState(false);
   const [draftRange, setDraftRange] = useState(() => normalizeRange(options, value));
   const [activeHandle, setActiveHandle] = useState<RangeHandle | null>(null);
+  const [fieldBottom, setFieldBottom] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+
+  const measureField = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) setFieldBottom(rect.bottom);
+  }, []);
 
   const selectedYears = useMemo(
     () => options.slice(draftRange.startIndex, draftRange.endIndex + 1),
@@ -125,6 +131,18 @@ export function YearRangeSlider({
   }, [commitDraft, open]);
 
   useEffect(() => {
+    if (!open) return;
+    const animationFrame = window.requestAnimationFrame(measureField);
+    window.addEventListener("resize", measureField);
+    window.addEventListener("scroll", measureField, true);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", measureField);
+      window.removeEventListener("scroll", measureField, true);
+    };
+  }, [measureField, open]);
+
+  useEffect(() => {
     if (!activeHandle) return;
 
     const onPointerMove = (event: PointerEvent) => {
@@ -157,6 +175,7 @@ export function YearRangeSlider({
               return;
             }
             setDraftRange(normalizeRange(options, value));
+            measureField();
             setOpen(true);
           }}
           aria-expanded={open}
@@ -181,7 +200,10 @@ export function YearRangeSlider({
         </button>
 
         {open && (
-          <div className="absolute left-0 right-0 top-full z-[220] mt-1 w-full max-w-[calc(100vw-2rem)] rounded-md border border-nrl-border bg-nrl-panel p-4 shadow-lg sm:right-auto sm:w-[36rem] sm:max-w-[36rem] sm:p-6">
+          <div
+            className="fixed inset-x-2 top-[var(--year-popup-top)] z-[220] rounded-md border border-nrl-border bg-nrl-panel p-4 shadow-lg sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-1 sm:w-[36rem] sm:max-w-[36rem] sm:p-6"
+            style={{ "--year-popup-top": `${(fieldBottom ?? 0) + 4}px` } as CSSProperties}
+          >
             {options.length > 0 ? (
               <div className="flex flex-col gap-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -231,27 +253,60 @@ export function YearRangeSlider({
                         width: `${Math.max(fillEndPercent - fillStartPercent, 0)}%`,
                       }}
                     />
-                    {(["start", "end"] as const).map((handle) => {
-                      const isStart = handle === "start";
-                      const percent = isStart ? fillStartPercent : fillEndPercent;
-                      return (
-                        <button
-                          key={handle}
-                          type="button"
-                          aria-label={isStart ? "Drag newer year" : "Drag older year"}
-                          title={isStart ? "Drag newer year" : "Drag older year"}
-                          onPointerDown={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            startDrag(handle, event.clientX);
-                          }}
-                          className={`absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-nrl-bg bg-nrl-accent shadow-[0_0_0_1px_rgba(0,245,138,0.6)] transition-transform ${
-                            activeHandle === handle ? "scale-110" : "hover:scale-105"
-                          }`}
-                          style={{ left: `${percent}%`, zIndex: activeHandle === handle ? 2 : isStart ? 1 : 2 }}
-                        />
-                      );
-                    })}
+                    {draftRange.startIndex === draftRange.endIndex ? (
+                      <div
+                        className="absolute top-1/2 h-5 w-14 -translate-x-1/2 -translate-y-1/2 [--single-half:1.75rem] sm:h-3 sm:w-8 sm:[--single-half:1rem]"
+                        style={{
+                          left: `clamp(var(--single-half), ${fillStartPercent}%, calc(100% - var(--single-half)))`,
+                        }}
+                      >
+                        {(["start", "end"] as const).map((handle) => {
+                          const isStart = handle === "start";
+                          return (
+                            <button
+                              key={handle}
+                              type="button"
+                              aria-label={isStart ? "Drag newer year" : "Drag older year"}
+                              title={isStart ? "Drag newer year" : "Drag older year"}
+                              onPointerDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                startDrag(handle, event.clientX);
+                              }}
+                              className={`absolute top-0 h-5 w-5 rounded-full border-2 border-nrl-bg bg-nrl-accent shadow-[0_0_0_1px_rgba(0,245,138,0.6)] transition-transform sm:h-3 sm:w-3 sm:border ${
+                                isStart ? "left-0" : "right-0"
+                              } ${activeHandle === handle ? "scale-110" : "hover:scale-105"}`}
+                              style={{ zIndex: activeHandle === handle ? 2 : 1 }}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      (["start", "end"] as const).map((handle) => {
+                        const isStart = handle === "start";
+                        const percent = isStart ? fillStartPercent : fillEndPercent;
+                        return (
+                          <button
+                            key={handle}
+                            type="button"
+                            aria-label={isStart ? "Drag newer year" : "Drag older year"}
+                            title={isStart ? "Drag newer year" : "Drag older year"}
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              startDrag(handle, event.clientX);
+                            }}
+                            className={`absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-nrl-bg bg-nrl-accent shadow-[0_0_0_1px_rgba(0,245,138,0.6)] transition-transform sm:h-3 sm:w-3 sm:border ${
+                              activeHandle === handle ? "scale-125" : "hover:scale-110"
+                            }`}
+                            style={{
+                              left: `${percent}%`,
+                              zIndex: activeHandle === handle ? 2 : isStart ? 1 : 2,
+                            }}
+                          />
+                        );
+                      })
+                    )}
                   </div>
                   <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-nrl-muted">
                     <span>{options[draftRange.startIndex]}</span>

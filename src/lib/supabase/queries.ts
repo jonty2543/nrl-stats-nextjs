@@ -254,7 +254,6 @@ function findLocalPlayerMatchForFantasyName(
     const parsed = parseNameForMatch(name);
     return parsed.last && parsed.last === target.last;
   });
-  if (candidates.length === 1) return candidates[0];
 
   const initialMatches = candidates.filter((name) => {
     const parsed = parseNameForMatch(name);
@@ -868,14 +867,31 @@ function buildTeamStatsRowsFromMatches(rawMatches: Record<string, unknown>[]): T
     const roundLabel = roundToLabel(raw.round as string);
     const team = String(raw.team ?? "").replace(/-/g, " ");
     const opponent = String(raw.opponent_team ?? "").replace(/-/g, " ").trim() || null;
+    const points = Number(raw.score ?? 0);
+    const opponentPoints = Number(raw.opponent_score ?? 0);
+    const pointDifferential = points - opponentPoints;
+    const homeAway = raw.is_home === 1 || raw.is_home === true ? "Home" : "Away";
+    const result = pointDifferential > 0 ? "Win" : pointDifferential < 0 ? "Loss" : "Draw";
 
     return {
       Team: team as TeamStat["Team"],
       Year: year,
       Round: round,
+      Date: matchDate,
       Round_Label: roundLabel,
       Opponent: opponent,
-      Points: Number(raw.score ?? 0),
+      "Home/Away": homeAway,
+      Result: result as TeamStat["Result"],
+      Points: points,
+      "Opponent Points": opponentPoints,
+      Margin: Math.abs(pointDifferential),
+      "Point Differential": pointDifferential,
+      "Possession %": toFiniteNumber(raw.possession_pct) ?? 0,
+      "Opponent Possession %": toFiniteNumber(raw.opponent_possession_pct) ?? 0,
+      "Time In Possession": toFiniteNumber(raw.time_in_possession) ?? 0,
+      "Opponent Time In Possession": toFiniteNumber(raw.opponent_time_in_possession) ?? 0,
+      "Completion Rate": toFiniteNumber(raw.completion_rate) ?? 0,
+      "Opponent Completion Rate": toFiniteNumber(raw.opponent_completion_rate) ?? 0,
       Tries: Number(raw.tries ?? 0),
       Conversions: Number(raw.conversions_made ?? 0),
       "Conversion Attempts": Number(raw.conversions_attempted ?? 0),
@@ -936,6 +952,14 @@ export async function fetchTeamStatsFromSupabase(years?: string[]): Promise<Team
       "team",
       "opponent_team",
       "score",
+      "opponent_score",
+      "is_home",
+      "possession_pct",
+      "opponent_possession_pct",
+      "time_in_possession",
+      "opponent_time_in_possession",
+      "completion_rate",
+      "opponent_completion_rate",
       "tries",
       "conversions_made",
       "conversions_attempted",
@@ -993,7 +1017,7 @@ export async function fetchTeamStats(years?: string[]): Promise<TeamStat[]> {
 
   const fetchCached = unstable_cache(
     async () => fetchTeamStatsFromSupabase(normalizedArg),
-    ["team-stats-v1", key],
+    ["team-stats-v2", key],
     { revalidate: DAILY_REVALIDATE_SECONDS }
   )
 

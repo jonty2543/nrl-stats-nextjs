@@ -97,10 +97,22 @@ export interface TeamStat {
   Team: TeamName;
   Year: string;
   Round: number;
+  Date: string;
   Round_Label: string;
   Opponent: string | null;
+  "Home/Away": "Home" | "Away";
+  Result: "Win" | "Loss" | "Draw";
 
   Points: number;
+  "Opponent Points": number;
+  Margin: number;
+  "Point Differential": number;
+  "Possession %": number;
+  "Opponent Possession %": number;
+  "Time In Possession": number;
+  "Opponent Time In Possession": number;
+  "Completion Rate": number;
+  "Opponent Completion Rate": number;
   Tries: number;
   Conversions: number;
   "Conversion Attempts": number;

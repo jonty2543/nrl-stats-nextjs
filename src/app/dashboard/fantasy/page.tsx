@@ -7,7 +7,7 @@ import {
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
 } from "@/lib/fantasy/nrl"
-import { fetchAvailableYears } from "@/lib/supabase/queries"
+import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -20,11 +20,12 @@ export default async function FantasyPage() {
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, availableYears, ownershipBaselineSnapshot] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, availableYears, ownershipBaselineSnapshot, playerImages] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchAvailableYears(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
+    fetchPlayerImages(),
   ])
 
   const unlockedYears = canAccessLoginSeason
@@ -33,6 +34,10 @@ export default async function FantasyPage() {
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
   )
+  const allPlayersStatsYear = "2026"
+  const initialPlayerStats = unlockedYears.includes(allPlayersStatsYear)
+    ? await fetchPlayerStats([allPlayersStatsYear])
+    : []
 
   return (
     <FantasyDashboard
@@ -40,12 +45,13 @@ export default async function FantasyPage() {
       fantasyCoachPlayers={fantasyCoachPlayers}
       availableYears={unlockedYears}
       defaultYears={initialYears}
-      initialPlayerStats={[]}
+      initialPlayerStats={initialPlayerStats}
       canAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
       showPlayerDetails={false}
       playerRouteBasePath="/dashboard/fantasy"
       ownershipBaselineSnapshot={ownershipBaselineSnapshot}
+      playerImages={playerImages}
     />
   )
 }

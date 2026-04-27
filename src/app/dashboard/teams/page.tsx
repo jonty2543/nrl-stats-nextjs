@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { fetchAvailableYears, fetchTeamStats } from "@/lib/supabase/queries";
+import { fetchAvailableYears, fetchTeamLogos, fetchTeamStats } from "@/lib/supabase/queries";
 import { TeamComparison } from "@/components/views/team-comparison";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
 import { isAccessibleSeason } from "@/lib/access/season-access";
@@ -14,7 +14,10 @@ export default async function TeamsPage() {
   const { userId } = await auth();
   const canAccessLoginSeason = Boolean(userId);
   const canBypassPlotGate = await getServerProPlotAccess(userId);
-  const availableYears = await fetchAvailableYears();
+  const [availableYears, teamLogos] = await Promise.all([
+    fetchAvailableYears(),
+    fetchTeamLogos(),
+  ]);
   const unlockedYears = availableYears.filter((year) =>
     isAccessibleSeason(year, canAccessLoginSeason, "stats", canBypassPlotGate)
   );
@@ -28,6 +31,7 @@ export default async function TeamsPage() {
       initialData={initialData}
       availableYears={availableYears}
       defaultYears={initialYears}
+      teamLogos={teamLogos}
       canBypassPlotGate={canBypassPlotGate}
     />
   );

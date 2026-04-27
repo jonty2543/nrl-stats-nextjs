@@ -6,6 +6,7 @@ import { useEffect } from "react";
 
 const tools = [
   { label: "Home", href: "/" },
+  { label: "NRL AI", href: "/dashboard/ai" },
   { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "Betting", href: "/dashboard/betting" },
   { label: "Stats", href: "/dashboard/players" },
@@ -59,7 +60,7 @@ export function ToolNav({ className, mobileFullWidth = false }: ToolNavProps) {
               aria-current={active ? "page" : undefined}
               className={`text-center font-semibold uppercase transition-colors ${
                 active
-                  ? "bg-emerald-400/14 text-emerald-300"
+                  ? "bg-nrl-accent/14 text-nrl-accent"
                   : "text-white/55 hover:text-white"
               } ${mobileFullWidth
                 ? "flex-1 rounded-full px-2 py-2 text-[10px] tracking-[0.14em] sm:px-3 sm:text-[11px] sm:tracking-[0.16em] lg:flex-none lg:px-4 lg:text-xs lg:tracking-[0.18em]"

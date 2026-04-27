@@ -69,7 +69,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
           href="/dashboard/fantasy"
           className="inline-flex items-center rounded-md border border-nrl-border bg-nrl-panel px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:text-nrl-accent"
         >
-          Back to Fantasy Ownership
+          Back to Fantasy Dashboard
         </Link>
       </div>
 

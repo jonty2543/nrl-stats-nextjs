@@ -12,7 +12,7 @@ export default function DashboardLayout({
       <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col pb-16">
         <AppHeader sticky showBillingNav showStatsTabs />
 
-        <main className="px-4 pb-5 pt-2 sm:px-6 sm:pb-6 sm:pt-3 lg:px-8 lg:pb-8 lg:pt-4">
+        <main className="min-h-0 flex-1 px-4 pb-5 pt-2 sm:px-6 sm:pb-6 sm:pt-3 lg:px-8 lg:pb-8 lg:pt-4">
           {children}
         </main>
       </div>

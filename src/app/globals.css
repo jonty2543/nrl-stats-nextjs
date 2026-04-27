@@ -76,6 +76,80 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.home-hero-interactive-bg {
+  position: relative;
+  isolation: isolate;
+}
+
+.rugby-loader {
+  position: relative;
+  height: 82px;
+  overflow: hidden;
+}
+
+.rugby-loader__track {
+  position: absolute;
+  inset: 0;
+  border-bottom: 2px solid color-mix(in srgb, var(--color-nrl-accent) 45%, transparent);
+}
+
+.rugby-loader__track::before,
+.rugby-loader__track::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  width: 6px;
+  height: 2px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-nrl-muted) 55%, transparent);
+  box-shadow:
+    38px 0 0 color-mix(in srgb, var(--color-nrl-muted) 35%, transparent),
+    82px 0 0 color-mix(in srgb, var(--color-nrl-muted) 45%, transparent),
+    136px 0 0 color-mix(in srgb, var(--color-nrl-muted) 35%, transparent),
+    190px 0 0 color-mix(in srgb, var(--color-nrl-muted) 45%, transparent),
+    244px 0 0 color-mix(in srgb, var(--color-nrl-muted) 35%, transparent);
+  animation: rugby-ground-scroll 1.2s linear infinite;
+}
+
+.rugby-loader__track::after {
+  left: 28px;
+  animation-delay: -0.6s;
+}
+
+.rugby-loader__runner {
+  position: absolute;
+  left: 8px;
+  bottom: -5px;
+  width: 76px;
+  height: 81px;
+  animation: rugby-runner-bob 0.76s ease-in-out infinite alternate;
+}
+
+.rugby-loader__figure {
+  display: block;
+  width: 76px;
+  height: 81px;
+  object-fit: contain;
+}
+
+@keyframes rugby-runner-bob {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes rugby-ground-scroll {
+  from {
+    transform: translateX(260px);
+  }
+  to {
+    transform: translateX(-120px);
+  }
+}
+
 .year-range-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;

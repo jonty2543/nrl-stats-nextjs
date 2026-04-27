@@ -5,6 +5,7 @@ import {
   hasPremiumAccessFromMetadata,
   hasProAccessFromMetadata,
 } from "@/lib/access/pro-access";
+import { AI_CHAT_QUOTAS, type AiPlan } from "@/lib/ai/access";
 
 interface BillingPageProps {
   searchParams: Promise<{
@@ -43,6 +44,13 @@ function CheckItem({ children }: { children: React.ReactNode }) {
       <span>{children}</span>
     </li>
   );
+}
+
+function formatAiQuota(plan: AiPlan): string {
+  const quota = AI_CHAT_QUOTAS[plan];
+  return quota.limit == null
+    ? "Unlimited AI messages"
+    : `${quota.limit} AI message${quota.limit === 1 ? "" : "s"} per ${quota.periodLabel}`;
 }
 
 function PlanCard({
@@ -141,8 +149,8 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
             </h1>
             <p className="mx-auto mt-4 max-w-3xl text-sm leading-6 text-nrl-muted sm:text-base">
               Choose the tier that matches how deep you want to go. Free covers the core product.
-              Pro unlocks all current paid features and full stats years. Premium will sit above
-              Pro with premium-only tools once it launches.
+              Pro unlocks paid stats access plus higher AI usage, fantasy projections, and breakevens.
+              Premium adds deeper AI reasoning plus premium-only betting model info, line odds, and total odds.
             </p>
           </div>
 
@@ -156,6 +164,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                   "Core app access",
                   "Current free stats access",
                   "Standard dashboards and browsing tools",
+                  formatAiQuota("free"),
                   "Upgrade path to Pro when you want full history and locked features",
                 ]}
                 cta={
@@ -189,9 +198,11 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 tone="featured"
                 features={[
                   "Everything in Free",
-                  "Fantasy projections, breakevens and advanced tools and plots",
+                  formatAiQuota("pro"),
+                  "All plots unlocked in Fantasy and Stats",
+                  "Fantasy projections and breakevens in AI",
                   "Full stats years",
-                  "Draft / H2H matchup odds and projections",
+                  "New features as they release",
                 ]}
                 cta={
                   currentPlan === "pro" ? (
@@ -221,10 +232,10 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 description="The future top tier above Pro for premium-only capabilities."
                 features={[
                   "Everything in Pro",
-                  "Model predictions for betting",
+                  formatAiQuota("premium"),
+                  "Betting model predictions, line and total odds",
                   "Bet tracker with history",
                   "Discord alerting",
-                  "New features as they release",
                 ]}
                 cta={
                   <div className="flex h-11 items-center justify-center rounded-xl border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted">

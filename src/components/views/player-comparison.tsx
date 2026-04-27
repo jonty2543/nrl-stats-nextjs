@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth, useUser } from "@clerk/nextjs";
-import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import { PLAYER_STATS } from "@/lib/data/constants";
@@ -45,8 +45,41 @@ interface PlayerComparisonProps {
   canBypassPlotGate?: boolean;
 }
 
+type PlayerStatsTableSortDirection = "asc" | "desc";
+type PlayerStatsTableValueMode = "Average" | "Total";
+type PlayerStatsTableStatKey = (typeof PLAYER_STATS)[number];
+type PlayerStatsTableSortKey =
+  | "name"
+  | "team"
+  | "position"
+  | "games"
+  | `stat:${PlayerStatsTableStatKey}`;
+
+interface PlayerStatsTableRow {
+  name: string;
+  team: string | null;
+  position: string | null;
+  imageRow: PlayerImageRecord | null;
+  games: number;
+  averages: Partial<Record<PlayerStatsTableStatKey, number | null>>;
+  totals: Partial<Record<PlayerStatsTableStatKey, number | null>>;
+}
+
 const DEFAULT_PLAYER_1_CANDIDATES = ["Nathan Cleary"];
 const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
+const DEFAULT_STATS_TABLE_YEAR = "2026";
+
+const PLAYER_STATS_TABLE_COLUMNS = PLAYER_STATS;
+const PLAYER_STATS_TABLE_BASE_COLUMNS: Array<{
+  key: PlayerStatsTableSortKey;
+  label: string;
+  align?: "left" | "center" | "right";
+}> = [
+  { key: "name", label: "Player", align: "left" },
+  { key: "team", label: "Team", align: "center" },
+  { key: "position", label: "Pos", align: "center" },
+  { key: "games", label: "Games", align: "center" },
+];
 
 const MINUTES_FILTER_OPTIONS = [
   "Any",
@@ -75,6 +108,23 @@ function toFiniteNumber(value: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+function averageNumbers(values: Array<number | null>): number | null {
+  const valid = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  if (valid.length === 0) return null;
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
+
+function formatTableNumber(value: number | null, digits = 1): string {
+  if (value === null || !Number.isFinite(value)) return "-";
+  return Number.isInteger(value) ? String(value) : value.toFixed(digits);
+}
+
+function getPlayerInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return `${parts[0]?.[0] ?? ""}${parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : ""}`.toUpperCase();
 }
 
 function withPositionLabel(name: string, position: string): string {
@@ -659,6 +709,46 @@ export function SimplePlayerPhotoTile({
   );
 }
 
+function PlayerStatsTableThumbnail({
+  name,
+  imageRow,
+}: {
+  name: string;
+  imageRow: PlayerImageRecord | null;
+}) {
+  const imageCandidates = useMemo(() => buildPlayerImageCandidates(imageRow), [imageRow]);
+  const imageCandidatesKey = imageCandidates.join("|");
+  const [imageAttemptState, setImageAttemptState] = useState<{ key: string; index: number }>({
+    key: "",
+    index: 0,
+  });
+  const imageIndex = imageAttemptState.key === imageCandidatesKey ? imageAttemptState.index : 0;
+  const imageUrl = imageCandidates[imageIndex] ?? null;
+
+  return (
+    <div className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[9px] text-nrl-muted">
+      {imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl}
+          alt=""
+          className="h-full w-full object-cover object-top"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => {
+            setImageAttemptState((prev) => ({
+              key: imageCandidatesKey,
+              index: (prev.key === imageCandidatesKey ? prev.index : 0) + 1,
+            }));
+          }}
+        />
+      ) : (
+        <span>{getPlayerInitials(name)}</span>
+      )}
+    </div>
+  );
+}
+
 export function PlayerComparison({
   initialData,
   playerImages,
@@ -686,15 +776,23 @@ export function PlayerComparison({
     [availableYears, canAccessLoginSeason, hasClientProPlotAccess]
   );
   const initialYears = useMemo(() => {
+    if (unlockedYears.includes(DEFAULT_STATS_TABLE_YEAR)) return [DEFAULT_STATS_TABLE_YEAR];
     const validDefaultYears = defaultYears.filter((year) => unlockedYears.includes(year));
     if (validDefaultYears.length > 0) return validDefaultYears;
     return unlockedYears.slice(0, 1);
   }, [defaultYears, unlockedYears]);
   const [selectedYears, setSelectedYears] = useState<string[]>(initialYears);
+  const [statsTableYears, setStatsTableYears] = useState<string[]>(initialYears);
+  const [statsTablePosition, setStatsTablePosition] = useState("All Positions");
+  const [statsTableTeam, setStatsTableTeam] = useState("All Teams");
+  const [statsTableSort, setStatsTableSort] = useState<{
+    column: PlayerStatsTableSortKey;
+    direction: PlayerStatsTableSortDirection;
+  }>({ column: "stat:Fantasy", direction: "desc" });
+  const [statsTableValueMode, setStatsTableValueMode] = useState<PlayerStatsTableValueMode>("Average");
   const [loading, setLoading] = useState(
     initialData.length === 0 && initialYears.length > 0
   );
-  const hasBootstrappedFetch = useRef(false);
   const filterUnlockedYears = useCallback(
     (years: string[]) => years.filter((year) => unlockedYears.includes(year)),
     [unlockedYears]
@@ -704,26 +802,38 @@ export function PlayerComparison({
     [unlockedYears]
   );
 
-  const loadAllUnlockedYears = useCallback(async () => {
-    if (unlockedYears.length === 0) {
-      setAllData([]);
-      return;
-    }
+  const loadedYears = useMemo(
+    () => new Set(allData.map((row) => String(row.Year ?? ""))),
+    [allData]
+  );
+
+  const loadYears = useCallback(async (years: string[]) => {
+    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    if (validYears.length === 0) return;
+
     setLoading(true);
     try {
-      const res = await fetch(`/api/player-stats?years=${unlockedYears.join(",")}`);
+      const res = await fetch(`/api/player-stats?years=${validYears.join(",")}`);
       if (res.ok) {
-        const data = await res.json();
-        setAllData(data);
+        const data = (await res.json()) as PlayerStat[];
+        const fetchedYears = new Set(validYears);
+        setAllData((prev) => [
+          ...prev.filter((row) => !fetchedYears.has(String(row.Year ?? ""))),
+          ...data,
+        ]);
       }
     } finally {
       setLoading(false);
     }
-  }, [unlockedYears]);
+  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
 
   const handleYearsChange = useCallback(async (years: string[]) => {
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
     setSelectedYears(validYears);
+  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
+  const handleStatsTableYearsChange = useCallback(async (years: string[]) => {
+    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    setStatsTableYears(validYears);
   }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any");
@@ -740,8 +850,8 @@ export function PlayerComparison({
     [dfYear, finalsMode]
   );
   const plotDfYear = useMemo(
-    () => filterByYear(allData, unlockedYears),
-    [allData, unlockedYears]
+    () => filterByYear(allData, selectedYears),
+    [allData, selectedYears]
   );
   const plotDfYearFinals = useMemo(
     () => filterByFinals(plotDfYear, finalsMode as "Yes" | "No"),
@@ -786,6 +896,92 @@ export function PlayerComparison({
     [df]
   );
 
+  const statsTableSourceRows = useMemo(
+    () => filterByYear(allData, statsTableYears),
+    [allData, statsTableYears]
+  );
+
+  const statsTablePositionOptions = useMemo(
+    () => ["All Positions", ...Array.from(new Set(statsTableSourceRows.map((row) => row.Position))).filter(Boolean).sort()],
+    [statsTableSourceRows]
+  );
+
+  const statsTableTeamOptions = useMemo(
+    () => ["All Teams", ...Array.from(new Set(statsTableSourceRows.map((row) => row.Team))).filter(Boolean).sort()],
+    [statsTableSourceRows]
+  );
+
+  const statsTableRows = useMemo<PlayerStatsTableRow[]>(() => {
+    const filteredRows = statsTableSourceRows.filter((row) => {
+      if (statsTablePosition !== "All Positions" && row.Position !== statsTablePosition) return false;
+      if (statsTableTeam !== "All Teams" && row.Team !== statsTableTeam) return false;
+      return true;
+    });
+    const byPlayer = new Map<string, PlayerStat[]>();
+
+    for (const row of filteredRows) {
+      const rows = byPlayer.get(row.Name) ?? [];
+      rows.push(row);
+      byPlayer.set(row.Name, rows);
+    }
+
+    return [...byPlayer.entries()].map(([name, rows]) => {
+      const averages: Partial<Record<PlayerStatsTableStatKey, number | null>> = {};
+      const totals: Partial<Record<PlayerStatsTableStatKey, number | null>> = {};
+      for (const stat of PLAYER_STATS_TABLE_COLUMNS) {
+        const values = rows.map((row) => toFiniteNumber(row[stat]));
+        averages[stat] = averageNumbers(values);
+        const validValues = values.filter((value): value is number => value !== null && Number.isFinite(value));
+        totals[stat] = validValues.length > 0 ? validValues.reduce((sum, value) => sum + value, 0) : null;
+      }
+
+      return {
+        name,
+        team: primaryTeamForRows(rows),
+        position: primaryPositionForRows(rows),
+        imageRow: resolvePlayerImage(name, primaryTeamForRows(rows), playerImages),
+        games: rows.length,
+        averages,
+        totals,
+      };
+    });
+  }, [playerImages, statsTablePosition, statsTableSourceRows, statsTableTeam]);
+
+  const sortedStatsTableRows = useMemo(() => {
+    const getSortValue = (row: PlayerStatsTableRow): number | string | null => {
+      if (statsTableSort.column === "name") return row.name.toLowerCase();
+      if (statsTableSort.column === "team") return row.team?.toLowerCase() ?? null;
+      if (statsTableSort.column === "position") return row.position?.toLowerCase() ?? null;
+      if (statsTableSort.column === "games") return row.games;
+
+      const statKey = statsTableSort.column.slice("stat:".length) as PlayerStatsTableStatKey;
+      return statsTableValueMode === "Total" ? row.totals[statKey] ?? null : row.averages[statKey] ?? null;
+    };
+
+    return [...statsTableRows].sort((a, b) => {
+      const aValue = getSortValue(a);
+      const bValue = getSortValue(b);
+      if (aValue === null && bValue === null) return a.name.localeCompare(b.name);
+      if (aValue === null) return 1;
+      if (bValue === null) return -1;
+
+      const direction = statsTableSort.direction === "asc" ? 1 : -1;
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        if (aValue !== bValue) return (aValue - bValue) * direction;
+        return a.name.localeCompare(b.name);
+      }
+
+      return String(aValue).localeCompare(String(bValue), undefined, { numeric: true, sensitivity: "base" }) * direction;
+    });
+  }, [statsTableRows, statsTableSort, statsTableValueMode]);
+
+  const toggleStatsTableSort = useCallback((column: PlayerStatsTableSortKey) => {
+    setStatsTableSort((current) => ({
+      column,
+      direction: current.column === column && current.direction === "desc" ? "asc" : "desc",
+    }));
+  }, []);
+
   // Player selections
   const [player1, setPlayer1] = useState("");
   const [player2, setPlayer2] = useState("");
@@ -807,15 +1003,16 @@ export function PlayerComparison({
   }, [selectedYears.length, unlockedYears]);
 
   useEffect(() => {
-    if (hasBootstrappedFetch.current) return;
-    if (initialData.length > 0 || allData.length > 0) {
-      hasBootstrappedFetch.current = true;
-      return;
-    }
-    if (unlockedYears.length === 0) return;
-    hasBootstrappedFetch.current = true;
-    void loadAllUnlockedYears();
-  }, [allData.length, initialData.length, loadAllUnlockedYears, unlockedYears.length]);
+    if (statsTableYears.length > 0 || unlockedYears.length === 0) return;
+    setStatsTableYears(unlockedYears.slice(0, 1));
+  }, [statsTableYears.length, unlockedYears]);
+
+  useEffect(() => {
+    const neededYears = [...new Set([...selectedYears, ...statsTableYears])];
+    const missingSelectedYears = neededYears.filter((year) => !loadedYears.has(year));
+    if (missingSelectedYears.length === 0) return;
+    void loadYears(missingSelectedYears);
+  }, [loadYears, loadedYears, selectedYears, statsTableYears]);
 
   useEffect(() => {
     const validYears = selectedYears.filter((year) => unlockedYears.includes(year));
@@ -827,12 +1024,20 @@ export function PlayerComparison({
   }, [handleYearsChange, selectedYears, unlockedYears]);
 
   useEffect(() => {
-    const loadedYears = [...new Set(allData.map((row) => row.Year))];
-    const missingUnlockedYear = unlockedYears.some((year) => !loadedYears.includes(year));
-    const hasLockedYearLoaded = loadedYears.some((year) => !unlockedYears.includes(year));
-    if (!missingUnlockedYear && !hasLockedYearLoaded) return;
-    void loadAllUnlockedYears();
-  }, [allData, loadAllUnlockedYears, unlockedYears]);
+    const validYears = statsTableYears.filter((year) => unlockedYears.includes(year));
+    const hasChanged =
+      validYears.length !== statsTableYears.length ||
+      validYears.some((year, index) => year !== statsTableYears[index]);
+    if (!hasChanged) return;
+    void handleStatsTableYearsChange(validYears);
+  }, [handleStatsTableYearsChange, statsTableYears, unlockedYears]);
+
+  useEffect(() => {
+    setAllData((prev) => {
+      const next = prev.filter((row) => unlockedYears.includes(String(row.Year ?? "")));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [unlockedYears]);
 
   const sortPlayersByRank = useCallback((names: string[]) => {
     return [...names].sort((a, b) => {
@@ -1442,10 +1647,157 @@ export function PlayerComparison({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-          Players & Stats
+      {loading && (
+        <div className="flex justify-center py-6 md:py-8">
+          <span
+            aria-label="Loading"
+            role="status"
+            className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/25 border-t-nrl-accent"
+          />
         </div>
+      )}
+      {!loading && allData.length === 0 && (
+        <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-center text-nrl-muted">
+          <div>No data available for the selected season.</div>
+        </div>
+      )}
+      {allData.length > 0 && (
+        <section className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-nrl-border bg-nrl-accent/10 px-3 py-2">
+            <div className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)] items-end gap-2 md:w-auto md:grid-cols-[minmax(220px,320px)_150px_150px]">
+              <FilterBar
+                years={availableYears}
+                selectedYears={statsTableYears}
+                onYearsChange={handleStatsTableYearsChange}
+                finalsMode="Yes"
+                onFinalsModeChange={() => {}}
+                minutesThreshold={0}
+                onMinutesThresholdChange={() => {}}
+                minutesMode="All"
+                onMinutesModeChange={() => {}}
+                showPosition={false}
+                showMinutes={false}
+                showPresets={false}
+                showFinals={false}
+                embedded
+                showYear
+              />
+              <Select
+                label="Position"
+                value={statsTablePosition}
+                options={statsTablePositionOptions}
+                onChange={setStatsTablePosition}
+              />
+              <Select
+                label="Team"
+                value={statsTableTeam}
+                options={statsTableTeamOptions}
+                onChange={setStatsTableTeam}
+              />
+            </div>
+            <div className="flex items-end">
+              <PillRadio
+                options={["Average", "Total"]}
+                value={statsTableValueMode}
+                onChange={(value) => setStatsTableValueMode(value as PlayerStatsTableValueMode)}
+              />
+            </div>
+          </div>
+          <div className="h-[396px] overflow-auto">
+            <table className="min-w-[2600px] border-collapse text-left text-xs">
+              <thead>
+                <tr>
+                  {PLAYER_STATS_TABLE_BASE_COLUMNS.map((column) => {
+                    const active = statsTableSort.column === column.key;
+                    return (
+                      <th
+                        key={column.key}
+                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "name" ? "left-0 z-[4] w-48 min-w-48 max-w-48" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleStatsTableSort(column.key)}
+                          className={`inline-flex w-full cursor-pointer items-center gap-1 whitespace-nowrap hover:text-nrl-accent ${column.align === "right" ? "justify-end" : column.align === "center" ? "justify-center" : "justify-start"}`}
+                          title={`Sort by ${column.label}`}
+                        >
+                          <span>{column.label}</span>
+                          {active ? <span>{statsTableSort.direction === "asc" ? "↑" : "↓"}</span> : null}
+                        </button>
+                      </th>
+                    );
+                  })}
+                  {PLAYER_STATS_TABLE_COLUMNS.map((stat) => {
+                    const key = `stat:${stat}` as PlayerStatsTableSortKey;
+                    const active = statsTableSort.column === key;
+                    return (
+                      <th
+                        key={stat}
+                        className="sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleStatsTableSort(key)}
+                          className="inline-flex w-full cursor-pointer items-center justify-center gap-1 whitespace-nowrap hover:text-nrl-accent"
+                          title={`Sort by ${stat}`}
+                        >
+                          <span>{stat}</span>
+                          {active ? <span>{statsTableSort.direction === "asc" ? "↑" : "↓"}</span> : null}
+                        </button>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedStatsTableRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={PLAYER_STATS_TABLE_BASE_COLUMNS.length + PLAYER_STATS_TABLE_COLUMNS.length}
+                      className="px-3 py-6 text-center text-xs text-nrl-muted"
+                    >
+                      No players match the selected filters.
+                    </td>
+                  </tr>
+                ) : (
+                  sortedStatsTableRows.map((row) => {
+                    return (
+                      <tr key={row.name} className="h-9 border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70">
+                        <td className="sticky left-0 z-[1] w-48 min-w-48 max-w-48 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-xs font-semibold text-nrl-text">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} />
+                            <span className="block min-w-0 truncate" title={row.name}>{row.name}</span>
+                          </div>
+                        </td>
+                      <td className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-muted">
+                        {row.team ?? "-"}
+                      </td>
+                      <td className="border-r border-nrl-border px-3 py-2 text-center text-[10px] whitespace-nowrap text-nrl-muted">
+                        {row.position ?? "-"}
+                      </td>
+                      <td className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-text">
+                        {row.games}
+                      </td>
+                      {PLAYER_STATS_TABLE_COLUMNS.map((stat) => (
+                        <td
+                          key={`${row.name}-${stat}`}
+                          className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0"
+                        >
+                          {formatTableNumber(
+                            statsTableValueMode === "Total" ? row.totals[stat] ?? null : row.averages[stat] ?? null
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+      <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
+        <div className="mb-4 text-xs font-bold uppercase tracking-wide text-nrl-accent">Player Comparison</div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <SearchableSelect
             label="Player 1"
@@ -1473,20 +1825,6 @@ export function PlayerComparison({
           />
         </div>
       </div>
-      {loading && (
-        <div className="flex justify-center py-6 md:py-8">
-          <span
-            aria-label="Loading"
-            role="status"
-            className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/25 border-t-nrl-accent"
-          />
-        </div>
-      )}
-      {!loading && allData.length === 0 && (
-        <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-center text-nrl-muted">
-          <div>No data available for the selected season.</div>
-        </div>
-      )}
       {allData.length > 0 && (
         <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -1683,7 +2021,7 @@ export function PlayerComparison({
             Full History Plots
           </div>
           <div className="mt-4 text-xs text-nrl-muted">
-            Rolling average and avg vs opponent use the full unlocked-year history rather than the filters above.
+            Rolling average and avg vs opponent use the selected year range.
           </div>
           <ChartPanelGrid panels={historyChartPanels} unlockAll={hasClientProPlotAccess} />
         </div>

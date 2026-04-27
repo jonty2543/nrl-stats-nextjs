@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
@@ -37,6 +37,7 @@ import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush"
 import {
   PlayerImageCard,
+  primaryTeamForRows,
   resolvePlayerImage,
   resolveTeamLogoUrl,
 } from "@/components/views/player-comparison"
@@ -64,13 +65,19 @@ interface FantasyDashboardProps {
 
 type TeammateMode = "With" | "Without"
 type GameLogSortDirection = "asc" | "desc"
-type PositionOwnershipMetric = "Total" | "Weekly"
-type PositionOwnershipDirection = "asc" | "desc"
-
-interface PositionOwnershipControl {
-  metric: PositionOwnershipMetric
-  direction: PositionOwnershipDirection
-}
+type AllPlayersSortDirection = "asc" | "desc"
+type AllPlayersSortKey =
+  | "name"
+  | "position"
+  | "weeklyChange"
+  | "ownPercent"
+  | "price"
+  | "avg2026"
+  | "last3"
+  | "ppm"
+  | "projection"
+  | "breakeven"
+  | "gamesPlayed"
 
 interface PlayerDrawStripRound {
   round: number
@@ -86,8 +93,9 @@ interface OpponentHeatmapCell {
 }
 
 interface OpponentHeatmapColumn {
-  opponent: string
+  opponent: string | null
   round: number | null
+  isBye: boolean
 }
 
 interface OpponentHeatmapRow {
@@ -105,11 +113,17 @@ interface FantasyBoxPlotRow {
   max: number
 }
 
-interface OwnedCardConfig {
-  key: string
-  title: string
-  rows: FantasyPlayerSnapshot[]
-  positionCode?: number
+interface AllPlayersTableRow {
+  player: FantasyPlayerSnapshot
+  localName: string | null
+  imageRow: PlayerImageRecord | null
+  avg2026: number | null
+  last3: number | null
+  ppm: number | null
+  projection: number | null
+  breakeven: number | null
+  weeklyChange: number | null
+  gamesPlayed: number
 }
 
 const STAT_VS_FANTASY_OPTIONS = [
@@ -209,6 +223,61 @@ const GAME_LOG_COLUMNS: { key: GameLogColumn; label: string; align?: "left" | "r
 ]
 
 const GAME_LOG_BASE_UPSIDE_COLUMN_WIDTH_PX = 190
+const ALL_PLAYERS_STATS_YEAR = "2026"
+
+const ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS = new Set<AllPlayersSortKey>()
+
+const ALL_PLAYERS_BASE_COLUMNS: Array<{ key: AllPlayersSortKey; label: string; align?: "left" | "center" | "right"; proOnly?: boolean }> = [
+  { key: "name", label: "Player", align: "left" },
+  { key: "position", label: "Pos", align: "center" },
+  { key: "weeklyChange", label: "Weekly", align: "center" },
+  { key: "ownPercent", label: "Own %", align: "center" },
+  { key: "price", label: "Price", align: "center" },
+  { key: "avg2026", label: "2026 Avg", align: "center" },
+  { key: "last3", label: "Last 3", align: "center" },
+  { key: "ppm", label: "PPM", align: "center" },
+  { key: "projection", label: "Proj", align: "center", proOnly: true },
+  { key: "breakeven", label: "BE", align: "center", proOnly: true },
+  { key: "gamesPlayed", label: "Games", align: "center" },
+]
+
+function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
+  switch (key) {
+    case "name":
+      return "w-40 min-w-40 max-w-40 sm:w-64 sm:min-w-64 sm:max-w-64"
+    case "position":
+      return "w-14 min-w-14 max-w-14 sm:w-auto"
+    case "weeklyChange":
+    case "ownPercent":
+      return "w-20 min-w-20 max-w-20 sm:w-auto"
+    case "price":
+      return "w-16 min-w-16 max-w-16 sm:w-auto"
+    case "avg2026":
+    case "last3":
+      return "w-16 min-w-16 max-w-16 sm:w-auto"
+    case "ppm":
+    case "projection":
+    case "breakeven":
+    case "gamesPlayed":
+      return "w-14 min-w-14 max-w-14 sm:w-auto"
+    default:
+      return ""
+  }
+}
+
+function getCenteredValueClass(key: AllPlayersSortKey): string {
+  switch (key) {
+    case "weeklyChange":
+      return "min-w-[3.6rem]"
+    case "ownPercent":
+      return "min-w-[3.5rem]"
+    case "avg2026":
+    case "last3":
+      return "min-w-[2.5rem]"
+    default:
+      return ""
+  }
+}
 
 function isCompactGameLogColumn(column: GameLogColumn): boolean {
   return !["Date", "Opponent", "Position"].includes(column)
@@ -283,7 +352,6 @@ function findLocalPlayerMatch(fantasyName: string, localNames: string[]): string
     const parsed = parseName(name)
     return parsed.last && parsed.last === target.last
   })
-  if (candidates.length === 1) return candidates[0]
 
   const initialMatches = candidates.filter((name) => {
     const parsed = parseName(name)
@@ -303,6 +371,42 @@ function findLocalPlayerMatch(fantasyName: string, localNames: string[]): string
 function formatPrice(value: number | null): string {
   if (value === null) return "-"
   return `$${Math.round(value / 1000)}k`
+}
+
+function getPlayerThumbnailUrl(imageRow: PlayerImageRecord | null): string | null {
+  const source = imageRow?.head_image ?? imageRow?.body_image
+  if (!source) return null
+
+  const trimmed = source.trim()
+  if (!trimmed) return null
+  if (trimmed.startsWith("http://")) return `https://${trimmed.slice("http://".length)}`
+
+  const marker = "/remote.axd?"
+  const idx = trimmed.indexOf(marker)
+  if (idx >= 0) {
+    const nested = trimmed.slice(idx + marker.length)
+    if (nested.startsWith("http://")) return `https://${nested.slice("http://".length)}`
+    if (nested) return nested
+  }
+
+  return trimmed
+}
+
+function getPlayerInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return "?"
+  return `${parts[0]?.[0] ?? ""}${parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : ""}`.toUpperCase()
+}
+
+function averageNumbers(values: Array<number | null>): number | null {
+  const valid = values.filter((value): value is number => value !== null && Number.isFinite(value))
+  if (valid.length === 0) return null
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length
+}
+
+function formatTableNumber(value: number | null, digits = 1): string {
+  if (value === null || !Number.isFinite(value)) return "-"
+  return Number.isInteger(value) ? String(value) : value.toFixed(digits)
 }
 
 function formatPercent(value: number | null): string {
@@ -410,11 +514,11 @@ const BASE_FANTASY_COMPONENTS: Array<{
   pointsPerUnit: number
   divideThenFloor?: number
 }> = [
-  { aliases: ["All Run Metres", "Run Metres"], pointsPerUnit: 1, divideThenFloor: 10 },
-  { aliases: ["Tackles Made", "Tackles"], pointsPerUnit: 1 },
-  { aliases: ["Kicking Metres", "Kick Metres"], pointsPerUnit: 1, divideThenFloor: 30 },
-  { aliases: ["Conversions"], pointsPerUnit: 2 },
-]
+    { aliases: ["All Run Metres", "Run Metres"], pointsPerUnit: 1, divideThenFloor: 10 },
+    { aliases: ["Tackles Made", "Tackles"], pointsPerUnit: 1 },
+    { aliases: ["Kicking Metres", "Kick Metres"], pointsPerUnit: 1, divideThenFloor: 30 },
+    { aliases: ["Conversions"], pointsPerUnit: 2 },
+  ]
 
 function getBaseUpsideSplit(row: PlayerStat): BaseUpsideSplit {
   const basePoints = BASE_FANTASY_COMPONENTS.reduce((sum, component) => {
@@ -617,74 +721,6 @@ function compareGameLogRows(
   return direction === "asc" ? cmp : -cmp
 }
 
-function OwnershipTableCard({
-  title,
-  rows,
-  onSelectPlayer,
-  ownershipDeltaByPlayerId,
-  headerRight,
-}: {
-  title: string
-  rows: FantasyPlayerSnapshot[]
-  onSelectPlayer?: (name: string) => void
-  ownershipDeltaByPlayerId?: Map<number, number | null>
-  headerRight?: ReactNode
-}) {
-  return (
-    <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
-      <div className="flex items-center justify-between gap-2 border-b border-nrl-border bg-nrl-accent/10 px-3 py-2">
-        <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">{title}</div>
-        {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse">
-          <thead>
-            <tr>
-              <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wide text-nrl-muted">Player</th>
-              <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wide text-nrl-muted">Pos</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Own %</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Weekly</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wide text-nrl-muted">Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((player) => {
-              const delta = ownershipDeltaByPlayerId?.get(player.id) ?? null
-              return (
-                <tr key={player.id} className="border-t border-nrl-border/60">
-                  <td className="px-3 py-2 text-xs text-nrl-text">
-                    {onSelectPlayer ? (
-                      <button
-                        type="button"
-                        onClick={() => onSelectPlayer(player.name)}
-                        className="cursor-pointer text-left text-nrl-text hover:text-nrl-accent hover:underline"
-                      >
-                        {player.name}
-                      </button>
-                    ) : (
-                      player.name
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-[10px] text-nrl-muted">{player.positionLabel}</td>
-                  <td className="px-3 py-2 text-right text-xs font-semibold text-nrl-accent">
-                    {formatPercent(player.ownedBy)}
-                  </td>
-                  <td className={`px-3 py-2 text-right text-xs font-semibold ${getOwnershipDeltaClass(delta)}`}>
-                    {formatOwnershipDelta(delta)}
-                  </td>
-                  <td className="px-3 py-2 text-right text-xs text-nrl-text">
-                    {formatPrice(player.cost)}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
 function FantasyPlotToggleButton({
   active,
   locked,
@@ -703,13 +739,12 @@ function FantasyPlotToggleButton({
       type="button"
       disabled={locked}
       onClick={onClick}
-      className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-        locked
-          ? "cursor-not-allowed border-white/8 bg-white/[0.035] text-slate-500 shadow-none"
-          : active
-            ? "cursor-pointer border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
-            : "cursor-pointer border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-      }`}
+      className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${locked
+        ? "cursor-not-allowed border-white/8 bg-white/[0.035] text-slate-500 shadow-none"
+        : active
+          ? "cursor-pointer border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
+          : "cursor-pointer border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+        }`}
     >
       {locked ? inactiveLabel : active ? activeLabel : inactiveLabel}
     </button>
@@ -733,21 +768,19 @@ function MetricCard({
 }) {
   return (
     <div
-      className={`rounded-lg border border-nrl-border bg-nrl-panel-2 ${
-        compact
-          ? mobileTight
-            ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
-            : "px-2 py-3 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5"
-          : "px-3 py-2"
-      }`}
+      className={`rounded-lg border border-nrl-border bg-nrl-panel-2 ${compact
+        ? mobileTight
+          ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
+          : "px-2 py-3 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5"
+        : "px-3 py-2"
+        }`}
     >
       <div className={`${compact ? mobileTight ? "text-[6.5px] sm:text-[7px]" : "text-[7px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
         {label}
       </div>
       <div
-        className={`${compact ? mobileTight ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${
-          blurValue ? "select-none blur-[5px]" : ""
-        }`}
+        className={`${compact ? mobileTight ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${blurValue ? "select-none blur-[5px]" : ""
+          }`}
         aria-hidden={blurValue || undefined}
       >
         {value}
@@ -783,6 +816,7 @@ export function FantasyDashboard({
   const { userId } = useAuth()
   const initialSelectedYears = useMemo(
     () => {
+      if (availableYears.includes(ALL_PLAYERS_STATS_YEAR)) return [ALL_PLAYERS_STATS_YEAR]
       const validDefaultYears = defaultYears.filter((year) => availableYears.includes(year))
       return validDefaultYears.length > 0 ? validDefaultYears : availableYears.slice(0, 1)
     },
@@ -812,12 +846,15 @@ export function FantasyDashboard({
   const [selectedRollingAverageStat, setSelectedRollingAverageStat] = useState<string>("Fantasy")
   const [selectedStatVsFantasyLabel, setSelectedStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [showWithWithoutPlot, setShowWithWithoutPlot] = useState(false)
-  const [positionOwnershipControls, setPositionOwnershipControls] = useState<Partial<Record<number, PositionOwnershipControl>>>(
-    {}
-  )
   const [gameLogSort, setGameLogSort] = useState<{ column: GameLogColumn; direction: GameLogSortDirection } | null>(
     null
   )
+  const [allPlayersSort, setAllPlayersSort] = useState<{ column: AllPlayersSortKey; direction: AllPlayersSortDirection }>({
+    column: "weeklyChange",
+    direction: "desc",
+  })
+  const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
+  const [hasRequestedAllPlayersStats, setHasRequestedAllPlayersStats] = useState(false)
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
   const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata)
@@ -973,6 +1010,34 @@ export function FantasyDashboard({
     if (!showPlayerDetails || !preloadedPlayerAllYears || !hasLoginAccess) return
     void loadTeammateLookupRows(selectedYears)
   }, [hasLoginAccess, loadTeammateLookupRows, preloadedPlayerAllYears, selectedYears, showPlayerDetails])
+
+  useEffect(() => {
+    if (
+      !showOwnedCards ||
+      hasRequestedAllPlayersStats ||
+      allData.some((row) => row.Year === ALL_PLAYERS_STATS_YEAR)
+    ) return
+
+    let cancelled = false
+    setHasRequestedAllPlayersStats(true)
+    const loadAllPlayersYear = async () => {
+      try {
+        const res = await fetch(`/api/player-stats?years=${ALL_PLAYERS_STATS_YEAR}`)
+        if (!res.ok) return
+        const data = (await res.json()) as PlayerStat[]
+        if (!cancelled && Array.isArray(data)) {
+          setAllData(data)
+        }
+      } catch (error) {
+        console.error("Failed to load all fantasy player stats", error)
+      }
+    }
+
+    void loadAllPlayersYear()
+    return () => {
+      cancelled = true
+    }
+  }, [allData, hasRequestedAllPlayersStats, showOwnedCards])
 
   useEffect(() => {
     if (hasLoginAccess) return
@@ -1222,30 +1287,6 @@ export function FantasyDashboard({
     [fantasyCardImage?.team, latestLocalTeam, teamLogos]
   )
 
-  const overallTopOwned = useMemo(
-    () => [...fantasyPlayers].sort((a, b) => (b.ownedBy ?? -1) - (a.ownedBy ?? -1)).slice(0, 20),
-    [fantasyPlayers]
-  )
-
-  const overallTopPrice = useMemo(
-    () => [...fantasyPlayers].sort((a, b) => (b.cost ?? -1) - (a.cost ?? -1)).slice(0, 20),
-    [fantasyPlayers]
-  )
-
-  const topOwnedByPosition = useMemo(() => {
-    return POSITION_TABLES.map((position) => ({
-      ...position,
-      rows: fantasyPlayers
-        .filter((player) => player.positions.includes(position.code))
-        .sort((a, b) => (b.ownedBy ?? -1) - (a.ownedBy ?? -1))
-        .slice(0, 20),
-      ascRows: fantasyPlayers
-        .filter((player) => player.positions.includes(position.code))
-        .sort((a, b) => (a.ownedBy ?? Infinity) - (b.ownedBy ?? Infinity))
-        .slice(0, 20),
-    }))
-  }, [fantasyPlayers])
-
   const ownershipBaselineByPlayerId = useMemo(() => {
     const map = new Map<number, number | null>()
     for (const point of ownershipBaselineSnapshot?.points ?? []) {
@@ -1273,59 +1314,105 @@ export function FantasyDashboard({
     [ownershipDeltaByPlayerId]
   )
 
-  const topWeeklyByPosition = useMemo(() => {
-    return POSITION_TABLES.map((position) => ({
-      ...position,
-      boughtRows: fantasyPlayers
-        .filter((player) => player.positions.includes(position.code))
-        .sort((a, b) => {
-          const aDelta = ownershipDeltaByPlayerId.get(a.id)
-          const bDelta = ownershipDeltaByPlayerId.get(b.id)
-          if (aDelta == null && bDelta == null) return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
-          if (aDelta == null) return 1
-          if (bDelta == null) return -1
-          if (bDelta !== aDelta) return bDelta - aDelta
-          return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
-        })
-        .slice(0, 20),
-      soldRows: fantasyPlayers
-        .filter((player) => player.positions.includes(position.code))
-        .sort((a, b) => {
-          const aDelta = ownershipDeltaByPlayerId.get(a.id)
-          const bDelta = ownershipDeltaByPlayerId.get(b.id)
-          if (aDelta == null && bDelta == null) return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
-          if (aDelta == null) return 1
-          if (bDelta == null) return -1
-          if (aDelta !== bDelta) return aDelta - bDelta
-          return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
-        })
-        .slice(0, 20),
+  const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
+    const rows2026 = allData.filter((row) => row.Year === ALL_PLAYERS_STATS_YEAR)
+    const localNames = Array.from(new Set(rows2026.map((row) => row.Name))).sort()
+    const rowsByName = new Map<string, PlayerStat[]>()
+
+    for (const row of rows2026) {
+      const rows = rowsByName.get(row.Name) ?? []
+      rows.push(row)
+      rowsByName.set(row.Name, rows)
+    }
+
+    return fantasyPlayers.map((player) => {
+      const localName = findLocalPlayerMatch(player.name, localNames)
+      const playerRows = localName ? rowsByName.get(localName) ?? [] : []
+      const fantasyScores = playerRows.map((row) => toFiniteNumber(row.Fantasy))
+      const minutes = playerRows.map((row) => toFiniteNumber(row["Mins Played"]))
+      const totalFantasy = fantasyScores.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+      const totalMinutes = minutes.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+      const recentScores = [...playerRows]
+        .sort(sortRoundsDesc)
+        .slice(0, 3)
+        .map((row) => toFiniteNumber(row.Fantasy))
+      const coachPlayer = fantasyCoachPlayers.find((entry) => entry.id === player.id)
+      const coachMetrics = getFantasyCoachRoundMetrics(coachPlayer)
+      const ownershipDelta = ownershipDeltaByPlayerId.get(player.id) ?? null
+      const teamHint = playerRows.length > 0 ? primaryTeamForRows(playerRows) : null
+      const imageRow =
+        resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
+        resolvePlayerImage(player.name, teamHint, playerImages)
+
+      return {
+        player,
+        localName,
+        imageRow,
+        avg2026: averageNumbers(fantasyScores) ?? player.avgPoints,
+        last3: averageNumbers(recentScores),
+        ppm: totalMinutes > 0 ? totalFantasy / totalMinutes : null,
+        weeklyChange: ownershipDelta,
+        projection: applyFantasyProjectionOffset(
+          coachMetrics.projection ?? player.projectedAvg ?? null,
+          ownershipDelta,
+          topOwnershipRise
+        ),
+        breakeven: applyFantasyBreakEvenOffset(
+          coachMetrics.breakEven ?? player.be ?? null,
+          player.id,
+          coachMetrics.round
+        ),
+        gamesPlayed: playerRows.length || player.gamesPlayed || 0,
+      }
+    })
+  }, [allData, fantasyCoachPlayers, fantasyPlayers, ownershipDeltaByPlayerId, playerImages, topOwnershipRise])
+
+  const sortedAllPlayersTableRows = useMemo(() => {
+    const filteredRows =
+      allPlayersPositionFilter === "All Positions"
+        ? allPlayersTableRows
+        : allPlayersTableRows.filter((row) => row.player.positionLabels.includes(allPlayersPositionFilter))
+
+    const getSortValue = (row: AllPlayersTableRow): number | string | null => {
+      if (allPlayersSort.column === "name") return row.player.name.toLowerCase()
+      if (allPlayersSort.column === "position") return row.player.positionLabel.toLowerCase()
+      if (allPlayersSort.column === "weeklyChange") return row.weeklyChange
+      if (allPlayersSort.column === "ownPercent") return row.player.ownedBy
+      if (allPlayersSort.column === "price") return row.player.cost
+      if (allPlayersSort.column === "avg2026") return row.avg2026
+      if (allPlayersSort.column === "last3") return row.last3
+      if (allPlayersSort.column === "ppm") return row.ppm
+      if (allPlayersSort.column === "projection") return row.projection
+      if (allPlayersSort.column === "breakeven") return row.breakeven
+      if (allPlayersSort.column === "gamesPlayed") return row.gamesPlayed
+
+      return null
+    }
+
+    return [...filteredRows].sort((a, b) => {
+      const aValue = getSortValue(a)
+      const bValue = getSortValue(b)
+      if (aValue === null && bValue === null) return a.player.name.localeCompare(b.player.name)
+      if (aValue === null) return 1
+      if (bValue === null) return -1
+
+      const direction = allPlayersSort.direction === "asc" ? 1 : -1
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        if (aValue !== bValue) return (aValue - bValue) * direction
+        return a.player.name.localeCompare(b.player.name)
+      }
+
+      return String(aValue).localeCompare(String(bValue)) * direction
+    })
+  }, [allPlayersPositionFilter, allPlayersSort, allPlayersTableRows])
+
+  const toggleAllPlayersSort = useCallback((column: AllPlayersSortKey, disabled = false) => {
+    if (disabled) return
+    setAllPlayersSort((current) => ({
+      column,
+      direction: current.column === column && current.direction === "desc" ? "asc" : "desc",
     }))
-  }, [fantasyPlayers, ownershipDeltaByPlayerId])
-
-  const overallTopBoughtWeekly = useMemo(() => {
-    return [...fantasyPlayers]
-      .filter((player) => (ownershipDeltaByPlayerId.get(player.id) ?? 0) > 0)
-      .sort((a, b) => {
-        const aDelta = ownershipDeltaByPlayerId.get(a.id) ?? 0
-        const bDelta = ownershipDeltaByPlayerId.get(b.id) ?? 0
-        if (bDelta !== aDelta) return bDelta - aDelta
-        return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
-      })
-      .slice(0, 20)
-  }, [fantasyPlayers, ownershipDeltaByPlayerId])
-
-  const overallTopSoldWeekly = useMemo(() => {
-    return [...fantasyPlayers]
-      .filter((player) => (ownershipDeltaByPlayerId.get(player.id) ?? 0) < 0)
-      .sort((a, b) => {
-        const aDelta = ownershipDeltaByPlayerId.get(a.id) ?? 0
-        const bDelta = ownershipDeltaByPlayerId.get(b.id) ?? 0
-        if (aDelta !== bDelta) return aDelta - bDelta
-        return (b.ownedBy ?? -1) - (a.ownedBy ?? -1)
-      })
-      .slice(0, 20)
-  }, [fantasyPlayers, ownershipDeltaByPlayerId])
+  }, [])
 
   const selectedOwnershipDelta = useMemo(
     () =>
@@ -1424,18 +1511,26 @@ export function FantasyDashboard({
   }, [averageBaseUpsideSplit, filteredRows])
 
   const opponentHeatmap = useMemo(() => {
-    const seasonOpponentSums = new Map<string, { sum: number; count: number }>()
-    const allOpponentSums = new Map<string, { sum: number; count: number }>()
-    const seasons = new Set<string>()
-    const opponents = new Set<string>()
-    const drawOpponentFirstRound = new Map<string, number>()
+    // Build columns from the draw strip (one per round), including byes.
+    // Then append any historical opponents not covered by the draw.
+    const drawColumns: OpponentHeatmapColumn[] = draw2026StripRows.map((stripRow) => ({
+      round: stripRow.round,
+      opponent: stripRow.isBye ? null : formatOpponent(stripRow.opponent),
+      isBye: stripRow.isBye,
+    }))
 
-    for (const row of draw2026StripRows) {
-      if (!row.opponent || row.isBye) continue
-      const opponent = formatOpponent(row.opponent)
-      if (!opponent || opponent === "-" || drawOpponentFirstRound.has(opponent)) continue
-      drawOpponentFirstRound.set(opponent, row.round)
-    }
+    // Track which opponent names are already covered by the draw (case-insensitive).
+    const drawOpponentKeys = new Set<string>(
+      drawColumns
+        .filter((col) => !col.isBye && col.opponent)
+        .map((col) => normaliseTeamKey(col.opponent!))
+    )
+
+    // Collect (season, opponent, fantasy) tuples from filtered rows.
+    interface HeatEntry { season: string; opponent: string; fantasy: number }
+    const entries: HeatEntry[] = []
+    const historicalOpponents = new Set<string>()
+    const seasons = new Set<string>()
 
     for (const row of trendFilteredRows) {
       const opponent = formatOpponent(row.Opponent)
@@ -1444,51 +1539,70 @@ export function FantasyDashboard({
 
       const season = String(row.Year ?? "").trim() || "Unknown"
       seasons.add(season)
-      opponents.add(opponent)
+      entries.push({ season, opponent, fantasy })
 
-      const seasonOpponentKey = `${season}|||${opponent}`
-      const seasonCurrent = seasonOpponentSums.get(seasonOpponentKey) ?? { sum: 0, count: 0 }
-      seasonCurrent.sum += fantasy
-      seasonCurrent.count += 1
-      seasonOpponentSums.set(seasonOpponentKey, seasonCurrent)
-
-      const allCurrent = allOpponentSums.get(opponent) ?? { sum: 0, count: 0 }
-      allCurrent.sum += fantasy
-      allCurrent.count += 1
-      allOpponentSums.set(opponent, allCurrent)
+      // If this opponent isn't in the draw, we'll show it as an extra columns.
+      if (!drawOpponentKeys.has(normaliseTeamKey(opponent))) {
+        historicalOpponents.add(opponent)
+      }
     }
 
-    const columns: OpponentHeatmapColumn[] = [...opponents]
-      .sort((a, b) => {
-        const aRound = drawOpponentFirstRound.get(a)
-        const bRound = drawOpponentFirstRound.get(b)
-        if (aRound != null && bRound != null && aRound !== bRound) return aRound - bRound
-        if (aRound != null) return -1
-        if (bRound != null) return 1
-        return a.localeCompare(b)
-      })
-      .map((opponent) => ({
-        opponent,
-        round: drawOpponentFirstRound.get(opponent) ?? null,
-      }))
+    // Extra columns for opponents only seen historically (not in current draw).
+    const extraColumns: OpponentHeatmapColumn[] = [...historicalOpponents]
+      .sort((a, b) => a.localeCompare(b))
+      .map((opponent) => ({ round: null, opponent, isBye: false }))
+
+    const columns: OpponentHeatmapColumn[] = [...drawColumns, ...extraColumns]
+
+    if (columns.length === 0) return { columns: [], rows: [] }
+
+    // Build lookups: seasonOpponentKey -> { sum, count } and opponent -> { sum, count }.
+    const bySeasonOpponent = new Map<string, { sum: number; count: number }>()
+    const byOpponent = new Map<string, { sum: number; count: number }>()
+
+    for (const { season, opponent, fantasy } of entries) {
+      // season+opponent key (used for per-season rows)
+      const soKey = `${season}|||${normaliseTeamKey(opponent)}`
+      const curSo = bySeasonOpponent.get(soKey) ?? { sum: 0, count: 0 }
+      curSo.sum += fantasy
+      curSo.count += 1
+      bySeasonOpponent.set(soKey, curSo)
+
+      // opponent-only key (for "All" row aggregation)
+      const oppKey = normaliseTeamKey(opponent)
+      const curOpp = byOpponent.get(oppKey) ?? { sum: 0, count: 0 }
+      curOpp.sum += fantasy
+      curOpp.count += 1
+      byOpponent.set(oppKey, curOpp)
+    }
+
+    function cellForColumn(col: OpponentHeatmapColumn, season: string | null): OpponentHeatmapCell {
+      if (col.isBye || !col.opponent) return { average: null, games: 0 }
+
+      // Season rows: average of ALL games vs this opponent in that season.
+      if (season !== null) {
+        const soKey = `${season}|||${normaliseTeamKey(col.opponent)}`
+        const hit = bySeasonOpponent.get(soKey)
+        if (hit && hit.count > 0) return { average: hit.sum / hit.count, games: hit.count }
+        return { average: null, games: 0 }
+      }
+
+      // "All" row: aggregate all games vs this opponent across all seasons.
+      const hit = byOpponent.get(normaliseTeamKey(col.opponent))
+      if (hit && hit.count > 0) return { average: hit.sum / hit.count, games: hit.count }
+      return { average: null, games: 0 }
+    }
+
     const seasonList = [...seasons].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
 
     const allRow: OpponentHeatmapRow = {
       label: "All",
-      cells: columns.map(({ opponent }) => {
-        const total = allOpponentSums.get(opponent)
-        if (!total || total.count === 0) return { average: null, games: 0 }
-        return { average: total.sum / total.count, games: total.count }
-      }),
+      cells: columns.map((col) => cellForColumn(col, null)),
     }
 
     const seasonRows: OpponentHeatmapRow[] = seasonList.map((season) => ({
       label: season,
-      cells: columns.map(({ opponent }) => {
-        const total = seasonOpponentSums.get(`${season}|||${opponent}`)
-        if (!total || total.count === 0) return { average: null, games: 0 }
-        return { average: total.sum / total.count, games: total.count }
-      }),
+      cells: columns.map((col) => cellForColumn(col, season)),
     }))
 
     return {
@@ -1568,92 +1682,6 @@ export function FantasyDashboard({
     })
   }, [])
 
-  const setPositionOwnershipMetric = useCallback((positionCode: number, metric: PositionOwnershipMetric) => {
-    setPositionOwnershipControls((prev) => {
-      const current = prev[positionCode] ?? { metric: "Total", direction: "desc" as const }
-      if (current.metric === metric) return prev
-      return { ...prev, [positionCode]: { ...current, metric } }
-    })
-  }, [])
-
-  const setPositionOwnershipDirection = useCallback((positionCode: number, direction: PositionOwnershipDirection) => {
-    setPositionOwnershipControls((prev) => {
-      const current = prev[positionCode] ?? { metric: "Total", direction: "desc" as const }
-      if (current.direction === direction) return prev
-      return { ...prev, [positionCode]: { ...current, direction } }
-    })
-  }, [])
-
-  const ownedCards = useMemo<OwnedCardConfig[]>(
-    () => {
-      if (ownershipBaselineSnapshot) {
-        return [
-          ...(overallTopBoughtWeekly.length > 0
-            ? [
-                {
-                  key: "weekly-bought",
-                  title: "TOP BOUGHT WEEKLY",
-                  rows: overallTopBoughtWeekly,
-                },
-              ]
-            : []),
-          ...(overallTopSoldWeekly.length > 0
-            ? [
-                {
-                  key: "weekly-sold",
-                  title: "TOP SOLD WEEKLY",
-                  rows: overallTopSoldWeekly,
-                },
-              ]
-            : []),
-          { key: "price", title: "TOP PRICE", rows: overallTopPrice },
-          ...topOwnedByPosition.map((table) => {
-            const control = positionOwnershipControls[table.code] ?? { metric: "Total" as const, direction: "desc" as const }
-            const weeklyTable = topWeeklyByPosition.find((candidate) => candidate.code === table.code)
-            return {
-              key: String(table.code),
-              title: `TOP ${table.label}`,
-              rows:
-                control.metric === "Weekly"
-                  ? control.direction === "desc"
-                    ? (weeklyTable?.boughtRows ?? table.rows)
-                    : (weeklyTable?.soldRows ?? table.ascRows)
-                  : control.direction === "desc"
-                    ? table.rows
-                    : table.ascRows,
-              positionCode: table.code,
-            }
-          }),
-        ]
-      }
-
-      return [
-        {
-          key: "all",
-          title: "TOP ALL POS",
-          rows: overallTopOwned,
-        },
-        { key: "price", title: "TOP PRICE", rows: overallTopPrice },
-        ...topOwnedByPosition.map((table) => ({
-          key: String(table.code),
-          title: `TOP ${table.label}`,
-          rows: table.rows,
-          positionCode: table.code,
-        })),
-      ]
-    },
-    [
-      overallTopBoughtWeekly,
-      overallTopOwned,
-      overallTopPrice,
-      overallTopSoldWeekly,
-      ownershipBaselineSnapshot,
-      positionOwnershipControls,
-      topWeeklyByPosition,
-      topOwnedByPosition,
-    ]
-  )
-
   const draw2026Panel = (
     <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
       <div className="border-b border-nrl-border bg-nrl-panel-2 px-3 py-3">
@@ -1717,20 +1745,15 @@ export function FantasyDashboard({
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
         <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-bold text-nrl-text">Fantasy</h1>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end lg:justify-end">
-              <div className="grid grid-cols-1 gap-3 sm:min-w-[260px] lg:min-w-[420px]">
-                <SearchableSelect
-                  label=""
-                  value={selectedFantasyName}
-                  options={playerSearchOptions}
-                  onChange={navigateToPlayer}
-                  placeholder="Search player..."
-                />
-              </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-3">
+              <SearchableSelect
+                label=""
+                value={selectedFantasyName}
+                options={playerSearchOptions}
+                onChange={navigateToPlayer}
+                placeholder="Search player..."
+              />
             </div>
           </div>
         </section>
@@ -1740,19 +1763,16 @@ export function FantasyDashboard({
             {hasFantasyPlotAccess ? (
               <Link
                 href="/dashboard/fantasy/draft"
-                className="inline-flex h-full min-h-[72px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[linear-gradient(135deg,rgba(91,61,173,0.34),rgba(12,93,74,0.3))] px-3 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
+                className="inline-flex h-full min-h-[72px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
               >
                 Draft / H2H Projection and Odds
               </Link>
             ) : (
               <Link
                 href="/dashboard/fantasy/draft"
-                className="flex h-full min-h-[72px] w-full flex-col items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[linear-gradient(135deg,rgba(91,61,173,0.34),rgba(12,93,74,0.3))] px-4 py-3 text-center transition-colors hover:border-nrl-accent xl:min-h-[100%]"
+                className="flex h-full min-h-[72px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-4 py-3 text-center transition-colors hover:border-nrl-accent xl:min-h-[100%]"
               >
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-nrl-accent">
-                  Pro
-                </div>
-                <div className="mt-1 text-[11px] font-semibold text-white">
+                <div className="text-[11px] font-semibold text-white">
                   Draft / H2H Projection and Odds
                 </div>
               </Link>
@@ -1762,78 +1782,136 @@ export function FantasyDashboard({
       </div>
 
       {showOwnedCards ? (
-        <section className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {ownedCards.map((card) => (
-              <OwnershipTableCard
-                key={card.key}
-                title={card.title}
-                rows={card.rows}
-                onSelectPlayer={navigateToPlayer}
-                ownershipDeltaByPlayerId={ownershipDeltaByPlayerId}
-                headerRight={
-                  ownershipBaselineSnapshot && card.positionCode != null ? (
-                    <div className="flex items-center gap-2">
-                      {(() => {
-                        const control = positionOwnershipControls[card.positionCode!] ?? { metric: "Total" as const, direction: "desc" as const }
-                        return (
-                          <>
-                            <div className="flex items-center overflow-hidden rounded border border-nrl-border bg-nrl-panel">
-                              <button
-                                type="button"
-                                onClick={() => setPositionOwnershipMetric(card.positionCode!, "Total")}
-                                title="Sort by total ownership"
-                                className={`cursor-pointer px-3 py-1 text-[9px] font-semibold uppercase tracking-wide transition-colors ${
-                                  control.metric === "Total"
-                                    ? "bg-nrl-accent/15 text-nrl-accent"
-                                    : "text-nrl-muted hover:text-nrl-text"
-                                }`}
-                              >
-                                Total
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setPositionOwnershipMetric(card.positionCode!, "Weekly")}
-                                title="Sort by weekly ownership change"
-                                className={`cursor-pointer border-l border-nrl-border px-3 py-1 text-[9px] font-semibold uppercase tracking-wide transition-colors ${
-                                  control.metric === "Weekly"
-                                    ? "bg-nrl-accent/15 text-nrl-accent"
-                                    : "text-nrl-muted hover:text-nrl-text"
-                                }`}
-                              >
-                                Weekly
-                              </button>
+        <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-nrl-border bg-nrl-accent/10 px-3 py-2">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">All Players</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="min-w-[150px]">
+                <Select
+                  label=""
+                  value={allPlayersPositionFilter}
+                  options={["All Positions", ...POSITION_TABLES.map((position) => position.label)]}
+                  onChange={setAllPlayersPositionFilter}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="h-[756px] overflow-y-auto overflow-x-auto sm:overflow-x-hidden">
+            <table className="min-w-[800px] border-collapse text-left text-xs sm:min-w-0 sm:w-full sm:table-fixed">
+              <thead>
+                <tr>
+                  {ALL_PLAYERS_BASE_COLUMNS.map((column) => {
+                    const disabled = Boolean(column.proOnly && !hasFantasyPlotAccess)
+                    const active = allPlayersSort.column === column.key
+                    return (
+                      <th
+                        key={column.key}
+                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 sm:px-3 ${column.key === "name" ? "left-0 z-[4]" : ""} ${getAllPlayersColumnWidthClass(column.key)} ${ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS.has(column.key) ? "hidden sm:table-cell" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                      >
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => toggleAllPlayersSort(column.key, disabled)}
+                          className={`inline-flex w-full items-center gap-1 whitespace-nowrap ${column.align === "right" ? "justify-center sm:justify-end" : column.align === "center" ? "justify-center" : "justify-start"} ${disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:text-nrl-accent"}`}
+                          title={disabled ? "Pro unlocks projection and breakeven" : `Sort by ${column.label}`}
+                        >
+                          <span>{column.label}</span>
+                          {active ? <span>{allPlayersSort.direction === "asc" ? "↑" : "↓"}</span> : null}
+                        </button>
+                      </th>
+                    )
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedAllPlayersTableRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={ALL_PLAYERS_BASE_COLUMNS.length}
+                      className="px-3 py-6 text-center text-xs text-nrl-muted"
+                    >
+                      No {ALL_PLAYERS_STATS_YEAR} player stats available.
+                    </td>
+                  </tr>
+                ) : (
+                  sortedAllPlayersTableRows.map((row) => {
+                    const thumbnailUrl = getPlayerThumbnailUrl(row.imageRow)
+                    return (
+                      <tr
+                        key={row.player.id}
+                        onClick={() => navigateToPlayer(row.player.name)}
+                        className="h-9 cursor-pointer border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70"
+                      >
+                        <td className="sticky left-0 z-[1] w-40 min-w-40 max-w-40 border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-64 sm:min-w-64 sm:max-w-64 sm:px-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[9px] text-nrl-muted">
+                              {thumbnailUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={thumbnailUrl}
+                                  alt=""
+                                  className="h-full w-full object-cover object-top"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span>{getPlayerInitials(row.player.name)}</span>
+                              )}
                             </div>
-                            <div className="flex items-center overflow-hidden rounded border border-nrl-border bg-nrl-panel text-[10px]">
-                              <button
-                                type="button"
-                                onClick={() => setPositionOwnershipDirection(card.positionCode!, "desc")}
-                                title={control.metric === "Weekly" ? "Sort by biggest weekly buys" : "Sort by highest ownership"}
-                                className={`cursor-pointer px-2 py-1 transition-colors hover:text-nrl-text ${
-                                  control.direction === "desc" ? "bg-nrl-accent/15 text-nrl-accent" : "text-nrl-muted"
-                                }`}
-                              >
-                                ↑
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setPositionOwnershipDirection(card.positionCode!, "asc")}
-                                title={control.metric === "Weekly" ? "Sort by biggest weekly sells" : "Sort by lowest ownership"}
-                                className={`cursor-pointer border-l border-nrl-border px-2 py-1 transition-colors hover:text-nrl-text ${
-                                  control.direction === "asc" ? "bg-nrl-accent/15 text-nrl-accent" : "text-nrl-muted"
-                                }`}
-                              >
-                                ↓
-                              </button>
-                            </div>
-                          </>
-                        )
-                      })()}
-                    </div>
-                  ) : null
-                }
-              />
-            ))}
+                            <span className="block min-w-0 truncate" title={row.player.name}>
+                              {row.player.name}
+                            </span>
+                          </div>
+                        </td>
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-[10px] whitespace-nowrap text-nrl-muted sm:w-auto sm:px-3">
+                        {row.player.positionLabel}
+                      </td>
+                      <td className={`w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:w-auto sm:px-3 ${getOwnershipDeltaClass(row.weeklyChange)}`}>
+                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("weeklyChange")}`}>
+                          {formatOwnershipDelta(row.weeklyChange)}
+                        </span>
+                      </td>
+                      <td className="w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:w-auto sm:px-3">
+                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("ownPercent")}`}>
+                          {formatPercent(row.player.ownedBy)}
+                        </span>
+                      </td>
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                        {formatPrice(row.player.cost)}
+                      </td>
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:w-auto sm:px-3">
+                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("avg2026")}`}>
+                          {formatTableNumber(row.avg2026)}
+                        </span>
+                      </td>
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("last3")}`}>
+                          {formatTableNumber(row.last3)}
+                        </span>
+                      </td>
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                        {formatTableNumber(row.ppm, 2)}
+                      </td>
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                        <span className={!hasFantasyPlotAccess ? "inline-block blur-[3px] select-none" : ""}>
+                          {formatTableNumber(row.projection)}
+                        </span>
+                      </td>
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                        <span className={!hasFantasyPlotAccess ? "inline-block blur-[3px] select-none" : ""}>
+                          {formatTableNumber(row.breakeven)}
+                        </span>
+                      </td>
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0 sm:w-auto sm:px-3">
+                        {row.gamesPlayed || "-"}
+                      </td>
+                    </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
       ) : null}
@@ -2051,15 +2129,13 @@ export function FantasyDashboard({
               </div>
 
               <div
-                className={`relative rounded-xl border p-4 ${
-                  analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel"
-                }`}
+                className={`relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel"
+                  }`}
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div
-                    className={`text-xs font-bold uppercase tracking-wide ${
-                      analysisLocked ? "text-slate-400" : "text-nrl-accent"
-                    }`}
+                    className={`text-xs font-bold uppercase tracking-wide ${analysisLocked ? "text-slate-400" : "text-nrl-accent"
+                      }`}
                   >
                     Analysis
                   </div>
@@ -2068,74 +2144,74 @@ export function FantasyDashboard({
                   </div>
                 </div>
                 <div className={analysisLocked ? "pointer-events-none select-none opacity-40" : undefined}>
-                <div className="mb-5 grid grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
-                  <MetricCard
-                    compact
-                    label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
-                    value={formatNumber(selectedAdjustedProjection, 0)}
-                    blurValue={analysisLocked}
-                  />
-                  <MetricCard
-                    compact
-                    label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}
-                    value={formatNumber(selectedAdjustedBreakEven, 0)}
-                    blurValue={analysisLocked}
-                  />
-                </div>
-                <div className="flex flex-wrap items-center justify-start gap-2">
-                  <FantasyPlotToggleButton
-                    active={showRollingAveragePlot}
-                    locked={analysisLocked}
-                    onClick={() => setShowRollingAveragePlot((prev) => !prev)}
-                    activeLabel="Hide Rolling Average Plot"
-                    inactiveLabel="Show Rolling Average Plot"
-                  />
-                  <FantasyPlotToggleButton
-                    active={showBaseUpsideBars}
-                    locked={analysisLocked}
-                    onClick={() => setShowBaseUpsideBars((prev) => !prev)}
-                    activeLabel="Hide Base vs Upside"
-                    inactiveLabel="Show Base vs Upside"
-                  />
-                  <FantasyPlotToggleButton
-                    active={showOpponentHeatmap}
-                    locked={analysisLocked}
-                    onClick={() => setShowOpponentHeatmap((prev) => !prev)}
-                    activeLabel="Hide Avg vs Opp Heatmap"
-                    inactiveLabel="Show Avg vs Opp Heatmap"
-                  />
-                  <FantasyPlotToggleButton
-                    active={showFantasyBoxPlot}
-                    locked={analysisLocked}
-                    onClick={() => setShowFantasyBoxPlot((prev) => !prev)}
-                    activeLabel="Hide Fantasy Box Plot"
-                    inactiveLabel="Show Fantasy Box Plot"
-                  />
-                  <FantasyPlotToggleButton
-                    active={showStatVsFantasyPlot}
-                    locked={analysisLocked}
-                    onClick={() => setShowStatVsFantasyPlot((prev) => !prev)}
-                    activeLabel="Hide Stat vs Fantasy Plot"
-                    inactiveLabel="Show Stat vs Fantasy Plot"
-                  />
-                  {hasLoginAccess && teammate !== "None" ? (
-                    <FantasyPlotToggleButton
-                      active={showWithWithoutPlot}
-                      locked={analysisLocked}
-                      onClick={() => setShowWithWithoutPlot((prev) => !prev)}
-                      activeLabel="Hide With vs Without Plot"
-                      inactiveLabel="Show With vs Without Plot"
+                  <div className="mb-5 grid grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
+                    <MetricCard
+                      compact
+                      label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
+                      value={formatNumber(selectedAdjustedProjection, 0)}
+                      blurValue={analysisLocked}
                     />
-                  ) : null}
-                  {showBaseUpsideBars ? (
-                    <div className="flex items-center gap-2 text-[10px] text-nrl-muted">
-                      <span className="inline-block h-2.5 w-2.5 rounded-sm bg-nrl-accent" />
-                      <span>Base</span>
-                      <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-400" />
-                      <span>Upside</span>
-                    </div>
-                  ) : null}
-                </div>
+                    <MetricCard
+                      compact
+                      label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}
+                      value={formatNumber(selectedAdjustedBreakEven, 0)}
+                      blurValue={analysisLocked}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-start gap-2">
+                    <FantasyPlotToggleButton
+                      active={showRollingAveragePlot}
+                      locked={analysisLocked}
+                      onClick={() => setShowRollingAveragePlot((prev) => !prev)}
+                      activeLabel="Hide Rolling Average Plot"
+                      inactiveLabel="Show Rolling Average Plot"
+                    />
+                    <FantasyPlotToggleButton
+                      active={showBaseUpsideBars}
+                      locked={analysisLocked}
+                      onClick={() => setShowBaseUpsideBars((prev) => !prev)}
+                      activeLabel="Hide Base vs Upside"
+                      inactiveLabel="Show Base vs Upside"
+                    />
+                    <FantasyPlotToggleButton
+                      active={showOpponentHeatmap}
+                      locked={analysisLocked}
+                      onClick={() => setShowOpponentHeatmap((prev) => !prev)}
+                      activeLabel="Hide Avg vs Opp Heatmap"
+                      inactiveLabel="Show Avg vs Opp Heatmap"
+                    />
+                    <FantasyPlotToggleButton
+                      active={showFantasyBoxPlot}
+                      locked={analysisLocked}
+                      onClick={() => setShowFantasyBoxPlot((prev) => !prev)}
+                      activeLabel="Hide Fantasy Box Plot"
+                      inactiveLabel="Show Fantasy Box Plot"
+                    />
+                    <FantasyPlotToggleButton
+                      active={showStatVsFantasyPlot}
+                      locked={analysisLocked}
+                      onClick={() => setShowStatVsFantasyPlot((prev) => !prev)}
+                      activeLabel="Hide Stat vs Fantasy Plot"
+                      inactiveLabel="Show Stat vs Fantasy Plot"
+                    />
+                    {hasLoginAccess && teammate !== "None" ? (
+                      <FantasyPlotToggleButton
+                        active={showWithWithoutPlot}
+                        locked={analysisLocked}
+                        onClick={() => setShowWithWithoutPlot((prev) => !prev)}
+                        activeLabel="Hide With vs Without Plot"
+                        inactiveLabel="Show With vs Without Plot"
+                      />
+                    ) : null}
+                    {showBaseUpsideBars ? (
+                      <div className="flex items-center gap-2 text-[10px] text-nrl-muted">
+                        <span className="inline-block h-2.5 w-2.5 rounded-sm bg-nrl-accent" />
+                        <span>Base</span>
+                        <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-400" />
+                        <span>Upside</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 {!analysisLocked && showRollingAveragePlot && trendFilteredRows.length > 0 ? (
@@ -2163,11 +2239,10 @@ export function FantasyDashboard({
                                 key={option}
                                 type="button"
                                 onClick={() => setSelectedRollingAverageWindow(option)}
-                                className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${
-                                  selectedRollingAverageWindow === option
-                                    ? "bg-nrl-accent/15 text-nrl-accent"
-                                    : "text-nrl-muted hover:text-nrl-text"
-                                }`}
+                                className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${selectedRollingAverageWindow === option
+                                  ? "bg-nrl-accent/15 text-nrl-accent"
+                                  : "text-nrl-muted hover:text-nrl-text"
+                                  }`}
                               >
                                 {option}
                               </button>
@@ -2181,6 +2256,7 @@ export function FantasyDashboard({
                       rows={chronologicalTrendRows}
                       defaultStartYear="2023"
                       headerTitle=""
+                      mainChartClassName="w-full h-auto sm:h-[320px]"
                       rollingWindow={selectedRollingAverageWindow}
                       onRollingWindowChange={setSelectedRollingAverageWindow}
                       showInternalControls={false}
@@ -2208,16 +2284,22 @@ export function FantasyDashboard({
                               <th className="sticky left-0 z-20 border-b border-r border-nrl-border bg-nrl-panel-2 px-2 py-1 text-left text-[10px] uppercase tracking-wide text-nrl-muted">
                                 Season
                               </th>
-                              {opponentHeatmap.columns.map((column) => (
+                              {opponentHeatmap.columns.map((column, colIndex) => (
                                 <th
-                                  key={`heat-head-${column.opponent}`}
-                                  className="border-b border-nrl-border px-2 py-1 text-center text-[10px] uppercase tracking-wide text-nrl-muted whitespace-nowrap"
+                                  key={`heat-head-${column.round ?? "x"}-${column.opponent ?? "bye"}-${colIndex}`}
+                                  className={`border-b border-nrl-border px-2 py-1 text-center text-[10px] uppercase tracking-wide whitespace-nowrap ${column.isBye ? "text-amber-400/60" : "text-nrl-muted"}`}
                                 >
                                   <div className="flex flex-col items-center gap-0.5">
-                                    <span className="text-[8px] font-semibold tracking-normal text-nrl-accent">
+                                    <span className={`text-[8px] font-semibold tracking-normal ${column.isBye ? "text-amber-400/70" : "text-nrl-accent"}`}>
                                       {column.round != null ? `R${column.round}` : "-"}
                                     </span>
-                                    <span>{column.opponent}</span>
+                                    {column.isBye ? (
+                                      <span className="rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-amber-400/70">
+                                        BYE
+                                      </span>
+                                    ) : (
+                                      <span>{column.opponent ?? "-"}</span>
+                                    )}
                                   </div>
                                 </th>
                               ))}
@@ -2229,26 +2311,32 @@ export function FantasyDashboard({
                                 <th className="sticky left-0 z-10 border-r border-nrl-border bg-nrl-panel-2 px-2 py-1 text-left text-[10px] font-semibold text-nrl-text whitespace-nowrap">
                                   {row.label}
                                 </th>
-                                {row.cells.map((cell, index) => (
-                                  <td
-                                    key={`heat-cell-${row.label}-${opponentHeatmap.columns[index]?.opponent ?? index}`}
-                                    className="min-w-[74px] border-l border-nrl-border/60 px-2 py-1.5 text-center"
-                                    style={
-                                      cell.average === null
-                                        ? undefined
-                                        : { backgroundColor: getHeatColorForAverage(cell.average) }
-                                    }
-                                  >
-                                    {cell.average === null ? (
-                                      <span className="text-[10px] text-nrl-muted">-</span>
-                                    ) : (
-                                      <div>
-                                        <div className="text-xs font-semibold text-nrl-text">{cell.average.toFixed(1)}</div>
-                                        <div className="text-[9px] text-nrl-muted">n={cell.games}</div>
-                                      </div>
-                                    )}
-                                  </td>
-                                ))}
+                                {row.cells.map((cell, index) => {
+                                  const col = opponentHeatmap.columns[index]
+                                  const isByeCol = col?.isBye ?? false
+                                  return (
+                                    <td
+                                      key={`heat-cell-${row.label}-${col?.round ?? "x"}-${col?.opponent ?? "bye"}-${index}`}
+                                      className={`min-w-[74px] border-l border-nrl-border/60 px-2 py-1.5 text-center ${isByeCol ? "bg-amber-400/5" : ""}`}
+                                      style={
+                                        isByeCol || cell.average === null
+                                          ? undefined
+                                          : { backgroundColor: getHeatColorForAverage(cell.average) }
+                                      }
+                                    >
+                                      {isByeCol ? (
+                                        <span className="text-[9px] font-semibold tracking-wider text-amber-400/50">BYE</span>
+                                      ) : cell.average === null ? (
+                                        <span className="text-[10px] text-nrl-muted">-</span>
+                                      ) : (
+                                        <div>
+                                          <div className="text-xs font-semibold text-nrl-text">{cell.average.toFixed(1)}</div>
+                                          <div className="text-[9px] text-nrl-muted">n={cell.games}</div>
+                                        </div>
+                                      )}
+                                    </td>
+                                  )
+                                })}
                               </tr>
                             ))}
                           </tbody>
@@ -2427,7 +2515,7 @@ export function FantasyDashboard({
                       </div>
                     </div>
                     {withWithoutFantasyPlotData.withValues.length === 0 ||
-                    withWithoutFantasyPlotData.withoutValues.length === 0 ? (
+                      withWithoutFantasyPlotData.withoutValues.length === 0 ? (
                       <div className="text-xs text-nrl-muted">
                         Need games in both teammate states to draw this plot.
                       </div>
@@ -2498,20 +2586,16 @@ export function FantasyDashboard({
                               </th>
                             ) : null}
                             <th
-                              className={`sticky top-0 z-10 border-b border-nrl-border py-2 text-[10px] font-semibold uppercase tracking-normal text-nrl-muted whitespace-nowrap ${
-                                getGameLogCellPaddingClass(column.key)
-                              } ${
-                                column.align === "right" ? "text-right" : "text-left"
-                              }`}
+                              className={`sticky top-0 z-10 border-b border-nrl-border py-2 text-[10px] font-semibold uppercase tracking-normal text-nrl-muted whitespace-nowrap ${getGameLogCellPaddingClass(column.key)
+                                } ${column.align === "right" ? "text-right" : "text-left"
+                                }`}
                             >
                               <button
                                 type="button"
                                 onClick={() => toggleGameLogSort(column.key)}
-                                className={`flex w-full items-center gap-1 ${
-                                  column.align === "right" ? "justify-end" : "justify-start"
-                                } hover:text-nrl-text ${
-                                  gameLogSort?.column === column.key ? "text-nrl-accent" : ""
-                                }`}
+                                className={`flex w-full items-center gap-1 ${column.align === "right" ? "justify-end" : "justify-start"
+                                  } hover:text-nrl-text ${gameLogSort?.column === column.key ? "text-nrl-accent" : ""
+                                  }`}
                                 title={`Sort by ${column.label}`}
                               >
                                 <span>{column.label}</span>
@@ -2591,11 +2675,9 @@ export function FantasyDashboard({
                                     </td>
                                   ) : null}
                                   <td
-                                    className={`py-2 text-xs font-semibold whitespace-nowrap ${
-                                      getGameLogCellPaddingClass(column.key)
-                                    } ${
-                                      column.align === "right" ? "text-right" : "text-left"
-                                    } ${isFantasy ? "text-nrl-accent" : "text-nrl-muted"}`}
+                                    className={`py-2 text-xs font-semibold whitespace-nowrap ${getGameLogCellPaddingClass(column.key)
+                                      } ${column.align === "right" ? "text-right" : "text-left"
+                                      } ${isFantasy ? "text-nrl-accent" : "text-nrl-muted"}`}
                                   >
                                     {display}
                                   </td>
@@ -2643,11 +2725,9 @@ export function FantasyDashboard({
                                       </td>
                                     ) : null}
                                     <td
-                                      className={`py-2 text-xs whitespace-nowrap ${
-                                        getGameLogCellPaddingClass(column.key)
-                                      } ${
-                                        column.align === "right" ? "text-right" : "text-left"
-                                      } ${isFantasy ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
+                                      className={`py-2 text-xs whitespace-nowrap ${getGameLogCellPaddingClass(column.key)
+                                        } ${column.align === "right" ? "text-right" : "text-left"
+                                        } ${isFantasy ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
                                     >
                                       {display}
                                     </td>

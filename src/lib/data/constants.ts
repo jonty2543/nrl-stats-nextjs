@@ -121,6 +121,15 @@ export const PLAYER_STATS = [
 
 export const TEAM_STATS = [
   "Points",
+  "Opponent Points",
+  "Margin",
+  "Point Differential",
+  "Possession %",
+  "Opponent Possession %",
+  "Time In Possession",
+  "Opponent Time In Possession",
+  "Completion Rate",
+  "Opponent Completion Rate",
   "Tries",
   "Conversions",
   "Conversion Attempts",

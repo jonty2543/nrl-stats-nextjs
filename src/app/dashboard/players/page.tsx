@@ -6,6 +6,8 @@ import { isAccessibleSeason } from "@/lib/access/season-access";
 
 export const dynamic = "force-dynamic";
 
+const DEFAULT_STATS_TABLE_YEAR = "2026";
+
 function defaultRecentYears(years: string[], maxYears = 4): string[] {
   return years.slice(0, Math.min(maxYears, years.length));
 }
@@ -22,10 +24,11 @@ export default async function PlayersPage() {
   const unlockedYears = availableYears.filter((year) =>
     isAccessibleSeason(year, canAccessLoginSeason, "stats", canBypassPlotGate)
   );
-  const initialYears = defaultRecentYears(
-    unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
-  );
-  const initialData = unlockedYears.length > 0 ? await fetchPlayerStats(unlockedYears) : [];
+  const yearPool = unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1);
+  const initialYears = yearPool.includes(DEFAULT_STATS_TABLE_YEAR)
+    ? [DEFAULT_STATS_TABLE_YEAR]
+    : defaultRecentYears(yearPool);
+  const initialData = initialYears.length > 0 ? await fetchPlayerStats(initialYears) : [];
 
   return (
     <PlayerComparison

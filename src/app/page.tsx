@@ -5,6 +5,7 @@ import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush"
 import { LandingCarousel } from "@/components/views/landing-carousel"
 import { LandingHeroScrollShell } from "@/components/views/landing-hero-scroll-shell"
+import { LandingSuiteTabs } from "@/components/views/landing-suite-tabs"
 import {
   PlayerImageCard,
   SimplePlayerPhotoTile,
@@ -789,8 +790,8 @@ function FeatureSection({
   children: React.ReactNode
 }) {
   return (
-    <section className="space-y-6 border border-white/8 bg-[linear-gradient(180deg,rgba(16,20,42,0.92),rgba(11,14,29,0.92))] p-4 sm:space-y-7 sm:p-6">
-      <div className="min-w-0">
+    <section className="space-y-6 border border-white/8 bg-[linear-gradient(180deg,rgba(16,20,42,0.92),rgba(11,14,29,0.92))] p-5 sm:space-y-7 sm:p-7 lg:p-8">
+      <div className="min-w-0 px-1 sm:px-2">
         <div className="flex flex-wrap items-center gap-3">
           <SectionEyebrow>{eyebrow}</SectionEyebrow>
           {live ? (
@@ -820,7 +821,7 @@ function FeatureSection({
           <span aria-hidden="true">→</span>
         </Link>
       </div>
-      <div className="h-full min-w-0">{children}</div>
+      <div className="h-full min-w-0 px-1 sm:px-2">{children}</div>
     </section>
   )
 }
@@ -844,6 +845,14 @@ export default async function Home() {
 
   const ownershipDeltaByPlayerId = buildFantasyOwnershipDeltaByPlayerId(fantasyPlayers, ownershipBaselineSnapshot)
   const topOwnershipRise = getTopFantasyOwnershipRise(ownershipDeltaByPlayerId)
+  const topOwnershipBuyTargets = fantasyPlayers
+    .map((player) => ({
+      name: player.name,
+      delta: ownershipDeltaByPlayerId.get(player.id) ?? null,
+    }))
+    .filter((player): player is { name: string; delta: number } => player.delta != null && player.delta > 0)
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 3)
   const spotlightFantasyPlayer = pickHighestPricedFantasyPlayer(fantasyPlayers)
   const spotlightCoachPlayer = spotlightFantasyPlayer
     ? fantasyCoachPlayers.find((player) => player.id === spotlightFantasyPlayer.id) ?? null
@@ -1028,20 +1037,26 @@ export default async function Home() {
 
               <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:flex-wrap">
                 <Link
+                  href="/dashboard/ai"
+                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
+                >
+                  Open NRL AI
+                </Link>
+                <Link
                   href="/dashboard/fantasy"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white"
+                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
                 >
                   Open Fantasy
                 </Link>
                 <Link
                   href="/dashboard/betting"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white"
+                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
                 >
                   Open Betting
                 </Link>
                 <Link
                   href="/dashboard/players"
-                  className="col-span-2 inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white sm:col-span-1"
+                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
                 >
                   Open Stats
                 </Link>
@@ -1079,11 +1094,63 @@ export default async function Home() {
         </LandingHeroScrollShell>
 
 
-        <section className="space-y-6 border-t border-white/8 py-10">
-          <div>
+        <section className="space-y-6 border-t border-white/8 px-4 py-10 sm:px-6 lg:px-8">
+          <div className="px-1 sm:px-2">
             <SectionEyebrow>Built For Weekly Decisions</SectionEyebrow>
             <h2 className="mt-2 text-2xl font-bold text-white">Previews of the full suite</h2>
           </div>
+
+          <LandingSuiteTabs labels={["NRL AI", "Fantasy", "Betting", "Stats"]}>
+          <FeatureSection
+            eyebrow="NRL AI"
+            title="A personal AI that knows every NRL stat at your fingertips"
+            description="Ask NRL AI for rankings, player trends, betting context, and follow-up questions across every major NRL dataset."
+            bullets={[
+              "Player and team stat queries",
+              "Fantasy screenshot analysis",
+              "Follow-up questions in context",
+              "Betting market summaries",
+            ]}
+            ctaHref="/dashboard/ai"
+            ctaLabel="Open NRL AI"
+            live
+          >
+            <PreviewFrame title="NRL AI / Chat" contentClassName="lg:min-h-[440px]" live>
+              <div className="flex min-h-[300px] flex-col justify-between gap-8 rounded-2xl border border-white/8 bg-[#070b1f] px-5 py-4 sm:min-h-[420px] sm:px-7 sm:py-6 lg:px-8">
+                <div className="space-y-4">
+                  <div className="ml-auto max-w-[88%] rounded-2xl bg-[#252c55] px-4 py-3 text-sm leading-6 text-white/88">
+                    <div className="mb-3 grid grid-cols-2 gap-2">
+                      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                        <ImageWithFallback
+                          sources={["/fantasy_ss/IMG_8817.PNG"]}
+                          alt="Fantasy team screenshot"
+                          className="h-28 w-full object-cover object-top sm:h-36"
+                        />
+                      </div>
+                      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                        <ImageWithFallback
+                          sources={["/fantasy_ss/IMG_8818.PNG"]}
+                          alt="Fantasy team screenshot"
+                          className="h-28 w-full object-cover object-top sm:h-36"
+                        />
+                      </div>
+                    </div>
+                    What trades would you recommend this week for my team?
+                  </div>
+                  <div className="max-w-[88%] rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-white/78">
+                    Trade out J. Hughes first: the screenshot marks him injured in your selected 17. The strongest buy targets by ownership rise are {topOwnershipBuyTargets.map((player) => `${player.name} (${formatSignedPercent(player.delta)})`).join(", ") || "the top positive ownership movers"}. Prioritise one of those buys, then use the second trade to fix your injured/DNP bench cover.
+                  </div>
+                </div>
+                <div className="rounded-[1.4rem] border border-white/10 bg-[#171c36] p-2 shadow-2xl shadow-black/30">
+                  <div className="flex items-end gap-2">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xl text-white/45">+</div>
+                    <div className="flex-1 py-2 text-sm text-white/78">Ask anything about NRL</div>
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-nrl-accent text-lg font-bold text-nrl-bg">↑</div>
+                  </div>
+                </div>
+              </div>
+            </PreviewFrame>
+          </FeatureSection>
 
           <FeatureSection
             eyebrow="Fantasy"
@@ -1936,6 +2003,7 @@ export default async function Home() {
               </PreviewFrame>
             </LandingCarousel>
           </FeatureSection>
+          </LandingSuiteTabs>
         </section>
       </div>
     </div>

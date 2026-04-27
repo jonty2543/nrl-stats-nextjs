@@ -11,10 +11,8 @@ export function LandingSuiteTabs({ labels, children }: LandingSuiteTabsProps) {
   const sections = useMemo(() => Children.toArray(children), [children])
   const safeLabels = labels.slice(0, sections.length)
   const [activeIndex, setActiveIndex] = useState(0)
-  const [visibleIndices, setVisibleIndices] = useState<Record<number, boolean>>({ 0: true })
   const sectionRefs = useRef<Array<HTMLDivElement | null>>([])
   const ratiosRef = useRef(new Map<number, number>())
-  const visibilityRef = useRef(new Map<number, boolean>())
 
   const clampedIndex = Math.min(activeIndex, sections.length - 1)
 
@@ -33,7 +31,6 @@ export function LandingSuiteTabs({ labels, children }: LandingSuiteTabsProps) {
             entry.isIntersecting &&
             entry.boundingClientRect.top < visibleBandBottom &&
             entry.boundingClientRect.bottom > visibleBandTop
-          visibilityRef.current.set(index, isVisible)
 
           if (isVisible) {
             ratiosRef.current.set(index, entry.intersectionRatio)
@@ -41,18 +38,6 @@ export function LandingSuiteTabs({ labels, children }: LandingSuiteTabsProps) {
             ratiosRef.current.delete(index)
           }
         }
-
-        setVisibleIndices((current) => {
-          let changed = false
-          const next = { ...current }
-          for (const [index, isVisible] of visibilityRef.current.entries()) {
-            if (next[index] !== isVisible) {
-              next[index] = isVisible
-              changed = true
-            }
-          }
-          return changed ? next : current
-        })
 
         const nextActiveIndex = [...ratiosRef.current.entries()]
           .sort((a, b) => b[1] - a[1])[0]?.[0]
@@ -108,7 +93,6 @@ export function LandingSuiteTabs({ labels, children }: LandingSuiteTabsProps) {
 
       <div className="space-y-6 sm:space-y-8">
         {sections.map((section, index) => {
-          const isVisible = Boolean(visibleIndices[index])
           return (
             <div
               key={index}
@@ -116,9 +100,6 @@ export function LandingSuiteTabs({ labels, children }: LandingSuiteTabsProps) {
                 sectionRefs.current[index] = node
               }}
               data-section-index={index}
-              className={`transition-[opacity,transform,filter] duration-700 ease-out motion-reduce:transform-none motion-reduce:transition-none ${
-                isVisible ? "translate-y-0 opacity-100 blur-0" : "translate-y-10 opacity-0 blur-[6px]"
-              }`}
             >
               {section}
             </div>

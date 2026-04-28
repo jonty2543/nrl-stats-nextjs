@@ -259,6 +259,7 @@ interface FantasySnapshotInput {
     | "ownership_delta_asc"
     | "avg_points_desc"
     | "projected_avg_desc"
+    | "projection_desc"
     | "projection_vs_priced_at_desc"
     | "price_asc";
   requireOwnershipRise?: boolean;
@@ -1187,6 +1188,7 @@ function parseFantasySnapshotInput(input: unknown): FantasySnapshotInput {
         "ownership_delta_asc",
         "avg_points_desc",
         "projected_avg_desc",
+        "projection_desc",
         "projection_vs_priced_at_desc",
         "price_asc",
       ] as const) ?? undefined,

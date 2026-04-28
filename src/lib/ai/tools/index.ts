@@ -1217,23 +1217,33 @@ function expandFantasyPositionFilters(positions: string[] | undefined): string[]
       return;
     }
 
-    if (["half", "halves"].includes(normalized)) {
+    if (["half", "halves", "hlf", "halfback", "half back", "five eighth", "five-eighth", "five eighths", "five-eighths", "5 8", "5/8", "5 eighth", "5-eighth"].includes(normalized)) {
       expanded.add("HLF");
       return;
     }
 
-    if (["hooker"].includes(normalized)) {
+    if (["hooker", "hookers", "hok"].includes(normalized)) {
       expanded.add("HOK");
       return;
     }
 
-    if (["middle", "middles"].includes(normalized)) {
+    if (["middle", "middles", "mid", "prop", "props", "front row", "front-row", "frontrow", "lock", "locks"].includes(normalized)) {
       expanded.add("MID");
       return;
     }
 
-    if (["edge", "edges", "2rf", "back row", "back-row", "second row", "second-row", "2nd row", "2nd-row", "backrow", "lock", "locks"].includes(normalized)) {
+    if (["edge", "edges", "2rf", "back row", "back-row", "second row", "second-row", "2nd row", "2nd-row", "backrow"].includes(normalized)) {
       expanded.add("EDG");
+      return;
+    }
+
+    if (["centre", "centres", "center", "centers", "ctr"].includes(normalized)) {
+      expanded.add("CTR");
+      return;
+    }
+
+    if (["wfb", "fullback", "fullbacks", "winger", "wingers", "wing", "wings"].includes(normalized)) {
+      expanded.add("WFB");
       return;
     }
 

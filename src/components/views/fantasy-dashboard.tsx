@@ -1809,13 +1809,17 @@ export function FantasyDashboard({
             <table className="min-w-[800px] border-collapse text-left text-xs sm:min-w-0 sm:w-full sm:table-fixed">
               <thead>
                 <tr>
+                  <th
+                    aria-label="Player photo"
+                    className="sticky left-0 top-0 z-[4] w-11 min-w-11 max-w-11 border-b border-r border-nrl-border bg-nrl-panel px-1 py-2 sm:w-12 sm:min-w-12 sm:max-w-12"
+                  />
                   {ALL_PLAYERS_BASE_COLUMNS.map((column) => {
                     const disabled = Boolean(column.proOnly && !hasFantasyPlotAccess)
                     const active = allPlayersSort.column === column.key
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 sm:px-3 ${column.key === "name" ? "left-0 z-[4]" : ""} ${getAllPlayersColumnWidthClass(column.key)} ${ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS.has(column.key) ? "hidden sm:table-cell" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 sm:px-3 ${getAllPlayersColumnWidthClass(column.key)} ${ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS.has(column.key) ? "hidden sm:table-cell" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -1836,7 +1840,7 @@ export function FantasyDashboard({
                 {sortedAllPlayersTableRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={ALL_PLAYERS_BASE_COLUMNS.length}
+                      colSpan={ALL_PLAYERS_BASE_COLUMNS.length + 1}
                       className="px-3 py-6 text-center text-xs text-nrl-muted"
                     >
                       No {ALL_PLAYERS_STATS_YEAR} player stats available.
@@ -1851,25 +1855,25 @@ export function FantasyDashboard({
                         onClick={() => navigateToPlayer(row.player.name)}
                         className="h-9 cursor-pointer border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70"
                       >
-                        <td className="sticky left-0 z-[1] w-36 min-w-36 max-w-36 border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-64 sm:min-w-64 sm:max-w-64 sm:px-2">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <div className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[9px] text-nrl-muted">
-                              {thumbnailUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={thumbnailUrl}
-                                  alt=""
-                                  className="h-full w-full object-cover object-top"
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <span>{getPlayerInitials(row.player.name)}</span>
-                              )}
-                            </div>
-                            <span className="block min-w-0 truncate" title={row.player.name}>
-                              {row.player.name}
-                            </span>
+                        <td className="sticky left-0 z-[1] w-11 min-w-11 max-w-11 border-r border-nrl-border bg-nrl-panel px-1 py-1 sm:w-12 sm:min-w-12 sm:max-w-12">
+                          <div className="mx-auto grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[9px] text-nrl-muted">
+                            {thumbnailUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={thumbnailUrl}
+                                alt=""
+                                className="h-full w-full object-cover object-top"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <span>{getPlayerInitials(row.player.name)}</span>
+                            )}
                           </div>
+                        </td>
+                        <td className="w-36 min-w-36 max-w-36 border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-64 sm:min-w-64 sm:max-w-64 sm:px-2">
+                          <span className="block min-w-0 truncate" title={row.player.name}>
+                            {row.player.name}
+                          </span>
                         </td>
                       <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-[10px] whitespace-nowrap text-nrl-muted sm:w-auto sm:px-3">
                         {row.player.positionLabel}

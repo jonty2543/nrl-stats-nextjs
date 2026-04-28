@@ -547,6 +547,7 @@ export function AiChatPage({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadMenuRef = useRef<HTMLDivElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const quotaReached =
     isUsageTrackingAvailable && (remainingInPeriod != null && remainingInPeriod <= 0);
 
@@ -678,9 +679,13 @@ export function AiChatPage({
       setPendingImages([]);
     }
 
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
       const result = await fetch("/api/ai/chat", {
         method: "POST",
+        signal: abortController.signal,
         headers: {
           "Content-Type": "application/json",
         },
@@ -739,6 +744,14 @@ export function AiChatPage({
         }),
       ]);
     } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        setMessages((current) => current.filter((entry) => entry.id !== localUserMessage.id));
+        setMessage(trimmed);
+        setPendingDirectTool(directTool ?? pendingDirectTool);
+        setPendingImages(submittedImages);
+        return;
+      }
+
       const errorMessage = caught instanceof Error ? caught.message : "";
       setError(
         errorMessage === "Failed to fetch" || errorMessage === "fetch failed"
@@ -746,9 +759,16 @@ export function AiChatPage({
           : errorMessage || "Unable to send request."
       );
     } finally {
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
       setIsSubmitting(false);
       setLoadingPrompt(null);
     }
+  };
+
+  const stopCurrentRequest = () => {
+    abortControllerRef.current?.abort();
   };
 
   const handleChoice = (choice: AiPersistedMessage["choices"][number]) => {
@@ -1120,15 +1140,22 @@ export function AiChatPage({
                 <button
                   type="button"
                   onClick={() => {
-                    if (message.trim() || pendingImages.length > 0) {
+                    if (isSubmitting) {
+                      stopCurrentRequest();
+                    } else if (message.trim() || pendingImages.length > 0) {
                       void submitPrompt();
                     }
                   }}
-                  disabled={isSubmitting || (!message.trim() && pendingImages.length === 0) || quotaReached}
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-nrl-accent text-lg font-bold text-nrl-bg transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Send message"
+                  disabled={!isSubmitting && ((!message.trim() && pendingImages.length === 0) || quotaReached)}
+                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-lg font-bold transition-opacity disabled:cursor-not-allowed disabled:opacity-40 ${
+                    isSubmitting
+                      ? "border border-rose-400/45 text-sm text-rose-200 hover:bg-rose-500/15"
+                      : "bg-nrl-accent text-nrl-bg"
+                  }`}
+                  aria-label={isSubmitting ? "Stop response" : "Send message"}
+                  title={isSubmitting ? "Stop response" : "Send message"}
                 >
-                  {isSubmitting ? "..." : "↑"}
+                  {isSubmitting ? "■" : "↑"}
                 </button>
               </div>
             </div>

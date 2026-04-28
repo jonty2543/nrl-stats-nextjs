@@ -454,6 +454,51 @@ export async function loadAiThreadForUser(
   }
 }
 
+export async function deleteAiThreadForUser(
+  userId: string | null | undefined,
+  threadId: string | null | undefined
+): Promise<boolean> {
+  if (!userId || !threadId) return false;
+
+  try {
+    const thread = await findThreadForUser(userId, threadId);
+    if (!thread) {
+      return false;
+    }
+
+    const supabase = getAiSupabaseClient();
+    const { error: messageError } = await supabase
+      .from("ai_messages")
+      .delete()
+      .eq("thread_id", thread.id);
+
+    if (messageError) {
+      throw new Error(messageError.message);
+    }
+
+    const { error: threadError } = await supabase
+      .from("ai_threads")
+      .delete()
+      .eq("id", thread.id)
+      .eq("clerk_user_id", userId);
+
+    if (threadError) {
+      throw new Error(threadError.message);
+    }
+
+    revalidateTag(`ai-usage-${userId}`, "max");
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isKnownPersistenceError(message)) {
+      console.warn("AI thread deletion unavailable.", message);
+      return false;
+    }
+
+    throw error;
+  }
+}
+
 async function countAiMessagesForUserUncached(
   userId: string,
   startIso: string,

@@ -3,6 +3,7 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { AiPlan } from "@/lib/ai/access";
 import type { AiPersistedMessage, AiThreadListItem } from "@/lib/ai/persistence";
@@ -387,6 +388,7 @@ export function AiChatPage({
   nextUpcomingRound,
   tools,
 }: AiChatPageProps) {
+  const router = useRouter();
   const { isLoaded: isAuthLoaded, userId } = useAuth();
   const { user } = useUser();
   const profileImageUrl = user?.imageUrl ?? null;
@@ -414,6 +416,7 @@ export function AiChatPage({
   const [error, setError] = useState<string | null>(null);
   const [pendingImages, setPendingImages] = useState<PendingImageAttachment[]>([]);
   const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
+  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -632,6 +635,35 @@ export function AiChatPage({
     void submitPrompt(nextMessage);
   };
 
+  const handleDeleteThread = async (deletedThreadId: string) => {
+    if (deletingThreadId || !window.confirm("Delete this chat?")) return;
+
+    setDeletingThreadId(deletedThreadId);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/ai/threads/${deletedThreadId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error || "Unable to delete chat.");
+      }
+
+      setThreads((current) => current.filter((thread) => thread.threadId !== deletedThreadId));
+      if (deletedThreadId === threadId) {
+        setThreadId(null);
+        setMessages([]);
+        router.replace("/dashboard/ai?new=1");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to delete chat.");
+    } finally {
+      setDeletingThreadId(null);
+    }
+  };
+
   void tools;
 
   const hasConversation = messages.length > 0 || isSubmitting;
@@ -707,21 +739,35 @@ export function AiChatPage({
             threads.map((thread) => {
               const isActive = thread.threadId === threadId;
               return (
-                <Link
+                <div
                   key={thread.threadId}
-                  href={`/dashboard/ai?thread=${thread.threadId}`}
-                  onClick={() => setIsSidebarOpen(false)}
-                  className={`block rounded-xl px-3 py-3 transition-colors ${
+                  className={`group flex items-center gap-1 rounded-xl transition-colors ${
                     isActive
                       ? "bg-nrl-accent/10 text-nrl-text"
                       : "text-nrl-muted hover:bg-nrl-panel-2 hover:text-nrl-text"
                   }`}
                 >
-                  <div className="truncate text-sm font-medium text-nrl-text">
-                    {thread.title || "Untitled conversation"}
-                  </div>
-                  <div className="mt-1 text-[11px] text-nrl-muted">{formatThreadTime(thread.lastMessageAt)}</div>
-                </Link>
+                  <Link
+                    href={`/dashboard/ai?thread=${thread.threadId}`}
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="min-w-0 flex-1 px-3 py-3"
+                  >
+                    <div className="truncate text-sm font-medium text-nrl-text">
+                      {thread.title || "Untitled conversation"}
+                    </div>
+                    <div className="mt-1 text-[11px] text-nrl-muted">{formatThreadTime(thread.lastMessageAt)}</div>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteThread(thread.threadId)}
+                    disabled={deletingThreadId === thread.threadId}
+                    className="mr-2 grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-semibold text-nrl-muted opacity-100 transition-colors hover:bg-red-500/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                    aria-label={`Delete ${thread.title || "untitled conversation"}`}
+                    title="Delete chat"
+                  >
+                    x
+                  </button>
+                </div>
               );
             })
           )}
@@ -815,7 +861,7 @@ export function AiChatPage({
                 {isSubmitting ? (
                   <RugbyLoadingMessage
                     runnerImageSrc={loadingRunnerImageSrc}
-                    status=""
+                    status={loadingPrompt ? getLoadingStages(loadingPrompt)[loadingStageIndex] ?? "" : ""}
                   />
                 ) : null}
                 <div ref={bottomRef} className="h-32 sm:h-36" />
@@ -825,13 +871,13 @@ export function AiChatPage({
         </div>
 
         <div
-          className={`pointer-events-none absolute inset-x-0 z-20 ${
+          className={`pointer-events-none z-20 ${
             hasConversation
-              ? "bottom-0 bg-nrl-bg/98 px-0 pb-4 pt-5 shadow-[0_-24px_36px_rgba(2,5,23,0.92)] sm:pb-6"
-              : "top-[calc(50%-1.75rem)] -translate-y-1/2"
+              ? "fixed inset-x-0 bottom-0 bg-nrl-bg/98 px-0 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-5 shadow-[0_-24px_36px_rgba(2,5,23,0.92)] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+              : "absolute inset-x-0 top-[calc(50%-1.75rem)] -translate-y-1/2"
           }`}
         >
-          <div className={`mx-auto w-full max-w-3xl px-4 sm:px-6 ${hasConversation ? "" : "pb-4 sm:pb-6"}`}>
+          <div className={`mx-auto w-full max-w-3xl px-4 sm:px-6 ${hasConversation ? "lg:translate-x-36" : "pb-4 sm:pb-6"}`}>
             <div className="pointer-events-auto rounded-[1.75rem] border border-nrl-border bg-nrl-panel/95 p-2 shadow-2xl shadow-black/30 backdrop-blur">
               {pendingImages.length > 0 ? (
                 <div className="mb-2 flex flex-wrap gap-2 px-2 pt-1">

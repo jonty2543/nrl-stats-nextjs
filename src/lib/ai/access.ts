@@ -18,8 +18,8 @@ export const AI_CHAT_QUOTAS: Record<AiPlan, { limit: number | null; periodDays: 
 };
 
 const AI_REASONING_EFFORTS: Record<AiPlan, AiReasoningEffort> = {
-  free: "medium",
-  pro: "medium",
+  free: "low",
+  pro: "low",
   premium: "high",
 };
 

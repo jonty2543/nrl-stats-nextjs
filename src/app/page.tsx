@@ -1,9 +1,9 @@
 import Image from "next/image"
 import Link from "next/link"
 import type { CSSProperties } from "react"
+import { AppHeader } from "@/components/layout/app-header"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush"
-import { AppHeader } from "@/components/layout/app-header"
 import { LandingCarousel } from "@/components/views/landing-carousel"
 import { LandingHeroScrollShell } from "@/components/views/landing-hero-scroll-shell"
 import { LandingSuiteTabs } from "@/components/views/landing-suite-tabs"
@@ -359,7 +359,6 @@ function buildDrawPreviewRows(draw2026Data: Draw2026Data | null, team: string | 
 
 function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2, requirePrices = true): BettingMatchPreview[] {
   const grouped = new Map<string, BettingMatchPreview>()
-  const todayIso = new Date().toISOString().slice(0, 10)
 
   for (const row of snapshot.h2h) {
     const key = `${row.date}|${row.match}`
@@ -372,7 +371,7 @@ function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2, requirePrice
     grouped.set(key, current)
   }
 
-  const validGroups = [...grouped.values()]
+  return [...grouped.values()]
     .filter((group) => {
       if (group.rows.length < 2) return false
       if (!requirePrices) return true
@@ -382,16 +381,6 @@ function buildH2HPreviews(snapshot: BettingOddsSnapshot, limit = 2, requirePrice
           BETTING_BOOKIE_COLUMNS.some((bookie) => row[bookie] != null),
       )
     })
-
-  const upcomingGroups = validGroups
-    .filter((group) => group.rows[0]?.date >= todayIso)
-    .sort((a, b) => a.rows[0].date.localeCompare(b.rows[0].date) || a.match.localeCompare(b.match))
-
-  if (upcomingGroups.length > 0) {
-    return upcomingGroups.slice(0, limit)
-  }
-
-  return validGroups
     .sort((a, b) => b.rows[0].date.localeCompare(a.rows[0].date) || a.match.localeCompare(b.match))
     .slice(0, limit)
 }
@@ -984,11 +973,11 @@ export default async function Home() {
     <div className="relative overflow-hidden text-nrl-text">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col pb-16">
-        <AppHeader sticky />
+      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+        <AppHeader />
 
         <LandingHeroScrollShell>
-          <section className="grid gap-6 px-4 pb-0 pt-8 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
+          <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
             <div className="max-w-2xl lg:pb-10">
               <div className="inline-flex items-center rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
                 NRL Analysis Platform
@@ -1006,12 +995,6 @@ export default async function Home() {
 
               <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:flex-wrap">
                 <Link
-                  href="/dashboard/ai"
-                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
-                >
-                  Open NRL AI
-                </Link>
-                <Link
                   href="/dashboard/fantasy"
                   className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
                 >
@@ -1028,6 +1011,12 @@ export default async function Home() {
                   className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
                 >
                   Open Stats
+                </Link>
+                <Link
+                  href="/dashboard/ai"
+                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
+                >
+                  Open NRL AI
                 </Link>
               </div>
 
@@ -1069,58 +1058,7 @@ export default async function Home() {
             <h2 className="mt-2 text-2xl font-bold text-white">Previews of the full suite</h2>
           </div>
 
-          <LandingSuiteTabs labels={["NRL AI", "Fantasy", "Betting", "Stats"]}>
-          <FeatureSection
-            eyebrow="NRL AI"
-            title="A personal AI that knows every NRL stat at your fingertips"
-            description="Ask NRL AI for rankings, player trends, betting context, and follow-up questions across every major NRL dataset."
-            bullets={[
-              "Player and team stat queries",
-              "Fantasy screenshot analysis",
-              "Follow-up questions in context",
-              "Betting market summaries",
-            ]}
-            ctaHref="/dashboard/ai"
-            ctaLabel="Open NRL AI"
-            live
-          >
-            <PreviewFrame title="NRL AI / Chat" contentClassName="lg:min-h-[440px]" live>
-              <div className="flex min-h-[300px] flex-col justify-between gap-8 rounded-2xl border border-white/8 bg-[#070b1f] px-5 py-4 sm:min-h-[420px] sm:px-7 sm:py-6 lg:px-8">
-                <div className="space-y-4">
-                  <div className="ml-auto max-w-[88%] rounded-2xl bg-[#252c55] px-4 py-3 text-sm leading-6 text-white/88">
-                    <div className="mb-3 grid grid-cols-2 gap-2">
-                      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
-                        <ImageWithFallback
-                          sources={["/fantasy_ss/IMG_8817.PNG"]}
-                          alt="Fantasy team screenshot"
-                          className="h-28 w-full object-cover object-top sm:h-36"
-                        />
-                      </div>
-                      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
-                        <ImageWithFallback
-                          sources={["/fantasy_ss/IMG_8818.PNG"]}
-                          alt="Fantasy team screenshot"
-                          className="h-28 w-full object-cover object-top sm:h-36"
-                        />
-                      </div>
-                    </div>
-                    What trades would you recommend this week for my team?
-                  </div>
-                  <div className="max-w-[88%] rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-white/78">
-                    Trade out J. Hughes first: the screenshot marks him injured in your selected 17. The strongest buy targets by ownership rise are {topOwnershipBuyTargets.map((player) => `${player.name} (${formatSignedPercent(player.delta)})`).join(", ") || "the top positive ownership movers"}. Prioritise one of those buys, then use the second trade to fix your injured/DNP bench cover.
-                  </div>
-                </div>
-                <div className="rounded-[1.4rem] border border-white/10 bg-[#171c36] p-2 shadow-2xl shadow-black/30">
-                  <div className="flex items-end gap-2">
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xl text-white/45">+</div>
-                    <div className="flex-1 py-2 text-sm text-white/78">Ask anything about NRL</div>
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-nrl-accent text-lg font-bold text-nrl-bg">↑</div>
-                  </div>
-                </div>
-              </div>
-            </PreviewFrame>
-          </FeatureSection>
-
+          <LandingSuiteTabs labels={["Fantasy", "Betting", "Stats", "NRL AI"]}>
           <FeatureSection
             eyebrow="Fantasy"
             title="Ownership, pricing, game logs, and visuals"
@@ -1341,7 +1279,7 @@ export default async function Home() {
                 </div>
               </PreviewFrame>
 
-              <PreviewFrame title="Fantasy / Visuals" contentClassName="lg:min-h-[440px]" live>
+              <PreviewFrame title="Fantasy / Visuals" live>
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
                     <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Average vs Opponent</div>
@@ -1471,7 +1409,6 @@ export default async function Home() {
                         rows={spotlightSortedRows}
                         defaultStartYear="2023"
                         headerTitle="Fantasy Trend"
-                        mainChartClassName="h-[220px] w-full sm:h-[240px]"
                         primarySeriesLabel={spotlightFantasyPlayer?.name ?? "Fantasy player"}
                       />
                     </div>
@@ -1972,6 +1909,57 @@ export default async function Home() {
                 </div>
               </PreviewFrame>
             </LandingCarousel>
+          </FeatureSection>
+
+          <FeatureSection
+            eyebrow="NRL AI"
+            title="A personal AI that knows every NRL stat at your fingertips"
+            description="Ask NRL AI for rankings, player trends, betting context, and follow-up questions across every major NRL dataset."
+            bullets={[
+              "Player and team stat queries",
+              "Fantasy screenshot analysis",
+              "Follow-up questions in context",
+              "Betting market summaries",
+            ]}
+            ctaHref="/dashboard/ai"
+            ctaLabel="Open NRL AI"
+            live
+          >
+            <PreviewFrame title="NRL AI / Chat" contentClassName="lg:min-h-[440px]" live>
+              <div className="flex min-h-[300px] flex-col justify-between gap-8 rounded-2xl border border-white/8 bg-[#070b1f] px-5 py-4 sm:min-h-[420px] sm:px-7 sm:py-6 lg:px-8">
+                <div className="space-y-4">
+                  <div className="ml-auto max-w-[88%] rounded-2xl bg-[#252c55] px-4 py-3 text-sm leading-6 text-white/88">
+                    <div className="mb-3 grid grid-cols-2 gap-2">
+                      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                        <ImageWithFallback
+                          sources={["/fantasy_ss/IMG_8817.PNG"]}
+                          alt="Fantasy team screenshot"
+                          className="h-28 w-full object-cover object-top sm:h-36"
+                        />
+                      </div>
+                      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                        <ImageWithFallback
+                          sources={["/fantasy_ss/IMG_8818.PNG"]}
+                          alt="Fantasy team screenshot"
+                          className="h-28 w-full object-cover object-top sm:h-36"
+                        />
+                      </div>
+                    </div>
+                    What trades would you recommend this week for my team?
+                  </div>
+                  <div className="max-w-[88%] rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-white/78">
+                    Trade out J. Hughes first: the screenshot marks him injured in your selected 17. The strongest buy targets by ownership rise are {topOwnershipBuyTargets.map((player) => `${player.name} (${formatSignedPercent(player.delta)})`).join(", ") || "the top positive ownership movers"}. Prioritise one of those buys, then use the second trade to fix your injured/DNP bench cover.
+                  </div>
+                </div>
+                <div className="rounded-[1.4rem] border border-white/10 bg-[#171c36] p-2 shadow-2xl shadow-black/30">
+                  <div className="flex items-end gap-2">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xl text-white/45">+</div>
+                    <div className="flex-1 py-2 text-sm text-white/78">Ask anything about NRL</div>
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-nrl-accent text-lg font-bold text-nrl-bg">↑</div>
+                  </div>
+                </div>
+              </div>
+            </PreviewFrame>
           </FeatureSection>
           </LandingSuiteTabs>
         </section>

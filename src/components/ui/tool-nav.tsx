@@ -6,19 +6,18 @@ import { useEffect } from "react";
 
 const tools = [
   { label: "Home", href: "/" },
-  { label: "NRL AI", href: "/dashboard/ai" },
   { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "Betting", href: "/dashboard/betting" },
   { label: "Stats", href: "/dashboard/players" },
+  { label: "NRL AI", href: "/dashboard/ai" },
   { label: "About", href: "/dashboard/about" },
 ];
 
 interface ToolNavProps {
   className?: string;
-  mobileFullWidth?: boolean;
 }
 
-export function ToolNav({ className, mobileFullWidth = false }: ToolNavProps) {
+export function ToolNav({ className }: ToolNavProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -36,15 +35,9 @@ export function ToolNav({ className, mobileFullWidth = false }: ToolNavProps) {
 
   return (
     <nav
-      className={`-mx-1 flex w-full overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 ${
-        mobileFullWidth ? "justify-stretch" : "justify-center"
-      } ${className ?? ""}`}
+      className={`-mx-1 flex w-full justify-center overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 ${className ?? ""}`}
     >
-      <div
-        className={`inline-flex rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur lg:min-w-max ${
-          mobileFullWidth ? "min-w-full w-full" : "min-w-max"
-        }`}
-      >
+      <div className="inline-flex min-w-max rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur">
         {tools.map((tool) => {
           const active = tool.href === "/"
             ? pathname === "/"
@@ -58,13 +51,10 @@ export function ToolNav({ className, mobileFullWidth = false }: ToolNavProps) {
               href={tool.href}
               prefetch
               aria-current={active ? "page" : undefined}
-              className={`text-center font-semibold uppercase transition-colors ${
+              className={`rounded-full px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors sm:px-4 sm:text-xs sm:tracking-[0.18em] ${
                 active
                   ? "bg-nrl-accent/14 text-nrl-accent"
                   : "text-white/55 hover:text-white"
-              } ${mobileFullWidth
-                ? "flex-1 rounded-full px-2 py-2 text-[10px] tracking-[0.14em] sm:px-3 sm:text-[11px] sm:tracking-[0.16em] lg:flex-none lg:px-4 lg:text-xs lg:tracking-[0.18em]"
-                : "rounded-full px-3 py-2 text-[11px] tracking-[0.16em] sm:px-4 sm:text-xs sm:tracking-[0.18em]"
               }`}
             >
               {tool.label}

@@ -10,6 +10,7 @@ import type {
   FantasyCoachPlayerSnapshot,
   FantasyOwnershipBaselineSnapshot,
   FantasyPlayerSnapshot,
+  LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import { PLAYER_STATS } from "@/lib/data/constants"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
@@ -47,6 +48,7 @@ import { ScatterCorrelation } from "@/components/charts/scatter-correlation"
 interface FantasyDashboardProps {
   fantasyPlayers: FantasyPlayerSnapshot[]
   fantasyCoachPlayers?: FantasyCoachPlayerSnapshot[]
+  lineupsProjections?: LineupsProjectionSnapshot
   ownershipBaselineSnapshot?: FantasyOwnershipBaselineSnapshot | null
   availableYears: string[]
   defaultYears: string[]
@@ -797,6 +799,7 @@ function MetricCard({
 export function FantasyDashboard({
   fantasyPlayers,
   fantasyCoachPlayers = [],
+  lineupsProjections,
   ownershipBaselineSnapshot = null,
   availableYears,
   defaultYears,
@@ -935,8 +938,8 @@ export function FantasyDashboard({
     [selectedFantasyCoachPlayer]
   )
   const selectedFantasyCoachRound = useMemo(() => {
-    return selectedFantasyCoachMetrics.round
-  }, [selectedFantasyCoachMetrics])
+    return lineupsProjections?.round ?? selectedFantasyCoachMetrics.round
+  }, [lineupsProjections, selectedFantasyCoachMetrics])
 
   const selectedYearData = useMemo(() => {
     if (selectedYears.length === 0) return allData
@@ -1343,6 +1346,8 @@ export function FantasyDashboard({
       const imageRow =
         resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
         resolvePlayerImage(player.name, teamHint, playerImages)
+      const lineupsRound = lineupsProjections?.round ?? coachMetrics.round
+      const rawProjection = lineupsProjections?.projectionByPlayerId.get(player.id) ?? 0
 
       return {
         player,
@@ -1353,19 +1358,19 @@ export function FantasyDashboard({
         ppm: totalMinutes > 0 ? totalFantasy / totalMinutes : null,
         weeklyChange: ownershipDelta,
         projection: applyFantasyProjectionOffset(
-          coachMetrics.projection ?? player.projectedAvg ?? null,
+          rawProjection,
           ownershipDelta,
           topOwnershipRise
         ),
         breakeven: applyFantasyBreakEvenOffset(
           coachMetrics.breakEven ?? player.be ?? null,
           player.id,
-          coachMetrics.round
+          lineupsRound
         ),
         gamesPlayed: playerRows.length || player.gamesPlayed || 0,
       }
     })
-  }, [allData, fantasyCoachPlayers, fantasyPlayers, ownershipDeltaByPlayerId, playerImages, topOwnershipRise])
+  }, [allData, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages, topOwnershipRise])
 
   const sortedAllPlayersTableRows = useMemo(() => {
     const filteredRows =
@@ -1423,11 +1428,13 @@ export function FantasyDashboard({
   )
   const selectedAdjustedProjection = useMemo(
     () => applyFantasyProjectionOffset(
-      selectedFantasyCoachMetrics.projection ?? selectedFantasyPlayer?.projectedAvg ?? null,
+      selectedFantasyPlayer
+        ? (lineupsProjections?.projectionByPlayerId.get(selectedFantasyPlayer.id) ?? 0)
+        : null,
       selectedOwnershipDelta,
       topOwnershipRise,
     ),
-    [selectedFantasyCoachMetrics.projection, selectedFantasyPlayer, selectedOwnershipDelta, topOwnershipRise]
+    [lineupsProjections, selectedFantasyPlayer, selectedOwnershipDelta, topOwnershipRise]
   )
   const selectedAdjustedBreakEven = useMemo(
     () => applyFantasyBreakEvenOffset(

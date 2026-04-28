@@ -8,6 +8,7 @@ import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
+  fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
@@ -36,9 +37,10 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
+    fetchLineupsProjectionsByPlayerId(),
     fetchAvailableYears(),
     loadDraw2026Data(),
     fetchPlayerImages(),
@@ -76,6 +78,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
       <FantasyDashboard
         fantasyPlayers={fantasyPlayers}
         fantasyCoachPlayers={fantasyCoachPlayers}
+        lineupsProjections={lineupsProjections}
         availableYears={unlockedYears}
         defaultYears={initialYears}
         initialPlayerStats={initialPlayerStats}

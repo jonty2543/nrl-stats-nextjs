@@ -229,8 +229,7 @@ const PROMPT_VARIABLE_OPTIONS = {
   season: ["2026", "2025", "2024", "2023"],
   minGames: ["3", "5", "6", "8", "10"],
   minMinutes: ["20", "30", "40", "50", "60"],
-  market: ["H2H", "Line", "Total"],
-  round: ["1", "2", "3", "4", "5", "6", "7", "8"],
+  round: ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
 } as const;
 
 type PromptVariableKey = keyof typeof PROMPT_VARIABLE_OPTIONS;
@@ -254,9 +253,7 @@ const DEFAULT_PROMPTS: Array<{
   { id: "fantasy-player", label: "Fantasy player check", template: "Give me the fantasy outlook for [player] in round [round].", variables: ["player", "round"] },
   { id: "fantasy-projection", label: "Fantasy projection", template: "Which [position]s have the best fantasy projection in round [round]?", variables: ["position", "round"] },
   { id: "fantasy-breakeven", label: "Fantasy breakeven", template: "Which [position]s have the lowest fantasy breakevens in round [round]?", variables: ["position", "round"] },
-  { id: "betting-market", label: "Market snapshot", template: "Summarise the best [market] betting prices for [team] this week.", variables: ["market", "team"] },
-  { id: "betting-edge", label: "Betting edge", template: "Where is the biggest [market] model edge for [team] this week?", variables: ["market", "team"] },
-  { id: "betting-matchup", label: "Matchup odds", template: "Compare [team] vs [team2] across [market] markets.", variables: ["team", "team2", "market"] },
+  { id: "betting-market", label: "H2H prices", template: "What are the best H2H prices for [team] this week?", variables: ["team"] },
   { id: "matchup-players", label: "Matchup players", template: "Which [team] players have the strongest [stat] matchup against [team2]?", variables: ["team", "stat", "team2"] },
   { id: "recent-form", label: "Recent form", template: "Which [position]s have improved most in [stat] recently in [season]?", variables: ["position", "stat", "season"] },
 ];
@@ -368,8 +365,11 @@ function RugbyLoadingMessage({ status, runnerImageSrc }: { status: string; runne
 
 function NrlAiTitle({ className = "" }: { className?: string }) {
   return (
-    <span className={`font-bold text-nrl-text ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 font-bold text-nrl-text ${className}`}>
       NRL <span className="font-semibold italic text-nrl-accent">AI</span>
+      <span className="rounded-full bg-nrl-accent/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-accent">
+        Beta
+      </span>
     </span>
   );
 }
@@ -408,7 +408,7 @@ export function AiChatPage({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadMenuRef = useRef<HTMLDivElement | null>(null);
   const quotaReached =
-    !isUsageTrackingAvailable || (remainingInPeriod != null && remainingInPeriod <= 0);
+    isUsageTrackingAvailable && (remainingInPeriod != null && remainingInPeriod <= 0);
 
   useEffect(() => {
     setMessages(initialMessages);
@@ -800,7 +800,7 @@ export function AiChatPage({
                 {isSubmitting ? (
                   <RugbyLoadingMessage
                     runnerImageSrc={loadingRunnerImageSrc}
-                    status={getLoadingStages(loadingPrompt ?? message)[loadingStageIndex] ?? "Thinking it through..."}
+                    status=""
                   />
                 ) : null}
                 <div ref={bottomRef} className="h-32 sm:h-36" />

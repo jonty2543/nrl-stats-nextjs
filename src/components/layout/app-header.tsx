@@ -61,7 +61,7 @@ export function AppHeader({
         </div>
 
         <div className="mt-3 lg:hidden">
-          <ToolNav mobileFullWidth />
+          <ToolNav />
         </div>
         {showStatsTabs ? <TabNav /> : null}
       </div>

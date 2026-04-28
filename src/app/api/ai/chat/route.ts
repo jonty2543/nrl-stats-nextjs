@@ -345,7 +345,8 @@ function isTransientAiProviderError(message: string): boolean {
     normalized.includes("temporary processing error") ||
     normalized.includes("temporarily unavailable") ||
     normalized.includes("an error occurred while processing your request") ||
-    normalized.includes("request id req_")
+    normalized.includes("request id req_") ||
+    normalized.includes("no tool output found for function call")
   );
 }
 

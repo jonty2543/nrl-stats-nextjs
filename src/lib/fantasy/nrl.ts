@@ -440,3 +440,72 @@ export async function fetchLatestFantasyOwnershipBaselineSnapshot(): Promise<Fan
     points: normaliseOwnershipBaselinePoints(row.snapshot_data),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Lineups-based fantasy projections
+// ---------------------------------------------------------------------------
+
+export interface LineupsProjectionSnapshot {
+  /** Parsed integer round number, e.g. 9. Null when lineups table is empty. */
+  round: number | null
+  /** Maps NRL player_id → fantasy_projection. Missing players default to 0 at call sites. */
+  projectionByPlayerId: Map<number, number>
+}
+
+export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjectionSnapshot> {
+  try {
+    const supabase = createServerSupabaseClient()
+    const today = new Date().toISOString().split("T")[0]
+
+    // Prefer the next upcoming round; fall back to the most recent past round.
+    let roundLabel: string | null = null
+
+    const { data: upcoming } = await supabase
+      .schema("nrl")
+      .from("lineups")
+      .select("round")
+      .gte("match_date", today)
+      .order("match_date", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    if (upcoming?.round) {
+      roundLabel = upcoming.round as string
+    } else {
+      const { data: latest } = await supabase
+        .schema("nrl")
+        .from("lineups")
+        .select("round")
+        .order("match_date", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      roundLabel = (latest?.round as string) ?? null
+    }
+
+    if (!roundLabel) return { round: null, projectionByPlayerId: new Map() }
+
+    // Parse the integer out of labels like "9", "Round 9", "Round 9 - 2026"
+    const roundNumMatch = roundLabel.match(/\d+/)
+    const round = roundNumMatch ? Number.parseInt(roundNumMatch[0], 10) : null
+
+    const { data, error } = await supabase
+      .schema("nrl")
+      .from("lineups")
+      .select("player_id, fantasy_projection")
+      .eq("round", roundLabel)
+
+    if (error || !data) return { round, projectionByPlayerId: new Map() }
+
+    const projectionByPlayerId = new Map<number, number>()
+    for (const row of data) {
+      if (row.player_id != null && row.fantasy_projection != null) {
+        projectionByPlayerId.set(Number(row.player_id), row.fantasy_projection as number)
+      }
+    }
+
+    return { round, projectionByPlayerId }
+  } catch (err) {
+    console.warn("Unable to fetch lineups projections.", err)
+    return { round: null, projectionByPlayerId: new Map() }
+  }
+}

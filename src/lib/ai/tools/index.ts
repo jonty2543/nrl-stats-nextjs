@@ -13,6 +13,7 @@ import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
+  fetchLineupsProjectionsByPlayerId,
   getFantasyCoachRoundMetrics,
   getTopFantasyOwnershipRise,
 } from "@/lib/fantasy/nrl";
@@ -1229,7 +1230,7 @@ function expandFantasyPositionFilters(positions: string[] | undefined): string[]
       return;
     }
 
-    if (["edge", "edges", "2rf", "back row", "back-row"].includes(normalized)) {
+    if (["edge", "edges", "2rf", "back row", "back-row", "second row", "second-row", "2nd row", "2nd-row", "backrow", "lock", "locks"].includes(normalized)) {
       expanded.add("EDG");
       return;
     }
@@ -2548,8 +2549,9 @@ async function runGetFantasySnapshot(
 ): Promise<AiToolExecutionResult> {
   const parsed = parseFantasySnapshotInput(input);
   const normalizedPositions = expandFantasyPositionFilters(parsed.positions);
-  const [fantasyPlayers, coachPlayers, ownershipBaseline] = await Promise.all([
+  const [fantasyPlayers, lineupsProjections, coachPlayers, ownershipBaseline] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
+    fetchLineupsProjectionsByPlayerId(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
   ]);
@@ -2560,13 +2562,17 @@ async function runGetFantasySnapshot(
     ownershipBaseline
   );
   const topOwnershipRise = getTopFantasyOwnershipRise(ownershipDeltaByPlayerId);
-  const availableRounds = [...new Set(coachPlayers.flatMap((player) => [
-    ...Object.keys(player.projectedScores ?? {}),
-    ...Object.keys(player.breakEvens ?? {}),
-  ]))]
-    .map((value) => Number.parseInt(value, 10))
-    .filter((value) => Number.isFinite(value))
-    .sort((a, b) => a - b);
+  // Available rounds are driven by the lineups table (our primary projection source).
+  // Fall back to the coach feed rounds if lineups has no data yet.
+  const availableRounds = lineupsProjections.round != null
+    ? [lineupsProjections.round]
+    : [...new Set(coachPlayers.flatMap((player) => [
+        ...Object.keys(player.projectedScores ?? {}),
+        ...Object.keys(player.breakEvens ?? {}),
+      ]))]
+        .map((value) => Number.parseInt(value, 10))
+        .filter((value) => Number.isFinite(value))
+        .sort((a, b) => a - b);
 
   const requestedRound = parsed.round ?? null;
   const roundAvailable = requestedRound == null || availableRounds.includes(requestedRound);
@@ -2585,15 +2591,13 @@ async function runGetFantasySnapshot(
     .map((player) => {
       const coach = coachById.get(player.id);
       const defaultMetrics = getFantasyCoachRoundMetrics(coach);
-      const round = requestedRound ?? defaultMetrics.round;
-      const projectionRaw =
-        round != null
-          ? (coach?.projectedScores?.[String(round)] ?? coach?.projectedScore ?? player.projectedAvg ?? null)
-          : (coach?.projectedScore ?? player.projectedAvg ?? null);
+      const round = requestedRound ?? lineupsProjections.round ?? defaultMetrics.round;
+      // Source projections from nrl.lineups (our primary store). Default to 0 for unlisted players.
+      const projectionRaw = lineupsProjections.projectionByPlayerId.get(player.id) ?? 0;
       const breakEvenRaw =
         round != null
-          ? (coach?.breakEvens?.[String(round)] ?? coach?.breakEven ?? player.be ?? null)
-          : (coach?.breakEven ?? player.be ?? null);
+          ? (coach?.breakEvens?.[String(round)] ?? coach?.breakEven ?? null)
+          : (coach?.breakEven ?? null);
       const ownershipDelta = ownershipDeltaByPlayerId.get(player.id) ?? null;
       const projection = hasAiProDataAccess(access.plan)
         ? applyFantasyProjectionOffset(projectionRaw, ownershipDelta, topOwnershipRise)
@@ -2601,7 +2605,7 @@ async function runGetFantasySnapshot(
       const breakEven = hasAiProDataAccess(access.plan)
         ? applyFantasyBreakEvenOffset(breakEvenRaw, player.id, round)
         : null;
-      const projectionBaseline = projection ?? player.projectedAvg;
+      const projectionBaseline = projection ?? projectionRaw;
 
       return {
         id: player.id,
@@ -2635,6 +2639,9 @@ async function runGetFantasySnapshot(
         if (pointsDelta !== 0) return pointsDelta;
       } else if (sortBy === "projected_avg_desc") {
         const projectionDelta = (b.projectedAvg ?? -1) - (a.projectedAvg ?? -1);
+        if (projectionDelta !== 0) return projectionDelta;
+      } else if (sortBy === "projection_desc") {
+        const projectionDelta = (b.projection ?? -1) - (a.projection ?? -1);
         if (projectionDelta !== 0) return projectionDelta;
       } else if (sortBy === "projection_vs_priced_at_desc") {
         const valueDelta = (b.projectionVsPricedAt ?? -Infinity) - (a.projectionVsPricedAt ?? -Infinity);
@@ -3075,7 +3082,7 @@ const CORE_AI_TOOLS: AiTool[] = [
   },
   {
     name: "get_fantasy_snapshot",
-    description: "Fetch a bounded fantasy player snapshot for buy/trade/value questions, including price, pricedAt, ownership, average fantasy points, ownership/transfer momentum, and round-specific projection/breakeven data when the user's plan allows it. Here pricedAt means the fantasy points average implied by the current price (price / 12725), so projection vs pricedAt is a value comparison. Supports position groups like forwards or backs, optional price caps, sorting by positive ownership momentum for buys or negative ownership momentum for sells, average points, projection-vs-pricedAt value edge, optional exclusion of locked players for actionable buy lists, and an optional ownership-rise-only filter when the user explicitly wants trade momentum.",
+    description: "Fetch a bounded fantasy player snapshot for buy/trade/value questions, including price, pricedAt, ownership, average fantasy points, ownership/transfer momentum, and round-specific projection/breakeven data when the user's plan allows it. Here pricedAt means the fantasy points average implied by the current price (price / 12725), so projection vs pricedAt is a value comparison. Supports position groups like forwards or backs, optional price caps, sorting by positive ownership momentum for buys or negative ownership momentum for sells, average points, projection-vs-pricedAt value edge, optional exclusion of locked players for actionable buy lists, and an optional ownership-rise-only filter when the user explicitly wants trade momentum. Use sortBy projection_desc when the user asks for best/highest projection for a specific round — this sorts by the actual round-specific projection value, not the season average. Use projected_avg_desc only when the user asks about season projected average.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -3083,6 +3090,7 @@ const CORE_AI_TOOLS: AiTool[] = [
       properties: {
         round: { type: ["number", "null"] },
         positions: {
+          description: "Fantasy position filters. Use the app's position labels: HOK (hooker), MID (middle/prop), EDG (edge/second row/lock/2RF), HLF (halfback/five-eighth/halves), CTR (centre), WFB (winger/fullback). Group aliases also accepted: 'forwards' (HOK+MID+EDG), 'backs' (CTR+WFB), 'halves' (HLF). Map natural language like 'second row' → EDG, 'prop' → MID, 'hooker' → HOK.",
           type: ["array", "null"],
           items: { type: "string" },
           maxItems: 4,
@@ -3092,7 +3100,7 @@ const CORE_AI_TOOLS: AiTool[] = [
           anyOf: [
             {
               type: "string",
-              enum: ["ownership_delta_desc", "ownership_delta_asc", "avg_points_desc", "projected_avg_desc", "projection_vs_priced_at_desc", "price_asc"],
+              enum: ["ownership_delta_desc", "ownership_delta_asc", "avg_points_desc", "projected_avg_desc", "projection_desc", "projection_vs_priced_at_desc", "price_asc"],
             },
             { type: "null" },
           ],

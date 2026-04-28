@@ -6,6 +6,7 @@ import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
+  fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
 import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats } from "@/lib/supabase/queries"
 
@@ -20,9 +21,10 @@ export default async function FantasyPage() {
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, availableYears, ownershipBaselineSnapshot, playerImages] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
+    fetchLineupsProjectionsByPlayerId(),
     fetchAvailableYears(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
     fetchPlayerImages(),
@@ -43,6 +45,7 @@ export default async function FantasyPage() {
     <FantasyDashboard
       fantasyPlayers={fantasyPlayers}
       fantasyCoachPlayers={fantasyCoachPlayers}
+      lineupsProjections={lineupsProjections}
       availableYears={unlockedYears}
       defaultYears={initialYears}
       initialPlayerStats={initialPlayerStats}

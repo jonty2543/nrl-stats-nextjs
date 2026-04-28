@@ -45,6 +45,11 @@ interface AiChatApiResponse {
   availableTools: Array<{ name: string; description: string }>;
 }
 
+interface DirectToolRequest {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+}
+
 interface PendingImageAttachment {
   id: string;
   name: string;
@@ -234,29 +239,149 @@ const PROMPT_VARIABLE_OPTIONS = {
 } as const;
 
 type PromptVariableKey = keyof typeof PROMPT_VARIABLE_OPTIONS;
+type PromptVariables = Partial<Record<PromptVariableKey, string>>;
+type DirectPromptTool = {
+  name: string;
+  input: Record<string, unknown>;
+};
 
 const DEFAULT_PROMPTS: Array<{
   id: string;
   label: string;
   template: string;
   variables: PromptVariableKey[];
+  getTool: (values: PromptVariables) => DirectPromptTool;
 }> = [
-  { id: "player-stat-rate", label: "Player rate ranking", template: "Among [position]s with [minGames]+ games in [season], who has the lowest [stat] per game?", variables: ["position", "minGames", "season", "stat"] },
-  { id: "player-stat-leaders", label: "Player stat leaders", template: "Which [position]s average the most [stat] in [season], minimum [minGames] games?", variables: ["position", "stat", "season", "minGames"] },
-  { id: "player-vs-player", label: "Player comparison", template: "Compare [player] and [player2] for [stat] in [season].", variables: ["player", "player2", "stat", "season"] },
-  { id: "player-last-season", label: "Player season summary", template: "Summarise [player]'s [stat] in [season], including average, total, and best game.", variables: ["player", "stat", "season"] },
-  { id: "minutes-filter", label: "Minutes filter", template: "Among [position]s averaging [minMinutes]+ minutes in [season], who has the best [stat] per game?", variables: ["position", "minMinutes", "season", "stat"] },
-  { id: "team-stat-rank", label: "Team stat ranking", template: "Rank teams by average [teamStat] in [season].", variables: ["teamStat", "season"] },
-  { id: "team-profile", label: "Team profile", template: "Show [team]'s [teamStat] trend in [season], with round-by-round context.", variables: ["team", "teamStat", "season"] },
-  { id: "team-comparison", label: "Team comparison", template: "Compare [team] and [team2] for [teamStat] in [season].", variables: ["team", "team2", "teamStat", "season"] },
-  { id: "team-home-away", label: "Home vs away", template: "Which teams have the biggest home vs away win-rate gap in [season]?", variables: ["season"] },
-  { id: "fantasy-value", label: "Fantasy value", template: "Which [position]s look best for fantasy value in round [round]?", variables: ["position", "round"] },
-  { id: "fantasy-player", label: "Fantasy player check", template: "Give me the fantasy outlook for [player] in round [round].", variables: ["player", "round"] },
-  { id: "fantasy-projection", label: "Fantasy projection", template: "Which [position]s have the best fantasy projection in round [round]?", variables: ["position", "round"] },
-  { id: "fantasy-breakeven", label: "Fantasy breakeven", template: "Which [position]s have the lowest fantasy breakevens in round [round]?", variables: ["position", "round"] },
-  { id: "betting-market", label: "H2H prices", template: "What are the best H2H prices for [team] this week?", variables: ["team"] },
-  { id: "matchup-players", label: "Matchup players", template: "Which [team] players have the strongest [stat] matchup against [team2]?", variables: ["team", "stat", "team2"] },
-  { id: "recent-form", label: "Recent form", template: "Which [position]s have improved most in [stat] recently in [season]?", variables: ["position", "stat", "season"] },
+  {
+    id: "player-stat-leaders",
+    label: "Player stat leaders",
+    template: "Which [position]s average the most [stat] in [season], minimum [minGames] games?",
+    variables: ["position", "stat", "season", "minGames"],
+    getTool: (values) => ({
+      name: "rank_players_by_stat",
+      input: {
+        statKey: values.stat,
+        years: [values.season],
+        limit: 8,
+        sortOrder: "desc",
+        aggregation: "avg",
+        rateBasis: "per_game",
+        minGames: Number(values.minGames),
+        minAverageMinutes: null,
+        filters: { opponent: null, position: values.position, finals: null, minutesOver: null, minutesUnder: null, teammate: null, teammatePosition: null, withWithout: null },
+      },
+    }),
+  },
+  {
+    id: "player-stat-lowest",
+    label: "Lowest player rates",
+    template: "Among [position]s with [minGames]+ games in [season], who has the lowest [stat] per game?",
+    variables: ["position", "minGames", "season", "stat"],
+    getTool: (values) => ({
+      name: "rank_players_by_stat",
+      input: {
+        statKey: values.stat,
+        years: [values.season],
+        limit: 8,
+        sortOrder: "asc",
+        aggregation: "avg",
+        rateBasis: "per_game",
+        minGames: Number(values.minGames),
+        minAverageMinutes: null,
+        filters: { opponent: null, position: values.position, finals: null, minutesOver: null, minutesUnder: null, teammate: null, teammatePosition: null, withWithout: null },
+      },
+    }),
+  },
+  {
+    id: "minutes-filter",
+    label: "Minutes filter",
+    template: "Among [position]s averaging [minMinutes]+ minutes in [season], who has the best [stat] per game?",
+    variables: ["position", "minMinutes", "season", "stat"],
+    getTool: (values) => ({
+      name: "rank_players_by_stat",
+      input: {
+        statKey: values.stat,
+        years: [values.season],
+        limit: 8,
+        sortOrder: "desc",
+        aggregation: "avg",
+        rateBasis: "per_game",
+        minGames: 3,
+        minAverageMinutes: Number(values.minMinutes),
+        filters: { opponent: null, position: values.position, finals: null, minutesOver: null, minutesUnder: null, teammate: null, teammatePosition: null, withWithout: null },
+      },
+    }),
+  },
+  {
+    id: "team-stat-rank",
+    label: "Team stat ranking",
+    template: "Rank teams by average [teamStat] in [season].",
+    variables: ["teamStat", "season"],
+    getTool: (values) => ({
+      name: "rank_teams_by_stat",
+      input: { statKey: values.teamStat, years: [values.season], limit: 8, sortOrder: "desc" },
+    }),
+  },
+  {
+    id: "team-home-away",
+    label: "Home vs away",
+    template: "Which teams have the biggest home vs away win-rate gap in [season]?",
+    variables: ["season"],
+    getTool: (values) => ({
+      name: "get_team_home_away_win_rates",
+      input: { team: null, years: [values.season], limit: 8, sortOrder: "desc" },
+    }),
+  },
+  {
+    id: "possession-records",
+    label: "Possession records",
+    template: "Which teams win the possession battle most often in [season]?",
+    variables: ["season"],
+    getTool: (values) => ({
+      name: "get_team_possession_battle_records",
+      input: { team: null, years: [values.season], limit: 8, sortOrder: "desc" },
+    }),
+  },
+  {
+    id: "player-vs-player",
+    label: "Player comparison",
+    template: "Compare [player] and [player2] for [stat] in [season].",
+    variables: ["player", "player2", "stat", "season"],
+    getTool: (values) => ({
+      name: "compare_players",
+      input: { players: [values.player, values.player2], stats: [values.stat], years: [values.season] },
+    }),
+  },
+  {
+    id: "fantasy-value",
+    label: "Fantasy value",
+    template: "Which [position]s look best for fantasy value in round [round]?",
+    variables: ["position", "round"],
+    getTool: (values) => ({
+      name: "get_fantasy_snapshot",
+      input: { round: Number(values.round), positions: [values.position ?? ""], priceMax: null, sortBy: "projection_vs_priced_at_desc", requireOwnershipRise: false, excludeLocked: true, limit: 8 },
+    }),
+  },
+  {
+    id: "fantasy-projection",
+    label: "Fantasy projections",
+    template: "Which [position]s have the best fantasy projection in round [round]?",
+    variables: ["position", "round"],
+    getTool: (values) => ({
+      name: "get_fantasy_snapshot",
+      input: { round: Number(values.round), positions: [values.position ?? ""], priceMax: null, sortBy: "projection_desc", requireOwnershipRise: false, excludeLocked: true, limit: 8 },
+    }),
+  },
+  {
+    id: "betting-market",
+    label: "H2H prices",
+    template: "What are the best H2H prices this week?",
+    variables: [],
+    getTool: () => ({
+      name: "get_betting_snapshot",
+      input: { market: "H2H", dateFrom: null, dateTo: null },
+    }),
+  },
 ];
 
 function buildPromptFromTemplate(template: string, values: Partial<Record<PromptVariableKey, string>>) {
@@ -402,6 +527,7 @@ export function AiChatPage({
     user?.primaryEmailAddress?.emailAddress.trim().slice(0, 2).toUpperCase() ||
     "SS";
   const [message, setMessage] = useState("");
+  const [pendingDirectTool, setPendingDirectTool] = useState<DirectToolRequest | null>(null);
   const [messages, setMessages] = useState<AiPersistedMessage[]>(initialMessages);
   const [threadId, setThreadId] = useState<string | null>(initialThreadId);
   const [threads, setThreads] = useState<AiThreadListItem[]>(initialThreads);
@@ -516,7 +642,7 @@ export function AiChatPage({
     }
   };
 
-  const submitPrompt = async (overrideMessage?: string) => {
+  const submitPrompt = async (overrideMessage?: string, directTool?: DirectToolRequest) => {
     const submittedImages = overrideMessage ? [] : pendingImages;
     const hasBettingImages = submittedImages.some((image) => image.context === "betting");
     const fallbackMessage =
@@ -548,6 +674,7 @@ export function AiChatPage({
     setMessages((current) => [...current, localUserMessage]);
     if (!overrideMessage) {
       setMessage("");
+      setPendingDirectTool(null);
       setPendingImages([]);
     }
 
@@ -571,6 +698,8 @@ export function AiChatPage({
             mediaType: image.mediaType,
             dataUrl: image.dataUrl,
           })),
+          toolName: directTool?.toolName ?? pendingDirectTool?.toolName,
+          toolInput: directTool?.toolInput ?? pendingDirectTool?.toolInput,
         }),
       });
 
@@ -667,7 +796,7 @@ export function AiChatPage({
   void tools;
 
   const hasConversation = messages.length > 0 || isSubmitting;
-  const fillRandomPrompt = () => {
+  const buildRandomPrompt = () => {
     const prompt = DEFAULT_PROMPTS[Math.floor(Math.random() * DEFAULT_PROMPTS.length)];
     const values = Object.fromEntries(
       prompt.variables.map((variable) => {
@@ -680,9 +809,21 @@ export function AiChatPage({
             : options[Math.floor(Math.random() * options.length)];
         return [variable, value];
       })
-    ) as Partial<Record<PromptVariableKey, string>>;
+    ) as PromptVariables;
 
-    setMessage(buildPromptFromTemplate(prompt.template, values));
+    return {
+      message: buildPromptFromTemplate(prompt.template, values),
+      tool: prompt.getTool(values),
+    };
+  };
+
+  const submitRandomPrompt = () => {
+    const prompt = buildRandomPrompt();
+    setMessage(prompt.message);
+    setPendingDirectTool({
+      toolName: prompt.tool.name,
+      toolInput: prompt.tool.input,
+    });
   };
 
   return (
@@ -951,7 +1092,10 @@ export function AiChatPage({
                 <textarea
                   ref={textareaRef}
                   value={message}
-                  onChange={(event) => setMessage(event.target.value)}
+                  onChange={(event) => {
+                    setMessage(event.target.value);
+                    setPendingDirectTool(null);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
@@ -965,7 +1109,7 @@ export function AiChatPage({
                 />
                 <button
                   type="button"
-                  onClick={fillRandomPrompt}
+                  onClick={submitRandomPrompt}
                   disabled={isSubmitting || quotaReached}
                   className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-lg text-nrl-muted transition-colors hover:bg-nrl-panel-2 hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-40"
                   aria-label="Random prompt"

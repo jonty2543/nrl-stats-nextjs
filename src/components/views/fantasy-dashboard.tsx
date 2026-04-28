@@ -246,7 +246,7 @@ const ALL_PLAYERS_BASE_COLUMNS: Array<{ key: AllPlayersSortKey; label: string; a
 function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
   switch (key) {
     case "name":
-      return "w-40 min-w-40 max-w-40 sm:w-64 sm:min-w-64 sm:max-w-64"
+      return "w-36 min-w-36 max-w-36 sm:w-64 sm:min-w-64 sm:max-w-64"
     case "position":
       return "w-14 min-w-14 max-w-14 sm:w-auto"
     case "weeklyChange":
@@ -1851,7 +1851,7 @@ export function FantasyDashboard({
                         onClick={() => navigateToPlayer(row.player.name)}
                         className="h-9 cursor-pointer border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70"
                       >
-                        <td className="sticky left-0 z-[1] w-40 min-w-40 max-w-40 border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-64 sm:min-w-64 sm:max-w-64 sm:px-2">
+                        <td className="sticky left-0 z-[1] w-36 min-w-36 max-w-36 border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-64 sm:min-w-64 sm:max-w-64 sm:px-2">
                           <div className="flex min-w-0 items-center gap-2">
                             <div className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[9px] text-nrl-muted">
                               {thumbnailUrl ? (

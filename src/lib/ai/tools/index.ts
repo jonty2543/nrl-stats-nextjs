@@ -2578,6 +2578,8 @@ async function runGetFantasySnapshot(
 
   const requestedRound = parsed.round ?? null;
   const roundAvailable = requestedRound == null || availableRounds.includes(requestedRound);
+  const fallbackRound = availableRounds[0] ?? null;
+  const effectiveRound = roundAvailable ? requestedRound : fallbackRound;
 
   const filtered = fantasyPlayers
     .filter((player) => (parsed.excludeLocked === true ? !player.locked : true))
@@ -2593,7 +2595,7 @@ async function runGetFantasySnapshot(
     .map((player) => {
       const coach = coachById.get(player.id);
       const defaultMetrics = getFantasyCoachRoundMetrics(coach);
-      const round = requestedRound ?? lineupsProjections.round ?? defaultMetrics.round;
+      const round = effectiveRound ?? lineupsProjections.round ?? defaultMetrics.round;
       // Source projections from nrl.lineups (our primary store). Default to 0 for unlisted players.
       const projectionRaw = lineupsProjections.projectionByPlayerId.get(player.id) ?? 0;
       const breakEvenRaw =
@@ -2633,7 +2635,7 @@ async function runGetFantasySnapshot(
         breakEven,
       };
     })
-    .filter((player) => (requestedRound != null ? player.round === requestedRound : true))
+    .filter((player) => (effectiveRound != null ? player.round === effectiveRound : true))
     .sort((a, b) => {
       const sortBy = parsed.sortBy ?? "ownership_delta_desc";
       if (sortBy === "avg_points_desc") {
@@ -2678,6 +2680,7 @@ async function runGetFantasySnapshot(
     ok: true,
     data: {
       requestedRound,
+      effectiveRound,
       roundAvailable,
       availableRounds,
       sortBy: parsed.sortBy ?? "ownership_delta_desc",

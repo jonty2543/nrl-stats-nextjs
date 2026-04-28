@@ -477,6 +477,184 @@ function buildFollowUpChoices(
   return [];
 }
 
+function formatValue(value: unknown): string {
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.join("/");
+  if (value == null) return "-";
+  return String(value);
+}
+
+function asRecords(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
+    : [];
+}
+
+function yearsLabel(years: unknown): string {
+  return Array.isArray(years) && years.length > 0 ? years.map(formatValue).join(", ") : "the selected period";
+}
+
+function statSummaryValue(stats: unknown, statKey: string, field: "avg" | "min" | "max"): unknown {
+  if (typeof stats !== "object" || stats === null) return null;
+  const stat = (stats as Record<string, unknown>)[statKey];
+  if (typeof stat !== "object" || stat === null) return null;
+  return (stat as Record<string, unknown>)[field];
+}
+
+function formatNumberDelta(value: number): string {
+  if (value === 0) return "level";
+  return `${value > 0 ? "+" : ""}${formatValue(value)}`;
+}
+
+function formatDirectToolResult(toolName: string, result: Awaited<ReturnType<typeof executeAiTool>>): string {
+  if (!result.ok) return result.error;
+
+  const data = result.data;
+  const years = yearsLabel(data.years);
+
+  if (toolName === "compare_players") {
+    const rows = asRecords(data.comparisons);
+    const statKey = Array.isArray(data.statKeys) && typeof data.statKeys[0] === "string" ? data.statKeys[0] : "the stat";
+    if (rows.length === 0) return `I could not find comparison rows for ${statKey} in ${years}.`;
+
+    const lines = rows.map((row) => {
+      const avg = statSummaryValue(row.stats, statKey, "avg");
+      const max = statSummaryValue(row.stats, statKey, "max");
+      return `- ${formatValue(row.player)} (${formatValue(row.teams)}): ${formatValue(avg)} per game across ${formatValue(row.games)} games${max != null ? `, best game ${formatValue(max)}` : ""}`;
+    });
+    const firstAvg = statSummaryValue(rows[0]?.stats, statKey, "avg");
+    const secondAvg = statSummaryValue(rows[1]?.stats, statKey, "avg");
+    const takeaway =
+      typeof firstAvg === "number" && typeof secondAvg === "number" && rows[0] && rows[1]
+        ? `\n\nTakeaway: ${formatValue(rows[0].player)} is ${formatNumberDelta(firstAvg - secondAvg)} per game versus ${formatValue(rows[1].player)}.`
+        : "";
+
+    return `Here's the ${statKey} comparison for ${years}:\n${lines.join("\n")}${takeaway}`;
+  }
+
+  if (toolName === "rank_players_by_stat") {
+    const rows = asRecords(data.rankings);
+    if (rows.length === 0) return `I could not find matching player rankings for ${formatValue(data.statKey)} in ${years}.`;
+    const lines = rows.slice(0, 8).map((row, index) =>
+      `${index + 1}. ${formatValue(row.player)} (${formatValue(row.team)}, ${formatValue(row.position)}) - ${formatValue(row.value)} per game across ${formatValue(row.games)} games`
+    );
+    return `Here are the player leaders for ${formatValue(data.statKey)} in ${years}:\n${lines.join("\n")}`;
+  }
+
+  if (toolName === "rank_teams_by_stat") {
+    const rows = asRecords(data.rankings);
+    if (rows.length === 0) return `I could not find team rankings for ${formatValue(data.statKey)} in ${years}.`;
+    const lines = rows.slice(0, 8).map((row, index) =>
+      `${index + 1}. ${formatValue(row.team)} - ${formatValue(row.avg)} per game (${formatValue(row.total)} total)`
+    );
+    return `Here are the team rankings for ${formatValue(data.statKey)} in ${years}:\n${lines.join("\n")}`;
+  }
+
+  if (toolName === "get_team_home_away_win_rates") {
+    const rows = asRecords(data.rankings);
+    if (rows.length === 0) return `I could not find home/away records for ${years}.`;
+    const lines = rows.slice(0, 8).map((row, index) =>
+      `${index + 1}. ${formatValue(row.team)} - ${formatValue(row.homeAwayGap)} point gap (home ${formatValue(row.homeWinRate)}%, away ${formatValue(row.awayWinRate)}%)`
+    );
+    return `Biggest home/away win-rate gaps in ${years}:\n${lines.join("\n")}`;
+  }
+
+  if (toolName === "get_team_possession_battle_records") {
+    const rows = asRecords(data.rankings);
+    if (rows.length === 0) return `I could not find possession battle records for ${years}.`;
+    const lines = rows.slice(0, 8).map((row, index) =>
+      `${index + 1}. ${formatValue(row.team)} - ${formatValue(row.possessionWinRate)}% (${formatValue(row.possessionWins)} wins from ${formatValue(row.games)} games)`
+    );
+    return `Best possession-battle records in ${years}:\n${lines.join("\n")}`;
+  }
+
+  if (toolName === "get_fantasy_snapshot") {
+    const rows = asRecords(data.players);
+    if (rows.length === 0) return "I could not find matching fantasy players for that prompt.";
+    const sortBy = typeof data.sortBy === "string" ? data.sortBy : "";
+    const label = sortBy === "projection_desc" ? "projected scorers" : "fantasy value options";
+    const requestedRound = typeof data.requestedRound === "number" ? data.requestedRound : null;
+    const effectiveRound = typeof data.effectiveRound === "number" ? data.effectiveRound : requestedRound;
+    const roundPrefix =
+      requestedRound != null && effectiveRound != null && requestedRound !== effectiveRound
+        ? `Round ${requestedRound} is not in the current projection feed, so I used round ${effectiveRound}. `
+        : "";
+    const lines = rows.slice(0, 8).map((row, index) => {
+      const metric = sortBy === "projection_desc"
+        ? `projection ${formatValue(row.projection)}`
+        : `value edge ${formatValue(row.projectionVsPricedAt)}`;
+      return `${index + 1}. ${formatValue(row.name)} (${formatValue(row.position)}) - ${metric}, priced at ${formatValue(row.pricedAt)}, price $${formatValue(row.price)}`;
+    });
+    return `${roundPrefix}Here are the top ${label}${effectiveRound ? ` for round ${formatValue(effectiveRound)}` : ""}:\n${lines.join("\n")}`;
+  }
+
+  if (toolName === "get_betting_snapshot") {
+    const rows = asRecords(data.rows);
+    if (rows.length === 0) return "I could not find current betting rows for that market.";
+    const matchGroups = new Map<string, Array<Record<string, unknown>>>();
+    rows.forEach((row) => {
+      const match = formatValue(row.match);
+      const group = matchGroups.get(match);
+      if (group) {
+        group.push(row);
+        return;
+      }
+
+      matchGroups.set(match, [row]);
+    });
+    const lines = [...matchGroups.entries()].slice(0, 8).map(([match, matchRows], index) => {
+      const prices = matchRows
+        .slice()
+        .sort((left, right) => formatValue(left.result).localeCompare(formatValue(right.result)))
+        .map((row) => `${formatValue(row.result)} ${formatValue(row.bestPrice)} (${formatValue(row.bestBookie)})`)
+        .join("; ");
+      return `${index + 1}. ${match}: ${prices}`;
+    });
+    return `Here are the current ${formatValue(data.market)} prices I found:\n${lines.join("\n")}`;
+  }
+
+  const rows =
+    Array.isArray(data.rankings) ? data.rankings :
+    Array.isArray(data.players) ? data.players :
+    Array.isArray(data.comparisons) ? data.comparisons :
+    Array.isArray(data.rows) ? data.rows :
+    [];
+
+  if (rows.length === 0) {
+    return "I could not find matching rows for that prompt.";
+  }
+
+  const lines = rows.slice(0, 8).map((row, index) => {
+    if (typeof row !== "object" || row === null) return `${index + 1}. ${formatValue(row)}`;
+    const record = row as Record<string, unknown>;
+    const name = record.player ?? record.name ?? record.team ?? record.Team ?? `#${index + 1}`;
+    const bits = [
+      record.market ? `${formatValue(record.market)}` : null,
+      record.match ? `${formatValue(record.match)}` : null,
+      record.teams ? `${formatValue(record.teams)}` : null,
+      record.position ? `${formatValue(record.position)}` : null,
+      record.value != null ? `value ${formatValue(record.value)}` : null,
+      record.avg != null ? `avg ${formatValue(record.avg)}` : null,
+      record.total != null ? `total ${formatValue(record.total)}` : null,
+      record.sharePercent != null ? `share ${formatValue(record.sharePercent)}%` : null,
+      record.homeAwayGap != null ? `gap ${formatValue(record.homeAwayGap)}%` : null,
+      record.possessionWinRate != null ? `possession win ${formatValue(record.possessionWinRate)}%` : null,
+      record.projection != null ? `proj ${formatValue(record.projection)}` : null,
+      record.projectionVsPricedAt != null ? `edge ${formatValue(record.projectionVsPricedAt)}` : null,
+      record.ownershipDelta != null ? `own ${formatValue(record.ownershipDelta)}` : null,
+      record.price != null ? `$${formatValue(record.price)}` : null,
+      record.bestPrice != null ? `best ${formatValue(record.bestPrice)}` : null,
+      record.games != null ? `${formatValue(record.games)} games` : null,
+    ].filter(Boolean);
+
+    return `${index + 1}. ${formatValue(name)}${bits.length > 0 ? ` - ${bits.join(", ")}` : ""}`;
+  });
+
+  const stat = typeof data.statKey === "string" ? ` for ${data.statKey}` : "";
+  return `Here's what I found${stat}:\n${lines.join("\n")}`;
+}
+
 export async function POST(request: Request) {
   const { userId } = await auth();
   const access = await getServerAiAccess(userId);
@@ -493,45 +671,6 @@ export async function POST(request: Request) {
   const requestHistory = toRequestHistory(body.history);
   const imageAttachments = toImageAttachments(body.imageAttachments);
   const toolName = typeof body.toolName === "string" ? body.toolName.trim() : "";
-
-  if (toolName) {
-    const result = await executeAiTool(toolName, body.toolInput, { plan: access.plan });
-    const restrictionReason = !result.ok ? getAiRestrictionReason(result.error) : null;
-    logAiAuditEvent(
-      restrictionReason ? "ai_tool_restricted" : "ai_tool_invocation",
-      {
-        userId,
-        plan: access.plan,
-        toolName,
-        ok: result.ok,
-        durationMs: Date.now() - requestStartedAt,
-        restrictionReason,
-        error: !result.ok ? truncateForAudit(result.error, 160) : null,
-      },
-      restrictionReason || !result.ok ? "warn" : "info"
-    );
-
-    return NextResponse.json(
-      {
-        status: result.ok ? "tool_result" : "tool_error",
-        plan: access.plan,
-        chatLimit: access.chatLimit,
-        chatQuotaPeriodLabel: access.chatQuotaPeriodLabel,
-        chatsUsed: usage.usedInPeriod,
-        chatsRemaining: usage.remainingInPeriod,
-        usageTrackingAvailable: usage.trackingAvailable,
-        submittedMessage: message,
-        toolName,
-        result,
-        guardrails: AI_GUARDRAILS,
-        availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-        })),
-      },
-      { status: result.ok ? 200 : 400 }
-    );
-  }
 
   if (!message) {
     return NextResponse.json(
@@ -628,6 +767,98 @@ export async function POST(request: Request) {
       },
       { status: 503 }
     );
+  }
+
+  if (toolName) {
+    const result = await executeAiTool(toolName, body.toolInput, { plan: access.plan });
+    const assistantMessage = formatDirectToolResult(toolName, result);
+    const restrictionReason = !result.ok ? getAiRestrictionReason(result.error) : null;
+    logAiAuditEvent(
+      restrictionReason ? "ai_tool_restricted" : "ai_tool_invocation",
+      {
+        userId,
+        plan: access.plan,
+        toolName,
+        ok: result.ok,
+        durationMs: Date.now() - requestStartedAt,
+        restrictionReason,
+        error: !result.ok ? truncateForAudit(result.error, 160) : null,
+      },
+      restrictionReason || !result.ok ? "warn" : "info"
+    );
+
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          status: "tool_error",
+          plan: access.plan,
+          chatLimit: access.chatLimit,
+          chatQuotaPeriodLabel: access.chatQuotaPeriodLabel,
+          chatsUsed: usage.usedInPeriod,
+          chatsRemaining: usage.remainingInPeriod,
+          usageTrackingAvailable: usage.trackingAvailable,
+          submittedMessage: message,
+          assistantMessage,
+          guardrails: AI_GUARDRAILS,
+          availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+          })),
+        },
+        { status: 400 }
+      );
+    }
+
+    const persistedThreadId = await ensureAiThreadForUser(userId, requestedThreadId || null, message);
+    await saveAiAssistantTurn({
+      userId,
+      threadId: persistedThreadId,
+      threadTitle: message,
+      userMessage: message,
+      assistantMessage,
+      toolActivity: [{
+        toolName,
+        arguments: typeof body.toolInput === "object" && body.toolInput !== null && !Array.isArray(body.toolInput)
+          ? body.toolInput as Record<string, unknown>
+          : null,
+        ok: true,
+        summary: assistantMessage,
+      }],
+      model: "direct_tool",
+      usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+    });
+
+    return NextResponse.json(sanitizeRuntimeMetadataForPlan({
+      status: "tool_result",
+      threadId: persistedThreadId,
+      threadTitle: message,
+      plan: access.plan,
+      chatLimit: access.chatLimit,
+      chatQuotaPeriodLabel: access.chatQuotaPeriodLabel,
+      chatsUsed: usage.usedInPeriod + 1,
+      chatsRemaining:
+        access.chatLimit == null ? null : Math.max(access.chatLimit - usage.usedInPeriod - 1, 0),
+      usageTrackingAvailable: usage.trackingAvailable,
+      submittedMessage: message,
+      assistantMessage,
+      guardrails: AI_GUARDRAILS,
+      toolActivity: [{
+        toolName,
+        arguments: typeof body.toolInput === "object" && body.toolInput !== null && !Array.isArray(body.toolInput)
+          ? body.toolInput as Record<string, unknown>
+          : null,
+        ok: true,
+        summary: assistantMessage,
+      }],
+      choices: [],
+      artifacts: [],
+      model: "direct_tool",
+      usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+      availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+      })),
+    }, access.plan));
   }
 
   if (!isOpenAiConfigured() && !isAiLocalFallbackEnabled()) {

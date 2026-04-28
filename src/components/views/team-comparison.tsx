@@ -706,12 +706,16 @@ export function TeamComparison({
             <table className="min-w-[2200px] border-collapse text-left text-xs">
               <thead>
                 <tr>
+                  <th
+                    aria-label="Team logo"
+                    className="sticky left-0 top-0 z-[4] w-11 min-w-11 max-w-11 border-b border-r border-nrl-border bg-nrl-panel px-1 py-2"
+                  />
                   {TEAM_STATS_TABLE_BASE_COLUMNS.map((column) => {
                     const active = teamStatsTableSort.column === column.key;
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "team" ? "left-0 z-[4] w-48 min-w-48 max-w-48" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "team" ? "w-48 min-w-48 max-w-48" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -751,7 +755,7 @@ export function TeamComparison({
                 {sortedTeamStatsTableRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={TEAM_STATS_TABLE_BASE_COLUMNS.length + TEAM_STATS_TABLE_COLUMNS.length}
+                      colSpan={TEAM_STATS_TABLE_BASE_COLUMNS.length + TEAM_STATS_TABLE_COLUMNS.length + 1}
                       className="px-3 py-6 text-center text-xs text-nrl-muted"
                     >
                       No teams match the selected filters.
@@ -760,21 +764,21 @@ export function TeamComparison({
                 ) : (
                   sortedTeamStatsTableRows.map((row) => (
                     <tr key={row.team} className="h-9 border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70">
-                      <td className="sticky left-0 z-[1] w-48 min-w-48 max-w-48 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-xs font-semibold text-nrl-text">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <div className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2">
-                            {row.logoUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={row.logoUrl}
-                                alt=""
-                                className="h-5 w-5 object-contain"
-                                loading="lazy"
-                              />
-                            ) : null}
-                          </div>
-                          <span className="block min-w-0 truncate" title={row.team}>{row.team}</span>
+                      <td className="sticky left-0 z-[1] w-11 min-w-11 max-w-11 border-r border-nrl-border bg-nrl-panel px-1 py-1">
+                        <div className="mx-auto grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2">
+                          {row.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={row.logoUrl}
+                              alt=""
+                              className="h-5 w-5 object-contain"
+                              loading="lazy"
+                            />
+                          ) : null}
                         </div>
+                      </td>
+                      <td className="w-48 min-w-48 max-w-48 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-xs font-semibold text-nrl-text">
+                        <span className="block min-w-0 truncate" title={row.team}>{row.team}</span>
                       </td>
                       <td className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-text">
                         {row.games}

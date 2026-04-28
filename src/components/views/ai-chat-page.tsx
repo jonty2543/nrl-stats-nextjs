@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
@@ -388,6 +388,17 @@ export function AiChatPage({
   tools,
 }: AiChatPageProps) {
   const { isLoaded: isAuthLoaded, userId } = useAuth();
+  const { user } = useUser();
+  const profileImageUrl = user?.imageUrl ?? null;
+  const profileInitials =
+    [user?.firstName, user?.lastName]
+      .map((name) => name?.trim()[0])
+      .filter(Boolean)
+      .join("")
+      .toUpperCase() ||
+    user?.fullName?.trim().slice(0, 2).toUpperCase() ||
+    user?.primaryEmailAddress?.emailAddress.trim().slice(0, 2).toUpperCase() ||
+    "SS";
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<AiPersistedMessage[]>(initialMessages);
   const [threadId, setThreadId] = useState<string | null>(initialThreadId);
@@ -718,8 +729,12 @@ export function AiChatPage({
 
         <div className="border-t border-nrl-border px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-nrl-accent text-xs font-bold text-nrl-bg">
-              SS
+            <div
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-nrl-accent bg-cover bg-center text-xs font-bold text-nrl-bg"
+              style={profileImageUrl ? { backgroundImage: `url("${profileImageUrl}")` } : undefined}
+              aria-label="User profile photo"
+            >
+              {!profileImageUrl ? profileInitials : null}
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-nrl-text">{formatPlanLabel(plan)}</div>

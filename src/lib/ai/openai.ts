@@ -229,6 +229,32 @@ Access rules:
 - If the user asks for restricted data, answer with the best allowed alternative instead of exposing locked details.`.trim();
 }
 
+function buildImageOnlySystemInstructions(plan: AiPlan): string {
+  const accessLines =
+    plan === "free"
+      ? [
+          "Do not provide restricted breakevens, projections, model predictions, or AI plots.",
+          "If restricted data would be useful, give practical non-restricted advice instead.",
+        ]
+      : plan === "pro"
+        ? ["Do not provide Premium-only betting model probabilities or model info."]
+        : [];
+
+  return [
+    "You are the native Short Side AI assistant for an NRL analytics app.",
+    "You are answering from uploaded screenshots. Read the screenshots directly and answer the user's request.",
+    "For NRL Fantasy team screenshots, extract the visible squad, player statuses, captain/vice-captain, bench, emergencies, DNP/injury/bye markers, and any visible round.",
+    "Give useful fantasy trade advice even if bank, trade count, or exact prices are not visible. State those assumptions briefly.",
+    "Do not recommend selling a player only because their club has a bye. Treat bye markers as temporary unavailability unless there is another sell reason.",
+    "Prioritise sells for injured, DNP, suspended, dropped, highly sold, or structurally poor picks.",
+    "Do not recommend buying players already visible in the user's squad.",
+    "Be careful with abbreviated names. Do not read J. Hughes as Jake Hughes by default; use visible team/position context and ask only if truly unclear.",
+    "Keep the response concise, direct, and plain English for a sports fan.",
+    "Do not mention internal tools, schemas, or implementation details.",
+    ...accessLines,
+  ].join("\n");
+}
+
 interface OpenAiFunctionToolCall {
   type: "function_call";
   name: string;
@@ -3471,6 +3497,38 @@ export async function runAiModelChat(
   const model = getOpenAiModel();
   const reasoningEffort =
     options?.reasoningEffortOverride ?? getOpenAiReasoningEffort(access.plan);
+  if (hasImageInputs) {
+    const response = await createOpenAiResponse({
+      model,
+      reasoning: {
+        effort: "low",
+      },
+      instructions: buildImageOnlySystemInstructions(access.plan),
+      input: [
+        {
+          role: "user",
+          content: buildOpenAiUserInputContent(userMessage, imageInputs),
+        },
+      ],
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+    });
+    const assistantMessage =
+      stripFinalAnswerPrefix(extractAssistantText(response)) ||
+      "I could not read the uploaded screenshots clearly enough to give reliable fantasy trade advice. Please retry with the same full-screen squad screenshots.";
+
+    return {
+      assistantMessage,
+      toolActivity: [],
+      artifacts: [],
+      model,
+      usage: {
+        inputTokens: response.usage?.input_tokens ?? null,
+        outputTokens: response.usage?.output_tokens ?? null,
+        totalTokens: response.usage?.total_tokens ?? null,
+      },
+    };
+  }
+
   const toolActivity: AiToolActivity[] = [];
   const history = options?.history ?? [];
   const clarificationCount = options?.clarificationCount ?? 0;

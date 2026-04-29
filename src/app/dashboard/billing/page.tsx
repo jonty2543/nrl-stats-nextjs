@@ -149,7 +149,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
             </h1>
             <p className="mx-auto mt-4 max-w-3xl text-sm leading-6 text-nrl-muted sm:text-base">
               Choose the tier that matches how deep you want to go. Free covers the core product.
-              Pro unlocks paid stats access plus higher AI usage, fantasy projections, and breakevens.
+              Pro unlocks paid stats access plus higher AI usage and full stats history.
               Premium adds deeper AI reasoning plus premium-only betting model info, line odds, and total odds.
             </p>
           </div>
@@ -199,8 +199,8 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 features={[
                   "Everything in Free",
                   formatAiQuota("pro"),
+                  "Fantasy projections and breakevens",
                   "All plots unlocked in Fantasy and Stats",
-                  "Fantasy projections and breakevens in AI",
                   "Full stats years",
                   "New features as they release",
                 ]}
@@ -236,6 +236,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                   "Betting model predictions, line and total odds",
                   "Bet tracker with history",
                   "Discord alerting",
+                  "New features as they release",
                 ]}
                 cta={
                   <div className="flex h-11 items-center justify-center rounded-xl border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted">

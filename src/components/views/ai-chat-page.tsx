@@ -1119,7 +1119,10 @@ export function AiChatPage({
           <div className={`mx-auto w-full max-w-3xl px-4 sm:px-6 ${hasConversation ? "lg:translate-x-36" : "pb-4 sm:pb-6"}`}>
             {quotaReached ? (
               <div className="pointer-events-auto mb-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-xs font-medium text-amber-100">
-                {formatQuotaReachedMessage(plan, chatLimit, chatQuotaPeriodLabel)}
+                {formatQuotaReachedMessage(plan, chatLimit, chatQuotaPeriodLabel)}{" "}
+                <Link href="/dashboard/billing" className="font-semibold text-nrl-accent underline underline-offset-2">
+                  Upgrade plan
+                </Link>
               </div>
             ) : null}
             <div className="pointer-events-auto rounded-[1.75rem] border border-nrl-border bg-nrl-panel/95 p-2 shadow-2xl shadow-black/30 backdrop-blur">

@@ -252,10 +252,14 @@ export function sanitizeAiMessagesForAccess(
   messages: AiPersistedMessage[],
   plan: AiPlan
 ): AiPersistedMessage[] {
-  return messages.map((message) => {
+  return messages.flatMap((message) => {
     const runtimeMetadataVisible = canViewAiRuntimeMetadata(plan);
 
     if (isMessageRestrictedForPlan(message, plan)) {
+      if (plan === "free") {
+        return [];
+      }
+
       return {
         ...message,
         content: buildAiThreadAccessMessage(plan),
@@ -267,11 +271,11 @@ export function sanitizeAiMessagesForAccess(
       };
     }
 
-    return {
+    return [{
       ...message,
       model: runtimeMetadataVisible ? message.model : null,
       usage: runtimeMetadataVisible ? message.usage : null,
-    };
+    }];
   });
 }
 

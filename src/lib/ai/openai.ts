@@ -248,28 +248,85 @@ function buildImageOnlySystemInstructions(plan: AiPlan): string {
     "Give useful fantasy trade advice even if bank, trade count, or exact prices are not visible. State those assumptions briefly.",
     "DNP or bye can be mentioned as a short-term availability issue, but it is not a sell reason by itself.",
     "The NRL Fantasy bye/DNP marker is a black/dark circle with a white square. Do not call that an injury, suspension, dropped status, or priority sell reason.",
-    "Only recommend sells for visible players with an injury marker, suspension marker, explicit dropped/out status, or a matching real highly-sold player from the supplied sell snapshot.",
-    "Prioritise visible injured players above structural or ownership-delta sells. In the screenshot key, injury is a red cross/plus marker.",
+    "Only recommend sells for visible players with negative ownership delta and no low-breakeven price-rise signal. Injury, suspension, or dropped/out markers can explain urgency, but do not override positive ownership delta or low breakeven.",
+    "Prioritise visible injured players among eligible sell candidates. In the screenshot key, injury is a red cross/plus marker.",
     "Do not recommend buying players already visible in the user's squad.",
     "Never say a user should buy a player again, buy back a player they already own, or trade a player out and then back in.",
     "Only recommend trade-in targets from the real fantasy snapshot data supplied in the user message. Do not invent names, clubs, ownership deltas, prices, or form notes.",
-    "For buys and sells, weigh ownership delta, breakeven, pricedAt, L3 average, round projection, and projection-vs-pricedAt. Low breakeven supports buys because price rises are easier; high breakeven, L3/projection below pricedAt, and negative ownership support sells.",
+    "If the user explicitly says they do not want to sell or trade out a player, do not suggest that player as the sell. Treat them as a hold and suggest targets only if the upgrade can be funded another way.",
+    "For buys and sells, weigh ownership delta, breakeven, pricedAt, L3 average, round projection, and projection-vs-pricedAt. Low breakeven supports buys because price rises are easier; do not recommend selling players with low breakevens. High breakeven, L3/projection below pricedAt, and negative ownership support sells.",
+    "Only recommend buys with positive ownership delta. Do not recommend a player as a buy if their ownership delta is negative.",
+    "Only recommend sells with negative ownership delta. Do not recommend a player as a sell if their ownership delta is positive.",
     "Use positions from the real fantasy snapshot when available. Do not infer positions from bench slot labels like INT.",
-    "Be careful with abbreviated names. Do not read J. Hughes as Jake Hughes by default; use visible team/position context and ask only if truly unclear.",
+    "Resolve abbreviated names against real NRL Fantasy player names. For initial + surname, if exactly one real player matches that first initial and surname, use that player. If multiple real players match, ask the user to clarify.",
+    "Never invent a first name for an abbreviation. J. Hughes should resolve to Jahrome Hughes unless another real J. Hughes is present in the relevant player data; do not call him Jye Hughes.",
     "Keep the response concise, direct, and plain English for a sports fan.",
     "Do not mention internal tools, schemas, or implementation details.",
     ...accessLines,
   ].join("\n");
 }
 
-function formatFantasySnapshotContext(result: AiToolExecutionResult, label = "trade-in", extraInstruction?: string): string {
+function getFantasyNumber(entry: Record<string, unknown>, key: string): number | null {
+  const value = entry[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function hasNegativeOwnershipDelta(entry: Record<string, unknown>): boolean {
+  const ownershipDelta = getFantasyNumber(entry, "ownershipDelta");
+  return ownershipDelta != null && ownershipDelta < 0;
+}
+
+function hasPositiveOwnershipDelta(entry: Record<string, unknown>): boolean {
+  const ownershipDelta = getFantasyNumber(entry, "ownershipDelta");
+  return ownershipDelta != null && ownershipDelta > 0;
+}
+
+function hasLowFantasyBreakEven(entry: Record<string, unknown>): boolean {
+  const breakEven = getFantasyNumber(entry, "breakEven");
+  if (breakEven == null) return false;
+
+  const scoringBenchmarks = [
+    getFantasyNumber(entry, "projection"),
+    getFantasyNumber(entry, "last3Avg"),
+    getFantasyNumber(entry, "avgPoints"),
+    getFantasyNumber(entry, "pricedAt"),
+  ].filter((value): value is number => value != null);
+
+  if (scoringBenchmarks.length === 0) {
+    return breakEven <= 35;
+  }
+
+  return breakEven <= Math.max(...scoringBenchmarks);
+}
+
+function filterFantasySnapshotPlayersForContext(
+  players: Array<Record<string, unknown>>,
+  context: "buy" | "sell" | "neutral"
+): Array<Record<string, unknown>> {
+  if (context === "buy") {
+    return players.filter((entry) => hasPositiveOwnershipDelta(entry));
+  }
+
+  if (context === "sell") {
+    return players.filter((entry) => hasNegativeOwnershipDelta(entry) && !hasLowFantasyBreakEven(entry));
+  }
+
+  return players;
+}
+
+function formatFantasySnapshotContext(
+  result: AiToolExecutionResult,
+  label = "trade-in",
+  extraInstruction?: string,
+  context: "buy" | "sell" | "neutral" = "neutral"
+): string {
   if (!result.ok) {
     return `Real fantasy snapshot unavailable: ${result.error}`;
   }
 
-  const players = Array.isArray(result.data.players)
+  const players = filterFantasySnapshotPlayersForContext(Array.isArray(result.data.players)
     ? result.data.players.filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null)
-    : [];
+    : [], context);
   const warnings = Array.isArray(result.data.warnings)
     ? result.data.warnings.filter((value): value is string => typeof value === "string")
     : [];
@@ -448,19 +505,24 @@ function buildFantasyScreenshotPrompt(userMessage: string, imageInputs: AiImageA
 
 Use the screenshots to extract the visible fantasy squad, then use internal fantasy data before recommending trades.
 When suggesting trades:
-- Treat injured, DNP, suspended, dropped, or clearly unavailable players as priority sells.
+- Treat injured, DNP, suspended, dropped, or clearly unavailable players as availability concerns, but only recommend a sell when the player also has negative ownership delta and no low breakeven.
 - Do not recommend selling a player only because they are on a bye. A bye is shown as a black circle with a white square; treat that as temporary unavailability, not a sell signal.
-- Name the visible player or players the screenshot shows should be traded out because of injury, DNP, suspension, dropped status, major negative ownership momentum, or poor squad balance. Do not replace this with generic sell advice.
+- Name the visible player or players the screenshot shows should be considered for trade-out because of injury, DNP, suspension, dropped status, major negative ownership momentum, or poor squad balance, but do not recommend the sell if ownership delta is positive or breakeven is low.
 - Provide concrete buy targets from internal fantasy data using positive ownership percentage increase/ownership delta. Include each buy target's ownership increase in the answer.
+- Do not recommend buys with negative ownership delta.
 - Do not recommend buying any player already visible in the user's squad. If a player is already owned, discuss whether to hold or sell them instead.
+- If the user explicitly says they do not want to sell or trade out a player, do not suggest that player as the sell. Treat them as a hold and suggest targets only if the upgrade can be funded another way.
 - Prefer buy targets with strong positive ownership/transfer momentum, unless budget or squad balance makes that impossible.
 - Prefer sell candidates with negative ownership/transfer momentum when they are not playable, underperforming, or blocking squad balance.
+- Do not recommend sells with positive ownership delta, and do not recommend selling players with low breakevens.
 - Maintain a legal fieldable squad: cover 17 selected players first, then bench depth.
 - Use the draw/upcoming fixtures where available: account for each player/team’s next opponent, home/away status, and near-term fixture run.
 - Build with the 2026 draw and major bye rounds in mind: rounds 12, 15, and 18 only count the best 13 selected scorers, so warn when buying a player whose team does not play in the next major bye round.
 - Respect visible positions, captain/vice-captain, bench, emergencies, and any visible round.
 - If budget, bank, trade count, or exact prices are not visible, state the assumption and give conditional trade paths instead of pretending it is known.
-- Be careful with abbreviated screenshot names. Do not read "J. Hughes" as Jake Hughes by default; use visible team/position context to resolve Jahrome Hughes where appropriate, otherwise ask the user to confirm.
+- Resolve abbreviated screenshot names against real NRL Fantasy player names. For an initial + surname like "J. Hughes", if exactly one real player matches that first initial and surname, use that player.
+- Never invent a first name for an abbreviation. "J. Hughes" should resolve to Jahrome Hughes unless another real J. Hughes is present in the relevant player data; do not call him Jye Hughes.
+- If multiple real players match the same initial + surname, ask the user which one they mean before relying on that player.
 - If a name is ambiguous from the screenshot, say so briefly and ask the user to confirm before relying on that player.`);
   }
 
@@ -2851,6 +2913,43 @@ function extractFantasyPositionFollowUp(userMessage: string): string[] | null {
   return null;
 }
 
+function cleanHeldPlayerTerm(value: string): string | null {
+  const cleaned = value
+    .replace(/\b(?:because|as|with|who|and|but|for|to|from|if|he|she|they|has|have|is|are|a|the|my|his|her|their)\b.*$/i, "")
+    .replace(/[^\p{L}\p{N}.' -]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned.length >= 2 ? cleaned.toLowerCase() : null;
+}
+
+function extractHeldPlayerTerms(userMessage: string): string[] {
+  const terms = new Set<string>();
+  const patterns = [
+    /\b(?:do not|don't|dont|don’t|would not|wouldn't|wouldn’t|wont|won't|won’t)\s+(?:want\s+to\s+)?(?:sell|trade\s+out|move\s+on|dump)\s+(.+?)(?=[,.!?]|$)/gi,
+    /\b(?:hold|keep)\s+(.+?)(?=[,.!?]|$)/gi,
+    /\b(.+?)\s+(?:has|have)\s+(?:a\s+)?low\s+(?:breakeven|be)\b/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of userMessage.matchAll(pattern)) {
+      const term = cleanHeldPlayerTerm(match[1] ?? "");
+      if (term) terms.add(term);
+    }
+  }
+
+  return [...terms];
+}
+
+function nameMatchesAnyTerm(name: string, terms: string[]): boolean {
+  const normalizedName = name.toLowerCase();
+  return terms.some((term) => {
+    const termTokens = term.split(" ").filter(Boolean);
+    if (termTokens.length === 0) return false;
+    return termTokens.every((token) => normalizedName.includes(token));
+  });
+}
+
 async function tryRunDirectFantasyPositionTradeFollowUpChat(
   userMessage: string,
   history: AiConversationHistoryMessage[] | undefined,
@@ -2881,7 +2980,7 @@ async function tryRunDirectFantasyPositionTradeFollowUpChat(
       positions,
       priceMax: null,
       sortBy: hasAiProDataAccess(access.plan) ? "projection_vs_priced_at_desc" : "avg_points_desc",
-      requireOwnershipRise: false,
+      requireOwnershipRise: true,
       excludeLocked: true,
       limit: 8,
     },
@@ -2898,13 +2997,25 @@ async function tryRunDirectFantasyPositionTradeFollowUpChat(
   const players = Array.isArray(result.data.players)
     ? result.data.players.filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null)
     : [];
-  const mentionedLussick = /\blussick\b/.test(normalized);
+  const heldPlayerTerms = extractHeldPlayerTerms(userMessage);
   const mentionedHughes = /\bhughes\b/.test(normalized);
-  const excludedNames = mentionedLussick ? ["lussick"] : [];
-  const candidates = players.filter((entry) => {
-    const name = typeof entry.name === "string" ? entry.name.toLowerCase() : "";
-    return !excludedNames.some((excluded) => name.includes(excluded));
-  });
+  const wantsPremiumTarget =
+    /\bexpensive\b|\bpremium\b|\bguns?\b|\btop[- ]shelf\b|\belite\b/.test(normalized);
+  const candidates = players
+    .filter((entry) => {
+      const name = typeof entry.name === "string" ? entry.name.toLowerCase() : "";
+      return hasPositiveOwnershipDelta(entry) && !nameMatchesAnyTerm(name, heldPlayerTerms);
+    })
+    .sort((left, right) => {
+      if (wantsPremiumTarget) {
+        const priceDelta = (getFantasyNumber(right, "price") ?? -1) - (getFantasyNumber(left, "price") ?? -1);
+        if (priceDelta !== 0) return priceDelta;
+      }
+
+      const projectionDelta = (getFantasyNumber(right, "projection") ?? -1) - (getFantasyNumber(left, "projection") ?? -1);
+      if (projectionDelta !== 0) return projectionDelta;
+      return (getFantasyNumber(right, "avgPoints") ?? -1) - (getFantasyNumber(left, "avgPoints") ?? -1);
+    });
 
   if (candidates.length === 0) {
     return buildAiResult(
@@ -2933,11 +3044,12 @@ async function tryRunDirectFantasyPositionTradeFollowUpChat(
 
   return buildAiResult(
     [
-      mentionedLussick
-        ? `For a ${positionLabel} upgrade, I would treat Freddy Lussick as the trade-out and use bank/trade count to choose the price tier.`
+      heldPlayerTerms.length > 0
+        ? `I would not use ${heldPlayerTerms.join(" / ")} as the sell based on your instruction. Treat this as a ${positionLabel} upgrade watchlist and fund it from another trade or after the held player rises in price.`
         : `For a ${positionLabel} upgrade, these are the current options I would check first.`,
       mentionedHughes ? "Holding Jahrome Hughes for a one-week absence is reasonable unless your squad has no playable cover." : "",
       lines.join("\n"),
+      "I have only included buy options with positive ownership delta.",
       "If your bank is tight, take the best option you can afford from that list rather than forcing a second trade.",
       warnings.length > 0 ? `Notes:\n- ${warnings.join("\n- ")}` : "",
     ].filter(Boolean).join("\n\n"),
@@ -3717,7 +3829,7 @@ export async function runAiModelChat(
           positions: null,
           priceMax: null,
           sortBy: "projection_vs_priced_at_desc",
-          requireOwnershipRise: false,
+          requireOwnershipRise: true,
           excludeLocked: true,
           limit: 12,
         },
@@ -3740,17 +3852,20 @@ export async function runAiModelChat(
     const fantasySnapshotContext = formatFantasySnapshotContext(
       buySnapshot.result,
       "trade-in momentum",
-      "These are real buy candidates sorted by ownership momentum. Use them when the player also has sensible BE, L3/projection, or priced-at reasoning."
+      "These are real buy candidates sorted by ownership momentum. Only use players with positive ownership delta as buys. Use them when the player also has sensible BE, L3/projection, or priced-at reasoning.",
+      "buy"
     );
     const fantasyValueContext = formatFantasySnapshotContext(
       valueSnapshot.result,
       "trade-in value",
-      "These are real buy candidates sorted by projection-vs-pricedAt value. Use them when they have strong projected scoring relative to price and sensible breakeven."
+      "These are real buy candidates sorted by projection-vs-pricedAt value and filtered to positive ownership delta. Do not use negative-ownership players as buys.",
+      "buy"
     );
     const fantasySellContext = formatFantasySnapshotContext(
       sellSnapshot.result,
       "highly-sold",
-      "Use this list only to support sell recommendations for screenshot-visible players with negative ownership deltas. Do not recommend selling screenshot players just for DNP/bye."
+      "Use this list only to support sell recommendations for screenshot-visible players with negative ownership deltas and no low-BE price-rise signal. Do not recommend selling screenshot players just for DNP/bye.",
+      "sell"
     );
     const imageUserMessage = [
       userMessage,
@@ -3764,10 +3879,13 @@ export async function runAiModelChat(
       "",
       "When writing the answer:",
       "- Sells must come from visible screenshot players only.",
-      "- DNP or bye is not a sell reason by itself. Only suggest selling a DNP/bye player if they also have a real negative ownership delta in the highly-sold snapshot or an injury/suspension/dropped marker.",
+      "- DNP or bye is not a sell reason by itself. Only suggest selling a DNP/bye player if they also have a real negative ownership delta in the highly-sold snapshot and no low breakeven.",
       "- Treat DNP and the black/dark circle with a white square as bye/non-playing-round markers, not injury or dropped status.",
-      "- Prioritise visible injury marker sells before any structural or ownership-delta sells. In the provided screenshot key, the injury marker is a red cross/plus.",
+      "- Prioritise visible injury marker sells among eligible sell candidates. In the provided screenshot key, the injury marker is a red cross/plus.",
       "- Negative-ownership sell recommendations require the visible player to appear in the real highly-sold snapshot above.",
+      "- Do not recommend a buy with negative ownership delta.",
+      "- Do not recommend a sell with positive ownership delta.",
+      "- Do not recommend selling a player with a low breakeven.",
       "- Trade-ins must come only from the real fantasy trade-in momentum/value snapshots above.",
       "- Explain buy and sell reasoning using the supplied ownership delta, BE, L3 average, pricedAt, projection, and projection-vs-pricedAt fields.",
       "- Low BE supports buys because the player can rise in price faster. High BE, negative ownership, and L3/projection below pricedAt support sells.",

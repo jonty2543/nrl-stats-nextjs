@@ -1,5 +1,7 @@
 import type { BettingMarket, BettingOddsRow } from "@/lib/betting/types";
 import type { PlayerStat, TeamStat } from "@/lib/data/types";
+import { loadDraw2026Data } from "@/lib/draw/load-draw-2026";
+import type { Draw2026Data } from "@/lib/draw/types";
 import {
   filterByFinals,
   filterByMinutes,
@@ -21,6 +23,7 @@ import {
   fetchAvailableYears,
   fetchBettingOddsSnapshot,
   fetchMatches,
+  fetchPlayerImages,
   fetchPlayerStats,
   fetchTeammateLookupRows,
   fetchTeamStats,
@@ -81,6 +84,7 @@ const SUPPORTED_CHART_TYPES = ["line", "bar", "table"] as const;
 const SUPPORTED_ENTITY_TYPES = ["player", "team"] as const;
 const SUPPORTED_BETTING_MARKETS = ["H2H", "Line", "Total"] as const;
 const PRO_ONLY_PLAYER_STAT_PATTERNS = [/breakeven/i, /\bbev?\b/i, /projection/i, /projected/i];
+const FANTASY_MAJOR_BYE_ROUNDS = [12, 15, 18] as const;
 
 const BASE_FANTASY_RATIO_DEFINITION = [
   "floor(All Run Metres / 10)",
@@ -294,8 +298,20 @@ function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
 }
 
+function normalizeLooseSearchValue(value: string): string {
+  return normalizeSearchValue(value).replace(/[^a-z0-9 ]+/g, "").replace(/\s+/g, " ").trim();
+}
+
 function normalizeCompactSearchValue(value: string): string {
   return normalizeSearchValue(value).replace(/\s+/g, "");
+}
+
+function parseNameParts(value: string): { first: string; last: string } {
+  const tokens = normalizeLooseSearchValue(value).split(" ").filter(Boolean);
+  return {
+    first: tokens[0] ?? "",
+    last: tokens[tokens.length - 1] ?? "",
+  };
 }
 
 function getLastSearchToken(value: string): string {
@@ -1251,6 +1267,45 @@ function expandFantasyPositionFilters(positions: string[] | undefined): string[]
   });
 
   return expanded.size > 0 ? [...expanded] : null;
+}
+
+function resolveFantasyPlayerTeam(
+  playerName: string,
+  playerImages: Awaited<ReturnType<typeof fetchPlayerImages>>
+): string | null {
+  const target = normalizeLooseSearchValue(playerName);
+  const targetParts = parseNameParts(playerName);
+  const candidates = playerImages.filter((row) => {
+    const rowName = row.player ?? "";
+    if (!rowName) return false;
+    const rowNorm = normalizeLooseSearchValue(rowName);
+    if (rowNorm === target) return true;
+    const rowParts = parseNameParts(rowName);
+    return Boolean(
+      rowParts.last &&
+        rowParts.last === targetParts.last &&
+        rowParts.first[0] &&
+        rowParts.first[0] === targetParts.first[0]
+    );
+  });
+
+  return candidates[0]?.team ?? null;
+}
+
+function teamHasDrawFixture(draw2026Data: Draw2026Data | null, round: number, team: string | null): boolean | null {
+  if (!draw2026Data || !team) return null;
+  const teamKey = normalizeLooseSearchValue(team);
+  if (!teamKey) return null;
+  const roundRows = draw2026Data.rows.filter((row) => row.round === round);
+  if (roundRows.length === 0) return null;
+  return roundRows.some(
+    (row) => normalizeLooseSearchValue(row.home) === teamKey || normalizeLooseSearchValue(row.away) === teamKey
+  );
+}
+
+function nextFantasyMajorByeRound(round: number | null): number | null {
+  if (round == null) return FANTASY_MAJOR_BYE_ROUNDS[0];
+  return FANTASY_MAJOR_BYE_ROUNDS.find((byeRound) => byeRound >= round) ?? null;
 }
 
 async function runListAvailableYears(): Promise<AiToolExecutionResult> {
@@ -2561,11 +2616,13 @@ async function runGetFantasySnapshot(
 ): Promise<AiToolExecutionResult> {
   const parsed = parseFantasySnapshotInput(input);
   const normalizedPositions = expandFantasyPositionFilters(parsed.positions);
-  const [fantasyPlayers, lineupsProjections, coachPlayers, ownershipBaseline] = await Promise.all([
+  const [fantasyPlayers, lineupsProjections, coachPlayers, ownershipBaseline, playerImages, draw2026Data] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchLineupsProjectionsByPlayerId(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
+    fetchPlayerImages(),
+    loadDraw2026Data().catch(() => null),
   ]);
 
   const coachById = new Map(coachPlayers.map((player) => [player.id, player]));
@@ -2620,10 +2677,18 @@ async function runGetFantasySnapshot(
         ? applyFantasyBreakEvenOffset(breakEvenRaw, player.id, round)
         : null;
       const projectionBaseline = projection ?? projectionRaw;
+      const team = resolveFantasyPlayerTeam(player.name, playerImages);
+      const nextMajorByeRound = nextFantasyMajorByeRound(round);
+      const playsNextMajorByeRound =
+        nextMajorByeRound != null ? teamHasDrawFixture(draw2026Data, nextMajorByeRound, team) : null;
+      const unavailableMajorByeRounds = FANTASY_MAJOR_BYE_ROUNDS.filter(
+        (byeRound) => teamHasDrawFixture(draw2026Data, byeRound, team) === false
+      );
 
       return {
         id: player.id,
         name: player.name,
+        team,
         positions: player.positionLabels,
         position: player.positionLabel,
         price: player.cost,
@@ -2634,6 +2699,9 @@ async function runGetFantasySnapshot(
         projectedAvg: hasAiProDataAccess(access.plan) ? player.projectedAvg : null,
         gamesPlayed: player.gamesPlayed,
         round,
+        nextMajorByeRound,
+        playsNextMajorByeRound,
+        unavailableMajorByeRounds,
         projection,
         projectionVsPricedAt:
           typeof projectionBaseline === "number" &&
@@ -2693,6 +2761,10 @@ async function runGetFantasySnapshot(
       effectiveRound,
       roundAvailable,
       availableRounds,
+      drawContext: {
+        season: 2026,
+        majorByeRounds: FANTASY_MAJOR_BYE_ROUNDS,
+      },
       sortBy: parsed.sortBy ?? "ownership_delta_desc",
       requireOwnershipRise: parsed.requireOwnershipRise ?? false,
       excludeLocked: parsed.excludeLocked ?? false,
@@ -3097,7 +3169,7 @@ const CORE_AI_TOOLS: AiTool[] = [
   },
   {
     name: "get_fantasy_snapshot",
-    description: "Fetch a bounded fantasy player snapshot for buy/trade/value questions, including price, pricedAt, ownership, average fantasy points, ownership/transfer momentum, and round-specific projection/breakeven data when the user's plan allows it. Here pricedAt means the fantasy points average implied by the current price (price / 12725), so projection vs pricedAt is a value comparison. Supports position groups like forwards or backs, optional price caps, sorting by positive ownership momentum for buys or negative ownership momentum for sells, average points, projection-vs-pricedAt value edge, optional exclusion of locked players for actionable buy lists, and an optional ownership-rise-only filter when the user explicitly wants trade momentum. Use sortBy projection_desc when the user asks for best/highest projection for a specific round — this sorts by the actual round-specific projection value, not the season average. Use projected_avg_desc only when the user asks about season projected average.",
+    description: "Fetch a bounded fantasy player snapshot for buy/trade/value questions, including price, pricedAt, ownership, average fantasy points, ownership/transfer momentum, 2026 draw major-bye availability, and round-specific projection/breakeven data when the user's plan allows it. Here pricedAt means the fantasy points average implied by the current price (price / 12725), so projection vs pricedAt is a value comparison. Supports position groups like forwards or backs, optional price caps, sorting by positive ownership momentum for buys or negative ownership momentum for sells, average points, projection-vs-pricedAt value edge, optional exclusion of locked players for actionable buy lists, and an optional ownership-rise-only filter when the user explicitly wants trade momentum. Use sortBy projection_desc when the user asks for best/highest projection for a specific round — this sorts by the actual round-specific projection value, not the season average. Use projected_avg_desc only when the user asks about season projected average.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

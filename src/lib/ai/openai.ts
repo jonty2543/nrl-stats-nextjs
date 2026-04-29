@@ -65,7 +65,7 @@ Rules:
 - For fantasy buy, trade, or ownership-momentum questions, use get_fantasy_snapshot with sortBy="ownership_delta_desc" and requireOwnershipRise=true.
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
 - For fantasy trade advice from screenshots, also use draw/upcoming fixture context where available so the answer accounts for who each player/team faces next and whether they are home or away.
-- In NRL Fantasy major bye rounds 12, 15, and 18, only the best 13 selected scorers count. When giving trade advice before those rounds, be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
+- In NRL Fantasy major bye rounds 12, 15, and 18, only the best 13 selected scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
 - In fantasy snapshot data, "priced at" means the fantasy points average implied by the player's current price, calculated as price / 12725. For "projection vs priced at", compare projection or projected average against pricedAt.
 - For fantasy ranking questions about "projection vs priced at" or "projection minus priced at", use get_fantasy_snapshot with sortBy="projection_vs_priced_at_desc" and requireOwnershipRise=false.
 - In fantasy snapshot data, exclude locked players only when the user is asking for actionable buy/trade targets right now. For general rankings and value lists, include locked players.
@@ -135,7 +135,7 @@ Rules:
 - For fantasy buy, trade, or ownership-momentum questions, use get_fantasy_snapshot with sortBy="ownership_delta_desc" and requireOwnershipRise=true.
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
 - For fantasy trade advice from screenshots, also use draw/upcoming fixture context where available so the answer accounts for who each player/team faces next and whether they are home or away.
-- In NRL Fantasy major bye rounds 12, 15, and 18, only the best 13 selected scorers count. When giving trade advice before those rounds, be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
+- In NRL Fantasy major bye rounds 12, 15, and 18, only the best 13 selected scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
 - In fantasy snapshot data, "priced at" means the fantasy points average implied by the player's current price, calculated as price / 12725. For "projection vs priced at", compare projection or projected average against pricedAt.
 - For fantasy ranking questions about "projection vs priced at" or "projection minus priced at", use get_fantasy_snapshot with sortBy="projection_vs_priced_at_desc" and requireOwnershipRise=false.
 - In fantasy snapshot data, exclude locked players only when the user is asking for actionable buy/trade targets right now. For general rankings and value lists, include locked players.
@@ -361,16 +361,19 @@ function buildFantasyScreenshotPrompt(userMessage: string, imageInputs: AiImageA
 
 Use the screenshots to extract the visible fantasy squad, then use internal fantasy data before recommending trades.
 When suggesting trades:
-- Treat injured, DNP, suspended, bye, or clearly unavailable players as priority sells.
-- Name the visible player or players the screenshot shows should be traded out because of injury, DNP, suspension, bye, or unavailability. Do not replace this with generic sell advice.
+- Treat injured, DNP, suspended, dropped, or clearly unavailable players as priority sells.
+- Do not recommend selling a player only because they are on a bye. A bye is shown as a black circle with a white square; treat that as temporary unavailability, not a sell signal.
+- Name the visible player or players the screenshot shows should be traded out because of injury, DNP, suspension, dropped status, major negative ownership momentum, or poor squad balance. Do not replace this with generic sell advice.
 - Provide concrete buy targets from internal fantasy data using positive ownership percentage increase/ownership delta. Include each buy target's ownership increase in the answer.
+- Do not recommend buying any player already visible in the user's squad. If a player is already owned, discuss whether to hold or sell them instead.
 - Prefer buy targets with strong positive ownership/transfer momentum, unless budget or squad balance makes that impossible.
 - Prefer sell candidates with negative ownership/transfer momentum when they are not playable, underperforming, or blocking squad balance.
 - Maintain a legal fieldable squad: cover 17 selected players first, then bench depth.
 - Use the draw/upcoming fixtures where available: account for each player/team’s next opponent, home/away status, and near-term fixture run.
-- Build with the major bye rounds in mind: rounds 12, 15, and 18 only count the best 13 selected scorers, so flag trades that improve or damage playable numbers in those rounds.
+- Build with the 2026 draw and major bye rounds in mind: rounds 12, 15, and 18 only count the best 13 selected scorers, so warn when buying a player whose team does not play in the next major bye round.
 - Respect visible positions, captain/vice-captain, bench, emergencies, and any visible round.
 - If budget, bank, trade count, or exact prices are not visible, state the assumption and give conditional trade paths instead of pretending it is known.
+- Be careful with abbreviated screenshot names. Do not read "J. Hughes" as Jake Hughes by default; use visible team/position context to resolve Jahrome Hughes where appropriate, otherwise ask the user to confirm.
 - If a name is ambiguous from the screenshot, say so briefly and ask the user to confirm before relying on that player.`);
   }
 

@@ -72,6 +72,7 @@ type RequestHistoryEntry = {
 };
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 180;
 
 const AI_GUARDRAILS = [
   "Do not send large raw datasets to the model.",

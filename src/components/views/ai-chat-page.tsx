@@ -60,6 +60,11 @@ interface PendingImageAttachment {
 
 const MAX_SCREENSHOTS = 3;
 
+type WakeLockSentinelLike = {
+  release: () => Promise<void>;
+  addEventListener: (type: "release", listener: () => void) => void;
+};
+
 async function parseAiChatResponse(response: Response): Promise<AiChatApiResponse> {
   const contentType = response.headers.get("content-type") ?? "";
   const rawBody = await response.text();
@@ -545,9 +550,11 @@ export function AiChatPage({
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fantasyFileInputRef = useRef<HTMLInputElement | null>(null);
+  const bettingFileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadMenuRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   const quotaReached =
     isUsageTrackingAvailable && (remainingInPeriod != null && remainingInPeriod <= 0);
 
@@ -610,6 +617,55 @@ export function AiChatPage({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [isUploadMenuOpen]);
 
+  useEffect(() => {
+    if (!isSubmitting) {
+      void wakeLockRef.current?.release().catch(() => undefined);
+      wakeLockRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+
+    const requestWakeLock = async () => {
+      const wakeLock = "wakeLock" in navigator
+        ? (navigator.wakeLock as { request?: (type: "screen") => Promise<WakeLockSentinelLike> })
+        : null;
+      if (!wakeLock?.request || document.visibilityState !== "visible") return;
+
+      try {
+        const sentinel = await wakeLock.request("screen");
+        if (cancelled) {
+          await sentinel.release().catch(() => undefined);
+          return;
+        }
+        wakeLockRef.current = sentinel;
+        sentinel.addEventListener("release", () => {
+          if (wakeLockRef.current === sentinel) {
+            wakeLockRef.current = null;
+          }
+        });
+      } catch {
+        wakeLockRef.current = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !wakeLockRef.current) {
+        void requestWakeLock();
+      }
+    };
+
+    void requestWakeLock();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      void wakeLockRef.current?.release().catch(() => undefined);
+      wakeLockRef.current = null;
+    };
+  }, [isSubmitting]);
+
   const handleScreenshotUpload = async (
     files: FileList | null,
     context: PendingImageAttachment["context"]
@@ -637,9 +693,8 @@ export function AiChatPage({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to upload screenshots.");
     } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      if (fantasyFileInputRef.current) fantasyFileInputRef.current.value = "";
+      if (bettingFileInputRef.current) bettingFileInputRef.current.value = "";
     }
   };
 
@@ -1063,15 +1118,22 @@ export function AiChatPage({
               <div className="flex items-end gap-2">
                 <div ref={uploadMenuRef} className="relative shrink-0">
                   <input
-                    ref={fileInputRef}
+                    ref={fantasyFileInputRef}
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     multiple
-                    className="hidden"
-                    onChange={(event) => {
-                      const context = event.currentTarget.dataset.context === "betting" ? "betting" : "fantasy";
-                      void handleScreenshotUpload(event.target.files, context);
-                    }}
+                    className="sr-only"
+                    id="ai-fantasy-screenshot-upload"
+                    onChange={(event) => void handleScreenshotUpload(event.target.files, "fantasy")}
+                  />
+                  <input
+                    ref={bettingFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    multiple
+                    className="sr-only"
+                    id="ai-betting-screenshot-upload"
+                    onChange={(event) => void handleScreenshotUpload(event.target.files, "betting")}
                   />
                   <button
                     type="button"
@@ -1084,28 +1146,20 @@ export function AiChatPage({
                   </button>
                   {isUploadMenuOpen ? (
                     <div className="absolute bottom-12 left-0 w-72 rounded-2xl border border-nrl-border bg-nrl-panel p-2 shadow-2xl shadow-black/40">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          fileInputRef.current?.setAttribute("data-context", "fantasy");
-                          fileInputRef.current?.click();
-                        }}
+                      <label
+                        htmlFor="ai-fantasy-screenshot-upload"
                         className="flex w-full items-center gap-3 whitespace-nowrap rounded-xl px-3 py-3 text-left text-sm font-semibold text-nrl-text transition-colors hover:bg-nrl-panel-2"
                       >
                         <UploadGlyph />
                         <span>Upload fantasy screenshots</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          fileInputRef.current?.setAttribute("data-context", "betting");
-                          fileInputRef.current?.click();
-                        }}
+                      </label>
+                      <label
+                        htmlFor="ai-betting-screenshot-upload"
                         className="mt-1 flex w-full items-center gap-3 whitespace-nowrap rounded-xl px-3 py-3 text-left text-sm font-semibold text-nrl-text transition-colors hover:bg-nrl-panel-2"
                       >
                         <UploadGlyph />
                         <span>Upload betting screenshots</span>
-                      </button>
+                      </label>
                     </div>
                   ) : null}
                 </div>

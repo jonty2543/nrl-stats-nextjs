@@ -2819,6 +2819,133 @@ async function tryRunDirectFantasyBuyChat(
   );
 }
 
+function hasFantasyTradeContext(
+  userMessage: string,
+  history: AiConversationHistoryMessage[] | undefined
+): boolean {
+  const contextText = [
+    userMessage,
+    ...(history ?? []).slice(-4).map((entry) => entry.content),
+  ].join("\n").toLowerCase();
+
+  return (
+    /\bfantasy\b/.test(contextText) ||
+    /\btrade(?:s|d|[- ]?in|[- ]?out)?\b/.test(contextText) ||
+    /\bbank\b/.test(contextText) ||
+    /\bbreakeven\b|\bbe\b/.test(contextText) ||
+    /\bpriced at\b/.test(contextText) ||
+    /\bownership\b/.test(contextText)
+  );
+}
+
+function extractFantasyPositionFollowUp(userMessage: string): string[] | null {
+  const normalized = userMessage.toLowerCase();
+
+  if (/\bhooker(?:s)?\b|\bhok\b/.test(normalized)) return ["HOK"];
+  if (/\bhalf(?:back|backs|ves)?\b|\bfive[- ]?eighths?\b|\bhlf\b/.test(normalized)) return ["HLF"];
+  if (/\bmiddle(?:s)?\b|\bprop(?:s)?\b|\block(?:s)?\b|\bmid\b/.test(normalized)) return ["MID"];
+  if (/\bedge(?:s)?\b|\bsecond[- ]row(?:ers)?\b|\b2rf\b|\bback[- ]row(?:ers)?\b/.test(normalized)) return ["EDG"];
+  if (/\bcentre(?:s)?\b|\bcenter(?:s)?\b|\bctr\b/.test(normalized)) return ["CTR"];
+  if (/\bwfb\b|\bfullback(?:s)?\b|\bwing(?:er|ers|s)?\b/.test(normalized)) return ["WFB"];
+
+  return null;
+}
+
+async function tryRunDirectFantasyPositionTradeFollowUpChat(
+  userMessage: string,
+  history: AiConversationHistoryMessage[] | undefined,
+  access: AiToolAccessPolicy
+): Promise<AiModelChatResult | null> {
+  const normalized = userMessage.toLowerCase();
+  const positions = extractFantasyPositionFollowUp(userMessage);
+  if (!positions || !hasFantasyTradeContext(userMessage, history)) {
+    return null;
+  }
+
+  const isTradeIntent =
+    /\btrade(?:s|d|[- ]?in|[- ]?out)?\b/.test(normalized) ||
+    /\bbuy\b|\bsell\b|\bswap\b|\bupgrade\b|\breplace\b|\bsure up\b|\bshore up\b/.test(normalized) ||
+    /\bspot\b/.test(normalized) ||
+    /\bunreliable\b/.test(normalized) ||
+    /\bhold\b/.test(normalized);
+
+  if (!isTradeIntent) {
+    return null;
+  }
+
+  const requestedRound = parseRequestedRound(userMessage);
+  const { result, activity } = await runToolForLocalFallback(
+    "get_fantasy_snapshot",
+    {
+      round: requestedRound,
+      positions,
+      priceMax: null,
+      sortBy: hasAiProDataAccess(access.plan) ? "projection_vs_priced_at_desc" : "avg_points_desc",
+      requireOwnershipRise: false,
+      excludeLocked: true,
+      limit: 8,
+    },
+    access
+  );
+
+  if (!result.ok) {
+    return buildAiResult(result.error, [activity], "direct-tools");
+  }
+
+  const warnings = Array.isArray(result.data.warnings)
+    ? result.data.warnings.filter((value): value is string => typeof value === "string")
+    : [];
+  const players = Array.isArray(result.data.players)
+    ? result.data.players.filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null)
+    : [];
+  const mentionedLussick = /\blussick\b/.test(normalized);
+  const mentionedHughes = /\bhughes\b/.test(normalized);
+  const excludedNames = mentionedLussick ? ["lussick"] : [];
+  const candidates = players.filter((entry) => {
+    const name = typeof entry.name === "string" ? entry.name.toLowerCase() : "";
+    return !excludedNames.some((excluded) => name.includes(excluded));
+  });
+
+  if (candidates.length === 0) {
+    return buildAiResult(
+      "I couldn't find enough current fantasy snapshot data to suggest a clean positional trade-in.",
+      [activity],
+      "direct-tools"
+    );
+  }
+
+  const positionLabel = positions[0] === "HOK" ? "hooker" : positions[0]?.toLowerCase() ?? "position";
+  const lines = candidates.slice(0, 5).map((entry, index) => {
+    const price = typeof entry.price === "number" ? formatFantasyPrice(entry.price) : "-";
+    const avg = typeof entry.avgPoints === "number" ? `avg ${entry.avgPoints.toFixed(1)}` : null;
+    const last3 = typeof entry.last3Avg === "number" ? `L3 ${entry.last3Avg.toFixed(1)}` : null;
+    const pricedAt = typeof entry.pricedAt === "number" ? `priced at ${entry.pricedAt.toFixed(1)}` : null;
+    const ownershipDelta =
+      typeof entry.ownershipDelta === "number"
+        ? `ownership ${entry.ownershipDelta > 0 ? "+" : ""}${entry.ownershipDelta.toFixed(1)}%`
+        : null;
+    const projection = typeof entry.projection === "number" ? `proj ${entry.projection.toFixed(1)}` : null;
+    const breakEven = typeof entry.breakEven === "number" ? `BE ${entry.breakEven}` : null;
+    const details = [avg, last3, pricedAt, projection, breakEven, ownershipDelta].filter(Boolean).join(", ");
+
+    return `${index + 1}. ${String(entry.name ?? "Unknown")} - ${price}${details ? `, ${details}` : ""}`;
+  });
+
+  return buildAiResult(
+    [
+      mentionedLussick
+        ? `For a ${positionLabel} upgrade, I would treat Freddy Lussick as the trade-out and use bank/trade count to choose the price tier.`
+        : `For a ${positionLabel} upgrade, these are the current options I would check first.`,
+      mentionedHughes ? "Holding Jahrome Hughes for a one-week absence is reasonable unless your squad has no playable cover." : "",
+      lines.join("\n"),
+      "If your bank is tight, take the best option you can afford from that list rather than forcing a second trade.",
+      warnings.length > 0 ? `Notes:\n- ${warnings.join("\n- ")}` : "",
+    ].filter(Boolean).join("\n\n"),
+    [activity],
+    "direct-tools"
+  );
+}
+
 function sumRequestedStatFromRows(
   rows: unknown,
   statKey: string
@@ -3377,6 +3504,15 @@ async function tryRunDirectToolChat(
   const baseFantasyRatioResult = await tryRunDirectBaseFantasyRatioChat(userMessage, access);
   if (baseFantasyRatioResult) {
     return baseFantasyRatioResult;
+  }
+
+  const fantasyPositionTradeFollowUpResult = await tryRunDirectFantasyPositionTradeFollowUpChat(
+    userMessage,
+    history,
+    access
+  );
+  if (fantasyPositionTradeFollowUpResult) {
+    return fantasyPositionTradeFollowUpResult;
   }
 
   const fantasyProjectionValueResult = await tryRunDirectFantasyProjectionValueChat(userMessage, access);

@@ -246,13 +246,60 @@ function buildImageOnlySystemInstructions(plan: AiPlan): string {
     "For NRL Fantasy team screenshots, extract the visible squad, player statuses, captain/vice-captain, bench, emergencies, DNP/injury/bye markers, and any visible round.",
     "Give useful fantasy trade advice even if bank, trade count, or exact prices are not visible. State those assumptions briefly.",
     "Do not recommend selling a player only because their club has a bye. Treat bye markers as temporary unavailability unless there is another sell reason.",
+    "The NRL Fantasy bye marker is a black/dark circle with a white square. Do not call that an injury, DNP, suspension, or dropped status.",
     "Prioritise sells for injured, DNP, suspended, dropped, highly sold, or structurally poor picks.",
     "Do not recommend buying players already visible in the user's squad.",
+    "Only recommend trade-in targets from the real fantasy snapshot data supplied in the user message. Do not invent names, clubs, ownership deltas, prices, or form notes.",
     "Be careful with abbreviated names. Do not read J. Hughes as Jake Hughes by default; use visible team/position context and ask only if truly unclear.",
     "Keep the response concise, direct, and plain English for a sports fan.",
     "Do not mention internal tools, schemas, or implementation details.",
     ...accessLines,
   ].join("\n");
+}
+
+function formatFantasySnapshotContext(result: AiToolExecutionResult): string {
+  if (!result.ok) {
+    return `Real fantasy snapshot unavailable: ${result.error}`;
+  }
+
+  const players = Array.isArray(result.data.players)
+    ? result.data.players.filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null)
+    : [];
+  const warnings = Array.isArray(result.data.warnings)
+    ? result.data.warnings.filter((value): value is string => typeof value === "string")
+    : [];
+  const effectiveRound = typeof result.data.effectiveRound === "number" ? result.data.effectiveRound : null;
+
+  const lines = players.map((entry, index) => {
+    const name = typeof entry.name === "string" ? entry.name : "Unknown";
+    const team = typeof entry.team === "string" ? entry.team : "team unknown";
+    const position = typeof entry.position === "string" ? entry.position : "position unknown";
+    const price = typeof entry.price === "number" ? formatFantasyPrice(entry.price) : "price unknown";
+    const ownedBy = typeof entry.ownedBy === "number" ? `${entry.ownedBy.toFixed(1)}% owned` : "ownership unknown";
+    const ownershipDelta =
+      typeof entry.ownershipDelta === "number"
+        ? `${entry.ownershipDelta > 0 ? "+" : ""}${entry.ownershipDelta.toFixed(1)}% ownership delta`
+        : "ownership delta unknown";
+    const nextMajorByeRound =
+      typeof entry.nextMajorByeRound === "number" ? `next major bye R${entry.nextMajorByeRound}` : "next major bye unknown";
+    const playsNextMajorByeRound =
+      typeof entry.playsNextMajorByeRound === "boolean"
+        ? entry.playsNextMajorByeRound
+          ? "plays next major bye"
+          : "misses next major bye"
+        : "next major bye availability unknown";
+
+    return `${index + 1}. ${name} (${team}, ${position}) - ${price}, ${ownedBy}, ${ownershipDelta}, ${nextMajorByeRound}, ${playsNextMajorByeRound}`;
+  });
+
+  return [
+    `Real fantasy trade-in snapshot${effectiveRound != null ? ` for Round ${effectiveRound}` : ""}.`,
+    "Use ONLY these players for recommended trade-ins. Do not recommend anyone outside this list.",
+    lines.length > 0 ? lines.join("\n") : "No eligible buy targets returned.",
+    warnings.length > 0 ? `Warnings: ${warnings.join("; ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 interface OpenAiFunctionToolCall {
@@ -3498,6 +3545,33 @@ export async function runAiModelChat(
   const reasoningEffort =
     options?.reasoningEffortOverride ?? getOpenAiReasoningEffort(access.plan);
   if (hasImageInputs) {
+    const { result: fantasySnapshotResult, activity: fantasySnapshotActivity } = await runToolForLocalFallback(
+      "get_fantasy_snapshot",
+      {
+        round: parseRequestedRound(userMessage),
+        positions: null,
+        priceMax: null,
+        sortBy: "ownership_delta_desc",
+        requireOwnershipRise: true,
+        excludeLocked: true,
+        limit: 12,
+      },
+      access
+    );
+    const fantasySnapshotContext = formatFantasySnapshotContext(fantasySnapshotResult);
+    const imageUserMessage = [
+      userMessage,
+      "",
+      "Real data guardrails for this screenshot answer:",
+      fantasySnapshotContext,
+      "",
+      "When writing the answer:",
+      "- Sells must come from visible screenshot players only.",
+      "- Do not recommend selling a player just because they have the black/dark circle with a white square bye marker.",
+      "- Trade-ins must come only from the real fantasy trade-in snapshot above.",
+      "- Include ownership delta only when it appears in the real fantasy snapshot above.",
+    ].join("\n");
+
     const response = await createOpenAiResponse({
       model,
       reasoning: {
@@ -3507,7 +3581,7 @@ export async function runAiModelChat(
       input: [
         {
           role: "user",
-          content: buildOpenAiUserInputContent(userMessage, imageInputs),
+          content: buildOpenAiUserInputContent(imageUserMessage, imageInputs),
         },
       ],
       max_output_tokens: MAX_OUTPUT_TOKENS,
@@ -3518,7 +3592,7 @@ export async function runAiModelChat(
 
     return {
       assistantMessage,
-      toolActivity: [],
+      toolActivity: [fantasySnapshotActivity],
       artifacts: [],
       model,
       usage: {

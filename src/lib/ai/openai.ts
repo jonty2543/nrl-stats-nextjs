@@ -3589,6 +3589,10 @@ export async function runAiModelChat(
     const extractedPrefixedAnswer = hasFinalAnswerPrefix(extractedAssistantText)
       ? stripFinalAnswerPrefix(extractedAssistantText)
       : "";
+    const extractedImageAnswer =
+      hasImageInputs && extractedAssistantText
+        ? stripFinalAnswerPrefix(extractedAssistantText)
+        : "";
 
     if (!hasImageInputs && !submittedFinalAnswer && !extractedPrefixedAnswer) {
       const fallbackResult = await tryRunDirectToolChat(userMessage, history, access);
@@ -3600,6 +3604,7 @@ export async function runAiModelChat(
     const assistantMessage =
       submittedFinalAnswer?.answer ||
       extractedPrefixedAnswer ||
+      extractedImageAnswer ||
       (hasImageInputs
         ? "I couldn't read enough from the uploaded screenshots to give reliable fantasy trade advice. Please re-upload a clear full-screen squad screenshot and include your bank/trades if they are not visible."
         : "I couldn't answer that cleanly from the available data. Try asking with a specific team, player, stat, and season range.");

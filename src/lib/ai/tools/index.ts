@@ -1308,6 +1308,18 @@ function nextFantasyMajorByeRound(round: number | null): number | null {
   return FANTASY_MAJOR_BYE_ROUNDS.find((byeRound) => byeRound >= round) ?? null;
 }
 
+function getFantasyLastThreeAverage(scoreHistory: Record<string, number>): number | null {
+  const scores = Object.entries(scoreHistory)
+    .map(([round, score]) => ({ round: Number.parseInt(round, 10), score }))
+    .filter((entry) => Number.isFinite(entry.round) && Number.isFinite(entry.score))
+    .sort((left, right) => right.round - left.round)
+    .slice(0, 3)
+    .map((entry) => entry.score);
+
+  if (scores.length === 0) return null;
+  return roundToTwoDecimals(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+}
+
 async function runListAvailableYears(): Promise<AiToolExecutionResult> {
   const years = await fetchAvailableYears();
   return {
@@ -2696,6 +2708,7 @@ async function runGetFantasySnapshot(
         ownedBy: player.ownedBy,
         ownershipDelta,
         avgPoints: player.avgPoints,
+        last3Avg: getFantasyLastThreeAverage(player.scoreHistory),
         projectedAvg: hasAiProDataAccess(access.plan) ? player.projectedAvg : null,
         gamesPlayed: player.gamesPlayed,
         round,

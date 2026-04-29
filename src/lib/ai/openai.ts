@@ -253,6 +253,7 @@ function buildImageOnlySystemInstructions(plan: AiPlan): string {
     "Do not recommend buying players already visible in the user's squad.",
     "Never say a user should buy a player again, buy back a player they already own, or trade a player out and then back in.",
     "Only recommend trade-in targets from the real fantasy snapshot data supplied in the user message. Do not invent names, clubs, ownership deltas, prices, or form notes.",
+    "For buys and sells, weigh ownership delta, breakeven, pricedAt, L3 average, round projection, and projection-vs-pricedAt. Low breakeven supports buys because price rises are easier; high breakeven, L3/projection below pricedAt, and negative ownership support sells.",
     "Use positions from the real fantasy snapshot when available. Do not infer positions from bench slot labels like INT.",
     "Be careful with abbreviated names. Do not read J. Hughes as Jake Hughes by default; use visible team/position context and ask only if truly unclear.",
     "Keep the response concise, direct, and plain English for a sports fan.",
@@ -284,6 +285,15 @@ function formatFantasySnapshotContext(result: AiToolExecutionResult, label = "tr
       typeof entry.ownershipDelta === "number"
         ? `${entry.ownershipDelta > 0 ? "+" : ""}${entry.ownershipDelta.toFixed(1)}% ownership delta`
         : "ownership delta unknown";
+    const avgPoints = typeof entry.avgPoints === "number" ? `avg ${entry.avgPoints.toFixed(1)}` : "avg unknown";
+    const last3Avg = typeof entry.last3Avg === "number" ? `L3 ${entry.last3Avg.toFixed(1)}` : "L3 unknown";
+    const pricedAt = typeof entry.pricedAt === "number" ? `priced at ${entry.pricedAt.toFixed(1)}` : "priced at unknown";
+    const projection = typeof entry.projection === "number" ? `projection ${entry.projection.toFixed(1)}` : "projection unknown";
+    const projectionVsPricedAt =
+      typeof entry.projectionVsPricedAt === "number"
+        ? `projection-vs-priced ${entry.projectionVsPricedAt > 0 ? "+" : ""}${entry.projectionVsPricedAt.toFixed(1)}`
+        : "projection-vs-priced unknown";
+    const breakEven = typeof entry.breakEven === "number" ? `BE ${entry.breakEven}` : "BE unknown";
     const nextMajorByeRound =
       typeof entry.nextMajorByeRound === "number" ? `next major bye R${entry.nextMajorByeRound}` : "next major bye unknown";
     const playsNextMajorByeRound =
@@ -293,7 +303,7 @@ function formatFantasySnapshotContext(result: AiToolExecutionResult, label = "tr
           : "misses next major bye"
         : "next major bye availability unknown";
 
-    return `${index + 1}. ${name} (${team}, ${position}) - ${price}, ${ownedBy}, ${ownershipDelta}, ${nextMajorByeRound}, ${playsNextMajorByeRound}`;
+    return `${index + 1}. ${name} (${team}, ${position}) - ${price}, ${ownedBy}, ${ownershipDelta}, ${avgPoints}, ${last3Avg}, ${pricedAt}, ${projection}, ${projectionVsPricedAt}, ${breakEven}, ${nextMajorByeRound}, ${playsNextMajorByeRound}`;
   });
 
   return [
@@ -3550,7 +3560,7 @@ export async function runAiModelChat(
     options?.reasoningEffortOverride ?? getOpenAiReasoningEffort(access.plan);
   if (hasImageInputs) {
     const requestedRound = parseRequestedRound(userMessage);
-    const [buySnapshot, sellSnapshot] = await Promise.all([
+    const [buySnapshot, valueSnapshot, sellSnapshot] = await Promise.all([
       runToolForLocalFallback(
         "get_fantasy_snapshot",
         {
@@ -3559,6 +3569,19 @@ export async function runAiModelChat(
           priceMax: null,
           sortBy: "ownership_delta_desc",
           requireOwnershipRise: true,
+          excludeLocked: true,
+          limit: 12,
+        },
+        access
+      ),
+      runToolForLocalFallback(
+        "get_fantasy_snapshot",
+        {
+          round: requestedRound,
+          positions: null,
+          priceMax: null,
+          sortBy: "projection_vs_priced_at_desc",
+          requireOwnershipRise: false,
           excludeLocked: true,
           limit: 12,
         },
@@ -3580,8 +3603,13 @@ export async function runAiModelChat(
     ]);
     const fantasySnapshotContext = formatFantasySnapshotContext(
       buySnapshot.result,
-      "trade-in",
-      "Use ONLY these players for recommended trade-ins. Do not recommend anyone outside this list."
+      "trade-in momentum",
+      "These are real buy candidates sorted by ownership momentum. Use them when the player also has sensible BE, L3/projection, or priced-at reasoning."
+    );
+    const fantasyValueContext = formatFantasySnapshotContext(
+      valueSnapshot.result,
+      "trade-in value",
+      "These are real buy candidates sorted by projection-vs-pricedAt value. Use them when they have strong projected scoring relative to price and sensible breakeven."
     );
     const fantasySellContext = formatFantasySnapshotContext(
       sellSnapshot.result,
@@ -3594,6 +3622,8 @@ export async function runAiModelChat(
       "Real data guardrails for this screenshot answer:",
       fantasySnapshotContext,
       "",
+      fantasyValueContext,
+      "",
       fantasySellContext,
       "",
       "When writing the answer:",
@@ -3602,7 +3632,9 @@ export async function runAiModelChat(
       "- Treat DNP and the black/dark circle with a white square as bye/non-playing-round markers, not injury or dropped status.",
       "- Prioritise visible injury marker sells before any structural or ownership-delta sells. In the provided screenshot key, the injury marker is a red cross/plus.",
       "- Negative-ownership sell recommendations require the visible player to appear in the real highly-sold snapshot above.",
-      "- Trade-ins must come only from the real fantasy trade-in snapshot above.",
+      "- Trade-ins must come only from the real fantasy trade-in momentum/value snapshots above.",
+      "- Explain buy and sell reasoning using the supplied ownership delta, BE, L3 average, pricedAt, projection, and projection-vs-pricedAt fields.",
+      "- Low BE supports buys because the player can rise in price faster. High BE, negative ownership, and L3/projection below pricedAt support sells.",
       "- Include ownership delta only when it appears in the real fantasy snapshot above.",
       "- Do not mention buying again, buying back, or re-buying an already owned player.",
     ].join("\n");
@@ -3627,7 +3659,7 @@ export async function runAiModelChat(
 
     return {
       assistantMessage,
-      toolActivity: [buySnapshot.activity, sellSnapshot.activity],
+      toolActivity: [buySnapshot.activity, valueSnapshot.activity, sellSnapshot.activity],
       artifacts: [],
       model,
       usage: {

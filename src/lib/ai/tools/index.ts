@@ -2688,7 +2688,7 @@ async function runGetFantasySnapshot(
       const breakEven = hasAiProDataAccess(access.plan)
         ? applyFantasyBreakEvenOffset(breakEvenRaw, player.id, round)
         : null;
-      const projectionBaseline = projection ?? projectionRaw;
+      const projectionBaseline = hasAiProDataAccess(access.plan) ? projection : null;
       const team = resolveFantasyPlayerTeam(player.name, playerImages);
       const nextMajorByeRound = nextFantasyMajorByeRound(round);
       const playsNextMajorByeRound =

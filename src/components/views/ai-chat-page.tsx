@@ -59,6 +59,7 @@ interface PendingImageAttachment {
 }
 
 const MAX_SCREENSHOTS = 3;
+const MAX_IMAGE_DATA_URL_LENGTH = 650_000;
 
 type WakeLockSentinelLike = {
   release: () => Promise<void>;
@@ -102,6 +103,13 @@ function formatLimit(limit: number | null, periodLabel: string): string {
 function formatRemainingChats(remaining: number | null, periodLabel: string): string {
   const periodText = periodLabel === "day" ? "today" : `this ${periodLabel}`;
   return remaining == null ? "Unlimited remaining" : `${remaining} remaining ${periodText}`;
+}
+
+function formatQuotaReachedMessage(plan: AiPlan, limit: number | null, periodLabel: string): string {
+  const planLabel = formatPlanLabel(plan);
+  const limitText = limit == null ? "your AI message limit" : `${limit} message${limit === 1 ? "" : "s"}`;
+  const periodText = periodLabel === "day" ? "today" : `this ${periodLabel}`;
+  return `${planLabel} limit reached: ${limitText} ${periodText}.`;
 }
 
 function formatThreadTime(timestamp: string): string {
@@ -448,24 +456,35 @@ async function buildPendingImageAttachment(
 
   const sourceDataUrl = await readFileAsDataUrl(file);
   const image = await loadHtmlImage(sourceDataUrl);
-  const maxWidth = 1200;
-  const scale = Math.min(1, maxWidth / image.naturalWidth);
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const maxWidth = 900;
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
   const canvasContext = canvas.getContext("2d");
   if (!canvasContext) {
     throw new Error("Unable to process image.");
   }
 
-  canvasContext.drawImage(image, 0, 0, width, height);
-  let dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-  for (const quality of [0.74, 0.66, 0.58]) {
-    if (dataUrl.length <= 6_200_000) break;
-    dataUrl = canvas.toDataURL("image/jpeg", quality);
+  let scale = Math.min(1, maxWidth / image.naturalWidth);
+  let dataUrl = "";
+  for (const widthScale of [1, 0.82, 0.68, 0.54, 0.42]) {
+    const width = Math.max(1, Math.round(image.naturalWidth * scale * widthScale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale * widthScale));
+    canvas.width = width;
+    canvas.height = height;
+    canvasContext.drawImage(image, 0, 0, width, height);
+
+    for (const quality of [0.78, 0.68, 0.58, 0.48]) {
+      dataUrl = canvas.toDataURL("image/jpeg", quality);
+      if (dataUrl.length <= MAX_IMAGE_DATA_URL_LENGTH) break;
+    }
+
+    if (dataUrl.length <= MAX_IMAGE_DATA_URL_LENGTH) break;
+    scale *= 0.9;
   }
+
+  if (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+    throw new Error("That screenshot is too large to upload. Try cropping it or uploading fewer screenshots.");
+  }
+
   return {
     id: `${file.name}-${file.size}-${file.lastModified}`,
     name: file.name,
@@ -1098,6 +1117,11 @@ export function AiChatPage({
           }`}
         >
           <div className={`mx-auto w-full max-w-3xl px-4 sm:px-6 ${hasConversation ? "lg:translate-x-36" : "pb-4 sm:pb-6"}`}>
+            {quotaReached ? (
+              <div className="pointer-events-auto mb-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-xs font-medium text-amber-100">
+                {formatQuotaReachedMessage(plan, chatLimit, chatQuotaPeriodLabel)}
+              </div>
+            ) : null}
             <div className="pointer-events-auto rounded-[1.75rem] border border-nrl-border bg-nrl-panel/95 p-2 shadow-2xl shadow-black/30 backdrop-blur">
               {pendingImages.length > 0 ? (
                 <div className="mb-2 flex flex-wrap gap-2 px-2 pt-1">

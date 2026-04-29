@@ -12,8 +12,8 @@ export type AiPlan = "free" | "pro" | "premium";
 export type AiReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export const AI_CHAT_QUOTAS: Record<AiPlan, { limit: number | null; periodDays: number; periodLabel: string }> = {
-  free: { limit: 1, periodDays: 1, periodLabel: "day" },
-  pro: { limit: 50, periodDays: 7, periodLabel: "week" },
+  free: { limit: 3, periodDays: 1, periodLabel: "day" },
+  pro: { limit: 100, periodDays: 7, periodLabel: "week" },
   premium: { limit: 200, periodDays: 7, periodLabel: "week" },
 };
 

@@ -1027,6 +1027,24 @@ function buildFinalAnswerToolPrompt(userMessage: string, assistantMessage: strin
     .join("\n");
 }
 
+function buildImageFinalAnswerToolPrompt(userMessage: string, assistantMessage: string): string {
+  return [
+    "You stopped without producing a usable screenshot answer.",
+    `Original user request: ${userMessage}`,
+    assistantMessage ? `Your latest draft answer: ${assistantMessage}` : "",
+    "The screenshots are attached again in this message. Read them directly.",
+    "If these are NRL Fantasy screenshots, extract the visible squad and give trade advice from the screenshot context.",
+    "Use internal fantasy data for buy targets where needed.",
+    "If one or two names are unclear, say which names are unclear and still give the best conditional advice from the visible players.",
+    "Do not answer as a generic player Fantasy stat question.",
+    "The final answer must be plain English for a sports fan.",
+    `When you are ready, call submit_final_answer with the final user-facing answer prefixed exactly with "${FINAL_ANSWER_PREFIX}".`,
+    `Do not reply with ordinary assistant prose, and do not use "${FINAL_ANSWER_PREFIX}" for anything except the completed turn-ending response.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function summariseToolResult(toolName: string, result: AiToolExecutionResult): string {
   if (!result.ok) {
     return result.error;
@@ -3537,12 +3555,17 @@ export async function runAiModelChat(
         input: [
           {
             role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: buildFinalAnswerToolPrompt(userMessage, extractedAssistantText),
-              },
-            ],
+            content: hasImageInputs
+              ? buildOpenAiUserInputContent(
+                  buildImageFinalAnswerToolPrompt(userMessage, extractedAssistantText),
+                  imageInputs
+                )
+              : [
+                  {
+                    type: "input_text",
+                    text: buildFinalAnswerToolPrompt(userMessage, extractedAssistantText),
+                  },
+                ],
           },
         ],
         tools: buildOpenAiTools(),
@@ -3567,7 +3590,7 @@ export async function runAiModelChat(
       ? stripFinalAnswerPrefix(extractedAssistantText)
       : "";
 
-    if (!submittedFinalAnswer && !extractedPrefixedAnswer) {
+    if (!hasImageInputs && !submittedFinalAnswer && !extractedPrefixedAnswer) {
       const fallbackResult = await tryRunDirectToolChat(userMessage, history, access);
       if (fallbackResult) {
         return fallbackResult;
@@ -3577,9 +3600,11 @@ export async function runAiModelChat(
     const assistantMessage =
       submittedFinalAnswer?.answer ||
       extractedPrefixedAnswer ||
-      "I couldn't answer that cleanly from the available data. Try asking with a specific team, player, stat, and season range.";
+      (hasImageInputs
+        ? "I couldn't read enough from the uploaded screenshots to give reliable fantasy trade advice. Please re-upload a clear full-screen squad screenshot and include your bank/trades if they are not visible."
+        : "I couldn't answer that cleanly from the available data. Try asking with a specific team, player, stat, and season range.");
 
-    if (ENABLE_DIRECT_AI_SHORTCUTS && !extractedAssistantText) {
+    if (!hasImageInputs && ENABLE_DIRECT_AI_SHORTCUTS && !extractedAssistantText) {
       const fallbackResult = await tryRunDirectToolChat(userMessage, history, access);
       if (fallbackResult) {
         return fallbackResult;

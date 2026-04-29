@@ -683,11 +683,13 @@ export async function POST(request: Request) {
     );
   }
 
-  if (Array.isArray(body.imageAttachments) && body.imageAttachments.length > 0 && imageAttachments.length === 0) {
+  if (Array.isArray(body.imageAttachments) && body.imageAttachments.length > imageAttachments.length) {
+    const assistantMessage = "One or more screenshots were too large or in an unsupported format. Re-upload PNG, JPEG, or WebP screenshots and try again.";
     return NextResponse.json(
       {
         status: "invalid_request",
-        error: "Upload up to 3 PNG, JPEG, or WebP screenshots under 6.5 MB each.",
+        error: assistantMessage,
+        assistantMessage,
       },
       { status: 400 }
     );

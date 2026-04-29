@@ -3586,7 +3586,7 @@ export async function runAiModelChat(
       }
     }
 
-    if (requiresInternalToolCall(userMessage) && !hasSuccessfulInternalToolCall(toolActivity)) {
+    if (!hasImageInputs && requiresInternalToolCall(userMessage) && !hasSuccessfulInternalToolCall(toolActivity)) {
       return {
         assistantMessage: buildRequiredToolFollowUpQuestion(userMessage),
         toolActivity,

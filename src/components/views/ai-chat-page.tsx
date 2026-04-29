@@ -448,7 +448,7 @@ async function buildPendingImageAttachment(
 
   const sourceDataUrl = await readFileAsDataUrl(file);
   const image = await loadHtmlImage(sourceDataUrl);
-  const maxEdge = 1400;
+  const maxEdge = 1000;
   const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
   const width = Math.max(1, Math.round(image.naturalWidth * scale));
   const height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -461,7 +461,7 @@ async function buildPendingImageAttachment(
   }
 
   canvasContext.drawImage(image, 0, 0, width, height);
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.84);
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.76);
   return {
     id: `${file.name}-${file.size}-${file.lastModified}`,
     name: file.name,

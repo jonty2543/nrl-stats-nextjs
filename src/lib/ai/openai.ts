@@ -16,6 +16,7 @@ const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_AI_MODEL = "gpt-5-mini";
 const MAX_TOOL_ROUNDS = 8;
 const MAX_OUTPUT_TOKENS = 1800;
+const MAX_IMAGE_OUTPUT_TOKENS = 2800;
 const MAX_THREAD_SUMMARY_TOKENS = 40;
 const MAX_HISTORY_MESSAGES = 6;
 const TRANSIENT_RETRY_EFFORTS: AiReasoningEffort[] = ["medium", "low", "minimal"];
@@ -245,10 +246,12 @@ function buildImageOnlySystemInstructions(plan: AiPlan): string {
     "You are answering from uploaded screenshots. Read the screenshots directly and answer the user's request.",
     "For NRL Fantasy team screenshots, extract the visible squad, player statuses, captain/vice-captain, bench, emergencies, bye/injury markers, and any visible round.",
     "Give useful fantasy trade advice even if bank, trade count, or exact prices are not visible. State those assumptions briefly.",
-    "Do not recommend selling a player because they are DNP or on a bye. In this screenshot workflow, treat DNP as a bye/non-playing-round marker, not a sell signal.",
+    "DNP or bye can be mentioned as a short-term availability issue, but it is not a sell reason by itself.",
     "The NRL Fantasy bye/DNP marker is a black/dark circle with a white square. Do not call that an injury, suspension, dropped status, or priority sell reason.",
     "Only recommend sells for visible players with an injury marker, suspension marker, explicit dropped/out status, or a matching real highly-sold player from the supplied sell snapshot.",
+    "Prioritise visible injured players above structural or ownership-delta sells. In the screenshot key, injury is a red cross/plus marker.",
     "Do not recommend buying players already visible in the user's squad.",
+    "Never say a user should buy a player again, buy back a player they already own, or trade a player out and then back in.",
     "Only recommend trade-in targets from the real fantasy snapshot data supplied in the user message. Do not invent names, clubs, ownership deltas, prices, or form notes.",
     "Use positions from the real fantasy snapshot when available. Do not infer positions from bench slot labels like INT.",
     "Be careful with abbreviated names. Do not read J. Hughes as Jake Hughes by default; use visible team/position context and ask only if truly unclear.",
@@ -3595,12 +3598,13 @@ export async function runAiModelChat(
       "",
       "When writing the answer:",
       "- Sells must come from visible screenshot players only.",
-      "- Do not recommend selling a player because they have DNP or the black/dark circle with a white square bye marker.",
-      "- Treat DNP as a bye/non-playing-round marker, not an injury or dropped status.",
-      "- Injury marker sells are allowed. In the provided screenshot key, the injury marker is a red cross/plus.",
+      "- DNP or bye is not a sell reason by itself. Only suggest selling a DNP/bye player if they also have a real negative ownership delta in the highly-sold snapshot or an injury/suspension/dropped marker.",
+      "- Treat DNP and the black/dark circle with a white square as bye/non-playing-round markers, not injury or dropped status.",
+      "- Prioritise visible injury marker sells before any structural or ownership-delta sells. In the provided screenshot key, the injury marker is a red cross/plus.",
       "- Negative-ownership sell recommendations require the visible player to appear in the real highly-sold snapshot above.",
       "- Trade-ins must come only from the real fantasy trade-in snapshot above.",
       "- Include ownership delta only when it appears in the real fantasy snapshot above.",
+      "- Do not mention buying again, buying back, or re-buying an already owned player.",
     ].join("\n");
 
     const response = await createOpenAiResponse({
@@ -3615,7 +3619,7 @@ export async function runAiModelChat(
           content: buildOpenAiUserInputContent(imageUserMessage, imageInputs),
         },
       ],
-      max_output_tokens: MAX_OUTPUT_TOKENS,
+      max_output_tokens: MAX_IMAGE_OUTPUT_TOKENS,
     });
     const assistantMessage =
       stripFinalAnswerPrefix(extractAssistantText(response)) ||

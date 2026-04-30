@@ -726,7 +726,7 @@ function PlayerStatsTableThumbnail({
   const imageUrl = imageCandidates[imageIndex] ?? null;
 
   return (
-    <div className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[9px] text-nrl-muted">
+    <div className="grid h-[42px] w-[42px] shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -1709,14 +1709,14 @@ export function PlayerComparison({
                 <tr>
                   <th
                     aria-label="Player photo"
-                    className="sticky left-0 top-0 z-[4] w-11 min-w-11 max-w-11 border-b border-r border-nrl-border bg-nrl-panel px-1 py-2"
+                    className="sticky left-0 top-0 z-[4] w-14 min-w-14 max-w-14 border-b border-r border-nrl-border bg-nrl-panel px-1 py-2"
                   />
                   {PLAYER_STATS_TABLE_BASE_COLUMNS.map((column) => {
                     const active = statsTableSort.column === column.key;
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "name" ? "w-48 min-w-48 max-w-48" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "name" ? "w-48 min-w-48 max-w-48" : ""} ${column.key === "position" ? "w-24 min-w-24 max-w-24" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -1736,7 +1736,7 @@ export function PlayerComparison({
                     return (
                       <th
                         key={stat}
-                        className="sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0"
+                        className="sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0"
                       >
                         <button
                           type="button"
@@ -1765,28 +1765,28 @@ export function PlayerComparison({
                 ) : (
                   sortedStatsTableRows.map((row) => {
                     return (
-                      <tr key={row.name} className="h-9 border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70">
-                        <td className="sticky left-0 z-[1] w-11 min-w-11 max-w-11 border-r border-nrl-border bg-nrl-panel px-1 py-1">
-                          <div className="mx-auto grid h-7 w-7 place-items-center">
+                      <tr key={row.name} className="h-[54px] border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70">
+                        <td className="sticky left-0 z-[1] w-14 min-w-14 max-w-14 border-r border-nrl-border bg-nrl-panel px-1 py-1">
+                          <div className="mx-auto grid h-[42px] w-[42px] place-items-center">
                             <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} />
                           </div>
                         </td>
-                      <td className="w-48 min-w-48 max-w-48 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-xs font-semibold text-nrl-text">
+                      <td className="w-48 min-w-48 max-w-48 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-[13px] font-semibold text-nrl-text">
                         <span className="block min-w-0 truncate" title={row.name}>{row.name}</span>
                       </td>
-                      <td className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-muted">
+                      <td className="border-r border-nrl-border px-3 py-2 text-center text-[13px] whitespace-nowrap text-nrl-muted">
                         {row.team ?? "-"}
                       </td>
-                      <td className="border-r border-nrl-border px-3 py-2 text-center text-[10px] whitespace-nowrap text-nrl-muted">
+                      <td className="w-24 min-w-24 max-w-24 border-r border-nrl-border px-3 py-2 text-center text-[13px] whitespace-nowrap text-nrl-muted">
                         {row.position ?? "-"}
                       </td>
-                      <td className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-text">
+                      <td className="border-r border-nrl-border px-3 py-2 text-center text-[13px] whitespace-nowrap text-nrl-text">
                         {row.games}
                       </td>
                       {PLAYER_STATS_TABLE_COLUMNS.map((stat) => (
                         <td
                           key={`${row.name}-${stat}`}
-                          className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0"
+                          className="border-r border-nrl-border px-3 py-2 text-center text-[13px] whitespace-nowrap text-nrl-muted last:border-r-0"
                         >
                           {formatTableNumber(
                             statsTableValueMode === "Total" ? row.totals[stat] ?? null : row.averages[stat] ?? null

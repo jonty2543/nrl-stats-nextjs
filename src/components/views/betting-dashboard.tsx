@@ -471,6 +471,7 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
   const [maxEdge, setMaxEdge] = useState(0.06);
   const [selectedMarket, setSelectedMarket] = useState<BettingMarket>("H2H");
   const [stakeOverrides, setStakeOverrides] = useState<Record<string, number>>({});
+  const [oddsOverrides, setOddsOverrides] = useState<Record<string, number>>({});
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [bets, setBets] = useState<TrackedBet[]>([]);
   const [betsLoading, setBetsLoading] = useState(false);
@@ -729,6 +730,13 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
 
   const handleStakeOverride = (key: string, value: number) => {
     setStakeOverrides((prev) => ({
+      ...prev,
+      [key]: Math.max(0, value),
+    }));
+  };
+
+  const handleOddsOverride = (key: string, value: number) => {
+    setOddsOverrides((prev) => ({
       ...prev,
       [key]: Math.max(0, value),
     }));
@@ -1364,7 +1372,9 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
             kellyScale={kellyScale}
             maxEdge={maxEdge}
             stakeOverrides={stakeOverrides}
+            oddsOverrides={oddsOverrides}
             onStakeOverride={handleStakeOverride}
+            onOddsOverride={handleOddsOverride}
             onAddBet={handleAddBet}
           />
         </section>
@@ -1383,7 +1393,9 @@ function MarketSection({
   kellyScale,
   maxEdge,
   stakeOverrides,
+  oddsOverrides,
   onStakeOverride,
+  onOddsOverride,
   onAddBet,
 }: {
   groups: EventGroup[];
@@ -1395,7 +1407,9 @@ function MarketSection({
   kellyScale?: number;
   maxEdge?: number;
   stakeOverrides: Record<string, number>;
+  oddsOverrides: Record<string, number>;
   onStakeOverride: (key: string, value: number) => void;
+  onOddsOverride: (key: string, value: number) => void;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
   if (groups.length === 0) {
@@ -1444,7 +1458,7 @@ function MarketSection({
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[920px] border-collapse text-xs">
+                  <table className="w-full min-w-[1000px] border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-nrl-border text-left text-nrl-muted">
                         <th className="py-2 pr-3 font-semibold">Outcome</th>
@@ -1461,13 +1475,16 @@ function MarketSection({
                             <th className="py-2 pr-3 font-semibold">Edge</th>
                           </>
                         ) : null}
+                        <th className="py-2 pr-3 font-semibold">Odds</th>
                         <th className="py-2 pr-0 font-semibold">Stake</th>
                         <th className="py-2 pl-3 pr-0 font-semibold">Bet</th>
                       </tr>
                     </thead>
                     <tbody>
                       {group.outcomes.map((row) => {
-                        const implied = impliedProbability(row.bestPriceComputed);
+                        const betRowKey = `${group.date}|${group.match}|${group.market}|${row.result}|${row.bestValueComputed ?? ""}`;
+                        const oddsValue = oddsOverrides[betRowKey] ?? row.bestPriceComputed;
+                        const implied = impliedProbability(oddsValue);
                         const supabaseModelProbability = showModelColumns
                           ? modelPercentToProbability(row.bestModelComputed)
                           : null;
@@ -1481,23 +1498,23 @@ function MarketSection({
                         const bankrollValue = bankroll ?? 0;
                         const percentageStakeDecimal = clamp((percentageStakePct ?? 0) / 100, 0, 1);
                         const targetProfitDecimal = clamp((targetProfitPct ?? 0) / 100, 0, 1);
-                        const fullKelly = modelProbability != null && row.bestPriceComputed != null
-                          ? kellyFraction(modelProbability, row.bestPriceComputed)
+                        const fullKelly = modelProbability != null && oddsValue != null
+                          ? kellyFraction(modelProbability, oddsValue)
                           : null;
                         let scaledStake: number | null = null;
-                        if (!canAccessPremium && row.bestPriceComputed != null && row.bestPriceComputed > 1) {
+                        if (!canAccessPremium && oddsValue != null && oddsValue > 1) {
                           if (stakingMode === "percentage") {
                             scaledStake = bankrollValue * percentageStakeDecimal;
                           } else if (stakingMode === "targetProfit") {
-                            scaledStake = (bankrollValue * targetProfitDecimal) / (row.bestPriceComputed - 1);
+                            scaledStake = (bankrollValue * targetProfitDecimal) / (oddsValue - 1);
                           }
-                        } else if (modelProbability != null && row.bestPriceComputed != null && row.bestPriceComputed > 1) {
+                        } else if (modelProbability != null && oddsValue != null && oddsValue > 1) {
                           if (!hasPositiveEdge || overEdgeCliff) {
                             scaledStake = 0;
                           } else if (stakingMode === "percentage") {
                             scaledStake = bankrollValue * percentageStakeDecimal;
                           } else if (stakingMode === "targetProfit") {
-                            scaledStake = (bankrollValue * targetProfitDecimal) / (row.bestPriceComputed - 1);
+                            scaledStake = (bankrollValue * targetProfitDecimal) / (oddsValue - 1);
                           } else if (fullKelly != null) {
                             scaledStake = bankrollValue * fullKelly * (kellyScale ?? 0);
                           }
@@ -1513,13 +1530,13 @@ function MarketSection({
                                 ? "text-orange-500"
                                 : "text-nrl-accent";
                         const outcomeLabel = row.result;
-                        const betRowKey = `${group.date}|${group.match}|${group.market}|${row.result}|${row.bestValueComputed ?? ""}`;
                         const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                         const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
                         const canPlaceBet = canAccessPremium
                           && modelProbability != null
                           && implied != null
-                          && row.bestPriceComputed != null
+                          && oddsValue != null
+                          && oddsValue > 1
                           && Number.isFinite(stakeValue)
                           && stakeValue > 0;
 
@@ -1588,6 +1605,21 @@ function MarketSection({
                                 </td>
                               </>
                             ) : null}
+                            <td className="py-2 pr-3 text-nrl-text">
+                              <input
+                                type="number"
+                                min={1.01}
+                                step={0.01}
+                                value={oddsValue == null || !Number.isFinite(oddsValue) ? "" : oddsValue}
+                                onChange={(event) => onOddsOverride(betRowKey, Number(event.target.value))}
+                                onBlur={(event) => {
+                                  const nextOdds = Number(event.target.value);
+                                  if (Number.isFinite(nextOdds) && nextOdds > 1) return;
+                                  onOddsOverride(betRowKey, row.bestPriceComputed ?? 0);
+                                }}
+                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                              />
+                            </td>
                             <td className="py-2 pr-0 text-nrl-text">
                               <input
                                 type="number"
@@ -1604,14 +1636,14 @@ function MarketSection({
                                   type="button"
                                   disabled={!canPlaceBet}
                                   onClick={() => {
-                                    if (!canPlaceBet || row.bestPriceComputed == null) return;
+                                    if (!canPlaceBet || oddsValue == null) return;
                                     void onAddBet({
                                       market: group.market,
                                       matchDate: group.date,
                                       matchName: group.match,
                                       selection: row.result,
                                       lineValue: row.bestValueComputed,
-                                      odds: row.bestPriceComputed,
+                                      odds: oddsValue,
                                       stake: stakeValue,
                                       modelProb: modelProbability,
                                       impliedProb: implied,

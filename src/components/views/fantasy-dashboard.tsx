@@ -248,7 +248,7 @@ function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
     case "name":
       return "w-36 min-w-36 max-w-36 sm:w-64 sm:min-w-64 sm:max-w-64"
     case "position":
-      return "w-14 min-w-14 max-w-14 sm:w-auto"
+      return "w-20 min-w-20 max-w-20 sm:w-24 sm:min-w-24 sm:max-w-24"
     case "weeklyChange":
     case "ownPercent":
       return "w-20 min-w-20 max-w-20 sm:w-auto"
@@ -1811,7 +1811,7 @@ export function FantasyDashboard({
                 <tr>
                   <th
                     aria-label="Player photo"
-                    className="sticky left-0 top-0 z-[4] w-11 min-w-11 max-w-11 border-b border-r border-nrl-border bg-nrl-panel px-1 py-2 sm:w-12 sm:min-w-12 sm:max-w-12"
+                    className="sticky left-0 top-0 z-[4] w-14 min-w-14 max-w-14 border-b border-r border-nrl-border bg-nrl-panel px-1 py-2 sm:w-16 sm:min-w-16 sm:max-w-16"
                   />
                   {ALL_PLAYERS_BASE_COLUMNS.map((column) => {
                     const disabled = Boolean(column.proOnly && !hasFantasyPlotAccess)
@@ -1819,7 +1819,7 @@ export function FantasyDashboard({
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 sm:px-3 ${getAllPlayersColumnWidthClass(column.key)} ${ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS.has(column.key) ? "hidden sm:table-cell" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 sm:px-3 ${getAllPlayersColumnWidthClass(column.key)} ${ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS.has(column.key) ? "hidden sm:table-cell" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -1853,10 +1853,10 @@ export function FantasyDashboard({
                       <tr
                         key={row.player.id}
                         onClick={() => navigateToPlayer(row.player.name)}
-                        className="h-9 cursor-pointer border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70"
+                        className="h-[54px] cursor-pointer border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70"
                       >
-                        <td className="sticky left-0 z-[1] w-11 min-w-11 max-w-11 border-r border-nrl-border bg-nrl-panel px-1 py-1 sm:w-12 sm:min-w-12 sm:max-w-12">
-                          <div className="mx-auto grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[9px] text-nrl-muted">
+                        <td className="sticky left-0 z-[1] w-14 min-w-14 max-w-14 border-r border-nrl-border bg-nrl-panel px-1 py-1 sm:w-16 sm:min-w-16 sm:max-w-16">
+                          <div className="mx-auto grid h-[42px] w-[42px] place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
                             {thumbnailUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
@@ -1870,51 +1870,51 @@ export function FantasyDashboard({
                             )}
                           </div>
                         </td>
-                        <td className="w-36 min-w-36 max-w-36 border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-64 sm:min-w-64 sm:max-w-64 sm:px-2">
+                        <td className="w-36 min-w-36 max-w-36 border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-[13px] font-semibold text-nrl-text sm:w-64 sm:min-w-64 sm:max-w-64 sm:px-2">
                           <span className="block min-w-0 truncate" title={row.player.name}>
                             {row.player.name}
                           </span>
                         </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-[10px] whitespace-nowrap text-nrl-muted sm:w-auto sm:px-3">
+                      <td className="w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] whitespace-nowrap text-nrl-muted sm:w-24 sm:min-w-24 sm:max-w-24 sm:px-3">
                         {row.player.positionLabel}
                       </td>
-                      <td className={`w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:w-auto sm:px-3 ${getOwnershipDeltaClass(row.weeklyChange)}`}>
+                      <td className={`w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] font-semibold whitespace-nowrap sm:w-auto sm:px-3 ${getOwnershipDeltaClass(row.weeklyChange)}`}>
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("weeklyChange")}`}>
                           {formatOwnershipDelta(row.weeklyChange)}
                         </span>
                       </td>
-                      <td className="w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:w-auto sm:px-3">
+                      <td className="w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] font-semibold whitespace-nowrap text-nrl-accent sm:w-auto sm:px-3">
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("ownPercent")}`}>
                           {formatPercent(row.player.ownedBy)}
                         </span>
                       </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
                         {formatPrice(row.player.cost)}
                       </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:w-auto sm:px-3">
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] font-semibold whitespace-nowrap text-nrl-accent sm:w-auto sm:px-3">
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("avg2026")}`}>
                           {formatTableNumber(row.avg2026)}
                         </span>
                       </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("last3")}`}>
                           {formatTableNumber(row.last3)}
                         </span>
                       </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
                         {formatTableNumber(row.ppm, 2)}
                       </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
                         <span className={!hasFantasyPlotAccess ? "inline-block blur-[3px] select-none" : ""}>
                           {formatTableNumber(row.projection)}
                         </span>
                       </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
                         <span className={!hasFantasyPlotAccess ? "inline-block blur-[3px] select-none" : ""}>
                           {formatTableNumber(row.breakeven)}
                         </span>
                       </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0 sm:w-auto sm:px-3">
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-[13px] whitespace-nowrap text-nrl-muted last:border-r-0 sm:w-auto sm:px-3">
                         {row.gamesPlayed || "-"}
                       </td>
                     </tr>

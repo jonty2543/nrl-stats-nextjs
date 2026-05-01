@@ -2143,8 +2143,7 @@ export function FantasyDashboard({
                         viewBox={`0 0 ${width} ${height}`}
                         role="img"
                         aria-label={`Priced at vs ${fantasyAnalyticsMetricOption.label.toLowerCase()} scatter plot`}
-                        preserveAspectRatio="none"
-                        className={`block h-[280px] w-full sm:h-[320px] ${fantasyAnalyticsZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
+                        className={`block h-auto w-full ${fantasyAnalyticsZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
                         onPointerDown={(event) => {
                           if (fantasyAnalyticsZoom <= 1) return
                           event.currentTarget.setPointerCapture(event.pointerId)
@@ -2198,6 +2197,7 @@ export function FantasyDashboard({
                             y2={scaleChartValue(diagonalEnd, yDomain.min, yDomain.max, height - bottom, top)}
                             stroke="rgba(226,232,240,0.5)"
                             strokeDasharray="6 5"
+                            clipPath="url(#fantasy-analytics-scatter-clip)"
                           />
                         ) : null}
                         {yTicks.map((tick) => {
@@ -2375,10 +2375,9 @@ export function FantasyDashboard({
                       <div className="space-y-2">
                         <svg
                           viewBox={`0 0 ${width} ${height}`}
-                          preserveAspectRatio="none"
                           role="img"
                           aria-label={`2026 fantasy average vs ${selectedGlobalStatVsFantasyOption.label.toLowerCase()} average scatter plot`}
-                          className={`block h-[250px] w-full sm:h-[290px] ${globalStatVsFantasyZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
+                          className={`block h-auto w-full ${globalStatVsFantasyZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
                           onPointerDown={(event) => {
                             if (globalStatVsFantasyZoom <= 1) return
                             event.currentTarget.setPointerCapture(event.pointerId)
@@ -2407,6 +2406,11 @@ export function FantasyDashboard({
                             if (globalStatVsFantasyDrag?.pointerId === event.pointerId) setGlobalStatVsFantasyDrag(null)
                           }}
                         >
+                          <defs>
+                            <clipPath id="fantasy-global-stat-scatter-clip">
+                              <rect x={left} y={top} width={width - left - right} height={height - top - bottom} rx="6" />
+                            </clipPath>
+                          </defs>
                           <rect x={left} y={top} width={width - left - right} height={height - top - bottom} fill="#111832" rx="6" />
                           {xTicks.map((tick) => {
                             const x = scaleChartValue(tick, xDomain.min, xDomain.max, left, width - right)
@@ -2438,52 +2442,54 @@ export function FantasyDashboard({
                           <text x="12" y={(height - bottom + top) / 2} textAnchor="middle" transform={`rotate(-90 12 ${(height - bottom + top) / 2})`} className="fill-slate-400 text-[10px]">
                             Fantasy Avg
                           </text>
-                          {trendStartY !== null && trendEndY !== null ? (
-                            <line
-                              x1={left}
-                              y1={scaleChartValue(trendStartY, yDomain.min, yDomain.max, height - bottom, top)}
-                              x2={width - right}
-                              y2={scaleChartValue(trendEndY, yDomain.min, yDomain.max, height - bottom, top)}
-                              stroke="rgba(226,232,240,0.7)"
-                              strokeWidth="2"
-                              strokeDasharray="6 5"
-                            />
-                          ) : null}
-                          {filteredGlobalStatVsFantasyPoints.map((point) => {
-                            const x = scaleChartValue(point.statValue, xDomain.min, xDomain.max, left, width - right)
-                            const y = scaleChartValue(point.fantasyAvg, yDomain.min, yDomain.max, height - bottom, top)
-                            const selected = selectedGlobalStatVsFantasyPoint?.name === point.name
-                            return (
-                              <g key={`${point.name}-${point.position}-global-stat`}>
-                                <circle
-                                  cx={x}
-                                  cy={y}
-                                  r="11"
-                                  fill="transparent"
-                                  className="cursor-pointer"
-                                  onMouseEnter={() => setSelectedGlobalStatVsFantasyPoint(point)}
-                                  onFocus={() => setSelectedGlobalStatVsFantasyPoint(point)}
-                                  onClick={() => setSelectedGlobalStatVsFantasyPoint(point)}
-                                  tabIndex={0}
-                                >
-                                  <title>{`${point.name}\n${selectedGlobalStatVsFantasyOption.label}: ${formatTableNumber(point.statValue, 1)}\nFantasy Avg: ${formatTableNumber(point.fantasyAvg, 1)}`}</title>
-                                </circle>
-                                <circle
-                                  cx={x}
-                                  cy={y}
-                                  r={selected ? "6" : "4"}
-                                  fill={getFantasyPositionColor(
-                                    globalStatVsFantasyPositionFilter === "All Positions"
-                                      ? point.position
-                                      : globalStatVsFantasyPositionFilter
-                                  )}
-                                  stroke={selected ? "#f8fafc" : "#07131f"}
-                                  strokeWidth={selected ? "2" : "1"}
-                                  pointerEvents="none"
-                                />
-                              </g>
-                            )
-                          })}
+                          <g clipPath="url(#fantasy-global-stat-scatter-clip)">
+                            {trendStartY !== null && trendEndY !== null ? (
+                              <line
+                                x1={left}
+                                y1={scaleChartValue(trendStartY, yDomain.min, yDomain.max, height - bottom, top)}
+                                x2={width - right}
+                                y2={scaleChartValue(trendEndY, yDomain.min, yDomain.max, height - bottom, top)}
+                                stroke="rgba(226,232,240,0.7)"
+                                strokeWidth="2"
+                                strokeDasharray="6 5"
+                              />
+                            ) : null}
+                            {filteredGlobalStatVsFantasyPoints.map((point) => {
+                              const x = scaleChartValue(point.statValue, xDomain.min, xDomain.max, left, width - right)
+                              const y = scaleChartValue(point.fantasyAvg, yDomain.min, yDomain.max, height - bottom, top)
+                              const selected = selectedGlobalStatVsFantasyPoint?.name === point.name
+                              return (
+                                <g key={`${point.name}-${point.position}-global-stat`}>
+                                  <circle
+                                    cx={x}
+                                    cy={y}
+                                    r="11"
+                                    fill="transparent"
+                                    className="cursor-pointer"
+                                    onMouseEnter={() => setSelectedGlobalStatVsFantasyPoint(point)}
+                                    onFocus={() => setSelectedGlobalStatVsFantasyPoint(point)}
+                                    onClick={() => setSelectedGlobalStatVsFantasyPoint(point)}
+                                    tabIndex={0}
+                                  >
+                                    <title>{`${point.name}\n${selectedGlobalStatVsFantasyOption.label}: ${formatTableNumber(point.statValue, 1)}\nFantasy Avg: ${formatTableNumber(point.fantasyAvg, 1)}`}</title>
+                                  </circle>
+                                  <circle
+                                    cx={x}
+                                    cy={y}
+                                    r={selected ? "6" : "4"}
+                                    fill={getFantasyPositionColor(
+                                      globalStatVsFantasyPositionFilter === "All Positions"
+                                        ? point.position
+                                        : globalStatVsFantasyPositionFilter
+                                    )}
+                                    stroke={selected ? "#f8fafc" : "#07131f"}
+                                    strokeWidth={selected ? "2" : "1"}
+                                    pointerEvents="none"
+                                  />
+                                </g>
+                              )
+                            })}
+                          </g>
                         </svg>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-semibold text-nrl-muted">
                           {POSITION_TABLES.map((position) => (

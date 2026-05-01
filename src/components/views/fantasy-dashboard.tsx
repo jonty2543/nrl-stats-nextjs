@@ -2534,17 +2534,56 @@ export function FantasyDashboard({
               </div>
                 </>
               ) : (
-                <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-4 py-5 text-center">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-                    Fantasy Analytics Plots are Pro
-                  </div>
-                  <div className="mx-auto mt-2 max-w-md text-xs text-nrl-muted">
-                    Upgrade to Pro or Premium to unlock projection scatter plots, stat correlations, zoom and player hover details.
-                  </div>
-                  <BillingPageLink className="mt-4 inline-flex rounded-md border border-nrl-accent bg-nrl-accent/15 px-4 py-2 text-xs font-semibold text-nrl-accent transition-colors hover:bg-nrl-accent/25">
-                    Unlock Plots
-                  </BillingPageLink>
-                </div>
+                <>
+                  {[
+                    {
+                      title: "Priced At vs Projection",
+                      subtitle: "Compare player priced-at value against projections, recent form and season average.",
+                      marker: "projection-preview",
+                    },
+                    {
+                      title: "Fantasy vs Stat",
+                      subtitle: "Plot every player's 2026 fantasy average against key stats by position.",
+                      marker: "stat-preview",
+                    },
+                  ].map((preview) => (
+                    <div key={preview.marker} className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                        {preview.title}
+                      </div>
+                      <div className="mt-1 text-[10px] text-nrl-muted">
+                        {preview.subtitle}
+                      </div>
+                      <div className="relative mt-3 h-[260px] overflow-hidden rounded-md border border-nrl-border bg-[#111832] blur-[3px]">
+                        <div className="absolute inset-x-8 top-1/4 h-px bg-slate-500/20" />
+                        <div className="absolute inset-x-8 top-1/2 h-px bg-slate-500/20" />
+                        <div className="absolute inset-x-8 top-3/4 h-px bg-slate-500/20" />
+                        <div className="absolute inset-y-6 left-1/3 w-px bg-slate-500/20" />
+                        <div className="absolute inset-y-6 left-2/3 w-px bg-slate-500/20" />
+                        <div className="absolute left-[12%] top-[68%] h-2 w-2 rounded-full bg-nrl-accent/70" />
+                        <div className="absolute left-[22%] top-[58%] h-2 w-2 rounded-full bg-sky-400/70" />
+                        <div className="absolute left-[34%] top-[48%] h-2 w-2 rounded-full bg-amber-400/70" />
+                        <div className="absolute left-[46%] top-[44%] h-2 w-2 rounded-full bg-rose-400/70" />
+                        <div className="absolute left-[58%] top-[36%] h-2 w-2 rounded-full bg-purple-400/70" />
+                        <div className="absolute left-[72%] top-[30%] h-2 w-2 rounded-full bg-teal-400/70" />
+                        <div className="absolute left-[84%] top-[22%] h-2 w-2 rounded-full bg-nrl-accent/70" />
+                        <div className="absolute left-[10%] top-[72%] h-px w-[78%] -rotate-12 border-t-2 border-dashed border-slate-300/40" />
+                      </div>
+                      <div className="absolute inset-0 grid place-items-center bg-[#080d1f]/35">
+                        <BillingPageLink className="rounded-xl bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]">
+                          <div className="rounded-[calc(0.75rem-1px)] bg-slate-950/85 px-4 py-3 text-center backdrop-blur-[2px]">
+                            <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
+                              Sign Up To Pro
+                            </div>
+                            <div className="mt-1 text-xs text-slate-400">
+                              Unlock fantasy analytics plots.
+                            </div>
+                          </div>
+                        </BillingPageLink>
+                      </div>
+                    </div>
+                  ))}
+                </>
               )}
               </div>
               <div className="order-1 min-w-0 xl:order-2 xl:sticky xl:top-3 xl:self-start">

@@ -799,6 +799,7 @@ export function FantasyDraftPricingPage({
   const [captainSelections, setCaptainSelections] = useState<CaptainSelections>({ home: null, away: null })
   const [savedTeams, setSavedTeams] = useState<SavedDraftTeamPreset[]>([])
   const [hasLoadedSavedState, setHasLoadedSavedState] = useState(false)
+  const [isBackPending, setIsBackPending] = useState(false)
 
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
   const ownershipDeltaByPlayerId = useMemo(
@@ -1072,9 +1073,13 @@ export function FantasyDraftPricingPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           href="/dashboard/fantasy"
+          onClick={() => setIsBackPending(true)}
           className="inline-flex items-center rounded-md border border-nrl-border bg-nrl-panel px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:text-nrl-accent"
         >
           Back to Fantasy Dashboard
+          {isBackPending ? (
+            <span className="ml-2 h-3 w-3 animate-spin rounded-full border-2 border-nrl-muted/30 border-t-nrl-accent" />
+          ) : null}
         </Link>
       </div>
 

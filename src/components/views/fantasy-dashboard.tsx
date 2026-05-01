@@ -312,7 +312,7 @@ const ALL_PLAYERS_BASE_COLUMNS: Array<{ key: AllPlayersSortKey; label: string; a
 function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
   switch (key) {
     case "name":
-      return "w-[136px] min-w-[136px] max-w-[136px] sm:w-60 sm:min-w-60 sm:max-w-60"
+      return "w-[136px] min-w-[136px] max-w-[136px] sm:w-48 sm:min-w-48 sm:max-w-48"
     case "position":
       return "w-[72px] min-w-[72px] max-w-[72px] sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px]"
     case "weeklyChange":
@@ -979,6 +979,7 @@ export function FantasyDashboard({
   const [selectedGlobalStatVsFantasyPoint, setSelectedGlobalStatVsFantasyPoint] = useState<GlobalStatVsFantasyPoint | null>(null)
   const [fantasyTemplateMode, setFantasyTemplateMode] = useState<FantasyTemplateMode>("ownership")
   const [isFantasyAnalyticsPending, setIsFantasyAnalyticsPending] = useState(false)
+  const [isFantasyDraftPending, setIsFantasyDraftPending] = useState(false)
   const [hasRequestedAllPlayersStats, setHasRequestedAllPlayersStats] = useState(false)
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
@@ -2004,20 +2005,16 @@ export function FantasyDashboard({
         {showOwnedCards ? (
           <div className="grid grid-cols-2 gap-2 xl:min-w-[520px]">
             <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)]">
-              <Link
-                href="/dashboard/fantasy/analytics"
-                onClick={() => {
-                  if (!showFantasyAnalytics) setIsFantasyAnalyticsPending(true)
-                }}
-                className={`relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border border-transparent px-3 py-2 text-center text-[11px] font-semibold transition-colors xl:min-h-[100%] ${
+                <Link
+                  href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
+                onClick={() => setIsFantasyAnalyticsPending(true)}
+                className={`relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-center text-[11px] font-semibold transition-colors xl:min-h-[100%] ${
                   showFantasyAnalytics
-                    ? "bg-nrl-accent text-[#07131f] hover:bg-nrl-accent"
-                    : "bg-[#20284a] text-white hover:text-white"
+                    ? "border-nrl-accent bg-[#20284a] text-white hover:text-white"
+                    : "border-transparent bg-[#20284a] text-white hover:text-white"
                 }`}
               >
-                <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded px-1 py-px text-[6px] font-bold uppercase tracking-wide ${
-                  showFantasyAnalytics ? "bg-[#07131f] text-nrl-accent" : "bg-nrl-accent text-[#07131f]"
-                }`}>
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-nrl-accent px-1 py-px text-[6px] font-bold uppercase tracking-wide text-[#07131f]">
                   New
                 </span>
                 Fantasy Analytics
@@ -2032,18 +2029,30 @@ export function FantasyDashboard({
               {hasFantasyPlotAccess ? (
                 <Link
                   href="/dashboard/fantasy/draft"
-                  className="inline-flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:text-white xl:min-h-[100%]"
+                  onClick={() => setIsFantasyDraftPending(true)}
+                  className="relative inline-flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:text-white xl:min-h-[100%]"
                 >
                   Draft / H2H Projection and Odds
+                  {isFantasyDraftPending ? (
+                    <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                      <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                    </span>
+                  ) : null}
                 </Link>
               ) : (
                 <Link
                   href="/dashboard/fantasy/draft"
-                  className="flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center transition-colors xl:min-h-[100%]"
+                  onClick={() => setIsFantasyDraftPending(true)}
+                  className="relative flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center transition-colors xl:min-h-[100%]"
                 >
                   <div className="text-[11px] font-semibold text-white">
                     Draft / H2H Projection and Odds
                   </div>
+                  {isFantasyDraftPending ? (
+                    <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                      <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                    </span>
+                  ) : null}
                 </Link>
               )}
             </div>
@@ -2720,7 +2729,7 @@ export function FantasyDashboard({
                             )}
                           </div>
                         </td>
-                        <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-60 sm:min-w-60 sm:max-w-60 sm:px-2">
+                        <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-48 sm:min-w-48 sm:max-w-48 sm:px-2">
                           <span className="block min-w-0 truncate" title={row.player.name}>
                             {row.player.name}
                           </span>

@@ -6,30 +6,25 @@ import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
+  fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
 import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 
-interface FantasyPageProps {
-  searchParams: Promise<{
-    analytics?: string
-  }>
-}
-
 function defaultRecentYears(years: string[], maxYears = 4): string[] {
   return years.slice(0, Math.min(maxYears, years.length))
 }
 
-export default async function FantasyPage({ searchParams }: FantasyPageProps) {
-  const params = await searchParams
+export default async function FantasyAnalyticsPage() {
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, availableYears, ownershipBaselineSnapshot, playerImages] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
+    fetchLineupsProjectionsByPlayerId(),
     fetchAvailableYears(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
     fetchPlayerImages(),
@@ -50,12 +45,13 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
     <FantasyDashboard
       fantasyPlayers={fantasyPlayers}
       fantasyCoachPlayers={fantasyCoachPlayers}
+      lineupsProjections={lineupsProjections}
       availableYears={unlockedYears}
       defaultYears={initialYears}
       initialPlayerStats={initialPlayerStats}
       canAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
-      initialShowFantasyAnalytics={params.analytics === "1"}
+      initialShowFantasyAnalytics
       showPlayerDetails={false}
       playerRouteBasePath="/dashboard/fantasy"
       ownershipBaselineSnapshot={ownershipBaselineSnapshot}

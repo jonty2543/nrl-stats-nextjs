@@ -185,7 +185,9 @@ const HEATMAP_LOW_SCORE = 20
 const HEATMAP_MID_SCORE = 45
 const HEATMAP_HIGH_SCORE = 75
 const FANTASY_BOX_PLOT_PAD_PCT = 6
-const FANTASY_ANALYTICS_ZOOM_OPTIONS = [1, 2, 4] as const
+const FANTASY_ANALYTICS_MIN_ZOOM = 1
+const FANTASY_ANALYTICS_MAX_ZOOM = 8
+const FANTASY_ANALYTICS_ZOOM_STEP = 0.25
 const FANTASY_ANALYTICS_POSITION_OPTIONS = ["All Positions", "HOK", "MID", "EDG", "HLF", "CTR", "WFB"]
 const FANTASY_POSITION_COLORS: Record<string, string> = {
   HOK: "rgba(0,245,138,0.82)",
@@ -965,13 +967,13 @@ export function FantasyDashboard({
   const showFantasyAnalytics = initialShowFantasyAnalytics
   const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("projection")
   const [fantasyAnalyticsPositionFilter, setFantasyAnalyticsPositionFilter] = useState("All Positions")
-  const [fantasyAnalyticsZoom, setFantasyAnalyticsZoom] = useState<(typeof FANTASY_ANALYTICS_ZOOM_OPTIONS)[number]>(1)
+  const [fantasyAnalyticsZoom, setFantasyAnalyticsZoom] = useState(1)
   const [fantasyAnalyticsPan, setFantasyAnalyticsPan] = useState({ x: 0.5, y: 0.5 })
   const [fantasyAnalyticsDrag, setFantasyAnalyticsDrag] = useState<FantasyAnalyticsDragState | null>(null)
   const [selectedFantasyAnalyticsPoint, setSelectedFantasyAnalyticsPoint] = useState<FantasyAnalyticsPoint | null>(null)
   const [selectedGlobalStatVsFantasyLabel, setSelectedGlobalStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [globalStatVsFantasyPositionFilter, setGlobalStatVsFantasyPositionFilter] = useState("All Positions")
-  const [globalStatVsFantasyZoom, setGlobalStatVsFantasyZoom] = useState<(typeof FANTASY_ANALYTICS_ZOOM_OPTIONS)[number]>(1)
+  const [globalStatVsFantasyZoom, setGlobalStatVsFantasyZoom] = useState(1)
   const [globalStatVsFantasyPan, setGlobalStatVsFantasyPan] = useState({ x: 0.5, y: 0.5 })
   const [globalStatVsFantasyDrag, setGlobalStatVsFantasyDrag] = useState<FantasyAnalyticsDragState | null>(null)
   const [selectedGlobalStatVsFantasyPoint, setSelectedGlobalStatVsFantasyPoint] = useState<GlobalStatVsFantasyPoint | null>(null)
@@ -2048,8 +2050,8 @@ export function FantasyDashboard({
                   </div>
                     <div className="text-[10px] text-nrl-muted">{pricedAtProjectionPoints.length} players with {fantasyAnalyticsMetricOption.label.toLowerCase()}</div>
                   </div>
-                  <div className="flex flex-nowrap items-center justify-end gap-1 overflow-x-auto">
-                    <div className="w-[150px] shrink-0">
+                  <div className="grid w-full grid-cols-3 items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[450px]">
+                    <div className="min-w-0">
                       <Select
                         label=""
                         value={fantasyAnalyticsPositionFilter}
@@ -2062,7 +2064,7 @@ export function FantasyDashboard({
                         }}
                       />
                     </div>
-                    <div className="mr-1 flex shrink-0 rounded-md border border-nrl-border bg-nrl-panel p-0.5">
+                    <div className="flex min-w-0 justify-center rounded-md border border-nrl-border bg-nrl-panel p-0.5">
                       {FANTASY_ANALYTICS_METRICS.map((metric) => (
                         <button
                           key={metric.key}
@@ -2083,29 +2085,27 @@ export function FantasyDashboard({
                         </button>
                       ))}
                     </div>
-                    {FANTASY_ANALYTICS_ZOOM_OPTIONS.map((zoom) => (
-                      <button
-                        key={zoom}
-                        type="button"
-                        onClick={() => {
-                          setFantasyAnalyticsZoom(zoom)
+                    <label className="flex min-w-0 items-center rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+                      <input
+                        type="range"
+                        min={FANTASY_ANALYTICS_MIN_ZOOM}
+                        max={FANTASY_ANALYTICS_MAX_ZOOM}
+                        step={FANTASY_ANALYTICS_ZOOM_STEP}
+                        value={fantasyAnalyticsZoom}
+                        onChange={(event) => {
+                          setFantasyAnalyticsZoom(Number(event.target.value))
                           setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
                         }}
-                        className={`shrink-0 rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
-                          fantasyAnalyticsZoom === zoom
-                            ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                            : "border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                        }`}
-                      >
-                        {zoom}x
-                      </button>
-                    ))}
+                        className="w-full accent-nrl-accent"
+                        aria-label="Priced at plot zoom"
+                      />
+                    </label>
                   </div>
                 </div>
                 {pricedAtProjectionPoints.length > 0 ? (
                   (() => {
                     const width = 640
-                    const height = 280
+                    const height = 380
                     const left = 44
                     const right = 18
                     const top = 1
@@ -2292,8 +2292,8 @@ export function FantasyDashboard({
                         : ""}
                     </div>
                   </div>
-                  <div className="flex w-full flex-nowrap items-center justify-end gap-2 overflow-x-auto sm:w-auto">
-                  <div className="w-[150px] shrink-0">
+                  <div className="grid w-full grid-cols-3 items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[490px]">
+                  <div className="min-w-0">
                     <Select
                       label=""
                       value={globalStatVsFantasyPositionFilter}
@@ -2306,7 +2306,7 @@ export function FantasyDashboard({
                       }}
                     />
                   </div>
-                  <div className="w-[190px] shrink-0">
+                  <div className="min-w-0">
                     <Select
                       label=""
                       value={selectedGlobalStatVsFantasyLabel}
@@ -2319,31 +2319,27 @@ export function FantasyDashboard({
                       }}
                     />
                   </div>
-                  <div className="flex shrink-0 gap-1">
-                    {FANTASY_ANALYTICS_ZOOM_OPTIONS.map((zoom) => (
-                      <button
-                        key={zoom}
-                        type="button"
-                        onClick={() => {
-                          setGlobalStatVsFantasyZoom(zoom)
-                          setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
-                        }}
-                        className={`shrink-0 rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
-                          globalStatVsFantasyZoom === zoom
-                            ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                            : "border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
-                        }`}
-                      >
-                        {zoom}x
-                      </button>
-                    ))}
-                  </div>
+                  <label className="flex min-w-0 items-center rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+                    <input
+                      type="range"
+                      min={FANTASY_ANALYTICS_MIN_ZOOM}
+                      max={FANTASY_ANALYTICS_MAX_ZOOM}
+                      step={FANTASY_ANALYTICS_ZOOM_STEP}
+                      value={globalStatVsFantasyZoom}
+                      onChange={(event) => {
+                        setGlobalStatVsFantasyZoom(Number(event.target.value))
+                        setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
+                      }}
+                      className="w-full accent-nrl-accent"
+                      aria-label="Fantasy vs stat plot zoom"
+                    />
+                  </label>
                   </div>
                 </div>
                 {filteredGlobalStatVsFantasyPoints.length > 0 ? (
                   (() => {
                     const width = 640
-                    const height = 250
+                    const height = 350
                     const left = 44
                     const right = 18
                     const top = 1
@@ -2592,7 +2588,7 @@ export function FantasyDashboard({
                                 : getOwnershipDeltaClass(playerRow?.weeklyChange ?? null)
                             return (
                               <div key={`${templateRow.label}-${index}`} className="min-w-0 text-center">
-                                <div className="mx-auto grid h-16 w-16 place-items-center overflow-hidden rounded-full border-2 border-white/80 bg-nrl-panel shadow-[0_10px_22px_rgba(0,0,0,0.34)]">
+                                <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-full border-2 border-white/80 bg-nrl-panel shadow-[0_10px_22px_rgba(0,0,0,0.34)] sm:h-14 sm:w-14">
                                   {thumbnailUrl ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img

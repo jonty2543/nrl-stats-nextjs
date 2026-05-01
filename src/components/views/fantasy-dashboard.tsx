@@ -199,7 +199,7 @@ const FANTASY_POSITION_COLORS: Record<string, string> = {
 }
 const FANTASY_ANALYTICS_METRICS: Array<{ key: FantasyAnalyticsMetric; label: string; shortLabel: string }> = [
   { key: "projection", label: "Projection", shortLabel: "Proj" },
-  { key: "last3", label: "Last 3 Avg", shortLabel: "Last 3" },
+  { key: "last3", label: "Last 3 Avg", shortLabel: "L3" },
   { key: "avg2026", label: "Season Avg", shortLabel: "Season" },
 ]
 const FANTASY_TEMPLATE_ROWS: Array<{ label: string; slots: string[] }> = [
@@ -317,17 +317,17 @@ function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
       return "w-[72px] min-w-[72px] max-w-[72px] sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px]"
     case "weeklyChange":
     case "ownPercent":
-      return "w-20 min-w-20 max-w-20 sm:w-auto"
+      return "w-20 min-w-20 max-w-20"
     case "price":
-      return "w-16 min-w-16 max-w-16 sm:w-auto"
+      return "w-16 min-w-16 max-w-16"
     case "avg2026":
     case "last3":
-      return "w-16 min-w-16 max-w-16 sm:w-auto"
+      return "w-16 min-w-16 max-w-16"
     case "ppm":
     case "projection":
     case "breakeven":
     case "gamesPlayed":
-      return "w-14 min-w-14 max-w-14 sm:w-auto"
+      return "w-14 min-w-14 max-w-14"
     default:
       return ""
   }
@@ -978,6 +978,7 @@ export function FantasyDashboard({
   const [globalStatVsFantasyDrag, setGlobalStatVsFantasyDrag] = useState<FantasyAnalyticsDragState | null>(null)
   const [selectedGlobalStatVsFantasyPoint, setSelectedGlobalStatVsFantasyPoint] = useState<GlobalStatVsFantasyPoint | null>(null)
   const [fantasyTemplateMode, setFantasyTemplateMode] = useState<FantasyTemplateMode>("ownership")
+  const [isFantasyAnalyticsPending, setIsFantasyAnalyticsPending] = useState(false)
   const [hasRequestedAllPlayersStats, setHasRequestedAllPlayersStats] = useState(false)
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
@@ -2005,26 +2006,40 @@ export function FantasyDashboard({
             <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)]">
               <Link
                 href="/dashboard/fantasy/analytics"
-                className="relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
+                onClick={() => {
+                  if (!showFantasyAnalytics) setIsFantasyAnalyticsPending(true)
+                }}
+                className={`relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border border-transparent px-3 py-2 text-center text-[11px] font-semibold transition-colors xl:min-h-[100%] ${
+                  showFantasyAnalytics
+                    ? "bg-nrl-accent text-[#07131f] hover:bg-nrl-accent"
+                    : "bg-[#20284a] text-white hover:text-white"
+                }`}
               >
-                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-nrl-accent px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wide text-[#07131f]">
+                <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded px-1 py-px text-[6px] font-bold uppercase tracking-wide ${
+                  showFantasyAnalytics ? "bg-[#07131f] text-nrl-accent" : "bg-nrl-accent text-[#07131f]"
+                }`}>
                   New
                 </span>
                 Fantasy Analytics
+                {isFantasyAnalyticsPending ? (
+                  <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                    <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                  </span>
+                ) : null}
               </Link>
             </div>
             <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)]">
               {hasFantasyPlotAccess ? (
                 <Link
                   href="/dashboard/fantasy/draft"
-                  className="inline-flex h-full min-h-10 w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
+                  className="inline-flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:text-white xl:min-h-[100%]"
                 >
                   Draft / H2H Projection and Odds
                 </Link>
               ) : (
                 <Link
                   href="/dashboard/fantasy/draft"
-                  className="flex h-full min-h-10 w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center transition-colors hover:border-nrl-accent xl:min-h-[100%]"
+                  className="flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center transition-colors xl:min-h-[100%]"
                 >
                   <div className="text-[11px] font-semibold text-white">
                     Draft / H2H Projection and Odds
@@ -2050,7 +2065,7 @@ export function FantasyDashboard({
                   </div>
                     <div className="text-[10px] text-nrl-muted">{pricedAtProjectionPoints.length} players with {fantasyAnalyticsMetricOption.label.toLowerCase()}</div>
                   </div>
-                  <div className="grid w-full grid-cols-3 items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[450px]">
+                  <div className="grid w-full grid-cols-[minmax(0,0.9fr)_minmax(128px,1.1fr)_minmax(0,0.9fr)] items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[450px]">
                     <div className="min-w-0">
                       <Select
                         label=""
@@ -2075,7 +2090,7 @@ export function FantasyDashboard({
                             setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
                             setSelectedFantasyAnalyticsPoint(null)
                           }}
-                          className={`rounded px-2 py-1 text-[10px] font-semibold transition-colors ${
+                          className={`min-w-0 flex-1 whitespace-nowrap rounded px-1.5 py-1 text-[9px] font-semibold transition-colors sm:px-2 sm:text-[10px] ${
                             fantasyAnalyticsMetric === metric.key
                               ? "bg-nrl-accent/15 text-nrl-accent"
                               : "text-nrl-muted hover:text-nrl-text"
@@ -2640,8 +2655,8 @@ export function FantasyDashboard({
               </div>
             </div>
           </div>
-          <div className="h-[756px] overflow-y-auto overflow-x-auto sm:overflow-x-hidden">
-            <table className="min-w-[800px] border-collapse text-left text-xs sm:min-w-0 sm:w-full sm:table-fixed">
+          <div className="h-[756px] overflow-y-auto overflow-x-auto">
+            <table className="min-w-[980px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>
                   <th
@@ -2713,43 +2728,43 @@ export function FantasyDashboard({
                       <td className="w-[72px] min-w-[72px] max-w-[72px] border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px] sm:px-3">
                         {row.player.positionLabel}
                       </td>
-                      <td className={`w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:w-auto sm:px-3 ${getOwnershipDeltaClass(row.weeklyChange)}`}>
+                      <td className={`w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getOwnershipDeltaClass(row.weeklyChange)}`}>
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("weeklyChange")}`}>
                           {formatOwnershipDelta(row.weeklyChange)}
                         </span>
                       </td>
-                      <td className="w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:w-auto sm:px-3">
+                      <td className="w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:px-3">
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("ownPercent")}`}>
                           {formatPercent(row.player.ownedBy)}
                         </span>
                       </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         {formatPrice(row.player.cost)}
                       </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:w-auto sm:px-3">
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:px-3">
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("avg2026")}`}>
                           {formatTableNumber(row.avg2026)}
                         </span>
                       </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("last3")}`}>
                           {formatTableNumber(row.last3)}
                         </span>
                       </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         {formatTableNumber(row.ppm, 2)}
                       </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         <span className={!hasFantasyPlotAccess ? "inline-block blur-[3px] select-none" : ""}>
                           {formatTableNumber(row.projection)}
                         </span>
                       </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:w-auto sm:px-3">
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         <span className={!hasFantasyPlotAccess ? "inline-block blur-[3px] select-none" : ""}>
                           {formatTableNumber(row.breakeven)}
                         </span>
                       </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0 sm:w-auto sm:px-3">
+                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0 sm:px-3">
                         {row.gamesPlayed || "-"}
                       </td>
                     </tr>

@@ -2001,24 +2001,15 @@ export function FantasyDashboard({
         {showOwnedCards ? (
           <div className="grid grid-cols-2 gap-2 xl:min-w-[520px]">
             <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)]">
-              {hasFantasyPlotAccess ? (
-                <Link
-                  href="/dashboard/fantasy/analytics"
-                  className="relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
-                >
-                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-nrl-accent px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wide text-[#07131f]">
-                    New
-                  </span>
-                  Fantasy Analytics
-                </Link>
-              ) : (
-                <BillingPageLink className="relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]">
-                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-nrl-accent px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wide text-[#07131f]">
-                    Pro
-                  </span>
-                  Fantasy Analytics
-                </BillingPageLink>
-              )}
+              <Link
+                href="/dashboard/fantasy/analytics"
+                className="relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
+              >
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-nrl-accent px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wide text-[#07131f]">
+                  New
+                </span>
+                Fantasy Analytics
+              </Link>
             </div>
             <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)]">
               {hasFantasyPlotAccess ? (
@@ -2045,9 +2036,10 @@ export function FantasyDashboard({
 
       {showOwnedCards && showFantasyAnalytics ? (
         <section id="fantasy-analytics" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
-          {hasFantasyPlotAccess ? (
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
-              <div className="min-w-0 space-y-3">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
+              <div className="order-2 min-w-0 space-y-3 xl:order-1">
+              {hasFantasyPlotAccess ? (
+                <>
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-2">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -2520,8 +2512,22 @@ export function FantasyDashboard({
                   <div className="grid h-[220px] place-items-center text-xs text-nrl-muted">No 2026 stat averages available.</div>
                 )}
               </div>
+                </>
+              ) : (
+                <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-4 py-5 text-center">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                    Fantasy Analytics Plots are Pro
+                  </div>
+                  <div className="mx-auto mt-2 max-w-md text-xs text-nrl-muted">
+                    Upgrade to Pro or Premium to unlock projection scatter plots, stat correlations, zoom and player hover details.
+                  </div>
+                  <BillingPageLink className="mt-4 inline-flex rounded-md border border-nrl-accent bg-nrl-accent/15 px-4 py-2 text-xs font-semibold text-nrl-accent transition-colors hover:bg-nrl-accent/25">
+                    Unlock Plots
+                  </BillingPageLink>
+                </div>
+              )}
               </div>
-              <div className="min-w-0 xl:sticky xl:top-3 xl:self-start">
+              <div className="order-1 min-w-0 xl:order-2 xl:sticky xl:top-3 xl:self-start">
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -2618,19 +2624,6 @@ export function FantasyDashboard({
               </div>
               </div>
             </div>
-          ) : (
-            <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-4 py-5 text-center">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-                Fantasy Analytics is Pro
-              </div>
-              <div className="mx-auto mt-2 max-w-md text-xs text-nrl-muted">
-                Upgrade to Pro or Premium to unlock fantasy analytics, projections, breakevens, stat plots and template teams.
-              </div>
-              <BillingPageLink className="mt-4 inline-flex rounded-md border border-nrl-accent bg-nrl-accent/15 px-4 py-2 text-xs font-semibold text-nrl-accent transition-colors hover:bg-nrl-accent/25">
-                Unlock Fantasy Analytics
-              </BillingPageLink>
-            </div>
-          )}
         </section>
       ) : null}
 

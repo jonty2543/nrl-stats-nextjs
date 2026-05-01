@@ -44,6 +44,7 @@ import {
 } from "@/components/views/player-comparison"
 import { WithWithoutKDE } from "@/components/charts/with-without-kde"
 import { ScatterCorrelation } from "@/components/charts/scatter-correlation"
+import { linearRegression, pearsonR } from "@/lib/data/stats"
 
 interface FantasyDashboardProps {
   fantasyPlayers: FantasyPlayerSnapshot[]
@@ -60,6 +61,7 @@ interface FantasyDashboardProps {
   initialSelectedFantasyName?: string
   showOwnedCards?: boolean
   showPlayerDetails?: boolean
+  initialShowFantasyAnalytics?: boolean
   playerRouteBasePath?: string
   canAccessLoginSeason?: boolean
   canBypassPlotGate?: boolean
@@ -68,6 +70,8 @@ interface FantasyDashboardProps {
 type TeammateMode = "With" | "Without"
 type GameLogSortDirection = "asc" | "desc"
 type AllPlayersSortDirection = "asc" | "desc"
+type FantasyAnalyticsMetric = "projection" | "last3" | "avg2026"
+type FantasyTemplateMode = "ownership" | "change"
 type AllPlayersSortKey =
   | "name"
   | "position"
@@ -128,6 +132,39 @@ interface AllPlayersTableRow {
   gamesPlayed: number
 }
 
+interface FantasyAnalyticsPoint {
+  name: string
+  position: string
+  positionLabels: string[]
+  price: number | null
+  pricedAt: number | null
+  avg2026: number | null
+  last3: number | null
+  breakeven: number | null
+  projection: number | null
+}
+
+interface FantasyAnalyticsDragState {
+  pointerId: number
+  startX: number
+  startY: number
+  panX: number
+  panY: number
+}
+
+interface FantasyTemplateSlot {
+  slot: string
+  row: AllPlayersTableRow | null
+}
+
+interface GlobalStatVsFantasyPoint {
+  name: string
+  position: string
+  positionLabels: string[]
+  statValue: number
+  fantasyAvg: number
+}
+
 const STAT_VS_FANTASY_OPTIONS = [
   { label: "Run Metres", key: "All Run Metres" },
   { label: "Tackles", key: "Tackles Made" },
@@ -148,6 +185,33 @@ const HEATMAP_LOW_SCORE = 20
 const HEATMAP_MID_SCORE = 45
 const HEATMAP_HIGH_SCORE = 75
 const FANTASY_BOX_PLOT_PAD_PCT = 6
+const FANTASY_ANALYTICS_ZOOM_OPTIONS = [1, 2, 4] as const
+const FANTASY_ANALYTICS_POSITION_OPTIONS = ["All Positions", "HOK", "MID", "EDG", "HLF", "CTR", "WFB"]
+const FANTASY_POSITION_COLORS: Record<string, string> = {
+  HOK: "rgba(0,245,138,0.82)",
+  MID: "rgba(96,165,250,0.82)",
+  EDG: "rgba(251,191,36,0.82)",
+  HLF: "rgba(248,113,113,0.82)",
+  CTR: "rgba(192,132,252,0.82)",
+  WFB: "rgba(45,212,191,0.82)",
+}
+const FANTASY_ANALYTICS_METRICS: Array<{ key: FantasyAnalyticsMetric; label: string; shortLabel: string }> = [
+  { key: "projection", label: "Projection", shortLabel: "Proj" },
+  { key: "last3", label: "Last 3 Avg", shortLabel: "Last 3" },
+  { key: "avg2026", label: "Season Avg", shortLabel: "Season" },
+]
+const FANTASY_TEMPLATE_ROWS: Array<{ label: string; slots: string[] }> = [
+  { label: "HOK", slots: ["HOK"] },
+  { label: "MID", slots: ["MID", "MID", "MID"] },
+  { label: "EDG", slots: ["EDG", "EDG"] },
+  { label: "HLF", slots: ["HLF", "HLF"] },
+  { label: "CTR", slots: ["CTR", "CTR"] },
+  { label: "WFB", slots: ["WFB", "WFB", "WFB"] },
+]
+const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }> = [
+  { key: "ownership", label: "Total Ownership" },
+  { key: "change", label: "Ownership Change" },
+]
 
 const MINUTES_FILTER_OPTIONS = [
   "Any",
@@ -469,6 +533,46 @@ function quantile(values: number[], q: number): number {
 function formatNumber(value: number | null, digits = 1): string {
   if (value === null) return "-"
   return value.toFixed(digits)
+}
+
+function scaleChartValue(value: number, min: number, max: number, start: number, end: number): number {
+  if (!Number.isFinite(value)) return start
+  if (max <= min) return (start + end) / 2
+  return start + ((value - min) / (max - min)) * (end - start)
+}
+
+function getPaddedDomain(values: number[]): { min: number; max: number } {
+  if (values.length === 0) return { min: 0, max: 1 }
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  if (min === max) return { min: min - 1, max: max + 1 }
+  const pad = (max - min) * 0.08
+  return { min: min - pad, max: max + pad }
+}
+
+function getZoomedDomain(domain: { min: number; max: number }, zoom: number, pan = 0): { min: number; max: number } {
+  if (zoom <= 1) return domain
+  const fullSpan = domain.max - domain.min
+  const span = fullSpan / zoom
+  const maxStart = domain.max - span
+  const start = domain.min + (maxStart - domain.min) * Math.max(0, Math.min(1, pan))
+  return { min: start, max: start + span }
+}
+
+function getProjectionDeltaColor(delta: number, maxAbsDelta: number): string {
+  const intensity = maxAbsDelta > 0 ? Math.min(1, Math.abs(delta) / maxAbsDelta) : 0
+  const alpha = 0.42 + intensity * 0.5
+  if (delta >= 0) return `rgba(52, 211, 153, ${alpha.toFixed(3)})`
+  return `rgba(248, 113, 113, ${alpha.toFixed(3)})`
+}
+
+function getFantasyAnalyticsMetricValue(point: FantasyAnalyticsPoint, metric: FantasyAnalyticsMetric): number | null {
+  return point[metric]
+}
+
+function getFantasyPositionColor(position: string): string {
+  const primaryPosition = position.split("/")[0] ?? position
+  return FANTASY_POSITION_COLORS[primaryPosition] ?? "rgba(148,163,184,0.82)"
 }
 
 function formatOpponent(value: string | null): string {
@@ -811,6 +915,7 @@ export function FantasyDashboard({
   initialSelectedFantasyName,
   showOwnedCards = true,
   showPlayerDetails = true,
+  initialShowFantasyAnalytics = false,
   playerRouteBasePath,
   canAccessLoginSeason = false,
   canBypassPlotGate = false,
@@ -857,6 +962,20 @@ export function FantasyDashboard({
     direction: "desc",
   })
   const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
+  const showFantasyAnalytics = initialShowFantasyAnalytics
+  const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("projection")
+  const [fantasyAnalyticsPositionFilter, setFantasyAnalyticsPositionFilter] = useState("All Positions")
+  const [fantasyAnalyticsZoom, setFantasyAnalyticsZoom] = useState<(typeof FANTASY_ANALYTICS_ZOOM_OPTIONS)[number]>(1)
+  const [fantasyAnalyticsPan, setFantasyAnalyticsPan] = useState({ x: 0.5, y: 0.5 })
+  const [fantasyAnalyticsDrag, setFantasyAnalyticsDrag] = useState<FantasyAnalyticsDragState | null>(null)
+  const [selectedFantasyAnalyticsPoint, setSelectedFantasyAnalyticsPoint] = useState<FantasyAnalyticsPoint | null>(null)
+  const [selectedGlobalStatVsFantasyLabel, setSelectedGlobalStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
+  const [globalStatVsFantasyPositionFilter, setGlobalStatVsFantasyPositionFilter] = useState("All Positions")
+  const [globalStatVsFantasyZoom, setGlobalStatVsFantasyZoom] = useState<(typeof FANTASY_ANALYTICS_ZOOM_OPTIONS)[number]>(1)
+  const [globalStatVsFantasyPan, setGlobalStatVsFantasyPan] = useState({ x: 0.5, y: 0.5 })
+  const [globalStatVsFantasyDrag, setGlobalStatVsFantasyDrag] = useState<FantasyAnalyticsDragState | null>(null)
+  const [selectedGlobalStatVsFantasyPoint, setSelectedGlobalStatVsFantasyPoint] = useState<GlobalStatVsFantasyPoint | null>(null)
+  const [fantasyTemplateMode, setFantasyTemplateMode] = useState<FantasyTemplateMode>("ownership")
   const [hasRequestedAllPlayersStats, setHasRequestedAllPlayersStats] = useState(false)
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
@@ -1372,6 +1491,120 @@ export function FantasyDashboard({
     })
   }, [allData, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages, topOwnershipRise])
 
+  const fantasyAnalyticsPoints = useMemo<FantasyAnalyticsPoint[]>(
+    () =>
+      allPlayersTableRows.map((row) => ({
+        name: row.player.name,
+        position: row.player.positionLabel,
+        positionLabels: row.player.positionLabels,
+        price: row.player.cost,
+        pricedAt: row.player.pricedAt,
+        avg2026: row.avg2026,
+        last3: row.last3,
+        breakeven: row.breakeven,
+        projection: row.projection,
+      })),
+    [allPlayersTableRows]
+  )
+
+  const pricedAtProjectionPoints = useMemo(
+    () => {
+      return fantasyAnalyticsPoints.filter((point) => {
+        const metricValue = getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric)
+        return (
+          (fantasyAnalyticsPositionFilter === "All Positions" ||
+            point.positionLabels.includes(fantasyAnalyticsPositionFilter)) &&
+          point.pricedAt !== null &&
+          metricValue !== null &&
+          metricValue > 0 &&
+          Number.isFinite(point.pricedAt) &&
+          Number.isFinite(metricValue)
+        )
+      })
+    },
+    [fantasyAnalyticsMetric, fantasyAnalyticsPoints, fantasyAnalyticsPositionFilter]
+  )
+  const fantasyAnalyticsMetricOption =
+    FANTASY_ANALYTICS_METRICS.find((metric) => metric.key === fantasyAnalyticsMetric) ?? FANTASY_ANALYTICS_METRICS[0]
+  const selectedGlobalStatVsFantasyOption = useMemo(
+    () =>
+      STAT_VS_FANTASY_OPTIONS.find((option) => option.label === selectedGlobalStatVsFantasyLabel) ??
+      STAT_VS_FANTASY_OPTIONS[0],
+    [selectedGlobalStatVsFantasyLabel]
+  )
+  const globalStatVsFantasyPoints = useMemo<GlobalStatVsFantasyPoint[]>(() => {
+    const rows2026 = allData.filter((row) => row.Year === ALL_PLAYERS_STATS_YEAR)
+    const rowsByName = new Map<string, PlayerStat[]>()
+
+    for (const row of rows2026) {
+      const rows = rowsByName.get(row.Name) ?? []
+      rows.push(row)
+      rowsByName.set(row.Name, rows)
+    }
+
+    return allPlayersTableRows.flatMap((row) => {
+      if (!row.localName || row.avg2026 === null) return []
+      const playerRows = rowsByName.get(row.localName) ?? []
+      const statValue = averageNumbers(
+        playerRows.map((playerRow) => toFiniteNumber(playerRow[selectedGlobalStatVsFantasyOption.key]))
+      )
+      if (statValue === null) return []
+      return [{
+        name: row.player.name,
+        position: row.player.positionLabel,
+        positionLabels: row.player.positionLabels,
+        statValue,
+        fantasyAvg: row.avg2026,
+      }]
+    })
+  }, [allData, allPlayersTableRows, selectedGlobalStatVsFantasyOption.key])
+  const filteredGlobalStatVsFantasyPoints = useMemo(
+    () =>
+      globalStatVsFantasyPositionFilter === "All Positions"
+        ? globalStatVsFantasyPoints
+        : globalStatVsFantasyPoints.filter((point) => point.positionLabels.includes(globalStatVsFantasyPositionFilter)),
+    [globalStatVsFantasyPoints, globalStatVsFantasyPositionFilter]
+  )
+  const globalStatVsFantasyCorrelation = useMemo(() => {
+    if (filteredGlobalStatVsFantasyPoints.length < 2) return null
+    return pearsonR(
+      filteredGlobalStatVsFantasyPoints.map((point) => point.statValue),
+      filteredGlobalStatVsFantasyPoints.map((point) => point.fantasyAvg)
+    )
+  }, [filteredGlobalStatVsFantasyPoints])
+  const globalStatVsFantasyTrendline = useMemo(() => {
+    if (filteredGlobalStatVsFantasyPoints.length < 2) return null
+    return linearRegression(
+      filteredGlobalStatVsFantasyPoints.map((point) => point.statValue),
+      filteredGlobalStatVsFantasyPoints.map((point) => point.fantasyAvg)
+    )
+  }, [filteredGlobalStatVsFantasyPoints])
+
+  const fantasyTemplateRows = useMemo<Array<{ label: string; slots: FantasyTemplateSlot[] }>>(() => {
+    const usedPlayerIds = new Set<number>()
+    const rankedRows = [...allPlayersTableRows].sort((a, b) => {
+      const aValue = fantasyTemplateMode === "ownership" ? a.player.ownedBy : a.weeklyChange
+      const bValue = fantasyTemplateMode === "ownership" ? b.player.ownedBy : b.weeklyChange
+      return (bValue ?? -Infinity) - (aValue ?? -Infinity)
+    })
+
+    return FANTASY_TEMPLATE_ROWS.map((row) => ({
+      label: row.label,
+      slots: row.slots.map((slot) => {
+        const selectedRow =
+          rankedRows.find(
+            (playerRow) =>
+              !usedPlayerIds.has(playerRow.player.id) &&
+              playerRow.player.positionLabels.includes(slot) &&
+              (fantasyTemplateMode === "ownership" ? playerRow.player.ownedBy !== null : playerRow.weeklyChange !== null)
+          ) ?? null
+
+        if (selectedRow) usedPlayerIds.add(selectedRow.player.id)
+        return { slot, row: selectedRow }
+      }),
+    }))
+  }, [allPlayersTableRows, fantasyTemplateMode])
+
   const sortedAllPlayersTableRows = useMemo(() => {
     const filteredRows =
       allPlayersPositionFilter === "All Positions"
@@ -1766,27 +1999,634 @@ export function FantasyDashboard({
         </section>
 
         {showOwnedCards ? (
-          <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-2 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] xl:min-w-[260px]">
-            {hasFantasyPlotAccess ? (
-              <Link
-                href="/dashboard/fantasy/draft"
-                className="inline-flex h-full min-h-[72px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
-              >
-                Draft / H2H Projection and Odds
-              </Link>
-            ) : (
-              <Link
-                href="/dashboard/fantasy/draft"
-                className="flex h-full min-h-[72px] w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-4 py-3 text-center transition-colors hover:border-nrl-accent xl:min-h-[100%]"
-              >
-                <div className="text-[11px] font-semibold text-white">
+          <div className="grid grid-cols-2 gap-2 xl:min-w-[520px]">
+            <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)]">
+              {hasFantasyPlotAccess ? (
+                <Link
+                  href="/dashboard/fantasy/analytics"
+                  className="relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
+                >
+                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-nrl-accent px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wide text-[#07131f]">
+                    New
+                  </span>
+                  Fantasy Analytics
+                </Link>
+              ) : (
+                <BillingPageLink className="relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]">
+                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-nrl-accent px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wide text-[#07131f]">
+                    Pro
+                  </span>
+                  Fantasy Analytics
+                </BillingPageLink>
+              )}
+            </div>
+            <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)]">
+              {hasFantasyPlotAccess ? (
+                <Link
+                  href="/dashboard/fantasy/draft"
+                  className="inline-flex h-full min-h-10 w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:border-nrl-accent hover:text-white xl:min-h-[100%]"
+                >
                   Draft / H2H Projection and Odds
-                </div>
-              </Link>
-            )}
+                </Link>
+              ) : (
+                <Link
+                  href="/dashboard/fantasy/draft"
+                  className="flex h-full min-h-10 w-full items-center justify-center rounded-md border border-[rgba(0,245,138,0.22)] bg-[#20284a] px-3 py-2 text-center transition-colors hover:border-nrl-accent xl:min-h-[100%]"
+                >
+                  <div className="text-[11px] font-semibold text-white">
+                    Draft / H2H Projection and Odds
+                  </div>
+                </Link>
+              )}
+            </div>
           </div>
         ) : null}
       </div>
+
+      {showOwnedCards && showFantasyAnalytics ? (
+        <section id="fantasy-analytics" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
+          {hasFantasyPlotAccess ? (
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
+              <div className="min-w-0 space-y-3">
+              <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-2">
+                <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                    Priced At vs {fantasyAnalyticsMetricOption.label}
+                  </div>
+                    <div className="text-[10px] text-nrl-muted">{pricedAtProjectionPoints.length} players with {fantasyAnalyticsMetricOption.label.toLowerCase()}</div>
+                  </div>
+                  <div className="flex flex-nowrap items-center justify-end gap-1 overflow-x-auto">
+                    <div className="w-[150px] shrink-0">
+                      <Select
+                        label=""
+                        value={fantasyAnalyticsPositionFilter}
+                        options={FANTASY_ANALYTICS_POSITION_OPTIONS}
+                        onChange={(value) => {
+                          setFantasyAnalyticsPositionFilter(value)
+                          setFantasyAnalyticsZoom(1)
+                          setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
+                          setSelectedFantasyAnalyticsPoint(null)
+                        }}
+                      />
+                    </div>
+                    <div className="mr-1 flex shrink-0 rounded-md border border-nrl-border bg-nrl-panel p-0.5">
+                      {FANTASY_ANALYTICS_METRICS.map((metric) => (
+                        <button
+                          key={metric.key}
+                          type="button"
+                          onClick={() => {
+                            setFantasyAnalyticsMetric(metric.key)
+                            setFantasyAnalyticsZoom(1)
+                            setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
+                            setSelectedFantasyAnalyticsPoint(null)
+                          }}
+                          className={`rounded px-2 py-1 text-[10px] font-semibold transition-colors ${
+                            fantasyAnalyticsMetric === metric.key
+                              ? "bg-nrl-accent/15 text-nrl-accent"
+                              : "text-nrl-muted hover:text-nrl-text"
+                          }`}
+                        >
+                          {metric.shortLabel}
+                        </button>
+                      ))}
+                    </div>
+                    {FANTASY_ANALYTICS_ZOOM_OPTIONS.map((zoom) => (
+                      <button
+                        key={zoom}
+                        type="button"
+                        onClick={() => {
+                          setFantasyAnalyticsZoom(zoom)
+                          setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
+                        }}
+                        className={`shrink-0 rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                          fantasyAnalyticsZoom === zoom
+                            ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                            : "border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                        }`}
+                      >
+                        {zoom}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {pricedAtProjectionPoints.length > 0 ? (
+                  (() => {
+                    const width = 640
+                    const height = 280
+                    const left = 44
+                    const right = 18
+                    const top = 1
+                    const bottom = 22
+                    const baseXDomain = getPaddedDomain(pricedAtProjectionPoints.map((point) => point.pricedAt ?? 0))
+                    const baseYDomain = getPaddedDomain(
+                      pricedAtProjectionPoints.map((point) => getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric) ?? 0)
+                    )
+                    const xDomain = getZoomedDomain(baseXDomain, fantasyAnalyticsZoom, fantasyAnalyticsPan.x)
+                    const yDomain = getZoomedDomain(baseYDomain, fantasyAnalyticsZoom, fantasyAnalyticsPan.y)
+                    const xTicks = [xDomain.min, (xDomain.min + xDomain.max) / 2, xDomain.max]
+                    const yTicks = [yDomain.min, (yDomain.min + yDomain.max) / 2, yDomain.max]
+                    const maxAbsDelta = Math.max(
+                      ...pricedAtProjectionPoints.map((point) =>
+                        Math.abs((getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric) ?? 0) - (point.pricedAt ?? 0))
+                      ),
+                      1
+                    )
+                    const diagonalStart = Math.max(xDomain.min, yDomain.min)
+                    const diagonalEnd = Math.min(xDomain.max, yDomain.max)
+                    const plotWidth = width - left - right
+                    const plotHeight = height - top - bottom
+
+                    return (
+                      <div className="space-y-2">
+                      <svg
+                        viewBox={`0 0 ${width} ${height}`}
+                        role="img"
+                        aria-label={`Priced at vs ${fantasyAnalyticsMetricOption.label.toLowerCase()} scatter plot`}
+                        preserveAspectRatio="none"
+                        className={`block h-[280px] w-full sm:h-[320px] ${fantasyAnalyticsZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
+                        onPointerDown={(event) => {
+                          if (fantasyAnalyticsZoom <= 1) return
+                          event.currentTarget.setPointerCapture(event.pointerId)
+                          setFantasyAnalyticsDrag({
+                            pointerId: event.pointerId,
+                            startX: event.clientX,
+                            startY: event.clientY,
+                            panX: fantasyAnalyticsPan.x,
+                            panY: fantasyAnalyticsPan.y,
+                          })
+                        }}
+                        onPointerMove={(event) => {
+                          if (!fantasyAnalyticsDrag || fantasyAnalyticsDrag.pointerId !== event.pointerId || fantasyAnalyticsZoom <= 1) return
+                          const deltaX = event.clientX - fantasyAnalyticsDrag.startX
+                          const deltaY = event.clientY - fantasyAnalyticsDrag.startY
+                          const dragScale = fantasyAnalyticsZoom / (fantasyAnalyticsZoom - 1)
+                          setFantasyAnalyticsPan({
+                            x: Math.max(0, Math.min(1, fantasyAnalyticsDrag.panX - (deltaX / plotWidth) * dragScale)),
+                            y: Math.max(0, Math.min(1, fantasyAnalyticsDrag.panY + (deltaY / plotHeight) * dragScale)),
+                          })
+                        }}
+                        onPointerUp={(event) => {
+                          if (fantasyAnalyticsDrag?.pointerId === event.pointerId) setFantasyAnalyticsDrag(null)
+                        }}
+                        onPointerCancel={(event) => {
+                          if (fantasyAnalyticsDrag?.pointerId === event.pointerId) setFantasyAnalyticsDrag(null)
+                        }}
+                      >
+                        <defs>
+                          <clipPath id="fantasy-analytics-scatter-clip">
+                            <rect x={left} y={top} width={width - left - right} height={height - top - bottom} rx="6" />
+                          </clipPath>
+                        </defs>
+                        <rect x={left} y={top} width={width - left - right} height={height - top - bottom} fill="#111832" rx="6" />
+                        {xTicks.map((tick) => {
+                          const x = scaleChartValue(tick, xDomain.min, xDomain.max, left, width - right)
+                          return (
+                            <g key={`x-${tick}`}>
+                              <line x1={x} x2={x} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.12)" />
+                              <text x={x} y={height - 10} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                                {formatTableNumber(tick, 0)}
+                              </text>
+                            </g>
+                          )
+                        })}
+                        {diagonalEnd > diagonalStart ? (
+                          <line
+                            x1={scaleChartValue(diagonalStart, xDomain.min, xDomain.max, left, width - right)}
+                            x2={scaleChartValue(diagonalEnd, xDomain.min, xDomain.max, left, width - right)}
+                            y1={scaleChartValue(diagonalStart, yDomain.min, yDomain.max, height - bottom, top)}
+                            y2={scaleChartValue(diagonalEnd, yDomain.min, yDomain.max, height - bottom, top)}
+                            stroke="rgba(226,232,240,0.5)"
+                            strokeDasharray="6 5"
+                          />
+                        ) : null}
+                        {yTicks.map((tick) => {
+                          const y = scaleChartValue(tick, yDomain.min, yDomain.max, height - bottom, top)
+                          return (
+                            <g key={`y-${tick}`}>
+                              <line x1={left} x2={width - right} y1={y} y2={y} stroke="rgba(148,163,184,0.12)" />
+                              <text x={left - 8} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px]">
+                                {formatTableNumber(tick, 0)}
+                              </text>
+                            </g>
+                          )
+                        })}
+                        <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
+                        <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
+                        <text x={(width + left - right) / 2} y={height} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                          Priced At
+                        </text>
+                        <text x="12" y={(height - bottom + top) / 2} textAnchor="middle" transform={`rotate(-90 12 ${(height - bottom + top) / 2})`} className="fill-slate-400 text-[10px]">
+                          {fantasyAnalyticsMetricOption.label}
+                        </text>
+                        <g clipPath="url(#fantasy-analytics-scatter-clip)">
+                        {pricedAtProjectionPoints.map((point) => {
+                          const metricValue = getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric) ?? 0
+                          const x = scaleChartValue(point.pricedAt ?? 0, xDomain.min, xDomain.max, left, width - right)
+                          const y = scaleChartValue(metricValue, yDomain.min, yDomain.max, height - bottom, top)
+                          const delta = metricValue - (point.pricedAt ?? 0)
+                          const pointColor = getProjectionDeltaColor(delta, maxAbsDelta)
+                          const selected = selectedFantasyAnalyticsPoint?.name === point.name
+                          return (
+                            <g key={`${point.name}-${point.position}`}>
+                              <circle
+                                cx={x}
+                                cy={y}
+                                r="11"
+                                fill="transparent"
+                                className="cursor-pointer"
+                                onMouseEnter={() => setSelectedFantasyAnalyticsPoint(point)}
+                                onFocus={() => setSelectedFantasyAnalyticsPoint(point)}
+                                onClick={() => setSelectedFantasyAnalyticsPoint(point)}
+                                tabIndex={0}
+                              >
+                                <title>{`${point.name}\nPriced At: ${formatTableNumber(point.pricedAt, 0)}\n${fantasyAnalyticsMetricOption.label}: ${formatTableNumber(metricValue, 1)}\nDelta: ${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`}</title>
+                              </circle>
+                              <circle
+                                cx={x}
+                                cy={y}
+                                r={selected ? "6" : "4"}
+                                fill={pointColor}
+                                stroke={selected ? "#f8fafc" : "#07131f"}
+                                strokeWidth={selected ? "2" : "1"}
+                                pointerEvents="none"
+                                opacity="0.9"
+                              />
+                            </g>
+                          )
+                        })}
+                        </g>
+                      </svg>
+                      {selectedFantasyAnalyticsPoint ? (
+                        <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-2 text-xs text-nrl-text">
+                          <div className="font-semibold">{selectedFantasyAnalyticsPoint.name}</div>
+                          <div className="mt-1 grid gap-1 text-[10px] text-nrl-muted sm:grid-cols-3">
+                            <span>Priced At: {formatTableNumber(selectedFantasyAnalyticsPoint.pricedAt, 0)}</span>
+                            <span>
+                              {fantasyAnalyticsMetricOption.label}:{" "}
+                              {formatTableNumber(getFantasyAnalyticsMetricValue(selectedFantasyAnalyticsPoint, fantasyAnalyticsMetric), 1)}
+                            </span>
+                            <span>
+                              Delta: {(() => {
+                                const metricValue = getFantasyAnalyticsMetricValue(selectedFantasyAnalyticsPoint, fantasyAnalyticsMetric) ?? 0
+                                const delta = metricValue - (selectedFantasyAnalyticsPoint.pricedAt ?? 0)
+                                return `${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`
+                              })()}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-nrl-muted">
+                          {fantasyAnalyticsZoom > 1 ? "Drag the plot to pan. Hover or tap a point to inspect the player." : "Hover or tap a point to inspect the player."}
+                        </div>
+                      )}
+                      </div>
+                    )
+                  })()
+                ) : (
+                  <div className="grid h-[280px] place-items-center text-xs text-nrl-muted">No projection data available.</div>
+                )}
+              </div>
+              <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-2">
+                <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                      Fantasy vs Stat
+                    </div>
+                    <div className="text-[10px] text-nrl-muted">
+                      2026 averages for {filteredGlobalStatVsFantasyPoints.length} players
+                      {globalStatVsFantasyCorrelation !== null
+                        ? ` | r = ${globalStatVsFantasyCorrelation >= 0 ? "+" : ""}${globalStatVsFantasyCorrelation.toFixed(2)}`
+                        : ""}
+                    </div>
+                  </div>
+                  <div className="flex w-full flex-nowrap items-center justify-end gap-2 overflow-x-auto sm:w-auto">
+                  <div className="w-[150px] shrink-0">
+                    <Select
+                      label=""
+                      value={globalStatVsFantasyPositionFilter}
+                      options={FANTASY_ANALYTICS_POSITION_OPTIONS}
+                      onChange={(value) => {
+                        setGlobalStatVsFantasyPositionFilter(value)
+                        setGlobalStatVsFantasyZoom(1)
+                        setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
+                        setSelectedGlobalStatVsFantasyPoint(null)
+                      }}
+                    />
+                  </div>
+                  <div className="w-[190px] shrink-0">
+                    <Select
+                      label=""
+                      value={selectedGlobalStatVsFantasyLabel}
+                      options={STAT_VS_FANTASY_OPTIONS.map((option) => option.label)}
+                      onChange={(value) => {
+                        setSelectedGlobalStatVsFantasyLabel(value as StatVsFantasyOptionLabel)
+                        setGlobalStatVsFantasyZoom(1)
+                        setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
+                        setSelectedGlobalStatVsFantasyPoint(null)
+                      }}
+                    />
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    {FANTASY_ANALYTICS_ZOOM_OPTIONS.map((zoom) => (
+                      <button
+                        key={zoom}
+                        type="button"
+                        onClick={() => {
+                          setGlobalStatVsFantasyZoom(zoom)
+                          setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
+                        }}
+                        className={`shrink-0 rounded border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                          globalStatVsFantasyZoom === zoom
+                            ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                            : "border-nrl-border text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                        }`}
+                      >
+                        {zoom}x
+                      </button>
+                    ))}
+                  </div>
+                  </div>
+                </div>
+                {filteredGlobalStatVsFantasyPoints.length > 0 ? (
+                  (() => {
+                    const width = 640
+                    const height = 250
+                    const left = 44
+                    const right = 18
+                    const top = 1
+                    const bottom = 22
+                    const baseXDomain = getPaddedDomain(filteredGlobalStatVsFantasyPoints.map((point) => point.statValue))
+                    const baseYDomain = getPaddedDomain(filteredGlobalStatVsFantasyPoints.map((point) => point.fantasyAvg))
+                    const xDomain = getZoomedDomain(baseXDomain, globalStatVsFantasyZoom, globalStatVsFantasyPan.x)
+                    const yDomain = getZoomedDomain(baseYDomain, globalStatVsFantasyZoom, globalStatVsFantasyPan.y)
+                    const xTicks = [xDomain.min, (xDomain.min + xDomain.max) / 2, xDomain.max]
+                    const yTicks = [yDomain.min, (yDomain.min + yDomain.max) / 2, yDomain.max]
+                    const plotWidth = width - left - right
+                    const plotHeight = height - top - bottom
+                    const trendStartY = globalStatVsFantasyTrendline
+                      ? globalStatVsFantasyTrendline.m * xDomain.min + globalStatVsFantasyTrendline.b
+                      : null
+                    const trendEndY = globalStatVsFantasyTrendline
+                      ? globalStatVsFantasyTrendline.m * xDomain.max + globalStatVsFantasyTrendline.b
+                      : null
+
+                    return (
+                      <div className="space-y-2">
+                        <svg
+                          viewBox={`0 0 ${width} ${height}`}
+                          preserveAspectRatio="none"
+                          role="img"
+                          aria-label={`2026 fantasy average vs ${selectedGlobalStatVsFantasyOption.label.toLowerCase()} average scatter plot`}
+                          className={`block h-[250px] w-full sm:h-[290px] ${globalStatVsFantasyZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
+                          onPointerDown={(event) => {
+                            if (globalStatVsFantasyZoom <= 1) return
+                            event.currentTarget.setPointerCapture(event.pointerId)
+                            setGlobalStatVsFantasyDrag({
+                              pointerId: event.pointerId,
+                              startX: event.clientX,
+                              startY: event.clientY,
+                              panX: globalStatVsFantasyPan.x,
+                              panY: globalStatVsFantasyPan.y,
+                            })
+                          }}
+                          onPointerMove={(event) => {
+                            if (!globalStatVsFantasyDrag || globalStatVsFantasyDrag.pointerId !== event.pointerId || globalStatVsFantasyZoom <= 1) return
+                            const deltaX = event.clientX - globalStatVsFantasyDrag.startX
+                            const deltaY = event.clientY - globalStatVsFantasyDrag.startY
+                            const dragScale = globalStatVsFantasyZoom / (globalStatVsFantasyZoom - 1)
+                            setGlobalStatVsFantasyPan({
+                              x: Math.max(0, Math.min(1, globalStatVsFantasyDrag.panX - (deltaX / plotWidth) * dragScale)),
+                              y: Math.max(0, Math.min(1, globalStatVsFantasyDrag.panY + (deltaY / plotHeight) * dragScale)),
+                            })
+                          }}
+                          onPointerUp={(event) => {
+                            if (globalStatVsFantasyDrag?.pointerId === event.pointerId) setGlobalStatVsFantasyDrag(null)
+                          }}
+                          onPointerCancel={(event) => {
+                            if (globalStatVsFantasyDrag?.pointerId === event.pointerId) setGlobalStatVsFantasyDrag(null)
+                          }}
+                        >
+                          <rect x={left} y={top} width={width - left - right} height={height - top - bottom} fill="#111832" rx="6" />
+                          {xTicks.map((tick) => {
+                            const x = scaleChartValue(tick, xDomain.min, xDomain.max, left, width - right)
+                            return (
+                              <g key={`global-x-${tick}`}>
+                                <line x1={x} x2={x} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.12)" />
+                                <text x={x} y={height - 10} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                                  {formatTableNumber(tick, 0)}
+                                </text>
+                              </g>
+                            )
+                          })}
+                          {yTicks.map((tick) => {
+                            const y = scaleChartValue(tick, yDomain.min, yDomain.max, height - bottom, top)
+                            return (
+                              <g key={`global-y-${tick}`}>
+                                <line x1={left} x2={width - right} y1={y} y2={y} stroke="rgba(148,163,184,0.12)" />
+                                <text x={left - 8} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px]">
+                                  {formatTableNumber(tick, 0)}
+                                </text>
+                              </g>
+                            )
+                          })}
+                          <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
+                          <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
+                          <text x={(width + left - right) / 2} y={height} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                            {selectedGlobalStatVsFantasyOption.label}
+                          </text>
+                          <text x="12" y={(height - bottom + top) / 2} textAnchor="middle" transform={`rotate(-90 12 ${(height - bottom + top) / 2})`} className="fill-slate-400 text-[10px]">
+                            Fantasy Avg
+                          </text>
+                          {trendStartY !== null && trendEndY !== null ? (
+                            <line
+                              x1={left}
+                              y1={scaleChartValue(trendStartY, yDomain.min, yDomain.max, height - bottom, top)}
+                              x2={width - right}
+                              y2={scaleChartValue(trendEndY, yDomain.min, yDomain.max, height - bottom, top)}
+                              stroke="rgba(226,232,240,0.7)"
+                              strokeWidth="2"
+                              strokeDasharray="6 5"
+                            />
+                          ) : null}
+                          {filteredGlobalStatVsFantasyPoints.map((point) => {
+                            const x = scaleChartValue(point.statValue, xDomain.min, xDomain.max, left, width - right)
+                            const y = scaleChartValue(point.fantasyAvg, yDomain.min, yDomain.max, height - bottom, top)
+                            const selected = selectedGlobalStatVsFantasyPoint?.name === point.name
+                            return (
+                              <g key={`${point.name}-${point.position}-global-stat`}>
+                                <circle
+                                  cx={x}
+                                  cy={y}
+                                  r="11"
+                                  fill="transparent"
+                                  className="cursor-pointer"
+                                  onMouseEnter={() => setSelectedGlobalStatVsFantasyPoint(point)}
+                                  onFocus={() => setSelectedGlobalStatVsFantasyPoint(point)}
+                                  onClick={() => setSelectedGlobalStatVsFantasyPoint(point)}
+                                  tabIndex={0}
+                                >
+                                  <title>{`${point.name}\n${selectedGlobalStatVsFantasyOption.label}: ${formatTableNumber(point.statValue, 1)}\nFantasy Avg: ${formatTableNumber(point.fantasyAvg, 1)}`}</title>
+                                </circle>
+                                <circle
+                                  cx={x}
+                                  cy={y}
+                                  r={selected ? "6" : "4"}
+                                  fill={getFantasyPositionColor(
+                                    globalStatVsFantasyPositionFilter === "All Positions"
+                                      ? point.position
+                                      : globalStatVsFantasyPositionFilter
+                                  )}
+                                  stroke={selected ? "#f8fafc" : "#07131f"}
+                                  strokeWidth={selected ? "2" : "1"}
+                                  pointerEvents="none"
+                                />
+                              </g>
+                            )
+                          })}
+                        </svg>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-semibold text-nrl-muted">
+                          {POSITION_TABLES.map((position) => (
+                            <span key={position.label} className="inline-flex items-center gap-1">
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ backgroundColor: getFantasyPositionColor(position.label) }}
+                              />
+                              {position.label}
+                            </span>
+                          ))}
+                        </div>
+                        {selectedGlobalStatVsFantasyPoint ? (
+                          <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-2 text-xs text-nrl-text">
+                            <div className="font-semibold">{selectedGlobalStatVsFantasyPoint.name}</div>
+                            <div className="mt-1 grid gap-1 text-[10px] text-nrl-muted sm:grid-cols-2">
+                              <span>{selectedGlobalStatVsFantasyOption.label}: {formatTableNumber(selectedGlobalStatVsFantasyPoint.statValue, 1)}</span>
+                              <span>Fantasy Avg: {formatTableNumber(selectedGlobalStatVsFantasyPoint.fantasyAvg, 1)}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-nrl-muted">Hover or tap a player to inspect their 2026 averages.</div>
+                        )}
+                      </div>
+                    )
+                  })()
+                ) : (
+                  <div className="grid h-[220px] place-items-center text-xs text-nrl-muted">No 2026 stat averages available.</div>
+                )}
+              </div>
+              </div>
+              <div className="min-w-0 xl:sticky xl:top-3 xl:self-start">
+              <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                      Template Team
+                    </div>
+                    <div className="text-[10px] text-nrl-muted">
+                      {fantasyTemplateMode === "ownership" ? "Top owned starting 13" : "Fastest rising starting 13"}
+                    </div>
+                  </div>
+                  <div className="flex rounded-md border border-nrl-border bg-nrl-panel p-0.5">
+                    {FANTASY_TEMPLATE_MODES.map((mode) => (
+                      <button
+                        key={mode.key}
+                        type="button"
+                        onClick={() => setFantasyTemplateMode(mode.key)}
+                        className={`rounded px-2 py-1 text-[10px] font-semibold transition-colors ${
+                          fantasyTemplateMode === mode.key
+                            ? "bg-nrl-accent/15 text-nrl-accent"
+                            : "text-nrl-muted hover:text-nrl-text"
+                        }`}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-[radial-gradient(circle_at_50%_12%,rgba(0,245,138,0.14),transparent_26%),linear-gradient(90deg,rgba(8,26,33,0.98),rgba(15,54,48,0.92)_50%,rgba(8,26,33,0.98))] px-3 py-4">
+                  <div className="pointer-events-none absolute inset-x-[6%] top-[8%] h-px bg-white/14" />
+                  <div className="pointer-events-none absolute inset-x-[6%] top-[24%] h-px bg-white/10" />
+                  <div className="pointer-events-none absolute inset-x-[6%] top-[40%] h-px bg-white/10" />
+                  <div className="pointer-events-none absolute inset-x-[6%] top-[56%] h-px bg-white/10" />
+                  <div className="pointer-events-none absolute inset-x-[6%] top-[72%] h-px bg-white/10" />
+                  <div className="pointer-events-none absolute inset-x-[6%] top-[88%] h-px bg-white/14" />
+                  <div className="pointer-events-none absolute inset-y-0 left-[6%] w-px bg-white/8" />
+                  <div className="pointer-events-none absolute inset-y-0 right-[6%] w-px bg-white/8" />
+                  <div className="relative z-[1] space-y-4">
+                    {fantasyTemplateRows.map((templateRow) => (
+                      <div key={templateRow.label} className="relative">
+                        <div className="absolute left-2 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-300/80 [writing-mode:vertical-rl] rotate-180">
+                          {templateRow.label}
+                        </div>
+                        <div
+                          className={`mx-[6%] grid gap-3 ${
+                            templateRow.slots.length === 1
+                              ? "grid-cols-1"
+                              : templateRow.slots.length === 2
+                                ? "grid-cols-2"
+                                : "grid-cols-3"
+                          }`}
+                        >
+                          {templateRow.slots.map((slot, index) => {
+                            const playerRow = slot.row
+                            const thumbnailUrl = playerRow ? getPlayerThumbnailUrl(playerRow.imageRow) : null
+                            const metricValue =
+                              fantasyTemplateMode === "ownership"
+                                ? formatPercent(playerRow?.player.ownedBy ?? null)
+                                : formatOwnershipDelta(playerRow?.weeklyChange ?? null)
+                            const metricClass =
+                              fantasyTemplateMode === "ownership"
+                                ? "text-nrl-accent"
+                                : getOwnershipDeltaClass(playerRow?.weeklyChange ?? null)
+                            return (
+                              <div key={`${templateRow.label}-${index}`} className="min-w-0 text-center">
+                                <div className="mx-auto grid h-16 w-16 place-items-center overflow-hidden rounded-full border-2 border-white/80 bg-nrl-panel shadow-[0_10px_22px_rgba(0,0,0,0.34)]">
+                                  {thumbnailUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={thumbnailUrl}
+                                      alt=""
+                                      className="h-full w-full object-cover object-top"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <span className="text-[10px] text-nrl-muted">
+                                      {playerRow ? getPlayerInitials(playerRow.player.name) : slot.slot}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="mt-1 truncate text-[10px] font-semibold leading-tight text-nrl-text" title={playerRow?.player.name ?? slot.slot}>
+                                  {playerRow?.player.name ?? slot.slot}
+                                </div>
+                                <div className={`text-[9px] font-semibold ${metricClass}`}>
+                                  {metricValue}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-4 py-5 text-center">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                Fantasy Analytics is Pro
+              </div>
+              <div className="mx-auto mt-2 max-w-md text-xs text-nrl-muted">
+                Upgrade to Pro or Premium to unlock fantasy analytics, projections, breakevens, stat plots and template teams.
+              </div>
+              <BillingPageLink className="mt-4 inline-flex rounded-md border border-nrl-accent bg-nrl-accent/15 px-4 py-2 text-xs font-semibold text-nrl-accent transition-colors hover:bg-nrl-accent/25">
+                Unlock Fantasy Analytics
+              </BillingPageLink>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {showOwnedCards ? (
         <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">

@@ -12,18 +12,11 @@ import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats } from "@/lib/
 
 export const dynamic = "force-dynamic"
 
-interface FantasyPageProps {
-  searchParams: Promise<{
-    analytics?: string
-  }>
-}
-
 function defaultRecentYears(years: string[], maxYears = 4): string[] {
   return years.slice(0, Math.min(maxYears, years.length))
 }
 
-export default async function FantasyPage({ searchParams }: FantasyPageProps) {
-  const params = await searchParams
+export default async function FantasyAnalyticsPage() {
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
@@ -58,7 +51,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
       initialPlayerStats={initialPlayerStats}
       canAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
-      initialShowFantasyAnalytics={params.analytics === "1"}
+      initialShowFantasyAnalytics
       showPlayerDetails={false}
       playerRouteBasePath="/dashboard/fantasy"
       ownershipBaselineSnapshot={ownershipBaselineSnapshot}

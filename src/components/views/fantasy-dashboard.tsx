@@ -905,7 +905,6 @@ function MetricCard({
 export function FantasyDashboard({
   fantasyPlayers,
   fantasyCoachPlayers = [],
-  lineupsProjections,
   ownershipBaselineSnapshot = null,
   availableYears,
   defaultYears,
@@ -1061,8 +1060,8 @@ export function FantasyDashboard({
     [selectedFantasyCoachPlayer]
   )
   const selectedFantasyCoachRound = useMemo(() => {
-    return lineupsProjections?.round ?? selectedFantasyCoachMetrics.round
-  }, [lineupsProjections, selectedFantasyCoachMetrics])
+    return selectedFantasyCoachMetrics.round
+  }, [selectedFantasyCoachMetrics])
 
   const selectedYearData = useMemo(() => {
     if (selectedYears.length === 0) return allData
@@ -1469,8 +1468,8 @@ export function FantasyDashboard({
       const imageRow =
         resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
         resolvePlayerImage(player.name, teamHint, playerImages)
-      const lineupsRound = lineupsProjections?.round ?? coachMetrics.round
-      const rawProjection = lineupsProjections?.projectionByPlayerId.get(player.id) ?? 0
+      const coachRound = coachMetrics.round
+      const rawProjection = coachMetrics.projection ?? player.projectedAvg ?? 0
 
       return {
         player,
@@ -1488,12 +1487,12 @@ export function FantasyDashboard({
         breakeven: applyFantasyBreakEvenOffset(
           coachMetrics.breakEven ?? player.be ?? null,
           player.id,
-          lineupsRound
+          coachRound
         ),
         gamesPlayed: playerRows.length || player.gamesPlayed || 0,
       }
     })
-  }, [allData, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages, topOwnershipRise])
+  }, [allData, fantasyCoachPlayers, fantasyPlayers, ownershipDeltaByPlayerId, playerImages, topOwnershipRise])
 
   const fantasyAnalyticsPoints = useMemo<FantasyAnalyticsPoint[]>(
     () =>
@@ -1666,12 +1665,12 @@ export function FantasyDashboard({
   const selectedAdjustedProjection = useMemo(
     () => applyFantasyProjectionOffset(
       selectedFantasyPlayer
-        ? (lineupsProjections?.projectionByPlayerId.get(selectedFantasyPlayer.id) ?? 0)
+        ? (selectedFantasyCoachMetrics.projection ?? selectedFantasyPlayer.projectedAvg ?? 0)
         : null,
       selectedOwnershipDelta,
       topOwnershipRise,
     ),
-    [lineupsProjections, selectedFantasyPlayer, selectedOwnershipDelta, topOwnershipRise]
+    [selectedFantasyCoachMetrics, selectedFantasyPlayer, selectedOwnershipDelta, topOwnershipRise]
   )
   const selectedAdjustedBreakEven = useMemo(
     () => applyFantasyBreakEvenOffset(

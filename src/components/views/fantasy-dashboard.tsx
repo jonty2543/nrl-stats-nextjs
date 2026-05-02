@@ -2704,7 +2704,7 @@ export function FantasyDashboard({
             </div>
           </div>
           <div className="h-[756px] overflow-y-auto overflow-x-auto">
-            <table className="min-w-[980px] border-collapse text-left text-xs table-fixed">
+            <table className="w-full min-w-[980px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>
                   <th
@@ -2717,7 +2717,7 @@ export function FantasyDashboard({
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 sm:px-3 ${getAllPlayersColumnWidthClass(column.key)} ${ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS.has(column.key) ? "hidden sm:table-cell" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 sm:px-3 ${column.key === "name" ? "lg:left-[3.75rem] lg:z-[3]" : ""} ${getAllPlayersColumnWidthClass(column.key)} ${ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS.has(column.key) ? "hidden sm:table-cell" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -2768,7 +2768,7 @@ export function FantasyDashboard({
                             )}
                           </div>
                         </td>
-                        <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-48 sm:min-w-48 sm:max-w-48 sm:px-2">
+                        <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-48 sm:min-w-48 sm:max-w-48 sm:px-2 lg:sticky lg:left-[3.75rem] lg:z-[1]">
                           <span className="block min-w-0 truncate" title={row.player.name}>
                             {row.player.name}
                           </span>

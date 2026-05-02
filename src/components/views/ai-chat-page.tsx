@@ -1112,11 +1112,11 @@ export function AiChatPage({
         <div
           className={`pointer-events-none z-20 ${
             hasConversation
-              ? "fixed inset-x-0 bottom-0 bg-nrl-bg/98 px-0 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-5 shadow-[0_-24px_36px_rgba(2,5,23,0.92)] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+              ? "fixed inset-x-0 bottom-0 bg-nrl-bg/98 px-0 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-5 shadow-[0_-24px_36px_rgba(2,5,23,0.92)] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:absolute"
               : "absolute inset-x-0 top-[calc(50%-1.75rem)] -translate-y-1/2"
           }`}
         >
-          <div className={`mx-auto w-full max-w-3xl px-4 sm:px-6 ${hasConversation ? "lg:translate-x-36" : "pb-4 sm:pb-6"}`}>
+          <div className={`mx-auto w-full max-w-3xl px-4 sm:px-6 ${hasConversation ? "" : "pb-4 sm:pb-6"}`}>
             {quotaReached ? (
               <div className="pointer-events-auto mb-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-xs font-medium text-amber-100">
                 {formatQuotaReachedMessage(plan, chatLimit, chatQuotaPeriodLabel)}{" "}

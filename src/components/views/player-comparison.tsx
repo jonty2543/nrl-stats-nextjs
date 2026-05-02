@@ -1716,7 +1716,7 @@ export function PlayerComparison({
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "name" ? "w-44 min-w-44 max-w-44" : ""} ${column.key === "position" ? "w-[88px] min-w-[88px] max-w-[88px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "name" ? "w-44 min-w-44 max-w-44 lg:left-[3.25rem] lg:z-[3]" : ""} ${column.key === "position" ? "w-[88px] min-w-[88px] max-w-[88px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -1771,7 +1771,7 @@ export function PlayerComparison({
                             <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} />
                           </div>
                         </td>
-                      <td className="w-44 min-w-44 max-w-44 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-xs font-semibold text-nrl-text">
+                      <td className="w-44 min-w-44 max-w-44 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-xs font-semibold text-nrl-text lg:sticky lg:left-[3.25rem] lg:z-[1]">
                         <span className="block min-w-0 truncate" title={row.name}>{row.name}</span>
                       </td>
                       <td className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-muted">

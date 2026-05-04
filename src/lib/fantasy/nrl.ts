@@ -470,17 +470,8 @@ function emptyLineupsProjectionSnapshot(source: FantasyProjectionSource = "none"
   }
 }
 
-function getTodayInBrisbane(): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Australia/Brisbane",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date())
-  const year = parts.find((part) => part.type === "year")?.value
-  const month = parts.find((part) => part.type === "month")?.value
-  const day = parts.find((part) => part.type === "day")?.value
-  return `${year}-${month}-${day}`
+function getLineupCutoffUtc(): string {
+  return new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
 }
 
 function normaliseProjectionPlayerName(value: unknown): string {
@@ -499,13 +490,13 @@ function toFiniteProjectionNumber(value: unknown): number | null {
   return null
 }
 
-async function fetchLineupUnawareProjectionSnapshot(today: string): Promise<LineupsProjectionSnapshot> {
+async function fetchLineupUnawareProjectionSnapshot(cutoffUtc: string): Promise<LineupsProjectionSnapshot> {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .schema("nrl")
     .from("lineup_unaware_fantasy_projections")
     .select("player, team, assumed_jersey, assumed_position, projection, model_projection, kickoff_utc")
-    .gte("kickoff_utc", `${today}T00:00:00+10:00`)
+    .gte("kickoff_utc", cutoffUtc)
 
   if (error || !data) return emptyLineupsProjectionSnapshot("lineup_unaware")
 
@@ -535,7 +526,7 @@ async function fetchLineupUnawareProjectionSnapshot(today: string): Promise<Line
 export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjectionSnapshot> {
   try {
     const supabase = createServerSupabaseClient()
-    const today = getTodayInBrisbane()
+    const lineupCutoffUtc = getLineupCutoffUtc()
 
     // Prefer the next upcoming lineups round. Before team lists are released,
     // use the lineup-unaware model instead of stale previous-round lineups.
@@ -545,7 +536,7 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
       .schema("nrl")
       .from("lineups")
       .select("round")
-      .gte("match_date", today)
+      .gte("match_date", lineupCutoffUtc)
       .order("match_date", { ascending: true })
       .limit(1)
       .maybeSingle()
@@ -553,10 +544,10 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     if (upcoming?.round) {
       roundLabel = upcoming.round as string
     } else {
-      return fetchLineupUnawareProjectionSnapshot(today)
+      return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
     }
 
-    if (!roundLabel) return fetchLineupUnawareProjectionSnapshot(today)
+    if (!roundLabel) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
 
     // Parse the integer out of labels like "9", "Round 9", "Round 9 - 2026"
     const roundNumMatch = roundLabel.match(/\d+/)
@@ -567,8 +558,9 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
       .from("lineups")
       .select("player_id, fantasy_projection, position, team, number, is_on_field")
       .eq("round", roundLabel)
+      .gte("match_date", lineupCutoffUtc)
 
-    if (error || !data) return fetchLineupUnawareProjectionSnapshot(today)
+    if (error || !data) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
 
     const projectionByPlayerId = new Map<number, number>()
     const roleByPlayerId = new Map<number, LineupsPlayerRole>()

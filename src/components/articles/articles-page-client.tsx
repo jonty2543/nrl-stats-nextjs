@@ -50,7 +50,7 @@ function stripMarkdownForPreview(value: string): string {
     .trim();
 }
 
-function articlePreviewParagraphs(body: string, wordLimit: number): string[] {
+function articlePreviewText(body: string, wordLimit: number): string {
   let remainingWords = wordLimit;
   const previewParagraphs: string[] = [];
   const previewBody = stripMarkdownForPreview(body);
@@ -66,14 +66,14 @@ function articlePreviewParagraphs(body: string, wordLimit: number): string[] {
     if (isTruncated) break;
   }
 
-  return previewParagraphs;
+  return previewParagraphs.join("\n\n");
 }
 
 function ArticleCard({ article, compact = false }: { article: Article; compact?: boolean }) {
-  const previewParagraphs = articlePreviewParagraphs(article.body, compact ? 45 : 80);
+  const previewText = articlePreviewText(article.body, compact ? 45 : 120);
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel">
+    <article className="overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel">
       {article.imageUrls.length > 0 ? (
         <div className={`grid ${article.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
           {article.imageUrls.map((url, index) => (
@@ -88,7 +88,7 @@ function ArticleCard({ article, compact = false }: { article: Article; compact?:
           ))}
         </div>
       ) : null}
-      <div className="flex flex-1 flex-col space-y-3 p-4 sm:p-5">
+      <div className="space-y-3 p-4 sm:p-5">
         <div>
           <div className="flex items-center gap-2">
             {article.authorImageUrl ? (
@@ -105,15 +105,17 @@ function ArticleCard({ article, compact = false }: { article: Article; compact?:
           </div>
           <h2 className="mt-2 text-xl font-bold text-nrl-text sm:text-2xl">{article.title}</h2>
         </div>
-        <div className={`${compact ? "" : "h-[15rem] overflow-hidden"} space-y-3 text-sm leading-6 text-nrl-text/88`}>
-          {previewParagraphs.map((paragraph, index) => (
-            <p key={`${article.id}-preview-${index}`}>{paragraph}</p>
-          ))}
+        <div
+          className={`whitespace-pre-line text-sm leading-6 text-nrl-text/88 ${
+            compact ? "" : "overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:10]"
+          }`}
+        >
+          {previewText}
         </div>
         <Link
           href={`/dashboard/articles/${article.slug}`}
           aria-label={compact ? `Read and review ${article.title}` : `Read ${article.title}`}
-          className="mt-auto inline-grid h-8 w-8 place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 text-lg font-bold leading-none text-nrl-text transition-colors hover:border-white/25 hover:bg-nrl-border/35"
+          className="inline-grid h-8 w-8 place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 text-lg font-bold leading-none text-nrl-text transition-colors hover:border-white/25 hover:bg-nrl-border/35"
         >
           <span aria-hidden="true">→</span>
         </Link>
@@ -426,7 +428,7 @@ export function ArticlesPageClient({
       ) : null}
 
       <section className="space-y-6">
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className="grid items-start gap-5 xl:grid-cols-2">
           {resolvedApprovedArticles.length === 0 ? (
             <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-sm text-nrl-muted xl:col-span-2">
               No approved articles yet.

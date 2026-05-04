@@ -2979,7 +2979,7 @@ export function FantasyDashboard({
                         <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1 py-0.5 text-nrl-muted sm:px-2 sm:py-1">
                           Status: {selectedFantasyPlayer.status ?? "N/A"}
                         </span>
-                        {selectedLineupRole?.position ? (
+                        {selectedLineupRole?.position && lineupsProjections?.source === "lineups" ? (
                           <span className="rounded-md border border-emerald-400/35 bg-emerald-400/10 px-1 py-0.5 font-semibold text-emerald-300 sm:px-2 sm:py-1">
                             Lineup: {selectedLineupRole.position}
                           </span>
@@ -3194,7 +3194,7 @@ export function FantasyDashboard({
                 </div>
                 <div className={analysisLocked ? "pointer-events-none select-none opacity-40" : undefined}>
                   <div className={`mb-5 grid gap-4 sm:gap-5 ${
-                    selectedLineupRole?.position
+                    selectedLineupRole?.position && lineupsProjections?.source === "lineups"
                       ? "grid-cols-3 sm:max-w-[760px]"
                       : "grid-cols-2 sm:max-w-[520px]"
                   }`}>
@@ -3204,7 +3204,7 @@ export function FantasyDashboard({
                       value={formatNumber(selectedAdjustedProjection, 0)}
                       blurValue={analysisLocked}
                     />
-                    {selectedLineupRole?.position ? (
+                    {selectedLineupRole?.position && lineupsProjections?.source === "lineups" ? (
                       <MetricCard
                         compact
                         label={`Avg at ${selectedLineupRole.position}`}

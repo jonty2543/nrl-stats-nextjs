@@ -20,7 +20,7 @@ alter table shortside.fantasy_ownership_snapshots
   add column if not exists snapshot_week_brisbane date;
 
 update shortside.fantasy_ownership_snapshots
-set snapshot_type = 'weekly_sunday_11pm_brisbane'
+set snapshot_type = 'weekly_monday_10am_brisbane'
 where snapshot_type is null;
 
 update shortside.fantasy_ownership_snapshots

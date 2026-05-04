@@ -82,7 +82,7 @@ const DEFAULT_TEAM_STAT_KEYS = ["Points", "Tries", "Line Breaks", "Tackles Made"
 const DEFAULT_COMPARE_STAT_KEYS = ["Fantasy", "Mins Played", "Tries"];
 const SUPPORTED_CHART_TYPES = ["line", "bar", "table"] as const;
 const SUPPORTED_ENTITY_TYPES = ["player", "team"] as const;
-const SUPPORTED_BETTING_MARKETS = ["H2H", "Line", "Total"] as const;
+const SUPPORTED_BETTING_MARKETS = ["H2H", "Line", "Total", "Tryscorer"] as const;
 const PRO_ONLY_PLAYER_STAT_PATTERNS = [/breakeven/i, /\bbev?\b/i, /projection/i, /projected/i];
 const FANTASY_MAJOR_BYE_ROUNDS = [12, 15, 18] as const;
 
@@ -2425,9 +2425,9 @@ async function runGetBettingSnapshot(
   }
   const snapshot = await fetchBettingOddsSnapshot();
   const marketRows = parsed.market
-    ? snapshot[parsed.market.toLowerCase() as "h2h" | "line" | "total"]
+    ? snapshot[parsed.market.toLowerCase() as "h2h" | "line" | "total" | "tryscorer"]
     : hasAiPremiumDataAccess(access.plan)
-      ? [...snapshot.h2h, ...snapshot.line, ...snapshot.total]
+      ? [...snapshot.h2h, ...snapshot.line, ...snapshot.total, ...snapshot.tryscorer]
       : [...snapshot.h2h];
   const filteredRows = filterBettingRowsByDate(marketRows, parsed.dateFrom, parsed.dateTo);
 

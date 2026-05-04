@@ -1,11 +1,20 @@
 import "server-only";
 
 import { clerkClient } from "@clerk/nextjs/server";
-import { hasPremiumAccess, hasProPlotAccess } from "@/lib/access/pro-access";
+import { headers } from "next/headers";
+import { hasPremiumAccess, hasProPlotAccess, isLocalhostName } from "@/lib/access/pro-access";
+
+async function hasLocalhostAccess(): Promise<boolean> {
+  const headerStore = await headers();
+  const host = headerStore.get("host")?.split(":")[0] ?? null;
+  const forwardedHost = headerStore.get("x-forwarded-host")?.split(":")[0] ?? null;
+  return isLocalhostName(host) || isLocalhostName(forwardedHost);
+}
 
 export async function getServerProPlotAccess(
   userId: string | null | undefined
 ): Promise<boolean> {
+  if (await hasLocalhostAccess()) return true;
   if (!userId) return hasProPlotAccess(userId);
   try {
     const client = await clerkClient();
@@ -20,6 +29,7 @@ export async function getServerProPlotAccess(
 export async function getServerPremiumAccess(
   userId: string | null | undefined
 ): Promise<boolean> {
+  if (await hasLocalhostAccess()) return true;
   if (!userId) return hasPremiumAccess(userId);
   try {
     const client = await clerkClient();

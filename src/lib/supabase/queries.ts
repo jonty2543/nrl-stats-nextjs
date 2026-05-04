@@ -522,10 +522,12 @@ function mapBettingMarket(table: BettingOddsTable, rawMarket: unknown): BettingM
     const normalized = rawMarket.trim().toLowerCase();
     if (normalized === "line") return "Line";
     if (normalized === "total") return "Total";
+    if (normalized === "tryscorer" || normalized === "try scorer") return "Tryscorer";
     if (normalized === "h2h") return "H2H";
   }
   if (table === "NRL Line Odds") return "Line";
   if (table === "NRL Total Odds") return "Total";
+  if (table === "NRL Tryscorers") return "Tryscorer";
   return "H2H";
 }
 
@@ -1230,11 +1232,15 @@ async function fetchPredictionModelRowsFromSupabase(): Promise<PredictionModelRo
 }
 
 export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
-  const [h2hRaw, lineRaw, total, predictionRows] = await Promise.all([
+  const [h2hRaw, lineRaw, total, tryscorer, predictionRows] = await Promise.all([
     fetchBettingOddsTableFromSupabase("NRL Odds"),
     fetchBettingOddsTableFromSupabase("NRL Line Odds"),
     fetchBettingOddsTableFromSupabase("NRL Total Odds"),
-    fetchPredictionModelRowsFromSupabase(),
+    fetchBettingOddsTableFromSupabase("NRL Tryscorers"),
+    fetchPredictionModelRowsFromSupabase().catch((error) => {
+      console.warn("Unable to fetch betting prediction rows; rendering odds without model values.", error);
+      return [];
+    }),
   ]);
   const predictionLookup = buildPredictionLookup(predictionRows);
   const h2h = h2hRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
@@ -1244,6 +1250,7 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
     h2h,
     line,
     total,
+    tryscorer,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -1266,6 +1273,7 @@ export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
       h2h: [],
       line: [],
       total: [],
+      tryscorer: [],
       generatedAt: new Date().toISOString(),
     };
   }

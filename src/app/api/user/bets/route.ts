@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { createServerSupabaseClient } from "@/lib/supabase/client";
 
-type BetMarket = "H2H" | "Line" | "Total";
+type BetMarket = "H2H" | "Line" | "Total" | "Tryscorer";
 type BetStatus = "pending" | "won" | "lost" | "push";
 
 interface UserBetRow {
@@ -387,8 +387,8 @@ export async function POST(request: NextRequest) {
   const edgePp = body.edgePp;
   const status = body.status;
 
-  if (market !== "H2H" && market !== "Line" && market !== "Total") {
-    return NextResponse.json({ error: "market must be H2H, Line, or Total" }, { status: 400 });
+  if (market !== "H2H" && market !== "Line" && market !== "Total" && market !== "Tryscorer") {
+    return NextResponse.json({ error: "market must be H2H, Line, Total, or Tryscorer" }, { status: 400 });
   }
   if (typeof matchDate !== "string" || matchDate.trim().length === 0) {
     return NextResponse.json({ error: "matchDate is required" }, { status: 400 });

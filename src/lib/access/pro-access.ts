@@ -10,6 +10,7 @@ function parseAllowlistedUserIds(raw: string | undefined): Set<string> {
 
 const ENTITLED_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
 const PREVIEW_UNLOCK_BRANCH_NAMES = new Set(["betting/testing"]);
+const LOCALHOST_NAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -24,12 +25,20 @@ function hasPreviewFeatureUnlock(): boolean {
 
   if (typeof window !== "undefined") {
     const host = window.location.hostname.toLowerCase();
+    if (LOCALHOST_NAMES.has(host)) {
+      return true;
+    }
     if (host.includes("betting-testing")) {
       return true;
     }
   }
 
   return false;
+}
+
+export function isLocalhostName(hostname: string | null | undefined): boolean {
+  if (!hostname) return false;
+  return LOCALHOST_NAMES.has(hostname.trim().toLowerCase());
 }
 
 function getProPlotAllowlist(): Set<string> {

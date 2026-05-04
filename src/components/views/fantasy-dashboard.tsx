@@ -16,10 +16,8 @@ import { PLAYER_STATS } from "@/lib/data/constants"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   applyFantasyBreakEvenOffset,
-  applyFantasyProjectionOffset,
   FANTASY_POSITION_MAP,
   getFantasyCoachRoundMetrics,
-  getTopFantasyOwnershipRise,
 } from "@/lib/fantasy/nrl"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import { hasProPlotAccess } from "@/lib/access/pro-access"
@@ -44,7 +42,14 @@ import {
 } from "@/components/views/player-comparison"
 import { WithWithoutKDE } from "@/components/charts/with-without-kde"
 import { ScatterCorrelation } from "@/components/charts/scatter-correlation"
+import { PlayerComments } from "@/components/fantasy/player-comments"
 import { linearRegression, pearsonR } from "@/lib/data/stats"
+
+interface FantasyArticleLink {
+  title: string
+  slug: string
+  imageUrls: string[]
+}
 
 interface FantasyDashboardProps {
   fantasyPlayers: FantasyPlayerSnapshot[]
@@ -61,10 +66,12 @@ interface FantasyDashboardProps {
   initialSelectedFantasyName?: string
   showOwnedCards?: boolean
   showPlayerDetails?: boolean
+  showPlayerComments?: boolean
   initialShowFantasyAnalytics?: boolean
   playerRouteBasePath?: string
   canAccessLoginSeason?: boolean
   canBypassPlotGate?: boolean
+  fantasyProjectionArticle?: FantasyArticleLink | null
 }
 
 type TeammateMode = "With" | "Without"
@@ -312,7 +319,7 @@ const ALL_PLAYERS_BASE_COLUMNS: Array<{ key: AllPlayersSortKey; label: string; a
 function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
   switch (key) {
     case "name":
-      return "w-[136px] min-w-[136px] max-w-[136px] sm:w-48 sm:min-w-48 sm:max-w-48"
+      return "w-[136px] min-w-[136px] max-w-[136px] sm:w-32 sm:min-w-32 sm:max-w-32"
     case "position":
       return "w-[72px] min-w-[72px] max-w-[72px] sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px]"
     case "weeklyChange":
@@ -464,6 +471,31 @@ function getPlayerInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return "?"
   return `${parts[0]?.[0] ?? ""}${parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : ""}`.toUpperCase()
+}
+
+function normalisePositionForComparison(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/five[-\s]?eighth/g, "five eighth")
+    .replace(/2nd/g, "second")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
+function normaliseProjectionPlayerName(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
+function isFantasyPlayerUnavailableForFallback(player: FantasyPlayerSnapshot): boolean {
+  if (player.isBye) return true
+  const status = player.status?.trim().toLowerCase()
+  return Boolean(
+    status &&
+    ["injured", "suspended", "out", "unavailable", "not playing"].some((token) => status.includes(token))
+  )
 }
 
 function averageNumbers(values: Array<number | null>): number | null {
@@ -917,10 +949,12 @@ export function FantasyDashboard({
   initialSelectedFantasyName,
   showOwnedCards = true,
   showPlayerDetails = true,
+  showPlayerComments = false,
   initialShowFantasyAnalytics = false,
   playerRouteBasePath,
   canAccessLoginSeason = false,
   canBypassPlotGate = false,
+  fantasyProjectionArticle = null,
 }: FantasyDashboardProps) {
   const router = useRouter()
   const { userId } = useAuth()
@@ -1059,6 +1093,17 @@ export function FantasyDashboard({
   const selectedFantasyCoachMetrics = useMemo(
     () => getFantasyCoachRoundMetrics(selectedFantasyCoachPlayer),
     [selectedFantasyCoachPlayer]
+  )
+  const selectedLineupRole = useMemo(
+    () =>
+      selectedFantasyPlayer
+        ? (
+          lineupsProjections?.roleByPlayerId.get(selectedFantasyPlayer.id) ??
+          lineupsProjections?.roleByPlayerName.get(normaliseProjectionPlayerName(selectedFantasyPlayer.name)) ??
+          null
+        )
+        : null,
+    [lineupsProjections, selectedFantasyPlayer]
   )
   const selectedFantasyCoachRound = useMemo(() => {
     return lineupsProjections?.round ?? selectedFantasyCoachMetrics.round
@@ -1435,11 +1480,6 @@ export function FantasyDashboard({
     return map
   }, [fantasyPlayers, ownershipBaselineByPlayerId])
 
-  const topOwnershipRise = useMemo(
-    () => getTopFantasyOwnershipRise(ownershipDeltaByPlayerId),
-    [ownershipDeltaByPlayerId]
-  )
-
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
     const rows2026 = allData.filter((row) => row.Year === ALL_PLAYERS_STATS_YEAR)
     const localNames = Array.from(new Set(rows2026.map((row) => row.Name))).sort()
@@ -1470,8 +1510,15 @@ export function FantasyDashboard({
         resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
         resolvePlayerImage(player.name, teamHint, playerImages)
       const projectionRound = lineupsProjections?.round ?? coachMetrics.round
+      const fallbackProjection =
+        lineupsProjections?.source === "lineup_unaware"
+          ? lineupsProjections.projectionByPlayerName.get(normaliseProjectionPlayerName(player.name))
+          : null
       const rawProjection =
         lineupsProjections?.projectionByPlayerId.get(player.id) ??
+        (fallbackProjection != null
+          ? isFantasyPlayerUnavailableForFallback(player) ? 0 : fallbackProjection
+          : null) ??
         coachMetrics.projection ??
         player.projectedAvg ??
         0
@@ -1484,11 +1531,7 @@ export function FantasyDashboard({
         last3: averageNumbers(recentScores),
         ppm: totalMinutes > 0 ? totalFantasy / totalMinutes : null,
         weeklyChange: ownershipDelta,
-        projection: applyFantasyProjectionOffset(
-          rawProjection,
-          ownershipDelta,
-          topOwnershipRise
-        ),
+        projection: rawProjection,
         breakeven: applyFantasyBreakEvenOffset(
           coachMetrics.breakEven ?? player.be ?? null,
           player.id,
@@ -1497,7 +1540,7 @@ export function FantasyDashboard({
         gamesPlayed: playerRows.length || player.gamesPlayed || 0,
       }
     })
-  }, [allData, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages, topOwnershipRise])
+  }, [allData, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages])
 
   const fantasyAnalyticsPoints = useMemo<FantasyAnalyticsPoint[]>(
     () =>
@@ -1668,19 +1711,23 @@ export function FantasyDashboard({
     [ownershipDeltaByPlayerId, selectedFantasyPlayer]
   )
   const selectedAdjustedProjection = useMemo(
-    () => applyFantasyProjectionOffset(
-      selectedFantasyPlayer
-        ? (
-          lineupsProjections?.projectionByPlayerId.get(selectedFantasyPlayer.id) ??
-          selectedFantasyCoachMetrics.projection ??
-          selectedFantasyPlayer.projectedAvg ??
-          0
-        )
-        : null,
-      selectedOwnershipDelta,
-      topOwnershipRise,
-    ),
-    [lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyPlayer, selectedOwnershipDelta, topOwnershipRise]
+    () => {
+      if (!selectedFantasyPlayer) return null
+      const fallbackProjection =
+        lineupsProjections?.source === "lineup_unaware"
+          ? lineupsProjections.projectionByPlayerName.get(normaliseProjectionPlayerName(selectedFantasyPlayer.name))
+          : null
+      return (
+        lineupsProjections?.projectionByPlayerId.get(selectedFantasyPlayer.id) ??
+        (fallbackProjection != null
+          ? isFantasyPlayerUnavailableForFallback(selectedFantasyPlayer) ? 0 : fallbackProjection
+          : null) ??
+        selectedFantasyCoachMetrics.projection ??
+        selectedFantasyPlayer.projectedAvg ??
+        0
+      )
+    },
+    [lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyPlayer]
   )
   const selectedAdjustedBreakEven = useMemo(
     () => applyFantasyBreakEvenOffset(
@@ -1690,6 +1737,19 @@ export function FantasyDashboard({
     ),
     [selectedFantasyCoachMetrics.breakEven, selectedFantasyPlayer, selectedFantasyCoachRound]
   )
+  const selectedLineupPositionAverage = useMemo(() => {
+    const lineupPosition = selectedLineupRole?.position
+    if (!lineupPosition) return null
+    const targetPosition = normalisePositionForComparison(lineupPosition)
+    const positionRows = allData.filter(
+      (row) => normalisePositionForComparison(row.Position) === targetPosition
+    )
+    const scores = positionRows
+      .map((row) => toFiniteNumber(row.Fantasy))
+      .filter((value): value is number => value !== null)
+    if (scores.length === 0) return null
+    return scores.reduce((sum, value) => sum + value, 0) / scores.length
+  }, [allData, selectedLineupRole])
 
   const localPpm = useMemo(() => {
     const scores = playerRowsForYear
@@ -1996,28 +2056,59 @@ export function FantasyDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
-        <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
-          <div className="grid grid-cols-1 gap-3">
-            <div className="grid grid-cols-1 gap-3">
-              <SearchableSelect
-                label=""
-                value={selectedFantasyName}
-                options={playerSearchOptions}
-                onChange={navigateToPlayer}
-                placeholder="Search player..."
-              />
-            </div>
+      <div className="space-y-3">
+        <section className="rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
+          <div className="max-w-2xl">
+            <SearchableSelect
+              label=""
+              value={selectedFantasyName}
+              options={playerSearchOptions}
+              onChange={navigateToPlayer}
+              placeholder="Search player..."
+            />
           </div>
         </section>
 
         {showOwnedCards ? (
-          <div className="grid grid-cols-2 gap-2 xl:min-w-[520px]">
-            <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.46fr)_minmax(0,1fr)] xl:items-stretch">
+            {fantasyProjectionArticle ? (
+              <Link
+                href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
+                className="group overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 xl:order-2"
+              >
+                <div className={`relative grid h-28 ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                  <span className="absolute left-2 top-2 z-10 rounded-md border border-white/15 bg-[#0e1330]/85 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-white shadow-sm backdrop-blur">
+                    Article
+                  </span>
+                  {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
+                    <div key={url} className="min-w-0 overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`${fantasyProjectionArticle.title} header ${index + 1}`}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-3 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-white">
+                      {fantasyProjectionArticle.title}
+                    </div>
+                  </div>
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/10 bg-nrl-panel-2 text-base text-nrl-text">
+                    →
+                  </span>
+                </div>
+              </Link>
+            ) : null}
+            <div className="grid grid-cols-2 gap-2 xl:order-1 xl:grid-cols-1">
+              <div className="group rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))]">
                 <Link
                   href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
                 onClick={() => setIsFantasyAnalyticsPending(true)}
-                className={`relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-center text-[11px] font-semibold transition-colors xl:min-h-[100%] ${
+                className={`relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-center text-[11px] font-semibold transition-colors group-hover:bg-[#29335f] xl:min-h-[100%] ${
                   showFantasyAnalytics
                     ? "border-nrl-accent bg-[#20284a] text-white hover:text-white"
                     : "border-transparent bg-[#20284a] text-white hover:text-white"
@@ -2034,12 +2125,12 @@ export function FantasyDashboard({
                 ) : null}
               </Link>
             </div>
-            <div className="rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)]">
+            <div className="group rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))]">
               {hasFantasyPlotAccess ? (
                 <Link
                   href="/dashboard/fantasy/draft"
                   onClick={() => setIsFantasyDraftPending(true)}
-                  className="relative inline-flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:text-white xl:min-h-[100%]"
+                  className="relative inline-flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:text-white group-hover:bg-[#29335f] xl:min-h-[100%]"
                 >
                   Draft / H2H Projection and Odds
                   {isFantasyDraftPending ? (
@@ -2052,7 +2143,7 @@ export function FantasyDashboard({
                 <Link
                   href="/dashboard/fantasy/draft"
                   onClick={() => setIsFantasyDraftPending(true)}
-                  className="relative flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center transition-colors xl:min-h-[100%]"
+                  className="relative flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center transition-colors group-hover:bg-[#29335f] xl:min-h-[100%]"
                 >
                   <div className="text-[11px] font-semibold text-white">
                     Draft / H2H Projection and Odds
@@ -2064,6 +2155,7 @@ export function FantasyDashboard({
                   ) : null}
                 </Link>
               )}
+            </div>
             </div>
           </div>
         ) : null}
@@ -2647,23 +2739,26 @@ export function FantasyDashboard({
                                 : "grid-cols-3"
                           }`}
                         >
-                          {templateRow.slots.map((slot, index) => {
-                            const playerRow = slot.row
-                            const thumbnailUrl = playerRow ? getPlayerThumbnailUrl(playerRow.imageRow) : null
-                            const metricValue =
-                              fantasyTemplateMode === "ownership"
-                                ? formatPercent(playerRow?.player.ownedBy ?? null)
+	                          {templateRow.slots.map((slot, index) => {
+	                            const playerRow = slot.row
+	                            const thumbnailUrl = playerRow ? getPlayerThumbnailUrl(playerRow.imageRow) : null
+	                            const playerHref = playerRow
+	                              ? `${playerRouteBasePath}/${fantasyPlayerSlug(playerRow.player.name)}`
+	                              : null
+	                            const metricValue =
+	                              fantasyTemplateMode === "ownership"
+	                                ? formatPercent(playerRow?.player.ownedBy ?? null)
                                 : formatOwnershipDelta(playerRow?.weeklyChange ?? null)
                             const metricClass =
                               fantasyTemplateMode === "ownership"
                                 ? "text-nrl-accent"
                                 : getOwnershipDeltaClass(playerRow?.weeklyChange ?? null)
-                            return (
-                              <div key={`${templateRow.label}-${index}`} className="min-w-0 text-center">
-                                <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-full border-2 border-white/80 bg-nrl-panel shadow-[0_10px_22px_rgba(0,0,0,0.34)] sm:h-14 sm:w-14">
-                                  {thumbnailUrl ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
+	                            const content = (
+	                              <>
+	                                <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-full border-2 border-white/80 bg-nrl-panel shadow-[0_10px_22px_rgba(0,0,0,0.34)] transition-colors group-hover:border-nrl-accent/80 sm:h-14 sm:w-14">
+	                                  {thumbnailUrl ? (
+	                                    // eslint-disable-next-line @next/next/no-img-element
+	                                    <img
                                       src={thumbnailUrl}
                                       alt=""
                                       className="h-full w-full object-cover object-top"
@@ -2678,12 +2773,26 @@ export function FantasyDashboard({
                                 <div className="mt-1 truncate text-[10px] font-semibold leading-tight text-nrl-text" title={playerRow?.player.name ?? slot.slot}>
                                   {playerRow?.player.name ?? slot.slot}
                                 </div>
-                                <div className={`text-[9px] font-semibold ${metricClass}`}>
-                                  {metricValue}
-                                </div>
-                              </div>
-                            )
-                          })}
+	                                <div className={`text-[9px] font-semibold ${metricClass}`}>
+	                                  {metricValue}
+	                                </div>
+	                              </>
+	                            )
+
+	                            return playerHref ? (
+	                              <Link
+	                                key={`${templateRow.label}-${index}`}
+	                                href={playerHref}
+	                                className="group min-w-0 text-center outline-none"
+	                              >
+	                                {content}
+	                              </Link>
+	                            ) : (
+	                              <div key={`${templateRow.label}-${index}`} className="min-w-0 text-center">
+	                                {content}
+	                              </div>
+	                            )
+	                          })}
                         </div>
                       </div>
                     ))}
@@ -2760,7 +2869,7 @@ export function FantasyDashboard({
                       <tr
                         key={row.player.id}
                         onClick={() => navigateToPlayer(row.player.name)}
-                        className="h-12 cursor-pointer border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70"
+                        className="h-12 cursor-pointer border-b border-nrl-border/60"
                       >
                         <td className="sticky left-0 z-[1] w-13 min-w-13 max-w-13 border-r border-nrl-border bg-nrl-panel px-1 py-1 sm:w-15 sm:min-w-15 sm:max-w-15">
                           <div className="mx-auto grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
@@ -2777,7 +2886,7 @@ export function FantasyDashboard({
                             )}
                           </div>
                         </td>
-                        <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-48 sm:min-w-48 sm:max-w-48 sm:px-2 lg:sticky lg:left-[3.75rem] lg:z-[1]">
+                        <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-32 sm:min-w-32 sm:max-w-32 sm:px-2 lg:sticky lg:left-[3.75rem] lg:z-[1]">
                           <span className="block min-w-0 truncate" title={row.player.name}>
                             {row.player.name}
                           </span>
@@ -2870,6 +2979,20 @@ export function FantasyDashboard({
                         <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1 py-0.5 text-nrl-muted sm:px-2 sm:py-1">
                           Status: {selectedFantasyPlayer.status ?? "N/A"}
                         </span>
+                        {selectedLineupRole?.position ? (
+                          <span className="rounded-md border border-emerald-400/35 bg-emerald-400/10 px-1 py-0.5 font-semibold text-emerald-300 sm:px-2 sm:py-1">
+                            Lineup: {selectedLineupRole.position}
+                          </span>
+                        ) : null}
+                        {lineupsProjections?.source === "lineups" ? (
+                          <span className="rounded-md border border-emerald-400/35 bg-emerald-400/10 px-1 py-0.5 font-semibold text-emerald-300 sm:px-2 sm:py-1">
+                            Lineups available
+                          </span>
+                        ) : lineupsProjections?.source === "lineup_unaware" ? (
+                          <span className="rounded-md border border-amber-400/40 bg-amber-400/10 px-1 py-0.5 font-semibold text-amber-300 sm:px-2 sm:py-1">
+                            Lineups unavailable
+                          </span>
+                        ) : null}
                         {isLoadingStats ? (
                           <span className="rounded-md border border-nrl-accent/30 bg-nrl-accent/10 px-1 py-0.5 text-nrl-accent sm:px-2 sm:py-1">
                             Loading season data…
@@ -2939,6 +3062,14 @@ export function FantasyDashboard({
                   ) : null}
                 </div>
               </div>
+
+              {showPlayerComments ? (
+                <PlayerComments
+                  playerId={selectedFantasyPlayer.id}
+                  playerSlug={fantasyPlayerSlug(selectedFantasyPlayer.name)}
+                  playerName={selectedFantasyPlayer.name}
+                />
+              ) : null}
 
               <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -3062,13 +3193,25 @@ export function FantasyDashboard({
                   </div>
                 </div>
                 <div className={analysisLocked ? "pointer-events-none select-none opacity-40" : undefined}>
-                  <div className="mb-5 grid grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
+                  <div className={`mb-5 grid gap-4 sm:gap-5 ${
+                    selectedLineupRole?.position
+                      ? "grid-cols-3 sm:max-w-[760px]"
+                      : "grid-cols-2 sm:max-w-[520px]"
+                  }`}>
                     <MetricCard
                       compact
                       label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
                       value={formatNumber(selectedAdjustedProjection, 0)}
                       blurValue={analysisLocked}
                     />
+                    {selectedLineupRole?.position ? (
+                      <MetricCard
+                        compact
+                        label={`Avg at ${selectedLineupRole.position}`}
+                        value={formatNumber(selectedLineupPositionAverage, 1)}
+                        blurValue={analysisLocked}
+                      />
+                    ) : null}
                     <MetricCard
                       compact
                       label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}

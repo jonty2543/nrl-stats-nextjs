@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
-import Link from "next/link"
 import { notFound } from "next/navigation"
+import { FantasyBackLink } from "@/components/fantasy/fantasy-back-link"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { isAccessibleSeason } from "@/lib/access/season-access"
@@ -67,12 +67,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   return (
     <div className="space-y-4">
       <div>
-        <Link
-          href="/dashboard/fantasy"
-          className="inline-flex items-center rounded-md border border-nrl-border bg-nrl-panel px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:text-nrl-accent"
-        >
-          Back to Fantasy Dashboard
-        </Link>
+        <FantasyBackLink />
       </div>
 
       <FantasyDashboard
@@ -90,6 +85,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
         teamLogos={teamLogos}
         initialSelectedFantasyName={selectedPlayer.name}
         showOwnedCards={false}
+        showPlayerComments
         playerRouteBasePath="/dashboard/fantasy"
         ownershipBaselineSnapshot={ownershipBaselineSnapshot}
       />

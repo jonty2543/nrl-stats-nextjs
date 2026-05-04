@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import Image from "next/image";
+import Link from "next/link";
 import { BillingPageLink } from "@/components/billing/billing-page-link";
 import { hasPremiumAccess } from "@/lib/access/pro-access";
+import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import {
   BETTING_BOOKIE_COLUMNS,
   type BettingMarket,
@@ -16,6 +18,17 @@ import {
 interface BettingDashboardProps {
   snapshot: BettingOddsSnapshot;
   canAccessPremium?: boolean;
+  playerImages?: PlayerImageRecord[];
+  teamLogos?: Record<string, string>;
+  tryscorerFormByPlayer?: Record<string, TryscorerFormSummary>;
+  tryscorerKickoffsByMatch?: Record<string, string>;
+  marginModelArticle?: BettingArticleLink | null;
+}
+
+interface BettingArticleLink {
+  title: string;
+  slug: string;
+  imageUrls: string[];
 }
 
 interface BettingPreferences {
@@ -43,6 +56,13 @@ interface OutcomeRow {
   bestValueComputed: number | null;
   bestModelComputed: number | null;
   bestBookiesComputed: BettingBookie[];
+}
+
+interface TryscorerFormSummary {
+  player: string;
+  team: string | null;
+  lastFive: number[];
+  average: number;
 }
 
 interface EventGroup {
@@ -89,8 +109,8 @@ interface BetDraft {
   edgePp: number | null;
 }
 
-const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total"];
-const PREMIUM_ONLY_MARKETS = new Set<BettingMarket>(["Line", "Total"]);
+const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
+const PREMIUM_ONLY_MARKETS = new Set<BettingMarket>(["Line", "Total", "Tryscorer"]);
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const IMPLIED_LINE_SIGMA = 16.85;
@@ -123,6 +143,100 @@ const BOOKIE_LOGO_PATHS: Record<BettingBookie, string> = {
   Palmerbet: "/logos/palmerbet.png",
   Betright: "/logos/betright.png",
 };
+
+function normaliseLookupKey(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function normaliseTeamMatchKey(value: string): string {
+  const key = normaliseLookupKey(value);
+  const aliases: Record<string, string> = {
+    broncos: "brisbane broncos",
+    bulldogs: "canterbury bankstown bulldogs",
+    raiders: "canberra raiders",
+    sharks: "cronulla sutherland sharks",
+    titans: "gold coast titans",
+    "sea eagles": "manly warringah sea eagles",
+    storm: "melbourne storm",
+    knights: "newcastle knights",
+    cowboys: "north queensland cowboys",
+    eels: "parramatta eels",
+    panthers: "penrith panthers",
+    rabbitohs: "south sydney rabbitohs",
+    dragons: "st george illawarra dragons",
+    roosters: "sydney roosters",
+    warriors: "new zealand warriors",
+    tigers: "wests tigers",
+    dolphins: "dolphins",
+  };
+  return aliases[key] ?? key;
+}
+
+function buildMatchKickoffKey(date: string, match: string): string | null {
+  const { home, away } = parseMatch(match);
+  if (!home || !away) return null;
+  const teamsKey = [normaliseTeamMatchKey(home), normaliseTeamMatchKey(away)].sort().join("|");
+  return `${date}|${teamsKey}`;
+}
+
+function resolveTeamLogoUrl(teamName: string | null | undefined, teamLogos: Record<string, string>): string | null {
+  const key = normaliseLookupKey(teamName);
+  if (!key) return null;
+  if (teamLogos[key]) return teamLogos[key];
+
+  const aliases: Record<string, string[]> = {
+    broncos: ["brisbane broncos"],
+    bulldogs: ["canterbury bulldogs", "canterbury bankstown bulldogs"],
+    raiders: ["canberra raiders"],
+    sharks: ["cronulla sharks", "cronulla sutherland sharks"],
+    titans: ["gold coast titans"],
+    "sea eagles": ["manly sea eagles", "manly warringah sea eagles"],
+    storm: ["melbourne storm"],
+    knights: ["newcastle knights"],
+    cowboys: ["north queensland cowboys"],
+    eels: ["parramatta eels"],
+    panthers: ["penrith panthers"],
+    rabbitohs: ["south sydney rabbitohs"],
+    dragons: ["st george illawarra dragons", "st george dragons"],
+    roosters: ["sydney roosters", "eastern suburbs roosters"],
+    warriors: ["new zealand warriors"],
+    tigers: ["wests tigers"],
+    dolphins: ["the dolphins", "dolphins"],
+  };
+
+  for (const alias of aliases[key] ?? []) {
+    if (teamLogos[alias]) return teamLogos[alias];
+  }
+
+  return Object.entries(teamLogos).find(([logoKey]) => logoKey.endsWith(` ${key}`) || logoKey.includes(key))?.[1] ?? null;
+}
+
+function TryscorerForm({ form }: { form: TryscorerFormSummary | null }) {
+  if (!form || form.lastFive.length === 0) return null;
+  const oldestToNewest = [...form.lastFive].reverse();
+  const latestIndex = oldestToNewest.length - 1;
+  return (
+    <div className="mt-1 flex flex-nowrap items-center gap-1 whitespace-nowrap text-[10px] font-semibold">
+      <span className="mr-1 font-medium text-nrl-muted">Last 5:</span>
+      {oldestToNewest.map((tries, index) => (
+        <span
+          key={`${index}-${tries}`}
+          className={`inline-flex h-5 min-w-7 items-center justify-center rounded-md px-2 ${
+            tries > 0
+              ? "bg-emerald-500/15 text-emerald-300"
+              : "bg-red-500/12 text-red-300"
+          } ${index === latestIndex ? (tries > 0 ? "border border-emerald-300" : "border border-red-300") : "border border-transparent"}`}
+        >
+          {tries}
+        </span>
+      ))}
+      <span className="ml-1 text-nrl-muted">Avg {form.average.toFixed(1)}</span>
+    </div>
+  );
+}
 
 function formatPrice(value: number | null): string {
   if (value == null) return "-";
@@ -253,7 +367,7 @@ function inverseNormalCdf(probability: number): number | null {
 function marketOfferScore(offer: BookieOffer, market: BettingMarket, result: string): number | null {
   const implied = impliedProbability(offer.price);
   const z = implied == null ? null : inverseNormalCdf(implied);
-  if (market === "H2H") return offer.price;
+  if (market === "H2H" || market === "Tryscorer") return offer.price;
   if (offer.value == null || z == null) return null;
 
   if (market === "Line") {
@@ -272,6 +386,7 @@ function marketOfferScore(offer: BookieOffer, market: BettingMarket, result: str
 
 function compareOfferValue(a: number | null, b: number | null, market: BettingMarket, result: string): number {
   if (a == null || b == null) return 0;
+  if (market === "Tryscorer") return 0;
   if (market === "Line") return a - b;
   if (market === "Total") {
     const normalizedResult = result.trim().toLowerCase();
@@ -303,7 +418,10 @@ function pickBestOffer(offers: BookieOffer[], market: BettingMarket, result: str
   ), offers[0]);
 }
 
-function buildEventGroups(rows: BettingOddsRow[]): EventGroup[] {
+function buildEventGroups(
+  rows: BettingOddsRow[],
+  resolveResult: (result: string, market: BettingMarket) => string = (result) => result
+): EventGroup[] {
   const groups = new Map<string, {
     key: string;
     date: string;
@@ -317,6 +435,7 @@ function buildEventGroups(rows: BettingOddsRow[]): EventGroup[] {
   }>();
 
   for (const row of rows) {
+    if (row.market === "Tryscorer" && row.result.includes(";")) continue;
     const eventKey = `${row.date}|${row.match}|${row.market}`;
     const existingGroup = groups.get(eventKey);
     if (!existingGroup) {
@@ -332,16 +451,18 @@ function buildEventGroups(rows: BettingOddsRow[]): EventGroup[] {
     const group = groups.get(eventKey);
     if (!group) continue;
 
-    const existingOutcome = group.outcomes.get(row.result);
+    const rowResult = resolveResult(row.result, row.market);
+    const outcomeKey = row.market === "Tryscorer" ? `${rowResult}|${row.value ?? ""}` : rowResult;
+    const existingOutcome = group.outcomes.get(outcomeKey);
     if (!existingOutcome) {
-      group.outcomes.set(row.result, {
+      group.outcomes.set(outcomeKey, {
         market: row.market,
-        result: row.result,
+        result: rowResult,
         candidateOffers: createBookieRecord(() => [] as BookieOffer[]),
       });
     }
 
-    const outcome = group.outcomes.get(row.result);
+    const outcome = group.outcomes.get(outcomeKey);
     if (!outcome) continue;
 
     for (const bookie of BETTING_BOOKIE_COLUMNS) {
@@ -402,7 +523,16 @@ function buildEventGroups(rows: BettingOddsRow[]): EventGroup[] {
       date: group.date,
       match: group.match,
       market: group.market,
-      outcomes: outcomes.sort((a, b) => a.result.localeCompare(b.result)),
+      outcomes: outcomes.sort((a, b) => {
+        if (group.market === "Tryscorer") {
+          if (a.bestPriceComputed != null && b.bestPriceComputed != null && a.bestPriceComputed !== b.bestPriceComputed) {
+            return a.bestPriceComputed - b.bestPriceComputed;
+          }
+          if (a.bestPriceComputed == null && b.bestPriceComputed != null) return 1;
+          if (a.bestPriceComputed != null && b.bestPriceComputed == null) return -1;
+        }
+        return a.result.localeCompare(b.result);
+      }),
       marketPctFromBest,
     };
   });
@@ -458,7 +588,15 @@ function BookieLogo({
   );
 }
 
-export function BettingDashboard({ snapshot, canAccessPremium = false }: BettingDashboardProps) {
+export function BettingDashboard({
+  snapshot,
+  canAccessPremium = false,
+  playerImages = [],
+  teamLogos = {},
+  tryscorerFormByPlayer = {},
+  tryscorerKickoffsByMatch = {},
+  marginModelArticle = null,
+}: BettingDashboardProps) {
   const { isLoaded, userId } = useAuth();
   const { user } = useUser();
   const hasPremiumBettingAccess = canAccessPremium || hasPremiumAccess(userId, user?.publicMetadata);
@@ -475,6 +613,7 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
   const [trackerOpen, setTrackerOpen] = useState(false);
   const [bets, setBets] = useState<TrackedBet[]>([]);
   const [betsLoading, setBetsLoading] = useState(false);
+  const [betsHydrated, setBetsHydrated] = useState(false);
   const [betsError, setBetsError] = useState<string | null>(null);
   const [betAddedMessage, setBetAddedMessage] = useState<string | null>(null);
   const [betRemovedMessage, setBetRemovedMessage] = useState<string | null>(null);
@@ -486,21 +625,58 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
   const [manualStatus, setManualStatus] = useState<TrackedBetStatus>("pending");
   const [manualError, setManualError] = useState<string | null>(null);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
+  const playerTeamsByName = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const row of playerImages) {
+      const key = normaliseLookupKey(row.player);
+      if (!key || !row.team || out.has(key)) continue;
+      out.set(key, row.team);
+    }
+    return out;
+  }, [playerImages]);
+  const resolveTryscorerResult = useMemo(() => {
+    const entries = Object.entries(tryscorerFormByPlayer);
+    return (result: string, market: BettingMarket) => {
+      if (market !== "Tryscorer") return result;
+      const key = normaliseLookupKey(result);
+      const exact = tryscorerFormByPlayer[key]?.player;
+      if (exact) return exact;
+
+      const tokens = key.split(" ");
+      const first = tokens[0] ?? "";
+      const last = tokens[tokens.length - 1] ?? "";
+      if (!first || !last) return result;
+
+      const matched = entries.find(([candidateKey]) => {
+        const candidateTokens = candidateKey.split(" ");
+        const candidateFirst = candidateTokens[0] ?? "";
+        const candidateLast = candidateTokens[candidateTokens.length - 1] ?? "";
+        return candidateLast === last && candidateFirst.startsWith(first[0] ?? "");
+      });
+      return matched?.[1].player || result;
+    };
+  }, [tryscorerFormByPlayer]);
 
   const h2hGroups = useMemo(() => buildEventGroups(snapshot.h2h), [snapshot.h2h]);
   const lineGroups = useMemo(() => buildEventGroups(snapshot.line), [snapshot.line]);
   const totalGroups = useMemo(() => buildEventGroups(snapshot.total), [snapshot.total]);
+  const tryscorerGroups = useMemo(
+    () => buildEventGroups(snapshot.tryscorer, resolveTryscorerResult),
+    [resolveTryscorerResult, snapshot.tryscorer]
+  );
   const selectedMarketGroups = selectedMarket === "H2H"
     ? h2hGroups
     : selectedMarket === "Line"
       ? lineGroups
-      : totalGroups;
+      : selectedMarket === "Total"
+        ? totalGroups
+        : tryscorerGroups;
 
   const handleMarketChange = (value: string) => {
     if (!hasPremiumBettingAccess && (value === "Line" || value === "Total")) {
       return;
     }
-    if (value === "H2H" || value === "Line" || value === "Total") {
+    if (value === "H2H" || value === "Line" || value === "Total" || value === "Tryscorer") {
       setSelectedMarket(value);
     }
   };
@@ -513,7 +689,7 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
   };
 
   useEffect(() => {
-    if (!hasPremiumBettingAccess && selectedMarket !== "H2H") {
+    if (!hasPremiumBettingAccess && PREMIUM_ONLY_MARKETS.has(selectedMarket)) {
       setSelectedMarket("H2H");
     }
   }, [hasPremiumBettingAccess, selectedMarket]);
@@ -649,11 +825,13 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
 
   useEffect(() => {
     if (!isLoaded) return;
+    setBetsHydrated(false);
 
     if (!hasPremiumBettingAccess) {
       setBets([]);
       setBetsLoading(false);
       setBetsError(null);
+      setBetsHydrated(true);
       return;
     }
 
@@ -672,6 +850,10 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
         }
       } catch {
         setBets([]);
+      } finally {
+        setBetsLoading(false);
+        setBetsError(null);
+        setBetsHydrated(true);
       }
       return;
     }
@@ -698,6 +880,7 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
       } finally {
         if (!cancelled) {
           setBetsLoading(false);
+          setBetsHydrated(true);
         }
       }
     })();
@@ -708,13 +891,13 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
   }, [hasPremiumBettingAccess, isLoaded, userId]);
 
   useEffect(() => {
-    if (!isLoaded || userId || !hasPremiumBettingAccess) return;
+    if (!isLoaded || userId || !hasPremiumBettingAccess || !betsHydrated) return;
     try {
       window.localStorage.setItem(BET_TRACKER_LOCAL_KEY, JSON.stringify(bets));
     } catch {
       // Ignore storage failures.
     }
-  }, [bets, hasPremiumBettingAccess, isLoaded, userId]);
+  }, [bets, betsHydrated, hasPremiumBettingAccess, isLoaded, userId]);
 
   useEffect(() => {
     if (!betAddedMessage) return;
@@ -917,15 +1100,52 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
     () => [...bets].sort((a, b) => b.placedAt.localeCompare(a.placedAt)),
     [bets]
   );
-  const stakingPreferencesLoading = isLoaded && Boolean(userId) && !preferencesHydrated;
+  const stakingPreferencesLoading = !isLoaded || !preferencesHydrated;
+  const betTrackerLoading = hasPremiumBettingAccess && (!betsHydrated || betsLoading);
 
   return (
     <div className="space-y-6">
+      {marginModelArticle ? (
+        <Link
+          href={`/dashboard/articles/${marginModelArticle.slug}`}
+          className="group block overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70"
+        >
+          <div className={`relative grid h-28 ${marginModelArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+            <span className="absolute left-2 top-2 z-10 rounded-md border border-white/15 bg-[#0e1330]/85 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-white shadow-sm backdrop-blur">
+              Article
+            </span>
+            {marginModelArticle.imageUrls.slice(0, 2).map((url, index) => (
+              <div key={url} className="min-w-0 overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt={`${marginModelArticle.title} header ${index + 1}`}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-3 px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-white">
+                {marginModelArticle.title}
+              </div>
+            </div>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/10 bg-nrl-panel-2 text-base text-nrl-text">
+              →
+            </span>
+          </div>
+        </Link>
+      ) : null}
+
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-nrl-text">Staking Calculator</h2>
         {stakingPreferencesLoading ? (
-          <div className="mt-3 text-xs text-nrl-muted">Loading staking…</div>
-        ) : null}
+          <div className="mt-4 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-4 text-xs text-nrl-muted">
+            Loading staking preferences...
+          </div>
+        ) : (
+        <>
         <div className="mt-4 grid gap-2 md:grid-cols-3">
           {STAKING_OPTIONS.map((option) => {
             const active = option.mode === stakingMode;
@@ -968,7 +1188,7 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
             );
           })}
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-3 gap-2">
           <label className="flex flex-col gap-1">
             <span className="text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">Bankroll</span>
             <input
@@ -1037,6 +1257,8 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
             </label>
           ) : null}
         </div>
+        </>
+        )}
       </section>
 
       {hasPremiumBettingAccess ? (
@@ -1048,20 +1270,26 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
               </span>
               <button
                 type="button"
+                aria-label={trackerOpen ? "Collapse bet tracker" : "Expand bet tracker"}
                 onClick={() => setTrackerOpen((open) => !open)}
-                className="cursor-pointer text-xs text-nrl-muted hover:text-nrl-text"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
               >
-                {trackerOpen ? "Hide Bets" : "Show Bets"}
+                <span aria-hidden="true">{trackerOpen ? "▴" : "▾"}</span>
               </button>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {betTrackerLoading ? (
+              <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-4 text-xs text-nrl-muted">
+                Loading bet tracker...
+              </div>
+            ) : (
+            <div className="grid grid-cols-[0.8fr_1fr_1fr_1.1fr_1.2fr_0.8fr] gap-2">
               <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
                 <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Bets</div>
                 <div className="text-sm font-semibold text-nrl-text">{bets.length}</div>
               </div>
               <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Win Rate</div>
+                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Win %</div>
                 <div className="text-sm font-semibold text-nrl-text">{winRate == null ? "-" : `${winRate.toFixed(1)}%`}</div>
               </div>
               <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
@@ -1069,11 +1297,11 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
                 <div className={`text-sm font-semibold ${profitLoss >= 0 ? "text-nrl-accent" : "text-red-500"}`}>{formatMoney(profitLoss)}</div>
               </div>
               <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Total Stake</div>
+                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Staked</div>
                 <div className="text-sm font-semibold text-nrl-text">${totalStake.toFixed(2)}</div>
               </div>
               <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Profit Margin</div>
+                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Margin</div>
                 <div className={`text-sm font-semibold ${profitMargin != null && profitMargin < 0 ? "text-red-500" : "text-nrl-text"}`}>
                   {profitMargin == null ? "-" : `${profitMargin.toFixed(1)}%`}
                 </div>
@@ -1085,12 +1313,13 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
                 </div>
               </div>
             </div>
+            )}
 
-            {betsError ? (
+            {betsError && !betTrackerLoading ? (
               <div className="text-xs text-red-500">{betsError}</div>
             ) : null}
 
-            {trackerOpen ? (
+            {trackerOpen && !betTrackerLoading ? (
               <div className="space-y-3 border-t border-nrl-border pt-3">
                 {betsLoading ? (
                   <div className="text-xs text-nrl-muted">Loading bets...</div>
@@ -1373,6 +1602,11 @@ export function BettingDashboard({ snapshot, canAccessPremium = false }: Betting
             maxEdge={maxEdge}
             stakeOverrides={stakeOverrides}
             oddsOverrides={oddsOverrides}
+            playerTeamsByName={playerTeamsByName}
+            teamLogos={teamLogos}
+            tryscorerFormByPlayer={tryscorerFormByPlayer}
+            tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
+            market={selectedMarket}
             onStakeOverride={handleStakeOverride}
             onOddsOverride={handleOddsOverride}
             onAddBet={handleAddBet}
@@ -1394,6 +1628,11 @@ function MarketSection({
   maxEdge,
   stakeOverrides,
   oddsOverrides,
+  playerTeamsByName,
+  teamLogos,
+  tryscorerFormByPlayer,
+  tryscorerKickoffsByMatch,
+  market,
   onStakeOverride,
   onOddsOverride,
   onAddBet,
@@ -1408,19 +1647,44 @@ function MarketSection({
   maxEdge?: number;
   stakeOverrides: Record<string, number>;
   oddsOverrides: Record<string, number>;
+  playerTeamsByName: Map<string, string>;
+  teamLogos: Record<string, string>;
+  tryscorerFormByPlayer: Record<string, TryscorerFormSummary>;
+  tryscorerKickoffsByMatch: Record<string, string>;
+  market: BettingMarket;
   onStakeOverride: (key: string, value: number) => void;
   onOddsOverride: (key: string, value: number) => void;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
-  if (groups.length === 0) {
+  const [tryscorerValueByGroup, setTryscorerValueByGroup] = useState<Record<string, number>>({});
+  const [collapsedTryscorerGroups, setCollapsedTryscorerGroups] = useState<Record<string, boolean>>({});
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  const activeGroups = groups.filter((group) => {
+    if (group.market !== "Tryscorer") return true;
+    const kickoffKey = buildMatchKickoffKey(group.date, group.match);
+    const kickoff = kickoffKey ? tryscorerKickoffsByMatch[kickoffKey] : null;
+    if (!kickoff) return true;
+    const kickoffMs = Date.parse(kickoff);
+    return !Number.isFinite(kickoffMs) || nowMs < kickoffMs + 5 * 60 * 1000;
+  });
+
+  if (activeGroups.length === 0) {
     return (
       <div>
-        <p className="mt-2 text-sm text-nrl-muted">No odds found.</p>
+        <p className="mt-2 text-sm text-nrl-muted">
+          {market === "Tryscorer" ? "No try scorer markets available." : "No odds found."}
+        </p>
       </div>
     );
   }
 
-  const groupsByDate = groups.reduce((acc, group) => {
+  const groupsByDate = activeGroups.reduce((acc, group) => {
     const existing = acc.get(group.date);
     if (existing) {
       existing.push(group);
@@ -1437,8 +1701,16 @@ function MarketSection({
           <h2 className="text-base font-semibold text-nrl-text">{formatDateLabel(date)}</h2>
           {dateGroups.map((group) => {
             const { home, away } = parseMatch(group.match);
-            const showModelColumns = true;
+            const showModelColumns = group.market !== "Tryscorer";
             const blurPremiumColumns = !canAccessPremium && showModelColumns;
+            const collapsed = group.market === "Tryscorer" && collapsedTryscorerGroups[group.key] === true;
+            const selectedTryscorerValue = tryscorerValueByGroup[group.key] ?? 1;
+            const visibleOutcomes = group.market === "Tryscorer"
+              ? group.outcomes.filter((row) => row.bestValueComputed === selectedTryscorerValue)
+              : group.outcomes;
+            const visibleBookieColumns = BETTING_BOOKIE_COLUMNS.filter((bookie) =>
+              visibleOutcomes.some((row) => row.bookieOffers[bookie] != null)
+            );
             return (
               <article key={group.key} className="rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
                 <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
@@ -1449,21 +1721,62 @@ function MarketSection({
                     </div>
                     <div className="text-xs text-nrl-muted">{group.market}</div>
                   </div>
-                  {group.marketPctFromBest != null ? (
+                  {group.market === "Tryscorer" ? (
+                    <button
+                      type="button"
+                      aria-label={collapsed ? "Expand game" : "Collapse game"}
+                      onClick={() => setCollapsedTryscorerGroups((current) => ({
+                        ...current,
+                        [group.key]: !current[group.key],
+                      }))}
+                      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                    >
+                      <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
+                    </button>
+                  ) : group.marketPctFromBest != null ? (
                     <div className="text-xs text-nrl-muted">
                       Best-book market %:{" "}
                       <span className="font-semibold text-nrl-text">{formatPct(group.marketPctFromBest)}</span>
                     </div>
                   ) : null}
                 </div>
+                {group.market === "Tryscorer" ? (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {[1, 2, 3].map((value) => {
+                      const active = selectedTryscorerValue === value;
+                      const hasRows = group.outcomes.some((row) => row.bestValueComputed === value);
+                      return (
+                        <button
+                          key={`${group.key}-try-${value}`}
+                          type="button"
+                          disabled={!hasRows}
+                          onClick={() => setTryscorerValueByGroup((current) => ({ ...current, [group.key]: value }))}
+                          className={`rounded-md border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+                            active
+                              ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                              : hasRows
+                                ? "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                                : "cursor-not-allowed border-nrl-border bg-nrl-panel-2 text-nrl-muted opacity-45"
+                          }`}
+                        >
+                          {value}+
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
 
+                {collapsed ? null : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1000px] border-collapse text-xs">
+                  <table className={`${group.market === "Tryscorer" ? "w-auto min-w-max lg:w-full lg:min-w-[1100px]" : "w-full min-w-[1000px]"} border-collapse text-xs`}>
                     <thead>
                       <tr className="border-b border-nrl-border text-left text-nrl-muted">
-                        <th className="py-2 pr-3 font-semibold">Outcome</th>
-                        {BETTING_BOOKIE_COLUMNS.map((bookie) => (
-                          <th key={`${group.key}-head-${bookie}`} className="py-2 pr-3 font-semibold">
+                        <th className={`${group.market === "Tryscorer" ? "whitespace-nowrap pr-6 lg:w-[330px]" : "pr-3"} py-2 font-semibold`}>Outcome</th>
+                        {visibleBookieColumns.map((bookie, bookieIndex) => (
+                          <th
+                            key={`${group.key}-head-${bookie}`}
+                            className={`py-2 pr-3 font-semibold ${group.market === "Tryscorer" && bookieIndex === 0 ? "pl-5" : ""}`}
+                          >
                             <BookieLogo bookie={bookie} />
                           </th>
                         ))}
@@ -1481,7 +1794,16 @@ function MarketSection({
                       </tr>
                     </thead>
                     <tbody>
-                      {group.outcomes.map((row) => {
+                      {visibleOutcomes.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={visibleBookieColumns.length + (showModelColumns ? 8 : 6)}
+                            className="py-4 text-sm text-nrl-muted"
+                          >
+                            No odds found for {selectedTryscorerValue}+.
+                          </td>
+                        </tr>
+                      ) : visibleOutcomes.map((row) => {
                         const betRowKey = `${group.date}|${group.match}|${group.market}|${row.result}|${row.bestValueComputed ?? ""}`;
                         const oddsValue = oddsOverrides[betRowKey] ?? row.bestPriceComputed;
                         const implied = impliedProbability(oddsValue);
@@ -1503,6 +1825,12 @@ function MarketSection({
                           : null;
                         let scaledStake: number | null = null;
                         if (!canAccessPremium && oddsValue != null && oddsValue > 1) {
+                          if (stakingMode === "percentage") {
+                            scaledStake = bankrollValue * percentageStakeDecimal;
+                          } else if (stakingMode === "targetProfit") {
+                            scaledStake = (bankrollValue * targetProfitDecimal) / (oddsValue - 1);
+                          }
+                        } else if (!showModelColumns && oddsValue != null && oddsValue > 1) {
                           if (stakingMode === "percentage") {
                             scaledStake = bankrollValue * percentageStakeDecimal;
                           } else if (stakingMode === "targetProfit") {
@@ -1533,17 +1861,40 @@ function MarketSection({
                         const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                         const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
                         const canPlaceBet = canAccessPremium
-                          && modelProbability != null
+                          && (!showModelColumns || modelProbability != null)
                           && implied != null
                           && oddsValue != null
                           && oddsValue > 1
                           && Number.isFinite(stakeValue)
                           && stakeValue > 0;
+                        const tryscorerForm = group.market === "Tryscorer"
+                          ? tryscorerFormByPlayer[normaliseLookupKey(row.result)] ?? null
+                          : null;
+                        const playerTeam = group.market === "Tryscorer"
+                          ? tryscorerForm?.team ?? playerTeamsByName.get(normaliseLookupKey(row.result)) ?? null
+                          : null;
+                        const teamLogoUrl = resolveTeamLogoUrl(playerTeam, teamLogos);
 
                         return (
-                          <tr key={`${group.key}-${row.result}`} className="border-b border-nrl-border/50">
-                            <td className="py-2 pr-3 font-medium text-nrl-text">{outcomeLabel}</td>
-                            {BETTING_BOOKIE_COLUMNS.map((bookie) => {
+                          <tr key={`${group.key}-${row.result}-${row.bestValueComputed ?? ""}`} className="border-b border-nrl-border/50">
+                            <td className="py-2 pr-3 font-medium text-nrl-text">
+                              <span className="inline-flex min-w-0 items-center gap-2">
+                                {teamLogoUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={teamLogoUrl}
+                                    alt=""
+                                    className="h-5 w-5 shrink-0 object-contain"
+                                    loading="lazy"
+                                  />
+                                ) : null}
+                                <span className="min-w-0">
+                                  <span className="block whitespace-nowrap">{outcomeLabel}</span>
+                                  <TryscorerForm form={tryscorerForm} />
+                                </span>
+                              </span>
+                            </td>
+                            {visibleBookieColumns.map((bookie, bookieIndex) => {
                               const offer = row.bookieOffers[bookie];
                               const isBest = offer != null
                                 && row.bestBookiesComputed.includes(bookie)
@@ -1552,7 +1903,7 @@ function MarketSection({
                               return (
                                 <td
                                   key={`${group.key}-${row.result}-${bookie}`}
-                                  className={`py-2 pr-3 ${isBest ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
+                                  className={`py-2 pr-3 ${group.market === "Tryscorer" && bookieIndex === 0 ? "pl-5" : ""} ${isBest ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
                                 >
                                   {offer == null ? "-" : (
                                     <div className="leading-tight">
@@ -1670,6 +2021,7 @@ function MarketSection({
                     </tbody>
                   </table>
                 </div>
+                )}
               </article>
             );
           })}

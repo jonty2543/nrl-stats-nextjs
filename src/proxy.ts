@@ -4,6 +4,7 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/dashboard(.*)",
   "/api/ai/chat(.*)",
+  "/api/fantasy/player-comments(.*)",
   "/api/player-stats(.*)",
   "/api/stripe/checkout(.*)",
   "/api/stripe/portal(.*)",

@@ -366,25 +366,14 @@ export function getTopFantasyOwnershipRise(deltaByPlayerId: Map<number, number |
   return topRise
 }
 
-export function getProjectionWeeklyChangeOffset(weeklyDelta: number | null, topRise: number | null): number {
-  if (weeklyDelta == null || topRise == null || topRise <= 0) return 0
-  const ratio = weeklyDelta / topRise
-  if (ratio >= 0.66) return 3
-  if (ratio >= 0.33) return 2
-  if (ratio > 0) return 1
-  if (ratio >= -0.33) return -1
-  if (ratio >= -0.66) return -2
-  return -3
-}
-
 export function applyFantasyProjectionOffset(
   value: number | null,
   weeklyDelta: number | null,
   topRise: number | null,
 ): number | null {
-  if (value == null) return value
-  if (value === 0) return 0
-  return Math.round(value + getProjectionWeeklyChangeOffset(weeklyDelta, topRise))
+  void weeklyDelta
+  void topRise
+  return value
 }
 
 export function applyFantasyBreakEvenOffset(
@@ -422,7 +411,7 @@ export async function fetchLatestFantasyOwnershipBaselineSnapshot(): Promise<Fan
     .schema("shortside")
     .from("fantasy_ownership_snapshots")
     .select("captured_at, snapshot_week_brisbane, snapshot_data")
-    .eq("snapshot_type", "weekly_sunday_11pm_brisbane")
+    .eq("snapshot_type", "weekly_monday_10am_brisbane")
     .order("captured_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -445,19 +434,111 @@ export async function fetchLatestFantasyOwnershipBaselineSnapshot(): Promise<Fan
 // Lineups-based fantasy projections
 // ---------------------------------------------------------------------------
 
+export interface LineupsPlayerRole {
+  position: string | null
+  team: string | null
+  number: number | null
+  isOnField: boolean
+}
+
+export type FantasyProjectionSource = "lineups" | "lineup_unaware" | "none"
+
 export interface LineupsProjectionSnapshot {
   /** Parsed integer round number, e.g. 9. Null when lineups table is empty. */
   round: number | null
+  source: FantasyProjectionSource
+  lineupsAvailable: boolean
   /** Maps NRL player_id → fantasy_projection. Missing players default to 0 at call sites. */
   projectionByPlayerId: Map<number, number>
+  /** Maps normalised player name → pre-lineups fantasy_projection/model_projection fallback. */
+  projectionByPlayerName: Map<string, number>
+  /** Maps NRL player_id → named lineup role for the selected lineups round. */
+  roleByPlayerId: Map<number, LineupsPlayerRole>
+  /** Maps normalised player name → assumed pre-lineups role. */
+  roleByPlayerName: Map<string, LineupsPlayerRole>
+}
+
+function emptyLineupsProjectionSnapshot(source: FantasyProjectionSource = "none"): LineupsProjectionSnapshot {
+  return {
+    round: null,
+    source,
+    lineupsAvailable: source === "lineups",
+    projectionByPlayerId: new Map(),
+    projectionByPlayerName: new Map(),
+    roleByPlayerId: new Map(),
+    roleByPlayerName: new Map(),
+  }
+}
+
+function getTodayInBrisbane(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date())
+  const year = parts.find((part) => part.type === "year")?.value
+  const month = parts.find((part) => part.type === "month")?.value
+  const day = parts.find((part) => part.type === "day")?.value
+  return `${year}-${month}-${day}`
+}
+
+function normaliseProjectionPlayerName(value: unknown): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
+function toFiniteProjectionNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+async function fetchLineupUnawareProjectionSnapshot(today: string): Promise<LineupsProjectionSnapshot> {
+  const supabase = createServerSupabaseClient()
+  const { data, error } = await supabase
+    .schema("nrl")
+    .from("lineup_unaware_fantasy_projections")
+    .select("player, team, assumed_jersey, assumed_position, projection, model_projection, kickoff_utc")
+    .gte("kickoff_utc", `${today}T00:00:00+10:00`)
+
+  if (error || !data) return emptyLineupsProjectionSnapshot("lineup_unaware")
+
+  const snapshot = emptyLineupsProjectionSnapshot("lineup_unaware")
+  for (const row of data) {
+    const nameKey = normaliseProjectionPlayerName(row.player)
+    if (!nameKey) continue
+
+    const projection =
+      toFiniteProjectionNumber(row.model_projection) ??
+      toFiniteProjectionNumber(row.projection)
+    if (projection != null) {
+      snapshot.projectionByPlayerName.set(nameKey, projection)
+    }
+
+    snapshot.roleByPlayerName.set(nameKey, {
+      position: typeof row.assumed_position === "string" ? row.assumed_position : null,
+      team: typeof row.team === "string" ? row.team : null,
+      number: row.assumed_jersey == null ? null : Number(row.assumed_jersey),
+      isOnField: true,
+    })
+  }
+
+  return snapshot
 }
 
 export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjectionSnapshot> {
   try {
     const supabase = createServerSupabaseClient()
-    const today = new Date().toISOString().split("T")[0]
+    const today = getTodayInBrisbane()
 
-    // Prefer the next upcoming round; fall back to the most recent past round.
+    // Prefer the next upcoming lineups round. Before team lists are released,
+    // use the lineup-unaware model instead of stale previous-round lineups.
     let roundLabel: string | null = null
 
     const { data: upcoming } = await supabase
@@ -472,17 +553,10 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     if (upcoming?.round) {
       roundLabel = upcoming.round as string
     } else {
-      const { data: latest } = await supabase
-        .schema("nrl")
-        .from("lineups")
-        .select("round")
-        .order("match_date", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      roundLabel = (latest?.round as string) ?? null
+      return fetchLineupUnawareProjectionSnapshot(today)
     }
 
-    if (!roundLabel) return { round: null, projectionByPlayerId: new Map() }
+    if (!roundLabel) return fetchLineupUnawareProjectionSnapshot(today)
 
     // Parse the integer out of labels like "9", "Round 9", "Round 9 - 2026"
     const roundNumMatch = roundLabel.match(/\d+/)
@@ -491,21 +565,38 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     const { data, error } = await supabase
       .schema("nrl")
       .from("lineups")
-      .select("player_id, fantasy_projection")
+      .select("player_id, fantasy_projection, position, team, number, is_on_field")
       .eq("round", roundLabel)
 
-    if (error || !data) return { round, projectionByPlayerId: new Map() }
+    if (error || !data) return fetchLineupUnawareProjectionSnapshot(today)
 
     const projectionByPlayerId = new Map<number, number>()
+    const roleByPlayerId = new Map<number, LineupsPlayerRole>()
     for (const row of data) {
       if (row.player_id != null && row.fantasy_projection != null) {
         projectionByPlayerId.set(Number(row.player_id), row.fantasy_projection as number)
       }
+      if (row.player_id != null) {
+        roleByPlayerId.set(Number(row.player_id), {
+          position: typeof row.position === "string" ? row.position : null,
+          team: typeof row.team === "string" ? row.team : null,
+          number: row.number == null ? null : Number(row.number),
+          isOnField: Boolean(row.is_on_field),
+        })
+      }
     }
 
-    return { round, projectionByPlayerId }
+    return {
+      round,
+      source: "lineups",
+      lineupsAvailable: true,
+      projectionByPlayerId,
+      projectionByPlayerName: new Map(),
+      roleByPlayerId,
+      roleByPlayerName: new Map(),
+    }
   } catch (err) {
     console.warn("Unable to fetch lineups projections.", err)
-    return { round: null, projectionByPlayerId: new Map() }
+    return emptyLineupsProjectionSnapshot()
   }
 }

@@ -7,8 +7,8 @@ export const BETTING_BOOKIE_COLUMNS = [
 ] as const;
 
 export type BettingBookie = (typeof BETTING_BOOKIE_COLUMNS)[number];
-export type BettingOddsTable = "NRL Odds" | "NRL Line Odds" | "NRL Total Odds";
-export type BettingMarket = "H2H" | "Line" | "Total";
+export type BettingOddsTable = "NRL Odds" | "NRL Line Odds" | "NRL Total Odds" | "NRL Tryscorers";
+export type BettingMarket = "H2H" | "Line" | "Total" | "Tryscorer";
 
 export interface BettingOddsRow {
   table: BettingOddsTable;
@@ -33,5 +33,6 @@ export interface BettingOddsSnapshot {
   h2h: BettingOddsRow[];
   line: BettingOddsRow[];
   total: BettingOddsRow[];
+  tryscorer: BettingOddsRow[];
   generatedAt: string;
 }

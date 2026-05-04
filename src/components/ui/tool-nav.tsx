@@ -28,7 +28,6 @@ export function ToolNav({ className }: ToolNavProps) {
   const router = useRouter();
   const { isLoaded, userId } = useAuth();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const [moreMenuPosition, setMoreMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [pendingArticleCount, setPendingArticleCount] = useState(0);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -79,17 +78,6 @@ export function ToolNav({ className }: ToolNavProps) {
   useEffect(() => {
     if (!isMoreOpen) return;
 
-    function syncMoreMenuPosition() {
-      const rect = moreButtonRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const menuWidth = 160;
-      setMoreMenuPosition({
-        top: rect.bottom + 8,
-        left: Math.min(window.innerWidth - menuWidth - 12, Math.max(12, rect.right - menuWidth)),
-      });
-    }
-
     function handlePointerDown(event: PointerEvent) {
       const target = event.target as Node;
       if (!moreButtonRef.current?.contains(target) && !moreMenuRef.current?.contains(target)) {
@@ -103,17 +91,12 @@ export function ToolNav({ className }: ToolNavProps) {
       }
     }
 
-    syncMoreMenuPosition();
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", syncMoreMenuPosition);
-    window.addEventListener("scroll", syncMoreMenuPosition, true);
 
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", syncMoreMenuPosition);
-      window.removeEventListener("scroll", syncMoreMenuPosition, true);
     };
   }, [isMoreOpen]);
 
@@ -161,44 +144,42 @@ export function ToolNav({ className }: ToolNavProps) {
                 </span>
               ) : null}
             </button>
+            {isMoreOpen ? (
+              <div
+                ref={moreMenuRef}
+                className="absolute right-0 top-full z-[300] mt-2 min-w-40 overflow-hidden rounded-lg border border-white/10 bg-[#121833] p-1 shadow-xl shadow-black/30"
+              >
+                {moreTools.map((tool) => {
+                  const active = pathname === tool.href || pathname.startsWith(`${tool.href}/`);
+                  return (
+                    <Link
+                      key={tool.href}
+                      href={tool.href}
+                      prefetch
+                      onClick={() => setIsMoreOpen(false)}
+                      aria-current={active ? "page" : undefined}
+                      className={`block rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${
+                        active
+                          ? "bg-nrl-accent/14 text-nrl-accent"
+                          : "text-white/60 hover:bg-white/5 hover:text-white"
+                      }`}
+                    >
+                      <span className="flex items-center justify-between gap-3">
+                        <span>{tool.label}</span>
+                        {tool.href === "/dashboard/articles" && displayedPendingArticleCount > 0 ? (
+                          <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
+                            {displayedPendingArticleCount > 9 ? "9+" : displayedPendingArticleCount}
+                          </span>
+                        ) : null}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         </div>
       </nav>
-
-      {isMoreOpen && moreMenuPosition ? (
-        <div
-          ref={moreMenuRef}
-          className="fixed z-[300] min-w-40 overflow-hidden rounded-lg border border-white/10 bg-[#121833] p-1 shadow-xl shadow-black/30"
-          style={{ top: moreMenuPosition.top, left: moreMenuPosition.left }}
-        >
-          {moreTools.map((tool) => {
-            const active = pathname === tool.href || pathname.startsWith(`${tool.href}/`);
-            return (
-              <Link
-                key={tool.href}
-                href={tool.href}
-                prefetch
-                onClick={() => setIsMoreOpen(false)}
-                aria-current={active ? "page" : undefined}
-                className={`block rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${
-                  active
-                    ? "bg-nrl-accent/14 text-nrl-accent"
-                    : "text-white/60 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span>{tool.label}</span>
-                  {tool.href === "/dashboard/articles" && displayedPendingArticleCount > 0 ? (
-                    <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
-                      {displayedPendingArticleCount > 9 ? "9+" : displayedPendingArticleCount}
-                    </span>
-                  ) : null}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      ) : null}
     </>
   );
 }

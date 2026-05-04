@@ -419,10 +419,10 @@ export function ArticlesPageClient({
         </section>
       ) : null}
 
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="space-y-5">
+      <section className="space-y-6">
+        <div className="grid gap-5 xl:grid-cols-2">
           {approvedArticles.length === 0 ? (
-            <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-sm text-nrl-muted">
+            <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-sm text-nrl-muted xl:col-span-2">
               No approved articles yet.
             </div>
           ) : (
@@ -430,60 +430,58 @@ export function ArticlesPageClient({
           )}
         </div>
 
-        <aside className="space-y-5">
-          {resolvedUserArticles.length > 0 ? (
-            <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
-              <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-nrl-text">Your articles</h2>
-              <div className="mt-4 space-y-3">
-                {resolvedUserArticles.map((article) => (
-                  <div key={article.id} className="rounded-md border border-nrl-border bg-nrl-panel-2 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-nrl-text">{article.title}</div>
-                        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
-                          {article.status}
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 gap-2">
-                        {resolvedIsAdmin ? (
-                          <button
-                            type="button"
-                            onClick={() => openEditArticle(article)}
-                            aria-label={`Edit ${article.title}`}
-                            className="grid h-8 w-8 place-items-center rounded-md border border-nrl-border text-nrl-text transition-colors hover:bg-nrl-border/35"
-                          >
-                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                              <path d="M12 20h9" />
-                              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                            </svg>
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteArticle(article)}
-                          disabled={deletingArticleId === article.id}
-                          aria-label={`Delete ${article.title}`}
-                          className="grid h-8 w-8 place-items-center rounded-md border border-red-400/40 text-red-200 transition-colors hover:bg-red-500/10 disabled:opacity-60"
-                        >
-                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                            <path d="M3 6h18" />
-                            <path d="M8 6V4h8v2" />
-                            <path d="M6 6l1 14h10l1-14" />
-                            <path d="M10 10v6" />
-                            <path d="M14 10v6" />
-                          </svg>
-                        </button>
+        {resolvedUserArticles.length > 0 ? (
+          <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
+            <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-nrl-text">Your articles</h2>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {resolvedUserArticles.map((article) => (
+                <div key={article.id} className="rounded-md border border-nrl-border bg-nrl-panel-2 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-nrl-text">{article.title}</div>
+                      <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
+                        {article.status}
                       </div>
                     </div>
-                    {article.rejectionReason ? (
-                      <div className="mt-2 text-xs text-red-200">{article.rejectionReason}</div>
-                    ) : null}
+                    <div className="flex shrink-0 gap-2">
+                      {resolvedIsAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => openEditArticle(article)}
+                          aria-label={`Edit ${article.title}`}
+                          className="grid h-8 w-8 place-items-center rounded-md border border-nrl-border text-nrl-text transition-colors hover:bg-nrl-border/35"
+                        >
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteArticle(article)}
+                        disabled={deletingArticleId === article.id}
+                        aria-label={`Delete ${article.title}`}
+                        className="grid h-8 w-8 place-items-center rounded-md border border-red-400/40 text-red-200 transition-colors hover:bg-red-500/10 disabled:opacity-60"
+                      >
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M6 6l1 14h10l1-14" />
+                          <path d="M10 10v6" />
+                          <path d="M14 10v6" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                ))}
-              </div>
+                  {article.rejectionReason ? (
+                    <div className="mt-2 text-xs text-red-200">{article.rejectionReason}</div>
+                  ) : null}
+                </div>
+              ))}
             </div>
-          ) : null}
-        </aside>
+          </div>
+        ) : null}
       </section>
 
       {resolvedIsAdmin ? (

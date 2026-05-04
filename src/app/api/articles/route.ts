@@ -197,7 +197,7 @@ export async function PATCH(request: NextRequest) {
   const supabase = createServerSupabaseClient("shortside");
   const { data: article, error: fetchError } = await supabase
     .from("articles")
-    .select("id, clerk_user_id")
+    .select("id")
     .eq("id", id)
     .maybeSingle();
 
@@ -207,10 +207,6 @@ export async function PATCH(request: NextRequest) {
 
   if (!article) {
     return NextResponse.json({ error: "Article not found." }, { status: 404 });
-  }
-
-  if (article.clerk_user_id !== userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { data, error } = await supabase

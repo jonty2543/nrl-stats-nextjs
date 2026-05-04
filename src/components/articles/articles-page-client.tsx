@@ -73,7 +73,7 @@ function ArticleCard({ article, compact = false }: { article: Article; compact?:
   const previewParagraphs = articlePreviewParagraphs(article.body, compact ? 45 : 80);
 
   return (
-    <article className="overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel">
+    <article className="flex h-full flex-col overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel">
       {article.imageUrls.length > 0 ? (
         <div className={`grid ${article.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
           {article.imageUrls.map((url, index) => (
@@ -88,7 +88,7 @@ function ArticleCard({ article, compact = false }: { article: Article; compact?:
           ))}
         </div>
       ) : null}
-      <div className="space-y-3 p-4 sm:p-5">
+      <div className="flex flex-1 flex-col space-y-3 p-4 sm:p-5">
         <div>
           <div className="flex items-center gap-2">
             {article.authorImageUrl ? (
@@ -105,7 +105,7 @@ function ArticleCard({ article, compact = false }: { article: Article; compact?:
           </div>
           <h2 className="mt-2 text-xl font-bold text-nrl-text sm:text-2xl">{article.title}</h2>
         </div>
-        <div className="space-y-3 text-sm leading-6 text-nrl-text/88">
+        <div className={`${compact ? "" : "h-[15rem] overflow-hidden"} space-y-3 text-sm leading-6 text-nrl-text/88`}>
           {previewParagraphs.map((paragraph, index) => (
             <p key={`${article.id}-preview-${index}`}>{paragraph}</p>
           ))}
@@ -113,7 +113,7 @@ function ArticleCard({ article, compact = false }: { article: Article; compact?:
         <Link
           href={`/dashboard/articles/${article.slug}`}
           aria-label={compact ? `Read and review ${article.title}` : `Read ${article.title}`}
-          className="inline-grid h-8 w-8 place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 text-lg font-bold leading-none text-nrl-text transition-colors hover:border-white/25 hover:bg-nrl-border/35"
+          className="mt-auto inline-grid h-8 w-8 place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 text-lg font-bold leading-none text-nrl-text transition-colors hover:border-white/25 hover:bg-nrl-border/35"
         >
           <span aria-hidden="true">→</span>
         </Link>
@@ -133,6 +133,7 @@ export function ArticlesPageClient({
   const { isLoaded: isAuthLoaded, userId } = useAuth();
   const { user } = useUser();
   const [resolvedIsAdmin, setResolvedIsAdmin] = useState(isAdmin);
+  const [resolvedApprovedArticles, setResolvedApprovedArticles] = useState(approvedArticles);
   const [resolvedPendingArticles, setResolvedPendingArticles] = useState(pendingArticles);
   const [resolvedUserArticles, setResolvedUserArticles] = useState(userArticles);
   const profileDisplayName = resolvedIsAdmin ? "Short Side" : displayNameForUser(user);
@@ -150,9 +151,10 @@ export function ArticlesPageClient({
 
   useEffect(() => {
     setResolvedIsAdmin(isAdmin);
+    setResolvedApprovedArticles(approvedArticles);
     setResolvedPendingArticles(pendingArticles);
     setResolvedUserArticles(userArticles);
-  }, [isAdmin, pendingArticles, userArticles]);
+  }, [approvedArticles, isAdmin, pendingArticles, userArticles]);
 
   useEffect(() => {
     if (!isAuthLoaded || !userId) return;
@@ -234,6 +236,7 @@ export function ArticlesPageClient({
       }
 
       setResolvedUserArticles((current) => current.filter((article) => article.id !== id));
+      setResolvedApprovedArticles((current) => current.filter((article) => article.id !== id));
       setResolvedPendingArticles((current) => current.filter((article) => article.id !== id));
       setConfirmDeleteArticle(null);
       setMessage("Article deleted.");
@@ -274,6 +277,9 @@ export function ArticlesPageClient({
       }
 
       setResolvedUserArticles((current) =>
+        current.map((article) => (article.id === payload.article?.id ? payload.article : article))
+      );
+      setResolvedApprovedArticles((current) =>
         current.map((article) => (article.id === payload.article?.id ? payload.article : article))
       );
       setResolvedPendingArticles((current) =>
@@ -421,20 +427,22 @@ export function ArticlesPageClient({
 
       <section className="space-y-6">
         <div className="grid gap-5 xl:grid-cols-2">
-          {approvedArticles.length === 0 ? (
+          {resolvedApprovedArticles.length === 0 ? (
             <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-sm text-nrl-muted xl:col-span-2">
               No approved articles yet.
             </div>
           ) : (
-            approvedArticles.map((article) => <ArticleCard key={article.id} article={article} />)
+            resolvedApprovedArticles.map((article) => <ArticleCard key={article.id} article={article} />)
           )}
         </div>
 
-        {resolvedUserArticles.length > 0 ? (
+        {(resolvedIsAdmin ? resolvedApprovedArticles : resolvedUserArticles).length > 0 ? (
           <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
-            <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-nrl-text">Your articles</h2>
+            <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-nrl-text">
+              {resolvedIsAdmin ? "Manage articles" : "Your articles"}
+            </h2>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {resolvedUserArticles.map((article) => (
+              {(resolvedIsAdmin ? resolvedApprovedArticles : resolvedUserArticles).map((article) => (
                 <div key={article.id} className="rounded-md border border-nrl-border bg-nrl-panel-2 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">

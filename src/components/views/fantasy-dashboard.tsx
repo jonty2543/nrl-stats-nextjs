@@ -1134,11 +1134,13 @@ export function FantasyDashboard({
 
   const playerRowsForYear = useMemo(() => {
     if (!matchedLocalName) return []
-    return selectedYearData.filter((row) => row.Name === matchedLocalName)
+    const matchedKey = normaliseName(matchedLocalName)
+    return selectedYearData.filter((row) => normaliseName(row.Name) === matchedKey)
   }, [matchedLocalName, selectedYearData])
   const playerRowsAllYears = useMemo(() => {
     if (!matchedLocalName) return []
-    return allData.filter((row) => row.Name === matchedLocalName)
+    const matchedKey = normaliseName(matchedLocalName)
+    return allData.filter((row) => normaliseName(row.Name) === matchedKey)
   }, [allData, matchedLocalName])
 
   const fantasyRank = useMemo(() => buildFantasyRank(teammateLookupSourceRows), [teammateLookupSourceRows])
@@ -1661,19 +1663,23 @@ export function FantasyDashboard({
       allPlayersPositionFilter === "All Positions"
         ? allPlayersTableRows
         : allPlayersTableRows.filter((row) => row.player.positionLabels.includes(allPlayersPositionFilter))
+    const effectiveSort =
+      allPlayersSort.column === "weeklyChange" && filteredRows.every((row) => row.weeklyChange === null)
+        ? { column: "projection" as const, direction: "desc" as const }
+        : allPlayersSort
 
     const getSortValue = (row: AllPlayersTableRow): number | string | null => {
-      if (allPlayersSort.column === "name") return row.player.name.toLowerCase()
-      if (allPlayersSort.column === "position") return row.player.positionLabel.toLowerCase()
-      if (allPlayersSort.column === "weeklyChange") return row.weeklyChange
-      if (allPlayersSort.column === "ownPercent") return row.player.ownedBy
-      if (allPlayersSort.column === "price") return row.player.cost
-      if (allPlayersSort.column === "avg2026") return row.avg2026
-      if (allPlayersSort.column === "last3") return row.last3
-      if (allPlayersSort.column === "ppm") return row.ppm
-      if (allPlayersSort.column === "projection") return row.projection
-      if (allPlayersSort.column === "breakeven") return row.breakeven
-      if (allPlayersSort.column === "gamesPlayed") return row.gamesPlayed
+      if (effectiveSort.column === "name") return row.player.name.toLowerCase()
+      if (effectiveSort.column === "position") return row.player.positionLabel.toLowerCase()
+      if (effectiveSort.column === "weeklyChange") return row.weeklyChange
+      if (effectiveSort.column === "ownPercent") return row.player.ownedBy
+      if (effectiveSort.column === "price") return row.player.cost
+      if (effectiveSort.column === "avg2026") return row.avg2026
+      if (effectiveSort.column === "last3") return row.last3
+      if (effectiveSort.column === "ppm") return row.ppm
+      if (effectiveSort.column === "projection") return row.projection
+      if (effectiveSort.column === "breakeven") return row.breakeven
+      if (effectiveSort.column === "gamesPlayed") return row.gamesPlayed
 
       return null
     }
@@ -1685,7 +1691,7 @@ export function FantasyDashboard({
       if (aValue === null) return 1
       if (bValue === null) return -1
 
-      const direction = allPlayersSort.direction === "asc" ? 1 : -1
+      const direction = effectiveSort.direction === "asc" ? 1 : -1
       if (typeof aValue === "number" && typeof bValue === "number") {
         if (aValue !== bValue) return (aValue - bValue) * direction
         return a.player.name.localeCompare(b.player.name)

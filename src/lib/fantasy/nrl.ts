@@ -411,7 +411,6 @@ export async function fetchLatestFantasyOwnershipBaselineSnapshot(): Promise<Fan
     .schema("shortside")
     .from("fantasy_ownership_snapshots")
     .select("captured_at, snapshot_week_brisbane, snapshot_data")
-    .eq("snapshot_type", "weekly_monday_10am_brisbane")
     .order("captured_at", { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -1101,8 +1101,9 @@ export async function fetchFantasyPlayerStatsAllYears(
       const localNames = Array.from(new Set(allRows.map((row) => row.Name))).sort();
       const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
       if (!matchedLocalName) return [];
+      const matchedNameKey = normaliseNameForMatch(matchedLocalName);
 
-      return allRows.filter((row) => row.Name === matchedLocalName);
+      return allRows.filter((row) => normaliseNameForMatch(row.Name) === matchedNameKey);
     }
 
     const teammateRows = await fetchTeammateLookupRows();

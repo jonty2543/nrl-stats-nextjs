@@ -80,6 +80,36 @@ const LANE_Y: Record<Slot, number> = {
   PR: 21,
 }
 
+const PORTRAIT_DEPTH_X: Record<Slot, number> = {
+  FB: 10,
+  LW: 16,
+  LC: 16,
+  RW: 16,
+  RC: 16,
+  FE: 26,
+  HLF: 26,
+  LK: 33,
+  L2R: 38,
+  R2R: 38,
+  HK: 44,
+  PR: 44,
+}
+
+const PORTRAIT_LANE_Y: Record<Slot, number> = {
+  LW: 9,
+  LC: 30,
+  FB: 50,
+  RC: 70,
+  RW: 91,
+  FE: 38,
+  HLF: 62,
+  LK: 50,
+  L2R: 32,
+  R2R: 68,
+  HK: 50,
+  PR: 18,
+}
+
 function normaliseKey(value: string | null | undefined): string {
   return String(value ?? "")
     .replace(/-/g, " ")
@@ -212,8 +242,11 @@ function slotPosition(
   side: "home" | "away",
   orientation: Orientation
 ): { left: string; top: string } {
-  const depth = slot === "PR" && player.number === 10 ? DEPTH_X.PR : DEPTH_X[slot]
-  const lane = slot === "PR" && player.number === 10 ? 79 : LANE_Y[slot]
+  const depthMap = orientation === "portrait" ? PORTRAIT_DEPTH_X : DEPTH_X
+  const laneMap = orientation === "portrait" ? PORTRAIT_LANE_Y : LANE_Y
+  const propLane = orientation === "portrait" ? 82 : 79
+  const depth = depthMap[slot]
+  const lane = slot === "PR" && player.number === 10 ? propLane : laneMap[slot]
 
   if (orientation === "portrait") {
     const top = side === "home" ? depth : 100 - depth
@@ -228,14 +261,18 @@ function slotPosition(
 
 function TeamBadge({ team, teamLogos }: { team: LineupTeam | null; teamLogos: Record<string, string> }) {
   const logo = resolveLogo(team, teamLogos)
+  const shortName = team?.team ?? team?.teamName ?? "TBC"
+  const fullName = team?.teamName ?? team?.team ?? "TBC"
+
   return (
-    <div className="flex min-w-0 flex-col items-center justify-center gap-1 text-center">
+    <div className="flex min-w-0 max-w-full flex-col items-center justify-center gap-1 overflow-hidden text-center">
       {logo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={logo} alt="" className="h-7 w-7 object-contain" loading="lazy" />
       ) : null}
-      <div className="min-w-0">
-        <div className="truncate text-xs font-bold text-nrl-text sm:text-sm">{team?.teamName ?? "TBC"}</div>
+      <div className="w-full min-w-0">
+        <div className="truncate text-xs font-bold text-nrl-text sm:hidden">{shortName}</div>
+        <div className="hidden truncate text-xs font-bold text-nrl-text sm:block sm:text-sm">{fullName}</div>
       </div>
     </div>
   )
@@ -260,14 +297,15 @@ function PitchPlayer({
   if (!slot) return null
   const imageUrl = normaliseImageUrl(player.headImage ?? player.bodyImage)
   const position = slotPosition(slot, player, side, orientation)
+  const compact = orientation === "portrait"
 
   return (
     <div
-      className="absolute z-[2] w-16 -translate-x-1/2 -translate-y-1/2 text-center sm:w-18"
+      className={`${compact ? "w-14 sm:w-16" : "w-16 sm:w-18"} absolute z-[2] -translate-x-1/2 -translate-y-1/2 text-center`}
       style={position}
       title={`${player.player}${player.sideSource === "override" ? " - side override" : ""}`}
     >
-      <div className="relative mx-auto h-10 w-10 sm:h-11 sm:w-11">
+      <div className={`${compact ? "h-9 w-9 sm:h-10 sm:w-10" : "h-10 w-10 sm:h-11 sm:w-11"} relative mx-auto`}>
         <div className="grid h-full w-full place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-nrl-panel shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -280,7 +318,7 @@ function PitchPlayer({
           {slot}
         </div>
       </div>
-      <div className="mt-1 truncate text-[10px] font-bold leading-tight text-white drop-shadow" title={player.player}>
+      <div className={`${compact ? "max-w-[3.45rem] text-[9px]" : "text-[10px]"} mx-auto mt-1 truncate font-bold leading-tight text-white drop-shadow`} title={player.player}>
         {displayName(player)}
       </div>
       <PlayerMetric player={player} displayMode={displayMode} tryscorerOdds={tryscorerOdds} playerAverages={playerAverages} />
@@ -334,14 +372,18 @@ function Pitch({
 }) {
   const sizeClass =
     orientation === "portrait"
-      ? "mx-auto h-[780px] w-full max-w-[460px] md:hidden"
+      ? "mx-auto h-[840px] w-full max-w-[460px] md:hidden"
       : "hidden h-[520px] w-full md:block"
 
   return (
     <div className={`${sizeClass} relative overflow-hidden rounded-lg border-2 border-emerald-300/45 bg-[radial-gradient(circle_at_50%_50%,rgba(0,245,138,0.16),transparent_30%),linear-gradient(90deg,rgba(8,26,33,0.98),rgba(15,112,73,0.92)_50%,rgba(8,26,33,0.98))]`}>
       <FieldLines orientation={orientation} />
-      <div className="absolute left-3 top-3 z-[4]">
-        <DisplayModeControl displayMode={displayMode} onDisplayModeChange={onDisplayModeChange} />
+      <div className={orientation === "portrait" ? "absolute left-2 top-2 z-[4]" : "absolute left-3 top-3 z-[4]"}>
+        <DisplayModeControl
+          displayMode={displayMode}
+          onDisplayModeChange={onDisplayModeChange}
+          compact={orientation === "portrait"}
+        />
       </div>
       {homePlayers.map((player) => (
         <PitchPlayer
@@ -392,21 +434,23 @@ function TeamBench({ team }: { team: LineupTeam | null }) {
 function DisplayModeControl({
   displayMode,
   onDisplayModeChange,
+  compact = false,
 }: {
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
+  compact?: boolean
 }) {
   return (
-    <label className="block w-[174px] max-w-[44vw]">
+    <label className={compact ? "block w-24" : "block w-[174px] max-w-[44vw]"}>
       <span className="sr-only">Display</span>
       <select
         value={displayMode}
         onChange={(event) => onDisplayModeChange(event.target.value as DisplayMode)}
-        className="w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 text-[11px] font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent"
+        className={`${compact ? "text-[10px]" : "text-[11px]"} w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent`}
       >
         {DISPLAY_MODES.map((mode) => (
           <option key={mode.key} value={mode.key}>
-            {mode.label}
+            {compact ? mode.shortLabel : mode.label}
           </option>
         ))}
       </select>

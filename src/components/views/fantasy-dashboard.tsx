@@ -369,7 +369,7 @@ function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
     case "name":
       return "w-[136px] min-w-[136px] max-w-[136px] sm:w-32 sm:min-w-32 sm:max-w-32"
     case "position":
-      return "w-[72px] min-w-[72px] max-w-[72px] sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px]"
+      return "w-40 min-w-40 max-w-40 sm:w-44 sm:min-w-44 sm:max-w-44"
     case "weeklyChange":
     case "ownPercent":
       return "w-20 min-w-20 max-w-20"
@@ -3855,8 +3855,13 @@ export function FantasyDashboard({
                           <div className="min-w-0">
                             <div className="truncate text-[13px] font-bold text-nrl-text">{row.player.name}</div>
                           </div>
-                          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
-                            {row.player.positionLabel}
+                          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                            <span>{row.player.positionLabel}</span>
+                            <PlayerContextTags
+                              relevantOuts={row.relevantOuts}
+                              nextMajorByeRound={row.nextMajorByeRound}
+                              playsNextMajorBye={row.playsNextMajorBye}
+                            />
                           </div>
                         </div>
                       </div>
@@ -3869,12 +3874,6 @@ export function FantasyDashboard({
                         </div>
                       </div>
                     </div>
-                    <PlayerContextTags
-                      relevantOuts={row.relevantOuts}
-                      nextMajorByeRound={row.nextMajorByeRound}
-                      playsNextMajorBye={row.playsNextMajorBye}
-                      className="mt-2"
-                    />
                     <div className="mt-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                       <div className="flex min-w-max gap-4">
                         {cardStats.map((stat) => (
@@ -3968,15 +3967,16 @@ export function FantasyDashboard({
                               {row.player.name}
                             </span>
                           </div>
+                        </td>
+                      <td className="w-40 min-w-40 max-w-40 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted sm:w-44 sm:min-w-44 sm:max-w-44 sm:px-3">
+                        <div className="flex min-w-0 items-center justify-center gap-1.5">
+                          <span>{row.player.positionLabel}</span>
                           <PlayerContextTags
                             relevantOuts={row.relevantOuts}
                             nextMajorByeRound={row.nextMajorByeRound}
                             playsNextMajorBye={row.playsNextMajorBye}
-                            className="mt-1"
                           />
-                        </td>
-                      <td className="w-[72px] min-w-[72px] max-w-[72px] border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px] sm:px-3">
-                        {row.player.positionLabel}
+                        </div>
                       </td>
                       <td className={`w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getOwnershipDeltaClass(row.weeklyChange)}`}>
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("weeklyChange")}`}>

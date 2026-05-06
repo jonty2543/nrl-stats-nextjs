@@ -3753,14 +3753,14 @@ export function FantasyDashboard({
             <div>
               <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">All Players</div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="inline-flex rounded-full border border-nrl-border bg-nrl-panel-2 p-1">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+              <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-0.5">
                 {(["cards", "table"] as const).map((view) => (
                   <button
                     key={view}
                     type="button"
                     onClick={() => setAllPlayersView(view)}
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                    className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wide transition-colors ${
                       allPlayersView === view
                         ? "bg-nrl-accent text-[#07131f]"
                         : "text-nrl-muted hover:text-nrl-text"
@@ -3770,19 +3770,7 @@ export function FantasyDashboard({
                   </button>
                 ))}
               </div>
-              <label className="inline-flex min-h-[30px] cursor-pointer items-center gap-2 rounded-full border border-nrl-border bg-nrl-panel-2 px-2.5 text-[10px] font-bold uppercase tracking-wide text-nrl-muted">
-                <span>Tags</span>
-                <input
-                  type="checkbox"
-                  checked={showAllPlayersCardTags}
-                  onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
-                  className="sr-only"
-                />
-                <span className={`relative h-4 w-7 rounded-full border transition-colors ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
-                  <span className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-3.5 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
-                </span>
-              </label>
-              <div className="min-w-[150px]">
+              <div className="w-[126px] shrink-0">
                 <Select
                   label=""
                   value={allPlayersPositionFilter}
@@ -3790,7 +3778,19 @@ export function FantasyDashboard({
                   onChange={setAllPlayersPositionFilter}
                 />
               </div>
-              <div className="min-w-[150px]">
+              <label className="inline-flex min-h-[28px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[9px] font-bold uppercase tracking-wide text-nrl-muted">
+                <span>Tags</span>
+                <input
+                  type="checkbox"
+                  checked={showAllPlayersCardTags}
+                  onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
+                  className="sr-only"
+                />
+                <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                  <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
+                </span>
+              </label>
+              <div className="w-[116px] shrink-0">
                 <MultiSelect
                   label=""
                   value={allPlayersTagFilters}

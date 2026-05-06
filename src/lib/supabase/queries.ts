@@ -11,11 +11,13 @@ import {
   readPlayerStatsServerCache,
   readPlayerStatsServerCacheMetadata,
 } from "@/lib/data/player-stats-server-cache";
-import type {
-  BettingMarket,
-  BettingOddsRow,
-  BettingOddsSnapshot,
-  BettingOddsTable,
+import {
+  BETTING_BOOKIE_COLUMNS,
+  type BettingBookie,
+  type BettingMarket,
+  type BettingOddsRow,
+  type BettingOddsSnapshot,
+  type BettingOddsTable,
 } from "@/lib/betting/types";
 
 const PAGE_SIZE = 1000;
@@ -52,6 +54,18 @@ export interface PositionFantasySd5yRecord {
   fantasy_cv: number | null;
 }
 
+export interface CasualtyWardRecord {
+  player: string;
+  team: string | null;
+  position: string | null;
+  injury: string | null;
+  returnDate: string | null;
+  games: number | null;
+  averageFantasy: number | null;
+  sourceUrl: string | null;
+  scrapedAt: string | null;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -67,6 +81,36 @@ function normaliseTeamKey(value: unknown): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function toNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalisePositionText(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function relevantOutsPositionGroup(value: string | null | undefined): string | null {
+  const normalised = normalisePositionText(value);
+  if (!normalised) return null;
+  if (["fullback", "fb"].includes(normalised)) return "fullback";
+  if (["wing", "winger", "w"].includes(normalised)) return "wing";
+  if (["centre", "center", "ctr"].includes(normalised)) return "centre";
+  if (["halfback", "five eighth", "five eighths", "5 8", "58", "half"].includes(normalised)) return "halves";
+  if (["lock", "prop", "front row", "front rower"].includes(normalised)) return "middle";
+  if (["2nd row", "second row", "second rower", "back row", "back rower"].includes(normalised)) return "second-row";
+  if (["hooker", "dummy half"].includes(normalised)) return "hooker";
+  return normalised;
+}
+
+function isRelevantOutsPositionMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  const leftGroup = relevantOutsPositionGroup(left);
+  const rightGroup = relevantOutsPositionGroup(right);
+  return Boolean(leftGroup && rightGroup && leftGroup === rightGroup);
 }
 
 // ---------------------------------------------------------------------------
@@ -520,18 +564,58 @@ function mapBettingMarket(table: BettingOddsTable, rawMarket: unknown): BettingM
     const normalized = rawMarket.trim().toLowerCase();
     if (normalized === "line") return "Line";
     if (normalized === "total") return "Total";
+    if (normalized === "tryscorer" || normalized === "try scorer") return "Tryscorer";
     if (normalized === "h2h") return "H2H";
   }
   if (table === "NRL Line Odds") return "Line";
   if (table === "NRL Total Odds") return "Total";
+  if (table === "NRL Tryscorers") return "Tryscorer";
   return "H2H";
 }
 
-function mapBettingRow(table: BettingOddsTable, raw: Record<string, unknown>): BettingOddsRow {
+function createEmptyBettingBookieFields(): Record<BettingBookie, number | null> {
   return {
+    Sportsbet: null,
+    Pointsbet: null,
+    Unibet: null,
+    Palmerbet: null,
+    Betright: null,
+  };
+}
+
+function computeBestBookieFromRow(
+  row: Pick<BettingOddsRow, BettingBookie | "bestBookie" | "bestPrice">
+): Pick<BettingOddsRow, "bestBookie" | "bestPrice"> {
+  if (row.bestBookie != null && row.bestPrice != null) {
+    return {
+      bestBookie: row.bestBookie,
+      bestPrice: row.bestPrice,
+    };
+  }
+
+  let bestBookie: BettingBookie | null = null;
+  let bestPrice: number | null = null;
+
+  for (const bookie of BETTING_BOOKIE_COLUMNS) {
+    const price = row[bookie];
+    if (price == null) continue;
+    if (bestPrice == null || price > bestPrice) {
+      bestBookie = bookie;
+      bestPrice = price;
+    }
+  }
+
+  return {
+    bestBookie: row.bestBookie ?? bestBookie,
+    bestPrice: row.bestPrice ?? bestPrice,
+  };
+}
+
+function mapLegacyBettingRow(table: BettingOddsTable, raw: Record<string, unknown>): BettingOddsRow {
+  const row: BettingOddsRow = {
     table,
     market: mapBettingMarket(table, raw.Market),
-    date: typeof raw.Date === "string" ? raw.Date : "",
+    date: toIsoDate(raw.Date),
     match: typeof raw.Match === "string" ? raw.Match : "",
     result: typeof raw.Result === "string" ? raw.Result : "",
     value: toNullableFinite(raw.Value),
@@ -546,6 +630,58 @@ function mapBettingRow(table: BettingOddsTable, raw: Record<string, unknown>): B
     Betright: toNullableOdds(raw.Betright),
     Betr: toNullableOdds(raw.Betr),
   };
+
+  return {
+    ...row,
+    ...computeBestBookieFromRow(row),
+  };
+}
+
+function hasBookSpecificOddsColumns(raw: Record<string, unknown>): boolean {
+  return BETTING_BOOKIE_COLUMNS.some(
+    (bookie) => `${bookie}_odds` in raw || `${bookie}_line` in raw
+  );
+}
+
+function mapBookSpecificBettingRows(
+  table: BettingOddsTable,
+  raw: Record<string, unknown>
+): BettingOddsRow[] {
+  const market = mapBettingMarket(table, raw.Market);
+  const date = toIsoDate(raw.Date);
+  const match = typeof raw.Match === "string" ? raw.Match : "";
+  const result = typeof raw.Result === "string" ? raw.Result : "";
+  const model = toNullableFinite(raw.Model);
+
+  return BETTING_BOOKIE_COLUMNS.flatMap((bookie) => {
+    const price = toNullableOdds(raw[`${bookie}_odds`]);
+    const value = toNullableFinite(raw[`${bookie}_line`]);
+    if (price == null || value == null) return [];
+
+    return [{
+      table,
+      market,
+      date,
+      match,
+      result,
+      value,
+      model,
+      bestBookie: bookie,
+      bestPrice: price,
+      marketPercentage: null,
+      ...createEmptyBettingBookieFields(),
+      [bookie]: price,
+      Betr: null,
+    }];
+  });
+}
+
+function mapBettingRows(table: BettingOddsTable, raw: Record<string, unknown>): BettingOddsRow[] {
+  if ((table === "NRL Line Odds" || table === "NRL Total Odds") && hasBookSpecificOddsColumns(raw)) {
+    return mapBookSpecificBettingRows(table, raw);
+  }
+
+  return [mapLegacyBettingRow(table, raw)];
 }
 
 // ---------------------------------------------------------------------------
@@ -1007,8 +1143,9 @@ export async function fetchFantasyPlayerStatsAllYears(
       const localNames = Array.from(new Set(allRows.map((row) => row.Name))).sort();
       const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
       if (!matchedLocalName) return [];
+      const matchedNameKey = normaliseNameForMatch(matchedLocalName);
 
-      return allRows.filter((row) => row.Name === matchedLocalName);
+      return allRows.filter((row) => normaliseNameForMatch(row.Name) === matchedNameKey);
     }
 
     const teammateRows = await fetchTeammateLookupRows();
@@ -1123,7 +1260,7 @@ export async function fetchMatches(years?: string[]): Promise<Match[]> {
 async function fetchBettingOddsTableFromSupabase(table: BettingOddsTable): Promise<BettingOddsRow[]> {
   const rawRows = await fetchAllRowsFromSchema<Record<string, unknown>>("public", table);
   return rawRows
-    .map((row) => mapBettingRow(table, row))
+    .flatMap((row) => mapBettingRows(table, row))
     .filter((row) => row.match.length > 0 && row.result.length > 0 && row.date.length > 0)
     .sort((a, b) => {
       if (a.date !== b.date) return b.date.localeCompare(a.date);
@@ -1138,11 +1275,15 @@ async function fetchPredictionModelRowsFromSupabase(): Promise<PredictionModelRo
 }
 
 export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
-  const [h2hRaw, lineRaw, total, predictionRows] = await Promise.all([
+  const [h2hRaw, lineRaw, total, tryscorer, predictionRows] = await Promise.all([
     fetchBettingOddsTableFromSupabase("NRL Odds"),
     fetchBettingOddsTableFromSupabase("NRL Line Odds"),
     fetchBettingOddsTableFromSupabase("NRL Total Odds"),
-    fetchPredictionModelRowsFromSupabase(),
+    fetchBettingOddsTableFromSupabase("NRL Tryscorers"),
+    fetchPredictionModelRowsFromSupabase().catch((error) => {
+      console.warn("Unable to fetch betting prediction rows; rendering odds without model values.", error);
+      return [];
+    }),
   ]);
   const predictionLookup = buildPredictionLookup(predictionRows);
   const h2h = h2hRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
@@ -1152,13 +1293,14 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
     h2h,
     line,
     total,
+    tryscorer,
     generatedAt: new Date().toISOString(),
   };
 }
 
 const fetchBettingOddsSnapshotCached = unstable_cache(
   async (): Promise<BettingOddsSnapshot> => fetchBettingOddsSnapshotFromSupabase(),
-  ["betting-odds-v2"],
+  ["betting-odds-v3"],
   { revalidate: 120 }
 );
 
@@ -1174,9 +1316,117 @@ export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
       h2h: [],
       line: [],
       total: [],
+      tryscorer: [],
       generatedAt: new Date().toISOString(),
     };
   }
+}
+
+export async function fetchCasualtyWardForPlayer(playerName: string): Promise<CasualtyWardRecord[]> {
+  const name = playerName.trim();
+  if (!name) return [];
+
+  const supabase = createServerSupabaseClient("nrl");
+  const { data, error } = await supabase
+    .from("casualty_ward")
+    .select("player, team, injury, return_date, source_url, scraped_at")
+    .ilike("player", name)
+    .order("scraped_at", { ascending: false })
+    .limit(5);
+
+  if (error) {
+    console.warn(`Unable to fetch casualty ward rows for ${name}; using empty set.`, error);
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    player: toNullableString(row.player) ?? name,
+    team: toNullableString(row.team),
+    position: toNullableString(row.position),
+    injury: toNullableString(row.injury),
+    returnDate: toNullableString(row.return_date),
+    games: toFiniteNumber(row.games),
+    averageFantasy: toFiniteNumber(row.average_fantasy),
+    sourceUrl: toNullableString(row.source_url),
+    scrapedAt: toNullableString(row.scraped_at),
+  }));
+}
+
+export async function fetchRelevantCasualtyWardOuts({
+  team,
+  position,
+  excludePlayer,
+}: {
+  team: string | null | undefined;
+  position: string | null | undefined;
+  excludePlayer?: string | null;
+}): Promise<CasualtyWardRecord[]> {
+  const teamName = team?.trim();
+  const positionName = position?.trim();
+  if (!teamName || !positionName) return [];
+
+  const supabase = createServerSupabaseClient("nrl");
+  let query = supabase
+    .from("casualty_ward")
+    .select("player, team, position, injury, return_date, games, average_fantasy, source_url, scraped_at")
+    .ilike("team", teamName)
+    .gte("games", 2)
+    .gte("average_fantasy", 30)
+    .order("average_fantasy", { ascending: false })
+    .limit(30);
+
+  if (excludePlayer?.trim()) {
+    query = query.neq("player", excludePlayer.trim());
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn(`Unable to fetch relevant casualty ward outs for ${teamName} ${positionName}; using empty set.`, error);
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[])
+    .map((row) => ({
+      player: toNullableString(row.player) ?? "",
+      team: toNullableString(row.team),
+      position: toNullableString(row.position),
+      injury: toNullableString(row.injury),
+      returnDate: toNullableString(row.return_date),
+      games: toFiniteNumber(row.games),
+      averageFantasy: toFiniteNumber(row.average_fantasy),
+      sourceUrl: toNullableString(row.source_url),
+      scrapedAt: toNullableString(row.scraped_at),
+    }))
+    .filter((row) => isRelevantOutsPositionMatch(row.position, positionName))
+    .slice(0, 8);
+}
+
+export async function fetchRelevantCasualtyWardOutCandidates(): Promise<CasualtyWardRecord[]> {
+  const supabase = createServerSupabaseClient("nrl");
+  const { data, error } = await supabase
+    .from("casualty_ward")
+    .select("player, team, position, injury, return_date, games, average_fantasy, source_url, scraped_at")
+    .gte("games", 2)
+    .gte("average_fantasy", 30)
+    .order("average_fantasy", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    console.warn("Unable to fetch relevant casualty ward out candidates; using empty set.", error);
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    player: toNullableString(row.player) ?? "",
+    team: toNullableString(row.team),
+    position: toNullableString(row.position),
+    injury: toNullableString(row.injury),
+    returnDate: toNullableString(row.return_date),
+    games: toFiniteNumber(row.games),
+    averageFantasy: toFiniteNumber(row.average_fantasy),
+    sourceUrl: toNullableString(row.source_url),
+    scrapedAt: toNullableString(row.scraped_at),
+  }));
 }
 
 export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord[]> {

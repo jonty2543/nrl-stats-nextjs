@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
-import Link from "next/link"
 import { notFound } from "next/navigation"
+import { FantasyBackLink } from "@/components/fantasy/fantasy-back-link"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { isAccessibleSeason } from "@/lib/access/season-access"
@@ -8,13 +8,17 @@ import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
+  fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchAvailableYears,
+  fetchCasualtyWardForPlayer,
   fetchFantasyPlayerStatsAllYears,
   fetchPlayerImages,
+  fetchRelevantCasualtyWardOuts,
+  fetchRelevantCasualtyWardOutCandidates,
   fetchTeamLogos,
 } from "@/lib/supabase/queries"
 
@@ -22,6 +26,13 @@ export const dynamic = "force-dynamic"
 
 function defaultRecentYears(years: string[], maxYears = 4): string[] {
   return years.slice(0, Math.min(maxYears, years.length))
+}
+
+function normaliseLineupPlayerName(value: unknown): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
 }
 
 interface FantasyPlayerPageProps {
@@ -36,9 +47,10 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
+    fetchLineupsProjectionsByPlayerId(),
     fetchAvailableYears(),
     loadDraw2026Data(),
     fetchPlayerImages(),
@@ -60,22 +72,37 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
   )
-  const initialPlayerStats = await fetchFantasyPlayerStatsAllYears(selectedPlayer.name)
+  const selectedLineupRole = lineupsProjections.roleByPlayerId.get(selectedPlayer.id) ?? null
+  const shouldFetchRelevantOuts =
+    lineupsProjections.source === "lineups" &&
+    Boolean(selectedLineupRole?.isOnField && selectedLineupRole.team && selectedLineupRole.position)
+
+  const [initialPlayerStats, casualtyWardRows, rawRelevantOuts, relevantOutCandidates] = await Promise.all([
+    fetchFantasyPlayerStatsAllYears(selectedPlayer.name),
+    fetchCasualtyWardForPlayer(selectedPlayer.name),
+    shouldFetchRelevantOuts
+      ? fetchRelevantCasualtyWardOuts({
+        team: selectedLineupRole?.team,
+        position: selectedLineupRole?.position,
+        excludePlayer: selectedPlayer.name,
+      })
+      : Promise.resolve([]),
+    fetchRelevantCasualtyWardOutCandidates(),
+  ])
+  const relevantOuts = rawRelevantOuts.filter(
+    (row) => !lineupsProjections.roleByPlayerName.has(normaliseLineupPlayerName(row.player))
+  )
 
   return (
     <div className="space-y-4">
       <div>
-        <Link
-          href="/dashboard/fantasy"
-          className="inline-flex items-center rounded-md border border-nrl-border bg-nrl-panel px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:text-nrl-accent"
-        >
-          Back to Fantasy Dashboard
-        </Link>
+        <FantasyBackLink />
       </div>
 
       <FantasyDashboard
         fantasyPlayers={fantasyPlayers}
         fantasyCoachPlayers={fantasyCoachPlayers}
+        lineupsProjections={lineupsProjections}
         availableYears={unlockedYears}
         defaultYears={initialYears}
         initialPlayerStats={initialPlayerStats}
@@ -87,8 +114,12 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
         teamLogos={teamLogos}
         initialSelectedFantasyName={selectedPlayer.name}
         showOwnedCards={false}
+        showPlayerComments
         playerRouteBasePath="/dashboard/fantasy"
         ownershipBaselineSnapshot={ownershipBaselineSnapshot}
+        casualtyWardRows={casualtyWardRows}
+        relevantOuts={relevantOuts}
+        relevantOutCandidates={relevantOutCandidates}
       />
     </div>
   )

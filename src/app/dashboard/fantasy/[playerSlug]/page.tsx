@@ -16,6 +16,7 @@ import {
   fetchAvailableYears,
   fetchCasualtyWardForPlayer,
   fetchFantasyPlayerStatsAllYears,
+  fetchOriginChances,
   fetchPlayerImages,
   fetchRelevantCasualtyWardOuts,
   fetchRelevantCasualtyWardOutCandidates,
@@ -47,7 +48,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot, originChances] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchLineupsProjectionsByPlayerId(),
@@ -56,6 +57,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
     fetchPlayerImages(),
     fetchTeamLogos(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
+    fetchOriginChances(),
   ])
 
   const selectedPlayer = fantasyPlayers.find(
@@ -120,6 +122,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
         casualtyWardRows={casualtyWardRows}
         relevantOuts={relevantOuts}
         relevantOutCandidates={relevantOutCandidates}
+        originChances={originChances}
       />
     </div>
   )

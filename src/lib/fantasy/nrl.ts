@@ -506,10 +506,12 @@ function getLineupCutoffUtc(): string {
 }
 
 function normaliseProjectionPlayerName(value: unknown): string {
-  return String(value ?? "")
+  const key = String(value ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
+  if (key === "api koroisau") return "apisai koroisau"
+  return key
 }
 
 function isZeroProjectionLineupPosition(value: unknown): boolean {

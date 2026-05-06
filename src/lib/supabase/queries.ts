@@ -66,6 +66,12 @@ export interface CasualtyWardRecord {
   scrapedAt: string | null;
 }
 
+export interface OriginChanceRecord {
+  player: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -81,6 +87,23 @@ function normaliseTeamKey(value: unknown): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function normalisePlayerAliasKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function casualtyWardPlayerSearchNames(name: string): string[] {
+  const names = new Set([name]);
+  const key = normalisePlayerAliasKey(name);
+  if (key === "apisai koroisau" || key === "api koroisau") {
+    names.add("Apisai Koroisau");
+    names.add("Api Koroisau");
+  }
+  return Array.from(names);
 }
 
 function relevantOutsTeamGroup(value: string | null | undefined): string | null {
@@ -1359,12 +1382,13 @@ export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
 export async function fetchCasualtyWardForPlayer(playerName: string): Promise<CasualtyWardRecord[]> {
   const name = playerName.trim();
   if (!name) return [];
+  const searchNames = casualtyWardPlayerSearchNames(name);
 
   const supabase = createServerSupabaseClient("nrl");
   const { data, error } = await supabase
     .from("casualty_ward")
     .select("player, team, injury, return_date, source_url, scraped_at")
-    .ilike("player", name)
+    .in("player", searchNames)
     .order("scraped_at", { ascending: false })
     .limit(5);
 
@@ -1455,6 +1479,26 @@ export async function fetchRelevantCasualtyWardOutCandidates(): Promise<Casualty
     averageFantasy: toFiniteNumber(row.average_fantasy),
     sourceUrl: toNullableString(row.source_url),
     scrapedAt: toNullableString(row.scraped_at),
+  }));
+}
+
+export async function fetchOriginChances(): Promise<OriginChanceRecord[]> {
+  const supabase = createServerSupabaseClient("nrl");
+  const { data, error } = await supabase
+    .from("origin_chances")
+    .select("player, created_at, updated_at")
+    .order("player", { ascending: true })
+    .limit(1000);
+
+  if (error) {
+    console.warn("Unable to fetch Origin chance rows; using empty set.", error);
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    player: toNullableString(row.player) ?? "",
+    createdAt: toNullableString(row.created_at),
+    updatedAt: toNullableString(row.updated_at),
   }));
 }
 

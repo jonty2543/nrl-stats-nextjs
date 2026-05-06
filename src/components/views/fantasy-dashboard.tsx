@@ -854,7 +854,11 @@ function cleanTradeSuggestorLine(text: string): string {
     .replace(/\bOwn\s*%\s*delta\s*:/gi, "Ownership change:")
     .replace(/\bown\s*%\s*delta\b/gi, "ownership change")
     .replace(/\bvalue\s+v(?:s)?\.?\s*pricedAt\b/gi, "value compared with price")
-    .replace(/\bmomentum\s*\+\s*ownership\b/gi, "rising ownership")
+    .replace(/\bmomentum\s*\+\s*ownership\b/gi, "ownership movement")
+    .replace(/\bReason:\s*Rising ownership\s+and\s+/gi, "Reason: ")
+    .replace(/\bReason:\s*Big ownership lift\s+and\s+/gi, "Reason: ")
+    .replace(/\bReason:\s*(?:ownership is rising|positive ownership momentum)\s+and\s+/gi, "Reason: ")
+    .replace(/\bReason:\s*([a-z])/g, (_match, letter: string) => `Reason: ${letter.toUpperCase()}`)
     .replace(/\bGood scored floor\b/gi, "Good scoring floor")
     .replace(/\bmisses the next major bye\s*\(helps field 13\)/gi, "misses the next major bye, so check your bye-round coverage")
     .replace(/\bhelps field 13\b/gi, "helps your major-bye coverage")
@@ -1737,10 +1741,10 @@ export function FantasyDashboard({
         "For each sell or buy, use the label Ownership change: and include BE, priced at, L3 average, projection vs priced at, next major bye availability, and one short reason.",
       ]
       : [
-        "Use live fantasy data available to free users: weekly ownership change, price, priced at, season average, L3 average, named-to-play status, casualty ward context, and next major bye availability.",
-        "State briefly in Recommended Moves that Pro unlocks projection and breakeven-based trade calls, and that this answer is based on ownership movement, recent form, price, bye coverage, lineup status, and injury context.",
+        "For free users, do not use projections, breakevens, projection vs priced at, casualty ward context, or Origin context as trade reasons.",
+        "Do not write a Pro note inside the generated answer. The UI already tells users Pro unlocks more informed trade advice.",
         "Try to list 3 Sell watch candidates every time. Use visible squad players only, prioritising confirmed injury/unavailability, negative ownership change, weak L3 or season average for the price, poor bye coverage, or awkward cash/squad fit. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
-        "List a visible player in Sell watch when live data shows their ownership delta is -1.0% or worse, their recent form is weak for the price, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using free-user data only.",
+        "List a visible player in Sell watch when live data shows their ownership delta is -1.0% or worse, their recent form is weak for the price, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold.",
         "If a player is -1.0% or worse in ownership delta but L3 is sound, bye coverage is useful, and there is no availability issue, frame them as Hold / Possible sell rather than a hard sell.",
         "In each sell/watch player title, include the player name, position, and price, but no rating. In each trade-in title, include the player name, position, price, and rating.",
         "For each sell or buy, use the label Ownership change: and include priced at, average/L3 form, next major bye availability, and one short reason. Do not include projections, breakevens, or projection vs priced at for free users.",
@@ -1754,18 +1758,21 @@ export function FantasyDashboard({
       "Only suggest sells from players visible in the user's squad screenshots. Do not invent sell candidates.",
       "If a visible player is not playing and has a strong negative ownership delta, mention them in Sell watch even if the screenshot was taken before final team status was known.",
       "Write for non-technical users: be clear, friendly, and direct. Do not mention thresholds, snapshots, filters, or why a backend rule did or did not trigger.",
-      "Write every reason as one normal sentence. Do not use compressed stat shorthand or fragments like value v pricedAt, momentum + ownership, scored floor, field 13, or helps field 13. Say things like projects well for his price, ownership is rising, has a reliable scoring floor, or helps your major-bye coverage.",
+      "Write every reason as one normal sentence. Do not use compressed stat shorthand or fragments like value v pricedAt, momentum + ownership, scored floor, field 13, or helps field 13. Say things like projects well for his price, has a reliable scoring floor, or helps your major-bye coverage.",
+      "Do not cite ownership movement as the written reason for a recommendation. Ownership change may appear in the details line only; the reason sentence should use form, price/value, role, bye coverage, availability, or squad-fit context.",
       "Tone for Sell watch: advice first, warm and practical. Do not sound like OCR/debug output. For an injured expensive player, explain that selling can free salary to bring in a stronger replacement or premium option. Do not write blunt phrases like projection is 0, avoid a zero score, your screenshot shows, or red injury marker.",
       "Do not use screenshot slot, bench, INT, EMG, or reserve position as a sell reason. Good players can be in emergencies; squad location is irrelevant for sell logic.",
       "Do not infer this-week availability from screenshot slot or absence from a snapshot. If real metrics are unavailable for a visible player and there is no clear injury/suspension marker, treat them as a hold/no clear sell instead of inventing projection 0 or unknown stats.",
       "A player visible anywhere in the user's screenshots is already owned. Do not recommend any visible squad player as a trade-in, even if they appear in the buy data.",
       "Use real player names from live data. Do not output OCR-invented names or expand abbreviated names unless they match a real player.",
       "Do not say a player has an injury marker unless a red cross/plus is visibly attached to that exact player in the screenshots.",
-      hasFantasyPlotAccess
-        ? "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold, especially with a low BE; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news."
-        : "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold when recent form, price and bye coverage are favourable; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news.",
-      "Use supplied casualty ward role-pressure and Origin chance context only as secondary tie-breakers. Do not let them outweigh clear ownership, form, value, injury, bye or lineup signals.",
-      "If casualty ward lists a player but current lineups say he is named to play this week, ignore casualty ward for that player and do not describe him as injured from casualty ward.",
+      ...(hasFantasyPlotAccess
+        ? [
+          "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold, especially with a low BE; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news.",
+          "Use supplied casualty ward role-pressure and Origin chance context only as secondary tie-breakers. Do not let them outweigh clear ownership, form, value, injury, bye or lineup signals.",
+          "If casualty ward lists a player but current lineups say he is named to play this week, ignore casualty ward for that player and do not describe him as injured from casualty ward.",
+        ]
+        : []),
       "Do not use the phrase visible red injury marker unless a red cross/plus is plainly attached to the exact player row/card. If uncertain, omit injury completely.",
       "Do not mention an injury marker for J. Hughes/Hughes unless the marker is unambiguously attached to his exact player tile.",
       "Do not invent trade-in names outside live buy/value data. If fewer than five eligible non-owned trade-ins remain after excluding visible squad players, list fewer than five.",
@@ -5040,6 +5047,11 @@ export function FantasyDashboard({
                   placeholder="Bank, trades remaining, players you want to hold..."
                   className="w-full resize-none rounded-lg border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent"
                 />
+                {!hasFantasyPlotAccess ? (
+                  <div className="mt-1.5 text-[10px] leading-4 text-nrl-muted">
+                    Sign up to Pro for more informed trade advice with projections, breakevens, casualty ward and Origin info.
+                  </div>
+                ) : null}
               </div>
 
               {tradeSuggestorError ? (

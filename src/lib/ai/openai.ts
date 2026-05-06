@@ -4625,9 +4625,9 @@ export async function runAiModelChat(
           access
         )
         : Promise.resolve(null),
-      visiblePlayerNames.length > 0 ? fetchCasualtyWardSnapshot() : Promise.resolve([]),
-      fetchRelevantCasualtyWardOutCandidates(),
-      fetchOriginChances(),
+      hasProjectionAccess && visiblePlayerNames.length > 0 ? fetchCasualtyWardSnapshot() : Promise.resolve([]),
+      hasProjectionAccess ? fetchRelevantCasualtyWardOutCandidates() : Promise.resolve([]),
+      hasProjectionAccess ? fetchOriginChances() : Promise.resolve([]),
     ]);
     const toolActivities = [
       buySnapshot.activity,
@@ -4724,14 +4724,13 @@ export async function runAiModelChat(
         "- Low BE supports buys because the player can rise in price faster. High BE, negative ownership, and L3/projection below pricedAt support sells.",
       ]
       : [
-        "- This is a free-user Find Trades answer. Keep the same three sections and useful recommendations, but do not use projections, breakevens, or projection-vs-pricedAt as trade reasons.",
-        "- Add one short sentence near the start of Recommended Moves saying that Pro unlocks projection and breakeven-based trade calls, and that this answer is based on ownership movement, recent form, price, bye coverage, lineup status, and injury context.",
-        "- Use ownership change, price, pricedAt, season average, L3 average, named-to-play status, casualty ward context, and next major bye availability.",
+        "- This is a free-user Find Trades answer. Keep the same three sections and useful recommendations, but do not use projections, breakevens, projection-vs-pricedAt, casualty ward context, or Origin context as trade reasons.",
+        "- Do not write a Pro note inside the generated answer. The UI already tells users Pro unlocks more informed advice.",
+        "- Use ownership change, price, pricedAt, season average, L3 average, named-to-play status, and next major bye availability.",
         "- Try to list 3 Sell watch candidates using negative ownership change, weak L3 or season average for the price, injury/unavailability, poor bye coverage, or awkward squad/cash fit. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
         "- If a visible player has negative ownership movement but strong L3 form, useful bye coverage, and no availability issue, list them as Hold / Possible sell with lower urgency rather than a hard sell.",
-        "- If the casualty ward says the player is expected back in 2 weeks or less, treat that as a potential hold when ownership, recent form, price, and bye coverage are favourable.",
         "- Strong sell recommendations require negative ownership movement plus a poor free-user signal, such as weak recent form for the price, injury/unavailability, or poor bye coverage.",
-        "- Explain buy and sell reasoning using the supplied ownership change, price, pricedAt, average, L3 average, named-to-play status, casualty ward context, and next major bye availability. Do not mention specific projections or breakevens.",
+        "- Explain buy and sell reasoning using the supplied price, pricedAt, average, L3 average, named-to-play status, and next major bye availability. Do not mention specific projections, breakevens, casualty ward context, or Origin context.",
         "- Do not give sell/watch players ratings or scores. In each sell/watch title, include player name, real fantasy position, and price only. In each trade-in title, include player name, real fantasy position, price, and rating.",
         "- In the details, use the label 'Ownership change:' instead of 'Own % delta:', then include priced at, average/L3 form, next major bye availability, and one normal-sentence reason. Do not include BE, projection, or projection-vs-pricedAt.",
       ];
@@ -4759,7 +4758,8 @@ export async function runAiModelChat(
       "- A Sell watch player should appear by real name in the sell/watch data above with ownership delta -1.0% or worse, or in the visible owned player reference with meaningful sell/watch signals supplied for this user's access level.",
       "- If a visible player is not playing and has a strong negative ownership delta, mention them in Sell watch even if the uploaded screenshot was taken before final team status was known.",
       "- Write for non-technical users: clear, friendly, direct advice. Do not explain thresholds, filters, snapshots, or backend rules.",
-      "- Write every reason as one normal sentence. Do not use compressed stat shorthand or fragments like 'value v pricedAt', 'momentum + ownership', 'scored floor', 'field 13', or 'helps field 13'. Say things like projects well for his price, ownership is rising, has a reliable scoring floor, or helps your major-bye coverage.",
+      "- Write every reason as one normal sentence. Do not use compressed stat shorthand or fragments like 'value v pricedAt', 'momentum + ownership', 'scored floor', 'field 13', or 'helps field 13'. Say things like projects well for his price, has a reliable scoring floor, or helps your major-bye coverage.",
+      "- Do not cite ownership movement as the written reason for a recommendation. Ownership change may appear in the details line only; the reason sentence should use form, price/value, role, bye coverage, availability, or squad-fit context.",
       "- Tone for Sell watch: advice first, warm and practical. Do not sound like OCR/debug output. Say a player is out, unavailable, or a high-priority sell when appropriate, then explain the fantasy implication in normal language.",
       "- For an injured expensive player, explain that selling can free salary to bring in a stronger replacement or premium option. Do not write blunt phrases like 'avoid a zero score', 'projection is 0', 'your screenshot shows', or 'red injury marker'.",
       "- Use real player names and positions from the visible owned player reference or snapshots. Do not use OCR-read position labels when a real fantasy position is available.",
@@ -4768,13 +4768,17 @@ export async function runAiModelChat(
       "- Do not infer this-week availability from screenshot slot, bench/EMG placement, or absence from a snapshot. If real metrics are unavailable for a visible player and there is no clear injury/suspension marker, do not list them as a numbered Sell watch item.",
       "- Do not write '(not in snapshot)' for a player who appears in the visible owned player reference. Use the visible owned player reference fields instead.",
       "- Do not claim a player is injured unless a red cross/plus is visibly attached to that exact player in the screenshot. Do not infer injury from name, status memory, DNP, bye, or prior examples.",
-      "- For any visible player with a red cross/plus injury marker or clear out/unavailable status, consult the NRL casualty ward context before deciding hold versus sell.",
-      "- If the casualty ward lists a player but the visible owned player reference says he is named to play this week, ignore the casualty ward for that player and do not call him injured from casualty ward.",
-      "- If the casualty ward says the player is out for 3 weeks or more, treat that as a strong sell signal.",
-      "- If the casualty ward return is TBC/unknown, or no matching casualty ward row is supplied for a red cross/plus player, say the timeline is uncertain and suggest checking the latest injury news before locking the trade.",
-      "- Use the secondary casualty ward role/security context only as a small tie-breaker. If a same-team/same-position casualty ward player with 30+ fantasy average and 2+ games is back within 3 weeks, mention possible role pressure only for owned players under $600k. If that casualty ward player is out longer than 3 weeks, treat it as a modest job-security buy signal for same-team/same-position candidates, not a sell signal.",
-      "- Use Origin chance context as a risk adjustment. Avoid recommending Origin chance players as buys unless the value/form signal is clearly strong; if you recommend one, mention the Origin risk. In Sell Watch, be a little more willing to sell Origin chance players when other sell signals exist, and a little less willing to sell similar non-Origin-risk players.",
-      "- Do not let casualty ward role pressure or Origin risk dominate the answer. They are secondary context, not primary trade rules.",
+      ...(hasProjectionAccess
+        ? [
+          "- For any visible player with a red cross/plus injury marker or clear out/unavailable status, consult the NRL casualty ward context before deciding hold versus sell.",
+          "- If the casualty ward lists a player but the visible owned player reference says he is named to play this week, ignore the casualty ward for that player and do not call him injured from casualty ward.",
+          "- If the casualty ward says the player is out for 3 weeks or more, treat that as a strong sell signal.",
+          "- If the casualty ward return is TBC/unknown, or no matching casualty ward row is supplied for a red cross/plus player, say the timeline is uncertain and suggest checking the latest injury news before locking the trade.",
+          "- Use the secondary casualty ward role/security context only as a small tie-breaker. If a same-team/same-position casualty ward player with 30+ fantasy average and 2+ games is back within 3 weeks, mention possible role pressure only for owned players under $600k. If that casualty ward player is out longer than 3 weeks, treat it as a modest job-security buy signal for same-team/same-position candidates, not a sell signal.",
+          "- Use Origin chance context as a risk adjustment. Avoid recommending Origin chance players as buys unless the value/form signal is clearly strong; if you recommend one, mention the Origin risk. In Sell Watch, be a little more willing to sell Origin chance players when other sell signals exist, and a little less willing to sell similar non-Origin-risk players.",
+          "- Do not let casualty ward role pressure or Origin risk dominate the answer. They are secondary context, not primary trade rules.",
+        ]
+        : []),
       "- Do not use the phrase 'visible red injury marker' unless a red cross/plus is plainly attached to the exact player row/card. If uncertain, omit injury completely.",
       "- Do not mention an injury marker for J. Hughes/Hughes unless the marker is unambiguously attached to his exact player tile.",
       "- DNP or bye is not a sell reason by itself. Use the supplied weekly ownership delta, recent form, price/value, and access-appropriate metrics to assess any visible sell/watch candidate.",

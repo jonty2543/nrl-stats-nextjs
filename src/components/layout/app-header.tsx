@@ -32,8 +32,8 @@ export function AppHeader({
             </div>
           </Link>
 
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden -translate-x-1/2 lg:flex lg:items-center">
-            <ToolNav className="pointer-events-auto w-[46rem] max-w-[46rem] pb-0" />
+          <div className="pointer-events-none absolute inset-y-0 left-[calc(50%+3rem)] hidden -translate-x-1/2 lg:flex lg:items-center">
+            <ToolNav className="pointer-events-auto w-[62rem] max-w-[62rem] pb-0" />
           </div>
 
           <div className="relative z-10 flex shrink-0 items-center gap-2">
@@ -61,7 +61,7 @@ export function AppHeader({
         </div>
 
         <div className="mt-3 lg:hidden">
-          <ToolNav mobileFullWidth />
+          <ToolNav />
         </div>
         {showStatsTabs ? <TabNav /> : null}
       </div>

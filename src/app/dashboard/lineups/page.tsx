@@ -1,5 +1,7 @@
+import { auth } from "@clerk/nextjs/server"
 import { LineupsDashboard } from "@/components/views/lineups-dashboard"
-import { fetchUpcomingLineups, fetchUpcomingTryscorerOdds } from "@/lib/lineups/nrl-lineups"
+import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
+import { fetchCasualtyWardOuts, fetchUpcomingLineups, fetchUpcomingTryscorerOdds } from "@/lib/lineups/nrl-lineups"
 import { fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
 import type { PlayerStat } from "@/lib/data/types"
 
@@ -54,10 +56,13 @@ function buildPlayerAverages(rows: PlayerStat[]): Record<string, Record<AverageK
 }
 
 export default async function LineupsPage() {
-  const [matches, teamLogos, tryscorerOdds, playerStats2026] = await Promise.all([
+  const { userId } = await auth()
+  const canAccessNotableOuts = await getServerProPlotAccess(userId)
+  const [matches, teamLogos, tryscorerOdds, casualtyWardOuts, playerStats2026] = await Promise.all([
     fetchUpcomingLineups(),
     fetchTeamLogos(),
     fetchUpcomingTryscorerOdds(),
+    canAccessNotableOuts ? fetchCasualtyWardOuts() : Promise.resolve({}),
     fetchPlayerStats(["2026"]),
   ])
 
@@ -66,6 +71,8 @@ export default async function LineupsPage() {
       matches={matches}
       teamLogos={teamLogos}
       tryscorerOdds={tryscorerOdds}
+      canAccessNotableOuts={canAccessNotableOuts}
+      casualtyWardOuts={casualtyWardOuts}
       playerAverages={buildPlayerAverages(playerStats2026)}
     />
   )

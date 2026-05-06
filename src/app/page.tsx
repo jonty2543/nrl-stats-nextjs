@@ -13,6 +13,7 @@ import {
 } from "@/components/views/player-comparison"
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
+import { fetchApprovedArticles } from "@/lib/articles"
 import type { Draw2026Data } from "@/lib/draw/types"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
@@ -24,8 +25,16 @@ import {
   getTopFantasyOwnershipRise,
   getFantasyCoachRoundMetrics,
   fetchLatestFantasyOwnershipBaselineSnapshot,
+  type FantasyCoachPlayerSnapshot,
   type FantasyPlayerSnapshot,
 } from "@/lib/fantasy/nrl"
+import {
+  fetchUpcomingLineups,
+  fetchUpcomingTryscorerOdds,
+  type LineupPlayer,
+  type LineupTeam,
+  type LineupTryscorerOdds,
+} from "@/lib/lineups/nrl-lineups"
 import type { PlayerStat } from "@/lib/data/types"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import {
@@ -34,6 +43,7 @@ import {
   fetchPlayerStats,
   fetchFantasyPlayerStatsAllYears,
   fetchPlayerImages,
+  fetchTeamLogos,
 } from "@/lib/supabase/queries"
 
 export const revalidate = 120
@@ -98,6 +108,16 @@ interface LandingLeaderEntry {
   team: string
   value: number
   imageSources: string[]
+}
+
+interface FantasyValuePreviewRow {
+  name: string
+  position: string
+  projection: number | null
+  pricedAt: number | null
+  value: number | null
+  ownedBy: number | null
+  weeklyChange: number | null
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -397,6 +417,114 @@ function buildBetTrackerPreviewRows(snapshot: BettingOddsSnapshot, limit = 3): B
 
   return [...grouped.values()]
     .sort((a, b) => a.date.localeCompare(b.date) || a.match.localeCompare(b.match))
+    .slice(0, limit)
+}
+
+function formatKickoffLabel(value: string | null): string {
+  if (!value) return "Kickoff TBC"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Brisbane",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed)
+}
+
+function formatArticleDate(value: string | null): string {
+  if (!value) return "Date TBC"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(parsed)
+}
+
+function articlePreviewText(body: string, maxLength = 180): string {
+  const cleaned = body
+    .replace(/!\[[^\]]*]\([^)]+\)/g, "")
+    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+    .replace(/[#>*_`~-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  if (cleaned.length <= maxLength) return cleaned
+  return `${cleaned.slice(0, maxLength).trim()}...`
+}
+
+function resolveLineupTeamLogo(team: LineupTeam | null, teamLogos: Record<string, string>): string | null {
+  for (const candidate of [team?.team, team?.teamName]) {
+    const logo = teamLogos[normaliseTeamKey(candidate)]
+    if (logo) return logo
+  }
+  return null
+}
+
+function getLineupStartingPlayers(team: LineupTeam | null, limit = 7): LineupPlayer[] {
+  return [...(team?.players ?? [])]
+    .filter((player) => player.isOnField && (player.number == null || player.number <= 13))
+    .sort((a, b) => (a.number ?? 99) - (b.number ?? 99))
+    .slice(0, limit)
+}
+
+function getLineupPlayerImageSources(player: LineupPlayer): string[] {
+  return [
+    ...normaliseRemoteImageCandidates(player.headImage),
+    ...normaliseRemoteImageCandidates(player.bodyImage),
+    "/body-shot.png",
+  ]
+}
+
+function getLineupPlayerMetric(
+  player: LineupPlayer,
+  tryscorerOdds: Record<string, LineupTryscorerOdds>,
+): { label: string; value: string; valueClassName: string } {
+  if (player.fantasyProjection != null) {
+    return { label: "Proj", value: formatNumber(player.fantasyProjection, 0), valueClassName: "text-emerald-300" }
+  }
+
+  const odds = tryscorerOdds[normaliseTeamKey(player.player)]
+  if (odds?.bestPrice != null) {
+    return { label: odds.bestBookie ?? "Odds", value: odds.bestPrice.toFixed(2), valueClassName: "text-white" }
+  }
+
+  return { label: "Role", value: player.position || "-", valueClassName: "text-white/72" }
+}
+
+function buildFantasyValuePreviewRows(
+  fantasyPlayers: FantasyPlayerSnapshot[],
+  fantasyCoachPlayers: FantasyCoachPlayerSnapshot[],
+  ownershipDeltaByPlayerId: Map<number, number | null>,
+  topOwnershipRise: number | null,
+  limit = 6,
+): FantasyValuePreviewRow[] {
+  return fantasyPlayers
+    .map((player) => {
+      const coachMetrics = getFantasyCoachRoundMetrics(fantasyCoachPlayers.find((coachPlayer) => coachPlayer.id === player.id) ?? null)
+      const weeklyChange = ownershipDeltaByPlayerId.get(player.id) ?? null
+      const projection = applyFantasyProjectionOffset(
+        coachMetrics.projection ?? player.projectedAvg ?? null,
+        weeklyChange,
+        topOwnershipRise,
+      )
+      const value = projection != null && player.pricedAt != null ? projection - player.pricedAt : null
+      return {
+        name: player.name,
+        position: player.positionLabel,
+        projection,
+        pricedAt: player.pricedAt,
+        value,
+        ownedBy: player.ownedBy,
+        weeklyChange,
+      }
+    })
+    .filter((row) => row.value != null)
+    .sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity) || a.name.localeCompare(b.name))
     .slice(0, limit)
 }
 
@@ -828,7 +956,19 @@ function FeatureSection({
 }
 
 export default async function Home() {
-  const [fantasyPlayers, fantasyCoachPlayers, ownershipBaselineSnapshot, bettingSnapshot, availableYears, playerImages, draw2026Data] = await Promise.all([
+  const [
+    fantasyPlayers,
+    fantasyCoachPlayers,
+    ownershipBaselineSnapshot,
+    bettingSnapshot,
+    availableYears,
+    playerImages,
+    draw2026Data,
+    lineups,
+    teamLogos,
+    tryscorerOdds,
+    approvedArticles,
+  ] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
@@ -836,6 +976,10 @@ export default async function Home() {
     fetchAvailableYears(),
     fetchPlayerImages(),
     loadDraw2026Data().catch(() => null),
+    fetchUpcomingLineups(),
+    fetchTeamLogos(),
+    fetchUpcomingTryscorerOdds(),
+    fetchApprovedArticles(),
   ])
 
   const previewYears = [...availableYears].map(String).sort((a, b) => Number(b) - Number(a)).slice(0, 3)
@@ -854,6 +998,12 @@ export default async function Home() {
     .filter((player): player is { name: string; delta: number } => player.delta != null && player.delta > 0)
     .sort((a, b) => b.delta - a.delta)
     .slice(0, 3)
+  const fantasyValuePreviewRows = buildFantasyValuePreviewRows(
+    fantasyPlayers,
+    fantasyCoachPlayers,
+    ownershipDeltaByPlayerId,
+    topOwnershipRise,
+  )
   const spotlightFantasyPlayer = pickHighestPricedFantasyPlayer(fantasyPlayers)
   const spotlightCoachPlayer = spotlightFantasyPlayer
     ? fantasyCoachPlayers.find((player) => player.id === spotlightFantasyPlayer.id) ?? null
@@ -884,6 +1034,18 @@ export default async function Home() {
     spotlightFantasyPlayer?.id ?? null,
     spotlightCoachMetrics.round,
   )
+  const spotlightLineupRole = spotlightFantasyPlayer
+    ? lineups
+        .flatMap((match) => [
+          ...(match.homeTeam?.players ?? []),
+          ...(match.awayTeam?.players ?? []),
+        ])
+        .find(
+          (player) =>
+            player.playerId === spotlightFantasyPlayer.id ||
+            normalisePersonName(player.player) === normalisePersonName(spotlightFantasyPlayer.name),
+        ) ?? null
+    : null
   const spotlightDrawRows = buildDrawPreviewRows(draw2026Data, spotlightTeam)
   const spotlightCardImage = spotlightFantasyPlayer
     ? {
@@ -898,9 +1060,21 @@ export default async function Home() {
     : null
   const spotlightHeatmapRows = buildOpponentHeatmapRows(spotlightSortedRows, plotYears)
   const spotlightBoxSummaries = buildBoxSummaries(spotlightSortedRows, plotYears)
+  const spotlightLineupFantasyAverage = spotlightLineupRole?.position
+    ? average(
+        spotlightSortedRows
+          .filter((row) => String(row.Position ?? "").toLowerCase() === spotlightLineupRole.position.toLowerCase())
+          .map((row) => toFiniteNumber(row.Fantasy))
+          .filter((value): value is number => value != null),
+      )
+    : null
   const h2hPreviews = buildH2HPreviews(bettingSnapshot, 1)
   const bettingLandingPreviews = h2hPreviews.length > 0 ? h2hPreviews : buildH2HPreviews(bettingSnapshot, 1, false)
   const betTrackerPreviewRows = buildBetTrackerPreviewRows(bettingSnapshot)
+  const lineupsLandingMatch = lineups[0] ?? null
+  const homeLineupPlayers = getLineupStartingPlayers(lineupsLandingMatch?.homeTeam ?? null)
+  const awayLineupPlayers = getLineupStartingPlayers(lineupsLandingMatch?.awayTeam ?? null)
+  const articlePreviewRows = approvedArticles.slice(0, 3)
   const statsPlayer1Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nathan Cleary"], 0)
   const statsPlayer2Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nicholas Hynes", "Nicho Hynes"], 1)
   const latestPreviewYear = previewYears[0] ?? ""
@@ -990,35 +1164,8 @@ export default async function Home() {
                 </span>
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-6 text-white/62 sm:text-base sm:leading-7">
-                Short Side brings Fantasy, Betting, and Stats into one hub for NRL analytics.
+                Short Side brings Fantasy, Lineups, Betting, Articles, and Stats into one hub for NRL analytics.
               </p>
-
-              <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-row sm:flex-wrap">
-                <Link
-                  href="/dashboard/fantasy"
-                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
-                >
-                  Open Fantasy
-                </Link>
-                <Link
-                  href="/dashboard/betting"
-                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
-                >
-                  Open Betting
-                </Link>
-                <Link
-                  href="/dashboard/players"
-                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
-                >
-                  Open Stats
-                </Link>
-                <Link
-                  href="/dashboard/ai"
-                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-[#171c36] px-4 py-2 text-sm font-semibold text-white transition-colors hover:border-white/24 hover:bg-[#20274a]"
-                >
-                  Open NRL AI
-                </Link>
-              </div>
 
               <div className="relative mt-6 flex items-end justify-center lg:hidden">
                 <div className="relative flex h-[15.5rem] w-full max-w-[26rem] items-end justify-center overflow-hidden px-1 pt-3">
@@ -1058,23 +1205,34 @@ export default async function Home() {
             <h2 className="mt-2 text-2xl font-bold text-white">Previews of the full suite</h2>
           </div>
 
-          <LandingSuiteTabs labels={["Fantasy", "Betting", "Stats", "NRL AI"]}>
+          <LandingSuiteTabs labels={["Fantasy", "Lineups", "Betting", "Articles", "Stats", "NRL AI"]}>
           <FeatureSection
             eyebrow="Fantasy"
-            title="Ownership, pricing, game logs, and visuals"
-            description="Use the Fantasy dashboard to move from ownership shifts to actual player-level context. The preview rotates between the player detail view and the deeper visual layer."
+            title="Lineup-aware projections, value tools, and player detail"
+            description="Use Fantasy to move from ownership shifts into projection value, breakevens, team-list context, template teams, comments, and the full player game log."
             bullets={[
-              "Ownership and price info",
-              "All features and filters",
-              "Full game logs",
-              "Detailed visuals",
+              "Priced at vs projection",
+              "Lineup roles and role averages",
+              "Template teams and ownership movers",
+              "Draft / H2H odds tools",
             ]}
             ctaHref="/dashboard/fantasy"
-            ctaLabel="Open Fantasy"
+            ctaLabel="Fantasy"
             live
           >
             <LandingCarousel>
               <PreviewFrame title="Fantasy / Player Detail" live>
+                <div className="mb-3 grid gap-2 rounded-2xl border border-white/8 bg-[#20284a] p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] sm:p-3">
+                  <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-center text-xs font-bold text-emerald-300">
+                    Find Value
+                  </div>
+                  <div className="rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-center text-xs font-semibold text-white/72">
+                    Template Team
+                  </div>
+                  <div className="rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-center text-xs font-semibold text-white/72">
+                    Draft / H2H Odds
+                  </div>
+                </div>
                 <div className="grid gap-3 sm:gap-4 xl:grid-cols-[290px_minmax(0,1fr)_220px]">
                   <div className="relative flex min-h-[12rem] items-center justify-center overflow-hidden rounded-2xl border border-white/8 bg-[#1b2140] p-2 sm:min-h-0 sm:p-3">
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_24%,rgba(71,255,182,0.22),transparent_34%),radial-gradient(circle_at_74%_78%,rgba(129,92,255,0.24),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]" />
@@ -1099,6 +1257,11 @@ export default async function Home() {
                       <h4 className="text-xl font-bold text-white sm:text-3xl">{spotlightFantasyPlayer?.name ?? "Fantasy player"}</h4>
                       <span className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-white/55">Team: {spotlightTeam ?? "-"}</span>
                       <span className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-white/55">Status: {spotlightFantasyPlayer?.status ?? "available"}</span>
+                      {spotlightLineupRole?.position ? (
+                        <span className="rounded-md border border-emerald-400/35 bg-emerald-400/10 px-2 py-1 text-xs font-semibold text-emerald-300">
+                          Lineup: {spotlightLineupRole.position}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2.5 sm:mt-4 sm:min-h-[248px] sm:grid-cols-3 sm:grid-rows-2 sm:gap-3">
                       <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
@@ -1106,8 +1269,12 @@ export default async function Home() {
                         <div className="mt-2 text-lg font-bold text-white sm:mt-3 sm:text-2xl">{formatCurrency(spotlightFantasyPlayer?.cost ?? null)}</div>
                       </div>
                       <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
-                        <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Avg</div>
-                        <div className="mt-2 text-lg font-bold text-white sm:mt-3 sm:text-2xl">{formatNumber(spotlightFantasyPlayer?.avgPoints ?? null, 1)}</div>
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">
+                          {spotlightLineupRole?.position ? `Avg at ${spotlightLineupRole.position}` : "Avg"}
+                        </div>
+                        <div className="mt-2 text-lg font-bold text-white sm:mt-3 sm:text-2xl">
+                          {formatNumber(spotlightLineupFantasyAverage ?? spotlightFantasyPlayer?.avgPoints ?? null, 1)}
+                        </div>
                       </div>
                       <div className="rounded-xl border border-white/8 bg-white/[0.03] p-2.5 sm:p-3">
                         <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Own %</div>
@@ -1415,7 +1582,270 @@ export default async function Home() {
                   </div>
                 </div>
               </PreviewFrame>
+
+              <PreviewFrame title="Fantasy / Find Value" contentClassName="lg:min-h-[480px]" live>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.72fr)]">
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Priced At vs Projection</div>
+                          <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/35">Sortable value list</div>
+                        </div>
+                        <div className="inline-flex rounded-md border border-white/8 bg-white/[0.03] p-1 text-[10px] font-semibold">
+                          <span className="rounded bg-emerald-400/16 px-2 py-1 text-emerald-300">Projection</span>
+                          <span className="px-2 py-1 text-white/38">L3 Avg</span>
+                          <span className="px-2 py-1 text-white/38">Season Avg</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-2">
+                        {fantasyValuePreviewRows.slice(0, 5).map((row, index) => {
+                          const value = row.value ?? 0
+                          const width = Math.max(12, Math.min(100, 48 + value * 3))
+                          return (
+                            <div key={`${row.name}-value`} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md border border-white/8 bg-[#20274a] text-[10px] font-bold text-white/62">
+                                      {index + 1}
+                                    </span>
+                                    <span className="truncate text-sm font-semibold text-white">{row.name}</span>
+                                  </div>
+                                  <div className="mt-1 text-[10px] text-white/42">
+                                    {row.position} · Own {formatPercent(row.ownedBy)} · Weekly {formatSignedPercent(row.weeklyChange)}
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3 text-right text-[11px]">
+                                  <div>
+                                    <div className="text-white/35">Proj</div>
+                                    <div className="font-bold text-white blur-[4px] select-none">{formatNumber(row.projection, 0)}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-white/35">Priced</div>
+                                    <div className="font-bold text-white">{formatNumber(row.pricedAt, 0)}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-white/35">Value</div>
+                                    <div className={value >= 0 ? "font-bold text-emerald-300 blur-[4px] select-none" : "font-bold text-rose-300 blur-[4px] select-none"}>
+                                      {value >= 0 ? "+" : ""}{formatNumber(value, 1)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="mt-2 h-1.5 rounded-full bg-white/8">
+                                <div className="h-full rounded-full bg-emerald-400/70" style={{ width: `${width}%` }} />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
+                        <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Projection Article</div>
+                        <div className="mt-2 text-sm font-semibold leading-5 text-white">
+                          {articlePreviewRows[0]?.title ?? "Fantasy projections article"}
+                        </div>
+                        <div className="mt-2 line-clamp-3 text-xs leading-5 text-white/55">
+                          {articlePreviewRows[0] ? articlePreviewText(articlePreviewRows[0].body, 130) : "Published analysis can sit beside the fantasy value tools."}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
+                        <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Draft / H2H Odds</div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+                          <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                            <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">My Team</div>
+                            <div className="mt-2 text-2xl font-black text-white blur-[4px] select-none">52%</div>
+                          </div>
+                          <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+                            <div className="text-[10px] uppercase tracking-[0.16em] text-white/35">Opponent</div>
+                            <div className="mt-2 text-2xl font-black text-white blur-[4px] select-none">48%</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Template Team</div>
+                        <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-white/35">Fastest rising starting 13</div>
+                      </div>
+                      <div className="inline-flex rounded-md border border-white/8 bg-white/[0.03] p-1 text-[10px] font-semibold">
+                        <span className="rounded bg-emerald-400/16 px-2 py-1 text-emerald-300">Change</span>
+                        <span className="px-2 py-1 text-white/38">Owned</span>
+                      </div>
+                    </div>
+                    <div className="relative overflow-hidden rounded-xl border border-emerald-300/35 bg-[radial-gradient(circle_at_50%_16%,rgba(0,245,138,0.14),transparent_28%),linear-gradient(90deg,rgba(8,26,33,0.98),rgba(15,80,58,0.92)_50%,rgba(8,26,33,0.98))] p-3">
+                      <div className="pointer-events-none absolute inset-x-[8%] top-[18%] h-px bg-white/12" />
+                      <div className="pointer-events-none absolute inset-x-[8%] top-[38%] h-px bg-white/10" />
+                      <div className="pointer-events-none absolute inset-x-[8%] top-[58%] h-px bg-white/10" />
+                      <div className="pointer-events-none absolute inset-x-[8%] top-[78%] h-px bg-white/12" />
+                      <div className="relative z-[1] grid gap-3">
+                        {fantasyValuePreviewRows.slice(0, 5).map((row) => (
+                          <div key={`${row.name}-template`} className="flex items-center justify-between gap-3 rounded-full border border-white/10 bg-[#07151e]/72 px-3 py-2">
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-semibold text-white">{row.name}</div>
+                              <div className="text-[10px] text-white/42">{row.position}</div>
+                            </div>
+                            <div className="text-xs font-bold text-emerald-300">
+                              {formatSignedPercent(row.weeklyChange)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </PreviewFrame>
             </LandingCarousel>
+          </FeatureSection>
+
+          <FeatureSection
+            eyebrow="Lineups"
+            title="Team lists with projections, roles, and try scorer prices"
+            description="Use Lineups after teams are named to check who is actually on field, compare fantasy projections, switch stat overlays, and scan the best available try scorer odds."
+            bullets={[
+              "Interactive field view",
+              "Fantasy and odds display modes",
+              "Bench and role context",
+              "Notable outs for Pro users",
+            ]}
+            ctaHref="/dashboard/lineups"
+            ctaLabel="Lineups"
+            live
+          >
+            <PreviewFrame title="Lineups / Team Lists" contentClassName="lg:min-h-[540px]" live>
+              {lineupsLandingMatch ? (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                      {[lineupsLandingMatch.homeTeam, lineupsLandingMatch.awayTeam].map((team, index) => {
+                        const logo = resolveLineupTeamLogo(team, teamLogos)
+                        return (
+                          <div key={`${team?.team ?? index}-lineup-team`} className="flex min-w-0 flex-col items-center text-center">
+                            {logo ? (
+                              <ImageWithFallback sources={[logo]} alt={team?.teamName ?? "Team logo"} className="h-10 w-10 object-contain" />
+                            ) : null}
+                            <div className="mt-2 max-w-full truncate text-sm font-bold text-white">
+                              {team?.teamName ?? team?.team ?? "TBC"}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+                        vs
+                      </div>
+                    </div>
+                    <div className="mt-3 text-center">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">{lineupsLandingMatch.round}</div>
+                      <div className="mt-1 text-[11px] text-white/42">
+                        {formatKickoffLabel(lineupsLandingMatch.kickoffUtc)}{lineupsLandingMatch.venue ? ` · ${lineupsLandingMatch.venue}` : ""}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-300/35 bg-[radial-gradient(circle_at_50%_50%,rgba(0,245,138,0.16),transparent_32%),linear-gradient(90deg,rgba(8,26,33,0.98),rgba(15,112,73,0.9)_50%,rgba(8,26,33,0.98))] p-3">
+                    <div className="mb-3 flex justify-center">
+                      <div className="inline-flex rounded-md border border-white/12 bg-[#07151e]/80 p-1 text-[10px] font-semibold">
+                        <span className="rounded bg-emerald-400/18 px-2 py-1 text-emerald-300">Fantasy</span>
+                        <span className="px-2 py-1 text-white/45">Odds</span>
+                        <span className="px-2 py-1 text-white/45">Runs</span>
+                        <span className="px-2 py-1 text-white/45">Tackles</span>
+                      </div>
+                    </div>
+                    <div className="relative h-[28rem] overflow-hidden rounded-xl border border-white/10 bg-[#07151e]/40 md:h-[24rem]">
+                      <div className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-emerald-200/45" />
+                      {[12, 24, 36, 64, 76, 88].map((left) => (
+                        <div key={`line-${left}`} className="absolute inset-y-0 w-px bg-emerald-200/18" style={{ left: `${left}%` }} />
+                      ))}
+                      {homeLineupPlayers.map((player, index) => {
+                        const metric = getLineupPlayerMetric(player, tryscorerOdds)
+                        return (
+                          <div
+                            key={`home-field-${player.player}-${player.number ?? index}`}
+                            className="absolute z-[2] w-24 -translate-x-1/2 -translate-y-1/2 text-center"
+                            style={{
+                              left: `${18 + (index % 2) * 21}%`,
+                              top: `${14 + Math.floor(index / 2) * 20}%`,
+                            }}
+                          >
+                            <div className="mx-auto grid h-11 w-11 place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-[#10172f] shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
+                              <ImageWithFallback sources={getLineupPlayerImageSources(player)} alt={player.player} className="h-full w-full object-cover object-top" />
+                            </div>
+                            <div className="mt-1 truncate text-[10px] font-semibold text-white">{player.player}</div>
+                            <div className={`text-[10px] font-bold ${metric.valueClassName}`}>{metric.value}</div>
+                          </div>
+                        )
+                      })}
+                      {awayLineupPlayers.map((player, index) => {
+                        const metric = getLineupPlayerMetric(player, tryscorerOdds)
+                        return (
+                          <div
+                            key={`away-field-${player.player}-${player.number ?? index}`}
+                            className="absolute z-[2] w-24 -translate-x-1/2 -translate-y-1/2 text-center"
+                            style={{
+                              left: `${61 + (index % 2) * 21}%`,
+                              top: `${14 + Math.floor(index / 2) * 20}%`,
+                            }}
+                          >
+                            <div className="mx-auto grid h-11 w-11 place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-[#10172f] shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
+                              <ImageWithFallback sources={getLineupPlayerImageSources(player)} alt={player.player} className="h-full w-full object-cover object-top" />
+                            </div>
+                            <div className="mt-1 truncate text-[10px] font-semibold text-white">{player.player}</div>
+                            <div className={`text-[10px] font-bold ${metric.valueClassName}`}>{metric.value}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border border-white/8 bg-[#1b2140] p-3">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Home Bench</div>
+                      <div className="mt-2 space-y-1 text-xs text-white/66">
+                        {(lineupsLandingMatch.homeTeam?.players ?? []).filter((player) => !player.isOnField || (player.number != null && player.number >= 14)).slice(0, 4).map((player) => (
+                          <div key={`home-bench-${player.player}`} className="truncate">{player.number ?? "-"} · {player.player}</div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-[#1b2140] p-3">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Away Bench</div>
+                      <div className="mt-2 space-y-1 text-xs text-white/66">
+                        {(lineupsLandingMatch.awayTeam?.players ?? []).filter((player) => !player.isOnField || (player.number != null && player.number >= 14)).slice(0, 4).map((player) => (
+                          <div key={`away-bench-${player.player}`} className="truncate">{player.number ?? "-"} · {player.player}</div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-[#1b2140] p-3">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Best Odds Overlay</div>
+                      <div className="mt-2 space-y-1 text-xs text-white/66">
+                        {[...homeLineupPlayers, ...awayLineupPlayers].map((player) => ({
+                          player,
+                          odds: tryscorerOdds[normaliseTeamKey(player.player)] ?? null,
+                        })).filter((entry) => entry.odds?.bestPrice != null).slice(0, 4).map((entry) => (
+                          <div key={`odds-${entry.player.player}`} className="flex justify-between gap-3">
+                            <span className="truncate">{entry.player.player}</span>
+                            <span className="font-semibold text-white">{entry.odds?.bestPrice?.toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid min-h-[420px] place-items-center rounded-2xl border border-dashed border-white/10 bg-[#1b2140] p-8 text-center">
+                  <div>
+                    <div className="text-lg font-bold text-white">Team lists are loading</div>
+                    <div className="mt-2 text-sm text-white/55">The Lineups page will populate after upcoming NRL teams are available.</div>
+                  </div>
+                </div>
+              )}
+            </PreviewFrame>
           </FeatureSection>
 
           <FeatureSection
@@ -1428,7 +1858,7 @@ export default async function Home() {
               "Bet tracker summaries",
             ]}
             ctaHref="/dashboard/betting"
-            ctaLabel="Open Betting"
+            ctaLabel="Betting"
             live
           >
             <LandingCarousel>
@@ -1677,6 +2107,141 @@ export default async function Home() {
           </FeatureSection>
 
           <FeatureSection
+            eyebrow="Articles"
+            title="Community analysis, match notes, and feature pieces"
+            description="Use Articles to publish NRL analysis with header images, read approved pieces, and keep submitted drafts in the review workflow."
+            bullets={[
+              "Public article feed",
+              "Image-led article cards",
+              "Signed-in submissions",
+              "Admin approval workflow",
+            ]}
+            ctaHref="/dashboard/articles"
+            ctaLabel="Articles"
+          >
+            <PreviewFrame title="Articles / Feed" contentClassName="lg:min-h-[520px]">
+              <div className="space-y-4">
+                {articlePreviewRows.length > 0 ? (
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(280px,0.72fr)]">
+                    <article className="overflow-hidden rounded-2xl border border-white/8 bg-[#1b2140]">
+                      {articlePreviewRows[0].imageUrls.length > 0 ? (
+                        <div className={`grid h-56 ${articlePreviewRows[0].imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                          {articlePreviewRows[0].imageUrls.slice(0, 2).map((url, index) => (
+                            <ImageWithFallback
+                              key={`${url}-${index}`}
+                              sources={[url]}
+                              alt={`${articlePreviewRows[0].title} header ${index + 1}`}
+                              className="h-full w-full object-cover"
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid h-56 place-items-center bg-[linear-gradient(135deg,#20284a,#10243a)]">
+                          <div className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300">Short Side</div>
+                        </div>
+                      )}
+                      <div className="p-4 sm:p-5">
+                        <div className="flex items-center gap-2">
+                          {articlePreviewRows[0].authorImageUrl ? (
+                            <ImageWithFallback
+                              sources={[articlePreviewRows[0].authorImageUrl]}
+                              alt=""
+                              className="h-7 w-7 rounded-full border border-white/10 object-cover"
+                            />
+                          ) : (
+                            <span className="grid h-7 w-7 place-items-center rounded-full border border-white/10 bg-[#20274a] text-[10px] font-bold uppercase text-white/55">
+                              {articlePreviewRows[0].displayName.slice(0, 2)}
+                            </span>
+                          )}
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/42">
+                            {articlePreviewRows[0].displayName} · {formatArticleDate(articlePreviewRows[0].approvedAt ?? articlePreviewRows[0].createdAt)}
+                          </div>
+                        </div>
+                        <h4 className="mt-3 text-2xl font-bold leading-tight text-white">{articlePreviewRows[0].title}</h4>
+                        <p className="mt-3 text-sm leading-6 text-white/68">{articlePreviewText(articlePreviewRows[0].body, 220)}</p>
+                        <Link
+                          href={`/dashboard/articles/${articlePreviewRows[0].slug}`}
+                          className="mt-4 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/12 bg-white/[0.04] text-lg font-bold text-white transition-colors hover:border-white/25 hover:bg-white/[0.08]"
+                          aria-label={`Read ${articlePreviewRows[0].title}`}
+                        >
+                          <span aria-hidden="true">→</span>
+                        </Link>
+                      </div>
+                    </article>
+
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Submit Article</div>
+                            <div className="mt-1 text-[11px] text-white/42">Title, body, author mode, and 1-2 header photos</div>
+                          </div>
+                          <div className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-[#20274a] text-2xl leading-none text-white">+</div>
+                        </div>
+                        <div className="mt-4 space-y-2">
+                          <div className="rounded-md border border-white/8 bg-[#20274a] px-3 py-2 text-sm text-white/55">Title</div>
+                          <div className="h-28 rounded-md border border-white/8 bg-[#20274a] px-3 py-2 text-sm text-white/55">Body</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-300">Profile</div>
+                            <div className="rounded-md border border-white/8 bg-[#20274a] px-3 py-2 text-xs font-semibold text-white/55">Anonymous</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                        <div className="rounded-xl border border-white/8 bg-[#1b2140] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Public Feed</div>
+                          <div className="mt-2 text-2xl font-black text-white">{approvedArticles.length}</div>
+                          <div className="text-[11px] text-white/42">approved articles</div>
+                        </div>
+                        <div className="rounded-xl border border-white/8 bg-[#1b2140] p-3">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Review Flow</div>
+                          <div className="mt-2 text-sm font-semibold text-white">Pending, approved, rejected</div>
+                          <div className="mt-1 text-[11px] text-white/42">Admin actions stay inside Articles</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid min-h-[320px] place-items-center rounded-2xl border border-dashed border-white/10 bg-[#1b2140] p-8 text-center">
+                    <div>
+                      <div className="text-lg font-bold text-white">No approved articles yet</div>
+                      <div className="mt-2 text-sm text-white/55">The Articles page is ready for submissions and approvals.</div>
+                    </div>
+                  </div>
+                )}
+
+                {articlePreviewRows.length > 1 ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {articlePreviewRows.slice(1, 3).map((article) => (
+                      <Link
+                        key={article.id}
+                        href={`/dashboard/articles/${article.slug}`}
+                        className="group overflow-hidden rounded-xl border border-white/8 bg-[#1b2140] transition-colors hover:border-white/18"
+                      >
+                        <div className="grid grid-cols-[8rem_minmax(0,1fr)]">
+                          <div className="h-full min-h-32 bg-[#20274a]">
+                            {article.imageUrls[0] ? (
+                              <ImageWithFallback sources={[article.imageUrls[0]]} alt="" className="h-full w-full object-cover" />
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 p-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">
+                              {article.displayName} · {formatArticleDate(article.approvedAt ?? article.createdAt)}
+                            </div>
+                            <div className="mt-2 line-clamp-2 text-sm font-bold leading-5 text-white group-hover:text-emerald-200">{article.title}</div>
+                            <div className="mt-2 line-clamp-2 text-xs leading-5 text-white/55">{articlePreviewText(article.body, 110)}</div>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </PreviewFrame>
+          </FeatureSection>
+
+          <FeatureSection
             eyebrow="Stats"
             title="Player and team statistical dashboard, stat leaders"
             description="Use the stats section to compare players and teams directly, inspect plot comparisons, and see stat leaders across seasons."
@@ -1686,7 +2251,7 @@ export default async function Home() {
               "Season leader cards",
             ]}
             ctaHref="/dashboard/players"
-            ctaLabel="Open Stats"
+            ctaLabel="Stats"
             live
           >
             <LandingCarousel>
@@ -1897,7 +2462,7 @@ export default async function Home() {
                                 href="/dashboard/players"
                                 className="inline-flex items-center gap-2 text-sm font-semibold text-white/55 transition-colors hover:text-white"
                               >
-                                Open Players
+                                Players
                                 <span aria-hidden="true">→</span>
                               </Link>
                             </div>
@@ -1922,7 +2487,7 @@ export default async function Home() {
               "Betting market summaries",
             ]}
             ctaHref="/dashboard/ai"
-            ctaLabel="Open NRL AI"
+            ctaLabel="NRL AI"
             live
           >
             <PreviewFrame title="NRL AI / Chat" contentClassName="lg:min-h-[440px]" live>

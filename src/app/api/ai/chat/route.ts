@@ -28,6 +28,7 @@ interface AiChatRequestBody {
   }>;
   toolName?: string;
   toolInput?: unknown;
+  persist?: boolean;
   imageAttachments?: Array<{
     name?: string;
     context?: string;
@@ -343,12 +344,34 @@ function buildUsageTrackingMessage(): string {
 function isTransientAiProviderError(message: string): boolean {
   const normalized = message.toLowerCase();
   return (
+    normalized.includes("fetch failed") ||
+    normalized.includes("enotfound") ||
+    normalized.includes("und_err_connect_timeout") ||
     normalized.includes("temporary processing error") ||
     normalized.includes("temporarily unavailable") ||
     normalized.includes("an error occurred while processing your request") ||
     normalized.includes("request id req_") ||
     normalized.includes("no tool output found for function call")
   );
+}
+
+function formatAiRequestError(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Unable to complete the AI request.";
+  const cause = error instanceof Error && error.cause instanceof Error ? error.cause : null;
+  const causeCode =
+    cause && "code" in cause && typeof cause.code === "string"
+      ? cause.code
+      : null;
+
+  if (
+    message.toLowerCase() === "fetch failed" ||
+    causeCode === "ENOTFOUND" ||
+    causeCode === "UND_ERR_CONNECT_TIMEOUT"
+  ) {
+    return "The server could not reach a live AI/data service needed for this request. In local dev, restart Next with external network access and check OpenAI, Supabase, and NRL Fantasy connectivity.";
+  }
+
+  return message;
 }
 
 function sanitizeRuntimeMetadataForPlan<T extends { model?: string | null; usage?: unknown }>(
@@ -672,6 +695,7 @@ export async function POST(request: Request) {
   const requestHistory = toRequestHistory(body.history);
   const imageAttachments = toImageAttachments(body.imageAttachments);
   const toolName = typeof body.toolName === "string" ? body.toolName.trim() : "";
+  const shouldPersist = body.persist !== false;
 
   if (!message) {
     return NextResponse.json(
@@ -944,25 +968,30 @@ export async function POST(request: Request) {
 
     const choices = buildFollowUpChoices(message, modelResult.toolActivity);
     const continuationThreadId = existingThread?.threadId ?? (requestedThreadId || null);
-    const persistedThreadId = await ensureAiThreadForUser(
-      userId,
-      continuationThreadId,
-      message
-    );
-    const threadTitle = await generateAiThreadSummary(history, message, modelResult.assistantMessage);
+    let persistedThreadId: string | null = null;
+    let threadTitle: string | null = null;
 
-    await saveAiAssistantTurn({
-      userId,
-      threadId: persistedThreadId,
-      threadTitle,
-      userMessage: message,
-      assistantMessage: modelResult.assistantMessage,
-      toolActivity: modelResult.toolActivity,
-      model: modelResult.model,
-      usage: modelResult.usage,
-      choices,
-      artifacts: modelResult.artifacts,
-    });
+    if (shouldPersist) {
+      persistedThreadId = await ensureAiThreadForUser(
+        userId,
+        continuationThreadId,
+        message
+      );
+      threadTitle = await generateAiThreadSummary(history, message, modelResult.assistantMessage);
+
+      await saveAiAssistantTurn({
+        userId,
+        threadId: persistedThreadId,
+        threadTitle,
+        userMessage: message,
+        assistantMessage: modelResult.assistantMessage,
+        toolActivity: modelResult.toolActivity,
+        model: modelResult.model,
+        usage: modelResult.usage,
+        choices,
+        artifacts: modelResult.artifacts,
+      });
+    }
 
     return NextResponse.json(sanitizeRuntimeMetadataForPlan({
       status: "completed",
@@ -989,8 +1018,7 @@ export async function POST(request: Request) {
       })),
     }, access.plan));
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unable to complete the AI request.";
+    const errorMessage = formatAiRequestError(error);
     const isTransientProviderError = isTransientAiProviderError(errorMessage);
     logAiAuditEvent(
       "ai_chat_failed",
@@ -1016,9 +1044,7 @@ export async function POST(request: Request) {
         chatsRemaining: usage.remainingInPeriod,
         usageTrackingAvailable: usage.trackingAvailable,
         submittedMessage: message,
-        assistantMessage: isTransientProviderError
-          ? "The AI provider is temporarily unavailable after retrying. Your request was not saved or counted."
-          : errorMessage,
+        assistantMessage: errorMessage,
         guardrails: AI_GUARDRAILS,
         availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
           name: tool.name,

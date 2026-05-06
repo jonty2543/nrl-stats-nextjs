@@ -12,6 +12,7 @@ interface SearchableSelectProps {
   className?: string;
   inputClassName?: string;
   dropdownClassName?: string;
+  showLoadingOnType?: boolean;
 }
 
 export function SearchableSelect({
@@ -24,23 +25,37 @@ export function SearchableSelect({
   className = "",
   inputClassName = "",
   dropdownClassName = "",
+  showLoadingOnType = false,
 }: SearchableSelectProps) {
   const [query, setQuery] = useState(value);
   const [open, setOpen] = useState(false);
   const [hasTypedSinceOpen, setHasTypedSinceOpen] = useState(false);
+  const [isTypingLoading, setIsTypingLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // This input intentionally mirrors an externally controlled selected value.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuery(value);
+    setIsTypingLoading(false);
   }, [value]);
 
   useEffect(() => {
     if (disabled) {
+      // Closing the popover immediately keeps the disabled state from remaining interactive.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(false);
       setHasTypedSinceOpen(false);
+      setIsTypingLoading(false);
     }
   }, [disabled]);
+
+  useEffect(() => {
+    if (!isTypingLoading) return;
+    const timeout = window.setTimeout(() => setIsTypingLoading(false), 180);
+    return () => window.clearTimeout(timeout);
+  }, [isTypingLoading, query]);
 
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
@@ -49,6 +64,7 @@ export function SearchableSelect({
         setOpen(false);
         setQuery(value);
         setHasTypedSinceOpen(false);
+        setIsTypingLoading(false);
       }
     };
     document.addEventListener("mousedown", onMouseDown);
@@ -67,6 +83,7 @@ export function SearchableSelect({
     onChange(opt);
     setQuery(opt);
     setHasTypedSinceOpen(false);
+    setIsTypingLoading(false);
     setOpen(false);
   };
 
@@ -76,6 +93,7 @@ export function SearchableSelect({
       setOpen(false);
       setQuery(value);
       setHasTypedSinceOpen(false);
+      setIsTypingLoading(false);
     }, 80);
   };
 
@@ -104,6 +122,7 @@ export function SearchableSelect({
             if (disabled) return;
             setQuery(e.target.value);
             setHasTypedSinceOpen(true);
+            if (showLoadingOnType) setIsTypingLoading(true);
             setOpen(true);
           }}
           onKeyDown={(e) => {
@@ -111,6 +130,7 @@ export function SearchableSelect({
             if (e.key === "Escape") {
               setOpen(false);
               setQuery(value);
+              setIsTypingLoading(false);
             }
             if (e.key === "Enter") {
               e.preventDefault();
@@ -125,16 +145,25 @@ export function SearchableSelect({
                 selectOption(filtered[0]);
               } else {
                 setQuery(value);
+                setIsTypingLoading(false);
                 setOpen(false);
               }
             }
           }}
-          className={`w-full rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-50 ${inputClassName}`}
+          className={`w-full rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-50 ${showLoadingOnType ? "pr-8" : ""} ${inputClassName}`}
         />
+        {showLoadingOnType && isTypingLoading ? (
+          <span
+            className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-nrl-muted/35 border-t-nrl-accent motion-safe:animate-spin"
+            aria-hidden="true"
+          />
+        ) : null}
 
         {open && !disabled && (
           <div className={`absolute left-0 top-full z-[200] mt-1 max-h-56 w-max min-w-[14rem] max-w-[18rem] overflow-auto rounded-md border border-nrl-border bg-nrl-panel shadow-lg ${dropdownClassName}`}>
-            {filtered.length === 0 ? (
+            {showLoadingOnType && isTypingLoading ? (
+              <div className="px-2 py-1 text-[10px] text-nrl-muted">Searching...</div>
+            ) : filtered.length === 0 ? (
               <div className="px-2 py-1 text-[10px] text-nrl-muted">No matches</div>
             ) : (
               filtered.map((opt) => (

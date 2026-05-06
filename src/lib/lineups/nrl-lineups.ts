@@ -45,6 +45,13 @@ export interface LineupTryscorerOdds {
   bestPrice: number | null
 }
 
+export interface LineupCasualtyOut {
+  team: string
+  player: string
+  injury: string | null
+  returnDate: string | null
+}
+
 type RawRow = Record<string, unknown>
 
 const PAGE_SIZE = 1000
@@ -96,6 +103,14 @@ function normaliseSide(value: unknown): LineupSide | null {
   if (side === "spine") return "spine"
   if (side === "bench" || side === "interchange") return "bench"
   return null
+}
+
+function normaliseKey(value: string | null | undefined): string {
+  return String(value ?? "")
+    .replace(/-/g, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
 }
 
 function getTodayInBrisbane(): string {
@@ -272,7 +287,7 @@ export async function fetchUpcomingTryscorerOdds(): Promise<Record<string, Lineu
       const bestPrice = numberOrNull(row["Best Price"])
       if (!player || bestPrice == null) continue
 
-      const key = player.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+      const key = normaliseKey(player)
       const current = odds.get(key)
       if (current?.bestPrice != null && current.bestPrice >= bestPrice) continue
 
@@ -286,6 +301,52 @@ export async function fetchUpcomingTryscorerOdds(): Promise<Record<string, Lineu
     return Object.fromEntries(odds)
   } catch (error) {
     console.warn("Unable to fetch upcoming tryscorer odds; using empty odds map.", error)
+    return {}
+  }
+}
+
+export async function fetchCasualtyWardOuts(): Promise<Record<string, LineupCasualtyOut[]>> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !serviceRoleKey) return {}
+
+    const endpoint = new URL("/rest/v1/casualty_ward", supabaseUrl)
+    endpoint.searchParams.set("select", "team,player,injury,return_date")
+    endpoint.searchParams.set("competition_id", "eq.111")
+    endpoint.searchParams.set("order", "team.asc,player.asc")
+
+    const response = await fetch(endpoint, {
+      cache: "no-store",
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Accept-Profile": "nrl",
+      },
+    })
+    if (!response.ok) return {}
+    const data = (await response.json()) as RawRow[]
+
+    const byTeam = new Map<string, LineupCasualtyOut[]>()
+    for (const row of data) {
+      const team = text(row.team)
+      const player = text(row.player)
+      const key = normaliseKey(team)
+      if (!team || !player || !key) continue
+
+      const outs = byTeam.get(key) ?? []
+      outs.push({
+        team,
+        player,
+        injury: nullableText(row.injury),
+        returnDate: nullableText(row.return_date),
+      })
+      byTeam.set(key, outs)
+    }
+
+    return Object.fromEntries(byTeam)
+  } catch (error) {
+    console.warn("Unable to fetch casualty ward outs; using empty notable outs map.", error)
     return {}
   }
 }

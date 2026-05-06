@@ -44,7 +44,7 @@ const MAX_ENTITY_IDS = 4;
 const MAX_RESULT_ROWS = 40;
 const MAX_SUGGESTIONS = 5;
 const MAX_CHART_POINTS = 24;
-const MAX_FANTASY_PLAYERS = 24;
+const MAX_FANTASY_PLAYERS = 80;
 const NAME_TOKEN_ALIASES: Record<string, string[]> = {
   tom: ["thomas"],
   thomas: ["tom"],
@@ -256,6 +256,7 @@ interface ChartDatasetInput {
 
 interface FantasySnapshotInput {
   round?: number;
+  playerNames?: string[];
   positions?: string[];
   priceMax?: number;
   sortBy?:
@@ -1196,6 +1197,7 @@ function parseFantasySnapshotInput(input: unknown): FantasySnapshotInput {
 
   return {
     round: parseOptionalInteger(record, "round"),
+    playerNames: parseOptionalStringArray(record, "playerNames", 40),
     positions: parseOptionalStringArray(record, "positions", 4),
     priceMax: parseOptionalInteger(record, "priceMax"),
     sortBy:
@@ -1290,6 +1292,27 @@ function resolveFantasyPlayerTeam(
   });
 
   return candidates[0]?.team ?? null;
+}
+
+function matchesRequestedFantasyPlayerName(playerName: string, requestedNames: string[]): boolean {
+  const playerNorm = normalizeLooseSearchValue(playerName);
+  const playerParts = parseNameParts(playerName);
+
+  return requestedNames.some((requestedName) => {
+    const requestedNorm = normalizeLooseSearchValue(requestedName);
+    if (!requestedNorm) return false;
+    if (playerNorm === requestedNorm) return true;
+
+    const requestedParts = parseNameParts(requestedName);
+    return Boolean(
+      playerParts.last &&
+        requestedParts.last &&
+        playerParts.last === requestedParts.last &&
+        playerParts.first[0] &&
+        requestedParts.first[0] &&
+        playerParts.first[0] === requestedParts.first[0]
+    );
+  });
 }
 
 function teamHasDrawFixture(draw2026Data: Draw2026Data | null, round: number, team: string | null): boolean | null {
@@ -2659,10 +2682,18 @@ async function runGetFantasySnapshot(
   const roundAvailable = requestedRound == null || availableRounds.includes(requestedRound);
   const fallbackRound = availableRounds[0] ?? null;
   const effectiveRound = roundAvailable ? requestedRound : fallbackRound;
+  const includeByeOrUnavailable =
+    parsed.sortBy === "ownership_delta_asc" && parsed.requireOwnershipRise === false;
+  const requestedPlayerNames = (parsed.playerNames ?? []).filter((name) => normalizeLooseSearchValue(name).length > 0);
 
   const filtered = fantasyPlayers
     .filter((player) => (parsed.excludeLocked === true ? !player.locked : true))
-    .filter((player) => !player.isBye)
+    .filter((player) =>
+      requestedPlayerNames.length > 0
+        ? matchesRequestedFantasyPlayerName(player.name, requestedPlayerNames)
+        : true
+    )
+    .filter((player) => (includeByeOrUnavailable ? true : !player.isBye))
     .filter((player) => (parsed.priceMax != null ? (player.cost ?? Number.MAX_SAFE_INTEGER) <= parsed.priceMax : true))
     .filter((player) =>
       normalizedPositions && normalizedPositions.length > 0
@@ -2675,8 +2706,20 @@ async function runGetFantasySnapshot(
       const coach = coachById.get(player.id);
       const defaultMetrics = getFantasyCoachRoundMetrics(coach);
       const round = effectiveRound ?? lineupsProjections.round ?? defaultMetrics.round;
-      // Source projections from nrl.lineups (our primary store). Default to 0 for unlisted players.
-      const projectionRaw = lineupsProjections.projectionByPlayerId.get(player.id) ?? 0;
+      // Source projections from nrl.lineups when team lists are available, otherwise
+      // from nrl.lineup_unaware_fantasy_projections by player name, matching the dashboard.
+      const fallbackProjectionRaw = defaultMetrics.projection ?? player.projectedAvg ?? null;
+      const projectionRaw =
+        lineupsProjections.projectionByPlayerId.get(player.id) ??
+        lineupsProjections.projectionByPlayerName.get(normalizeLooseSearchValue(player.name)) ??
+        fallbackProjectionRaw ??
+        0;
+      const lineupRole =
+        lineupsProjections.source === "lineups"
+          ? lineupsProjections.roleByPlayerId.get(player.id) ??
+            lineupsProjections.roleByPlayerName.get(normalizeLooseSearchValue(player.name)) ??
+            null
+          : null;
       const breakEvenRaw =
         round != null
           ? (coach?.breakEvens?.[String(round)] ?? coach?.breakEven ?? null)
@@ -2712,6 +2755,8 @@ async function runGetFantasySnapshot(
         projectedAvg: hasAiProDataAccess(access.plan) ? player.projectedAvg : null,
         gamesPlayed: player.gamesPlayed,
         round,
+        namedToPlay: lineupRole != null,
+        lineupRole,
         nextMajorByeRound,
         playsNextMajorByeRound,
         unavailableMajorByeRounds,
@@ -3189,8 +3234,14 @@ const CORE_AI_TOOLS: AiTool[] = [
       required: ["round", "positions", "priceMax", "sortBy", "requireOwnershipRise", "excludeLocked", "limit"],
       properties: {
         round: { type: ["number", "null"] },
+        playerNames: {
+          description: "Optional real or screenshot-visible player names to fetch directly. Accepts full names and initial-plus-surname forms like J. Hughes.",
+          type: ["array", "null"],
+          items: { type: "string" },
+          maxItems: 40,
+        },
         positions: {
-          description: "Fantasy position filters. Use the app's position labels: HOK (hooker), MID (middle/prop), EDG (edge/second row/lock/2RF), HLF (halfback/five-eighth/halves), CTR (centre), WFB (winger/fullback). Group aliases also accepted: 'forwards' (HOK+MID+EDG), 'backs' (CTR+WFB), 'halves' (HLF). Map natural language like 'second row' → EDG, 'prop' → MID, 'hooker' → HOK.",
+          description: "Fantasy position filters. Use the app's position labels: HOK (hooker), MID (middle/prop/lock), EDG (edge/second row/2RF), HLF (halfback/five-eighth/halves), CTR (centre), WFB (winger/fullback). Group aliases also accepted: 'forwards' (HOK+MID+EDG), 'backs' (CTR+WFB), 'halves' (HLF). Map natural language like 'second row' -> EDG, 'lock' -> MID, 'prop' -> MID, 'hooker' -> HOK.",
           type: ["array", "null"],
           items: { type: "string" },
           maxItems: 4,

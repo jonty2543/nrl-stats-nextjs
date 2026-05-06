@@ -13,7 +13,7 @@ import type {
   LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import { PLAYER_STATS } from "@/lib/data/constants"
-import type { PlayerImageRecord } from "@/lib/supabase/queries"
+import type { CasualtyWardRecord, PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   applyFantasyBreakEvenOffset,
   FANTASY_POSITION_MAP,
@@ -51,11 +51,30 @@ interface FantasyArticleLink {
   imageUrls: string[]
 }
 
+type TradeScreenshotSlot = "starters" | "bench" | "trade"
+
+interface FantasyTradeScreenshot {
+  id: string
+  slot: TradeScreenshotSlot
+  name: string
+  mediaType: "image/jpeg" | "image/png" | "image/webp"
+  dataUrl: string
+}
+
+interface FantasyTradeSuggestorResponse {
+  status: string
+  assistantMessage?: string
+  error?: string
+}
+
 interface FantasyDashboardProps {
   fantasyPlayers: FantasyPlayerSnapshot[]
   fantasyCoachPlayers?: FantasyCoachPlayerSnapshot[]
   lineupsProjections?: LineupsProjectionSnapshot
   ownershipBaselineSnapshot?: FantasyOwnershipBaselineSnapshot | null
+  casualtyWardRows?: CasualtyWardRecord[]
+  relevantOuts?: CasualtyWardRecord[]
+  relevantOutCandidates?: CasualtyWardRecord[]
   availableYears: string[]
   defaultYears: string[]
   initialPlayerStats: PlayerStat[]
@@ -85,10 +104,12 @@ type AllPlayersSortKey =
   | "weeklyChange"
   | "ownPercent"
   | "price"
+  | "pricedAt"
   | "avg2026"
   | "last3"
   | "ppm"
   | "projection"
+  | "value"
   | "breakeven"
   | "gamesPlayed"
 
@@ -133,9 +154,14 @@ interface AllPlayersTableRow {
   avg2026: number | null
   last3: number | null
   ppm: number | null
+  pricedAt: number | null
   projection: number | null
+  value: number | null
   breakeven: number | null
   weeklyChange: number | null
+  relevantOuts: CasualtyWardRecord[]
+  nextMajorByeRound: number | null
+  playsNextMajorBye: boolean | null
   gamesPlayed: number
 }
 
@@ -218,9 +244,15 @@ const FANTASY_TEMPLATE_ROWS: Array<{ label: string; slots: string[] }> = [
   { label: "WFB", slots: ["WFB", "WFB", "WFB"] },
 ]
 const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }> = [
+  { key: "change", label: "Weekly Deltas" },
   { key: "ownership", label: "Total Ownership" },
-  { key: "change", label: "Ownership Change" },
 ]
+const TRADE_SCREENSHOT_SLOTS: Array<{ key: TradeScreenshotSlot; label: string; hint: string }> = [
+  { key: "starters", label: "Starters", hint: "Selected 13 / field view" },
+  { key: "bench", label: "Bench", hint: "Interchange + emergencies" },
+  { key: "trade", label: "Trade screen", hint: "Bank, trades, prices" },
+]
+const TRADE_SUGGESTOR_MAX_IMAGE_DATA_URL_LENGTH = 650_000
 
 const MINUTES_FILTER_OPTIONS = [
   "Any",
@@ -308,12 +340,28 @@ const ALL_PLAYERS_BASE_COLUMNS: Array<{ key: AllPlayersSortKey; label: string; a
   { key: "weeklyChange", label: "Weekly", align: "center" },
   { key: "ownPercent", label: "Own %", align: "center" },
   { key: "price", label: "Price", align: "center" },
+  { key: "pricedAt", label: "Priced At", align: "center" },
   { key: "avg2026", label: "2026 Avg", align: "center" },
   { key: "last3", label: "Last 3", align: "center" },
   { key: "ppm", label: "PPM", align: "center" },
   { key: "projection", label: "Proj", align: "center", proOnly: true },
+  { key: "value", label: "Value", align: "center", proOnly: true },
   { key: "breakeven", label: "BE", align: "center", proOnly: true },
   { key: "gamesPlayed", label: "Games", align: "center" },
+]
+
+const ALL_PLAYERS_MOBILE_SORT_OPTIONS: Array<{ key: AllPlayersSortKey; label: string; proOnly?: boolean }> = [
+  { key: "weeklyChange", label: "Weekly" },
+  { key: "ownPercent", label: "Own %" },
+  { key: "price", label: "Price" },
+  { key: "pricedAt", label: "Priced At" },
+  { key: "avg2026", label: "2026 Avg" },
+  { key: "last3", label: "Last 3" },
+  { key: "ppm", label: "PPM" },
+  { key: "projection", label: "Proj", proOnly: true },
+  { key: "value", label: "Value", proOnly: true },
+  { key: "breakeven", label: "BE", proOnly: true },
+  { key: "gamesPlayed", label: "Games" },
 ]
 
 function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
@@ -321,17 +369,20 @@ function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
     case "name":
       return "w-[136px] min-w-[136px] max-w-[136px] sm:w-32 sm:min-w-32 sm:max-w-32"
     case "position":
-      return "w-[72px] min-w-[72px] max-w-[72px] sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px]"
+      return "w-40 min-w-40 max-w-40 sm:w-44 sm:min-w-44 sm:max-w-44"
     case "weeklyChange":
     case "ownPercent":
       return "w-20 min-w-20 max-w-20"
     case "price":
+      return "w-16 min-w-16 max-w-16"
+    case "pricedAt":
       return "w-16 min-w-16 max-w-16"
     case "avg2026":
     case "last3":
       return "w-16 min-w-16 max-w-16"
     case "ppm":
     case "projection":
+    case "value":
     case "breakeven":
     case "gamesPlayed":
       return "w-14 min-w-14 max-w-14"
@@ -349,6 +400,10 @@ function getCenteredValueClass(key: AllPlayersSortKey): string {
     case "avg2026":
     case "last3":
       return "min-w-[2.5rem]"
+    case "pricedAt":
+      return "min-w-[2.2rem]"
+    case "value":
+      return "min-w-[2.6rem]"
     default:
       return ""
   }
@@ -443,6 +498,39 @@ function findLocalPlayerMatch(fantasyName: string, localNames: string[]): string
   return null
 }
 
+function buildInitialSurnamePlayerNameMap(playerNames: string[]): Map<string, string> {
+  const namesByKey = new Map<string, Set<string>>()
+  for (const name of playerNames) {
+    const parsed = parseName(name)
+    if (!parsed.first || !parsed.last) continue
+    const key = `${parsed.first[0]} ${parsed.last}`
+    const names = namesByKey.get(key) ?? new Set<string>()
+    names.add(name)
+    namesByKey.set(key, names)
+  }
+
+  const uniqueNames = new Map<string, string>()
+  namesByKey.forEach((names, key) => {
+    if (names.size !== 1) return
+    const [name] = Array.from(names)
+    uniqueNames.set(key, name)
+  })
+  return uniqueNames
+}
+
+function expandInitialSurnamePlayerNames(text: string, playerNames: string[]): string {
+  const playerNameByInitialSurname = buildInitialSurnamePlayerNameMap(playerNames)
+  if (playerNameByInitialSurname.size === 0) return text
+
+  return text.replace(
+    /\b([A-Z])\.?\s+([A-Z][A-Za-z'’.-]*(?:-[A-Z][A-Za-z'’.-]*)*)\b/gi,
+    (match, initial, surname) => {
+      const fullName = playerNameByInitialSurname.get(`${initial.toLowerCase()} ${normaliseName(surname)}`)
+      return fullName ?? match
+    }
+  )
+}
+
 function formatPrice(value: number | null): string {
   if (value === null) return "-"
   return `$${Math.round(value / 1000)}k`
@@ -482,6 +570,106 @@ function normalisePositionForComparison(value: string | null | undefined): strin
     .trim()
 }
 
+function relevantOutsPositionGroup(value: string | null | undefined): string | null {
+  const normalised = normalisePositionForComparison(value)
+  if (!normalised) return null
+  if (["fullback", "fb"].includes(normalised)) return "fullback"
+  if (["wing", "winger", "w"].includes(normalised)) return "wing"
+  if (["centre", "center", "ctr"].includes(normalised)) return "centre"
+  if (["halfback", "five eighth", "five eighths", "5 8", "58", "half", "hlf"].includes(normalised)) return "halves"
+  if (["lock", "prop", "front row", "front rower", "mid"].includes(normalised)) return "middle"
+  if (["second row", "second rower", "back row", "back rower", "2rf", "edg", "edge"].includes(normalised)) return "second-row"
+  if (["hooker", "dummy half", "hok"].includes(normalised)) return "hooker"
+  return normalised
+}
+
+function isRelevantOutsPositionMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  const leftGroup = relevantOutsPositionGroup(left)
+  const rightGroup = relevantOutsPositionGroup(right)
+  return Boolean(leftGroup && rightGroup && leftGroup === rightGroup)
+}
+
+function relevantOutsTeamGroup(value: string | null | undefined): string | null {
+  const key = normaliseTeamKey(value)
+  if (!key) return null
+  const aliases: Array<[string, string[]]> = [
+    ["broncos", ["broncos", "brisbane broncos"]],
+    ["bulldogs", ["bulldogs", "canterbury bankstown bulldogs", "canterbury bulldogs"]],
+    ["cowboys", ["cowboys", "north queensland cowboys"]],
+    ["dragons", ["dragons", "st george illawarra dragons"]],
+    ["dolphins", ["dolphins", "the dolphins"]],
+    ["eels", ["eels", "parramatta eels"]],
+    ["knights", ["knights", "newcastle knights"]],
+    ["panthers", ["panthers", "penrith panthers"]],
+    ["rabbitohs", ["rabbitohs", "south sydney rabbitohs", "souths"]],
+    ["raiders", ["raiders", "canberra raiders"]],
+    ["roosters", ["roosters", "sydney roosters"]],
+    ["sea eagles", ["sea eagles", "manly sea eagles", "manly warringah sea eagles", "manly"]],
+    ["sharks", ["sharks", "cronulla sharks", "cronulla sutherland sharks"]],
+    ["storm", ["storm", "melbourne storm"]],
+    ["tigers", ["tigers", "wests tigers"]],
+    ["titans", ["titans", "gold coast titans"]],
+    ["warriors", ["warriors", "new zealand warriors", "nz warriors"]],
+  ]
+  for (const [group, names] of aliases) {
+    if (names.includes(key)) return group
+  }
+  return key
+}
+
+function isRelevantOutsTeamMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  const leftGroup = relevantOutsTeamGroup(left)
+  const rightGroup = relevantOutsTeamGroup(right)
+  return Boolean(leftGroup && rightGroup && leftGroup === rightGroup)
+}
+
+function findFantasyPlayerForCasualtyRow(
+  row: CasualtyWardRecord,
+  fantasyPlayerByName: Map<string, FantasyPlayerSnapshot>
+): FantasyPlayerSnapshot | null {
+  return fantasyPlayerByName.get(normaliseProjectionPlayerName(row.player)) ?? null
+}
+
+function casualtyRowPosition(row: CasualtyWardRecord, fantasyPlayer: FantasyPlayerSnapshot | null): string | null {
+  return row.position ?? fantasyPlayer?.positionLabel ?? fantasyPlayer?.positionLabels[0] ?? null
+}
+
+function casualtyRowGames(row: CasualtyWardRecord, fantasyPlayer: FantasyPlayerSnapshot | null): number | null {
+  return row.games ?? fantasyPlayer?.gamesPlayed ?? null
+}
+
+function casualtyRowAverageFantasy(row: CasualtyWardRecord, fantasyPlayer: FantasyPlayerSnapshot | null): number | null {
+  return row.averageFantasy ?? fantasyPlayer?.avgPoints ?? null
+}
+
+function isRelevantOutCandidate({
+  row,
+  lineupTeam,
+  lineupPosition,
+  namedLineupPlayers,
+  fantasyPlayerByName,
+}: {
+  row: CasualtyWardRecord
+  lineupTeam: string | null | undefined
+  lineupPosition: string | null | undefined
+  namedLineupPlayers: Set<string>
+  fantasyPlayerByName: Map<string, FantasyPlayerSnapshot>
+}): boolean {
+  const playerKey = normaliseProjectionPlayerName(row.player)
+  if (!playerKey || namedLineupPlayers.has(playerKey)) return false
+
+  const fantasyPlayer = findFantasyPlayerForCasualtyRow(row, fantasyPlayerByName)
+  const games = casualtyRowGames(row, fantasyPlayer)
+  const averageFantasy = casualtyRowAverageFantasy(row, fantasyPlayer)
+
+  return (
+    (games ?? 0) >= 2 &&
+    (averageFantasy ?? 0) >= 30 &&
+    isRelevantOutsTeamMatch(row.team, lineupTeam) &&
+    isRelevantOutsPositionMatch(casualtyRowPosition(row, fantasyPlayer), lineupPosition)
+  )
+}
+
 function normaliseProjectionPlayerName(value: string | null | undefined): string {
   return String(value ?? "")
     .toLowerCase()
@@ -509,9 +697,327 @@ function formatTableNumber(value: number | null, digits = 1): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(digits)
 }
 
+function formatSignedTableNumber(value: number | null, digits = 1): string {
+  if (value === null || !Number.isFinite(value)) return "-"
+  const formatted = formatTableNumber(value, digits)
+  return value > 0 ? `+${formatted}` : formatted
+}
+
 function formatPercent(value: number | null): string {
   if (value === null) return "-"
   return `${value.toFixed(2)}%`
+}
+
+function readTradeFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result)
+      } else {
+        reject(new Error("Unable to read image."))
+      }
+    }
+    reader.onerror = () => reject(new Error("Unable to read image."))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadTradeHtmlImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new window.Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error("Unable to load image."))
+    image.src = src
+  })
+}
+
+async function buildFantasyTradeScreenshot(
+  file: File,
+  slot: TradeScreenshotSlot
+): Promise<FantasyTradeScreenshot> {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    throw new Error("Upload PNG, JPEG, or WebP screenshots.")
+  }
+
+  const sourceDataUrl = await readTradeFileAsDataUrl(file)
+  const image = await loadTradeHtmlImage(sourceDataUrl)
+  const maxWidth = 900
+  const canvas = document.createElement("canvas")
+  const canvasContext = canvas.getContext("2d")
+  if (!canvasContext) {
+    throw new Error("Unable to process image.")
+  }
+
+  let scale = Math.min(1, maxWidth / image.naturalWidth)
+  let dataUrl = ""
+  for (const widthScale of [1, 0.82, 0.68, 0.54, 0.42]) {
+    const width = Math.max(1, Math.round(image.naturalWidth * scale * widthScale))
+    const height = Math.max(1, Math.round(image.naturalHeight * scale * widthScale))
+    canvas.width = width
+    canvas.height = height
+    canvasContext.drawImage(image, 0, 0, width, height)
+
+    for (const quality of [0.78, 0.68, 0.58, 0.48]) {
+      dataUrl = canvas.toDataURL("image/jpeg", quality)
+      if (dataUrl.length <= TRADE_SUGGESTOR_MAX_IMAGE_DATA_URL_LENGTH) break
+    }
+
+    if (dataUrl.length <= TRADE_SUGGESTOR_MAX_IMAGE_DATA_URL_LENGTH) break
+    scale *= 0.9
+  }
+
+  if (dataUrl.length > TRADE_SUGGESTOR_MAX_IMAGE_DATA_URL_LENGTH) {
+    throw new Error("That screenshot is too large. Try cropping it or uploading a clearer, smaller screenshot.")
+  }
+
+  return {
+    id: `${slot}-${file.name}-${file.size}-${file.lastModified}`,
+    slot,
+    name: file.name,
+    mediaType: "image/jpeg",
+    dataUrl,
+  }
+}
+
+function SparkAiIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true" className={className}>
+      <path
+        d="M23.5 4.5c1.2 8.1 5.9 12.8 14 14-8.1 1.2-12.8 5.9-14 14-1.2-8.1-5.9-12.8-14-14 8.1-1.2 12.8-5.9 14-14Z"
+        fill="currentColor"
+      />
+      <path
+        d="M37.5 29c.7 4.3 3.2 6.8 7.5 7.5-4.3.7-6.8 3.2-7.5 7.5-.7-4.3-3.2-6.8-7.5-7.5 4.3-.7 6.8-3.2 7.5-7.5Z"
+        fill="currentColor"
+        opacity="0.92"
+      />
+      <path
+        d="M38.5 2.5c.6 3.4 2.6 5.4 6 6-3.4.6-5.4 2.6-6 6-.6-3.4-2.6-5.4-6-6 3.4-.6 5.4-2.6 6-6Z"
+        fill="currentColor"
+        opacity="0.86"
+      />
+    </svg>
+  )
+}
+
+function TrendGraphIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path
+        d="M4 18h16M5 15l4-4 3 3 6-7"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.2"
+      />
+      <path
+        d="M15 7h3v3"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.2"
+      />
+    </svg>
+  )
+}
+
+function DollarIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path
+        d="M12 3v18M16.5 7.5c-.9-1-2.4-1.6-4.2-1.6-2.3 0-4 1.1-4 2.8 0 1.9 1.9 2.5 4.2 3 2.4.5 4.3 1.1 4.3 3.2 0 1.8-1.8 3.2-4.5 3.2-2 0-3.8-.7-4.9-2"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.2"
+      />
+    </svg>
+  )
+}
+
+function getTradeSuggestorRatingClass(rating: number): string {
+  if (rating >= 8) return "border-emerald-300/45 bg-emerald-400/15 text-emerald-200"
+  if (rating >= 6) return "border-amber-300/45 bg-amber-400/15 text-amber-100"
+  return "border-rose-300/45 bg-rose-400/15 text-rose-100"
+}
+
+function cleanTradeSuggestorLine(text: string): string {
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/\bOwn\s*%\s*delta\s*:/gi, "Ownership change:")
+    .replace(/\bown\s*%\s*delta\b/gi, "ownership change")
+    .replace(/\bvalue\s+v(?:s)?\.?\s*pricedAt\b/gi, "value compared with price")
+    .replace(/\bmomentum\s*\+\s*ownership\b/gi, "rising ownership")
+    .replace(/\bGood scored floor\b/gi, "Good scoring floor")
+    .replace(/\bmisses the next major bye\s*\(helps field 13\)/gi, "misses the next major bye, so check your bye-round coverage")
+    .replace(/\bhelps field 13\b/gi, "helps your major-bye coverage")
+    .replace(/\bpriced[- ]at\s+\$/gi, "priced at ")
+    .replace(/\bPriced[- ]at\s+\$/g, "Priced at ")
+}
+
+function shouldDropTradeSuggestorLine(text: string): boolean {
+  const normalized = cleanTradeSuggestorLine(text).toLowerCase()
+  return (
+    /\bif you want\b/.test(normalized) ||
+    /\bi can\b/.test(normalized) ||
+    /\bi['’]?ll\b/.test(normalized) ||
+    /\bwould you like\b/.test(normalized) ||
+    /\bfollow[- ]?up\b/.test(normalized) ||
+    /\bsnapshot threshold\b/.test(normalized) ||
+    /\bthreshold for\b/.test(normalized) ||
+    /\bmeets? the .*threshold\b/.test(normalized) ||
+    /\bguardrail\b/.test(normalized) ||
+    /\brule followed\b/.test(normalized) ||
+    /\bbackend\b/.test(normalized) ||
+    /\blive momentum snapshot\b/.test(normalized) ||
+    /\blive .*snapshot\b/.test(normalized) ||
+    /\bhighly[- ]sold snapshot\b/.test(normalized) ||
+    /\bsell\/watch data\b/.test(normalized) ||
+    /\buploaded squad\b/.test(normalized) ||
+    /\ball buys come from\b/.test(normalized)
+  )
+}
+
+function extractTradeSuggestorRating(text: string): number | null {
+  const match = text.match(/(?:rating\s*)?(\d+(?:\.\d+)?)\/10/i)
+  if (!match) return null
+  const rating = Number(match[1])
+  return Number.isFinite(rating) ? rating : null
+}
+
+function stripTradeSuggestorRating(text: string): string {
+  return text
+    .replace(/\s*[\[(]?(?:rating\s*)?\d+(?:\.\d+)?\/10[\])]?/gi, "")
+    .replace(/\s+([,;:)])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+}
+
+function renderTradeSuggestorInline(text: string) {
+  const cleaned = cleanTradeSuggestorLine(text)
+  const ratingMatch = cleaned.match(/(?:rating\s*)?(\d+(?:\.\d+)?)\/10/i)
+  if (!ratingMatch || ratingMatch.index == null) return cleaned
+
+  const rating = Number(ratingMatch[1])
+  const matchText = ratingMatch[0]
+  const before = cleaned.slice(0, ratingMatch.index)
+  const after = cleaned.slice(ratingMatch.index + matchText.length)
+
+  return (
+    <>
+      {before}
+      <span className={`mx-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${getTradeSuggestorRatingClass(rating)}`}>
+        {rating}/10
+      </span>
+      {after}
+    </>
+  )
+}
+
+function formatTradeSuggestorSectionTitle(title: string): string {
+  if (/^sell watch/i.test(title)) return "Sell Watch"
+  if (/^top 5 trade-ins/i.test(title)) return "Top 5 Trade-ins"
+  if (/^recommended moves?/i.test(title)) return "Recommended Moves"
+  return title
+}
+
+function buildTradeSuggestorSections(content: string) {
+  const sections: Array<{ title: string; lines: string[] }> = []
+  let current: { title: string; lines: string[] } | null = null
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const cleaned = cleanTradeSuggestorLine(rawLine.trim().replace(/^#+\s*/, ""))
+    if (!cleaned || shouldDropTradeSuggestorLine(cleaned)) {
+      if (current) current.lines.push("")
+      continue
+    }
+
+    if (/^(recommended moves?|sell watch|top 5 trade-ins|notes)\b/i.test(cleaned)) {
+      if (current) sections.push(current)
+      current = { title: cleaned, lines: [] }
+      continue
+    }
+
+    if (!current) current = { title: "Recommended Moves", lines: [] }
+    current.lines.push(cleaned)
+  }
+  if (current) sections.push(current)
+
+  const orderedTitles = ["Sell Watch", "Top 5 Trade-ins", "Recommended Moves"]
+  return orderedTitles
+    .map((title) => {
+      const section = sections.find((entry) => formatTradeSuggestorSectionTitle(entry.title) === title)
+      if (!section) return null
+
+      const blocks: string[][] = []
+      let active: string[] = []
+      for (const line of section.lines) {
+        if (/^\d+[\).]\s+/.test(line) && active.length > 0) {
+          blocks.push(active)
+          active = [line]
+        } else {
+          active.push(line)
+        }
+      }
+      if (active.length > 0) blocks.push(active)
+
+      const orderedBlocks = title === "Sell Watch"
+        ? blocks
+        : blocks.sort((left, right) => {
+          const leftRating = extractTradeSuggestorRating(left.join(" ")) ?? -1
+          const rightRating = extractTradeSuggestorRating(right.join(" ")) ?? -1
+          return rightRating - leftRating
+        })
+      const lines = orderedBlocks.flat().map((line) => title === "Sell Watch" ? stripTradeSuggestorRating(line) : line)
+      if (title === "Sell Watch" && !lines.some((line) => line.trim().length > 0)) {
+        return {
+          title,
+          lines: ["No clear sells right now. Hold your current squad unless a player has confirmed unavailability or a clear poor-value signal."],
+        }
+      }
+
+      return { title, lines }
+    })
+    .filter((section): section is { title: string; lines: string[] } => section !== null)
+}
+
+function FantasyTradeSuggestorResult({ content }: { content: string }) {
+  const sections = buildTradeSuggestorSections(content)
+
+  return (
+    <div className="space-y-1.5 text-sm leading-6 text-nrl-text">
+      {sections.map((section) => (
+        <div key={section.title} className="space-y-1.5">
+          <div className="mt-4 text-[11px] font-bold uppercase tracking-wide text-violet-200 first:mt-0">
+            {section.title}
+          </div>
+          {section.lines.map((line, index) => {
+            const cleaned = cleanTradeSuggestorLine(line)
+            if (!cleaned) return <div key={index} className="h-1" />
+
+            if (/^\d+[\).]\s+/.test(cleaned)) {
+              return (
+                <div key={index} className="mt-2 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5 font-semibold text-white">
+                  {renderTradeSuggestorInline(cleaned)}
+                </div>
+              )
+            }
+
+            const isDetail = /^[-•]\s+/.test(cleaned)
+            return (
+              <div key={index} className={isDetail ? "pl-3 text-nrl-text" : "text-nrl-text"}>
+                {renderTradeSuggestorInline(cleaned)}
+              </div>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function formatOwnershipDelta(value: number | null): string {
@@ -525,6 +1031,132 @@ function getOwnershipDeltaClass(value: number | null): string {
   if (value > 0) return "text-emerald-300"
   if (value < 0) return "text-rose-300"
   return "text-nrl-muted"
+}
+
+function getFantasyValueClass(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "text-nrl-muted"
+  if (value > 0) return "text-emerald-300"
+  if (value < 0) return "text-rose-300"
+  return "text-nrl-muted"
+}
+
+function CasualtyWardPills({ rows }: { rows: CasualtyWardRecord[] }) {
+  if (rows.length === 0) return null
+
+  return (
+    <>
+      {rows.map((row, index) => (
+        <Fragment key={`${row.player}-${row.injury ?? "injury"}-${row.returnDate ?? "return"}-${index}`}>
+          <a
+            href={row.sourceUrl ?? undefined}
+            target={row.sourceUrl ? "_blank" : undefined}
+            rel={row.sourceUrl ? "noreferrer" : undefined}
+            className="rounded-md border border-amber-400/40 bg-amber-400/10 px-1 py-0.5 font-semibold text-amber-300 sm:px-2 sm:py-1"
+            title="Casualty ward injury"
+          >
+            Out: {row.injury ?? "TBC"}, return {row.returnDate ?? "TBC"}
+          </a>
+        </Fragment>
+      ))}
+    </>
+  )
+}
+
+function formatRelevantOutReturnTag(value: string | null): string {
+  const trimmed = value?.trim()
+  if (!trimmed) return "TBC"
+  if (/\b2027\b/.test(trimmed)) return "TBC"
+  const round = trimmed.match(/^round\s+(.+)$/i)
+  if (round?.[1]) return `R${round[1].trim()}`
+  return trimmed
+}
+
+function formatRelevantOutTag(rows: CasualtyWardRecord[]): string {
+  const [row] = rows
+  if (!row) return ""
+  return `${row.player} ${formatRelevantOutReturnTag(row.returnDate)}`
+}
+
+const MAJOR_BYE_ROUNDS = [12, 15, 18] as const
+
+function getNextMajorByeRound(currentRound: number | null | undefined): number | null {
+  const round = typeof currentRound === "number" && Number.isFinite(currentRound) ? currentRound : 1
+  return MAJOR_BYE_ROUNDS.find((byeRound) => byeRound >= round) ?? null
+}
+
+function teamPlaysInRound(draw2026Data: Draw2026Data | null | undefined, round: number | null, team: string | null | undefined): boolean | null {
+  if (!draw2026Data?.rows?.length || !round || !team) return null
+  const teamKey = relevantOutsTeamGroup(team) ?? normaliseTeamKey(team)
+  if (!teamKey) return null
+  return draw2026Data.rows.some(
+    (row) =>
+      row.round === round &&
+      ((relevantOutsTeamGroup(row.home) ?? normaliseTeamKey(row.home)) === teamKey ||
+        (relevantOutsTeamGroup(row.away) ?? normaliseTeamKey(row.away)) === teamKey)
+  )
+}
+
+function PlayerContextTags({
+  relevantOuts,
+  nextMajorByeRound,
+  playsNextMajorBye,
+  className = "",
+}: {
+  relevantOuts: CasualtyWardRecord[]
+  nextMajorByeRound: number | null
+  playsNextMajorBye: boolean | null
+  className?: string
+}) {
+  const showByeTag = nextMajorByeRound !== null && playsNextMajorBye !== null
+  if (!showByeTag && relevantOuts.length === 0) return null
+
+  return (
+    <div className={`flex min-w-0 flex-wrap items-center gap-1.5 ${className}`}>
+      {showByeTag ? (
+        <span
+          className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
+            playsNextMajorBye
+              ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-300"
+              : "border-rose-400/35 bg-rose-400/10 text-rose-300"
+          }`}
+          title={playsNextMajorBye ? `Plays in Round ${nextMajorByeRound}` : `Bye in Round ${nextMajorByeRound}`}
+        >
+          <span aria-hidden="true">{playsNextMajorBye ? "✓" : "✕"} </span>Rd{nextMajorByeRound}
+        </span>
+      ) : null}
+      {relevantOuts.length > 0 ? (
+        <span
+          className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300"
+          title={formatRelevantOutTag(relevantOuts)}
+        >
+          <span aria-hidden="true">⚠ </span>{formatRelevantOutTag(relevantOuts)}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
+  if (rows.length === 0) return null
+
+  return (
+    <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-300">
+        <span aria-hidden="true">⚠</span>
+        <span>Relevant Outs</span>
+      </div>
+      <div className="space-y-2">
+        {rows.map((row, index) => (
+          <div
+            key={`${row.player}-${row.position ?? "position"}-${index}`}
+            className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm text-nrl-text"
+          >
+            {row.player}: {row.injury ?? "TBC"}, return {row.returnDate ?? "TBC"}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function getHeatColorForAverage(value: number): string {
@@ -938,6 +1570,9 @@ export function FantasyDashboard({
   fantasyPlayers,
   fantasyCoachPlayers = [],
   ownershipBaselineSnapshot = null,
+  casualtyWardRows = [],
+  relevantOuts = [],
+  relevantOutCandidates = [],
   lineupsProjections,
   availableYears,
   defaultYears,
@@ -957,7 +1592,7 @@ export function FantasyDashboard({
   fantasyProjectionArticle = null,
 }: FantasyDashboardProps) {
   const router = useRouter()
-  const { userId } = useAuth()
+  const { isLoaded: isAuthLoaded, userId } = useAuth()
   const initialSelectedYears = useMemo(
     () => {
       if (availableYears.includes(ALL_PLAYERS_STATS_YEAR)) return [ALL_PLAYERS_STATS_YEAR]
@@ -997,6 +1632,7 @@ export function FantasyDashboard({
     column: "weeklyChange",
     direction: "desc",
   })
+  const [allPlayersMobileView, setAllPlayersMobileView] = useState<"cards" | "table">("cards")
   const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
   const showFantasyAnalytics = initialShowFantasyAnalytics
   const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("projection")
@@ -1011,9 +1647,20 @@ export function FantasyDashboard({
   const [globalStatVsFantasyPan, setGlobalStatVsFantasyPan] = useState({ x: 0.5, y: 0.5 })
   const [globalStatVsFantasyDrag, setGlobalStatVsFantasyDrag] = useState<FantasyAnalyticsDragState | null>(null)
   const [selectedGlobalStatVsFantasyPoint, setSelectedGlobalStatVsFantasyPoint] = useState<GlobalStatVsFantasyPoint | null>(null)
-  const [fantasyTemplateMode, setFantasyTemplateMode] = useState<FantasyTemplateMode>("ownership")
+  const [fantasyTemplateMode, setFantasyTemplateMode] = useState<FantasyTemplateMode>("change")
   const [isFantasyAnalyticsPending, setIsFantasyAnalyticsPending] = useState(false)
   const [isFantasyDraftPending, setIsFantasyDraftPending] = useState(false)
+  const [isTradeSuggestorOpen, setIsTradeSuggestorOpen] = useState(false)
+  const [tradeScreenshots, setTradeScreenshots] = useState<Record<TradeScreenshotSlot, FantasyTradeScreenshot | null>>({
+    starters: null,
+    bench: null,
+    trade: null,
+  })
+  const [tradeSuggestorNotes, setTradeSuggestorNotes] = useState("")
+  const [tradeSuggestorResult, setTradeSuggestorResult] = useState<string | null>(null)
+  const [tradeSuggestorError, setTradeSuggestorError] = useState<string | null>(null)
+  const [isTradeSuggestorUploading, setIsTradeSuggestorUploading] = useState<TradeScreenshotSlot | null>(null)
+  const [isTradeSuggestorSubmitting, setIsTradeSuggestorSubmitting] = useState(false)
   const [hasRequestedAllPlayersStats, setHasRequestedAllPlayersStats] = useState(false)
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
@@ -1027,6 +1674,139 @@ export function FantasyDashboard({
       playerDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
     })
   }, [])
+  const tradeSuggestorReady = TRADE_SCREENSHOT_SLOTS.every((slot) => tradeScreenshots[slot.key] !== null)
+
+  const handleTradeScreenshotChange = async (slot: TradeScreenshotSlot, files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+
+    setIsTradeSuggestorUploading(slot)
+    setTradeSuggestorError(null)
+    try {
+      const screenshot = await buildFantasyTradeScreenshot(file, slot)
+      setTradeScreenshots((current) => ({ ...current, [slot]: screenshot }))
+    } catch (error) {
+      setTradeSuggestorError(error instanceof Error ? error.message : "Unable to upload screenshot.")
+    } finally {
+      setIsTradeSuggestorUploading(null)
+    }
+  }
+
+  const handleRunTradeSuggestor = async () => {
+    if (!isAuthLoaded) return
+    if (!userId) {
+      setTradeSuggestorError("Sign in to use Find Trades.")
+      return
+    }
+    if (!tradeSuggestorReady) {
+      setTradeSuggestorError("Upload starters, bench, and trade screen screenshots first.")
+      return
+    }
+
+    const attachments = TRADE_SCREENSHOT_SLOTS
+      .map((slot) => tradeScreenshots[slot.key])
+      .filter((screenshot): screenshot is FantasyTradeScreenshot => screenshot !== null)
+    const extraContext = tradeSuggestorNotes.trim()
+    const tradeSuggestorMetricInstructions = hasFantasyPlotAccess
+      ? [
+        "Use live fantasy data for both buys and sells: weekly ownership change, breakeven, projection, priced at, L3 average, and projection vs priced at. Projection vs priced at is important.",
+        "Try to list 3 Sell watch candidates every time. Use visible squad players only, prioritising confirmed injury/unavailability, negative ownership change, high BE, projection below priced at, weak L3/projection, or poor bye coverage. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
+        "List a visible player in Sell watch when live data shows their ownership delta is -1.0% or worse, BE is high, projection is below priced at, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using projection, priced at, BE, L3 average, ownership delta, injury/availability markers, and next major bye availability.",
+        "If a player is -1.0% or worse in ownership delta but BE is lower than priced at, projection is similar to priced at, L3 is sound, and they play the next major bye, frame them as Hold / Possible sell rather than a hard sell.",
+        "In each sell/watch player title, include the player name, position, price, and projection, but no rating. In each trade-in title, include the player name, position, price, projection, and rating.",
+        "For each sell or buy, use the label Ownership change: and include BE, priced at, L3 average, projection vs priced at, next major bye availability, and one short reason.",
+      ]
+      : [
+        "Use live fantasy data available to free users: weekly ownership change, price, priced at, season average, L3 average, named-to-play status, casualty ward context, and next major bye availability.",
+        "State briefly in Recommended Moves that Pro unlocks projection and breakeven-based trade calls, and that this answer is based on ownership movement, recent form, price, bye coverage, lineup status, and injury context.",
+        "Try to list 3 Sell watch candidates every time. Use visible squad players only, prioritising confirmed injury/unavailability, negative ownership change, weak L3 or season average for the price, poor bye coverage, or awkward cash/squad fit. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
+        "List a visible player in Sell watch when live data shows their ownership delta is -1.0% or worse, their recent form is weak for the price, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using free-user data only.",
+        "If a player is -1.0% or worse in ownership delta but L3 is sound, bye coverage is useful, and there is no availability issue, frame them as Hold / Possible sell rather than a hard sell.",
+        "In each sell/watch player title, include the player name, position, and price, but no rating. In each trade-in title, include the player name, position, price, and rating.",
+        "For each sell or buy, use the label Ownership change: and include priced at, average/L3 form, next major bye availability, and one short reason. Do not include projections, breakevens, or projection vs priced at for free users.",
+      ]
+    const prompt = [
+      "Fantasy Trade Suggestor dashboard request.",
+      "Read the uploaded NRL Fantasy screenshots: starters, bench, and trade screen.",
+      "Give a concise, friendly trade summary for this week.",
+      ...tradeSuggestorMetricInstructions,
+      "Include whether each buy/sell plays or misses the next major bye round.",
+      "Only suggest sells from players visible in the user's squad screenshots. Do not invent sell candidates.",
+      "If a visible player is not playing and has a strong negative ownership delta, mention them in Sell watch even if the screenshot was taken before final team status was known.",
+      "Write for non-technical users: be clear, friendly, and direct. Do not mention thresholds, snapshots, filters, or why a backend rule did or did not trigger.",
+      "Write every reason as one normal sentence. Do not use compressed stat shorthand or fragments like value v pricedAt, momentum + ownership, scored floor, field 13, or helps field 13. Say things like projects well for his price, ownership is rising, has a reliable scoring floor, or helps your major-bye coverage.",
+      "Tone for Sell watch: advice first, warm and practical. Do not sound like OCR/debug output. For an injured expensive player, explain that selling can free salary to bring in a stronger replacement or premium option. Do not write blunt phrases like projection is 0, avoid a zero score, your screenshot shows, or red injury marker.",
+      "Do not use screenshot slot, bench, INT, EMG, or reserve position as a sell reason. Good players can be in emergencies; squad location is irrelevant for sell logic.",
+      "Do not infer this-week availability from screenshot slot or absence from a snapshot. If real metrics are unavailable for a visible player and there is no clear injury/suspension marker, treat them as a hold/no clear sell instead of inventing projection 0 or unknown stats.",
+      "A player visible anywhere in the user's screenshots is already owned. Do not recommend any visible squad player as a trade-in, even if they appear in the buy data.",
+      "Use real player names from live data. Do not output OCR-invented names or expand abbreviated names unless they match a real player.",
+      "Do not say a player has an injury marker unless a red cross/plus is visibly attached to that exact player in the screenshots.",
+      hasFantasyPlotAccess
+        ? "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold, especially with a low BE; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news."
+        : "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold when recent form, price and bye coverage are favourable; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news.",
+      "If casualty ward lists a player but current lineups say he is named to play this week, ignore casualty ward for that player and do not describe him as injured from casualty ward.",
+      "Do not use the phrase visible red injury marker unless a red cross/plus is plainly attached to the exact player row/card. If uncertain, omit injury completely.",
+      "Do not mention an injury marker for J. Hughes/Hughes unless the marker is unambiguously attached to his exact player tile.",
+      "Do not invent trade-in names outside live buy/value data. If fewer than five eligible non-owned trade-ins remain after excluding visible squad players, list fewer than five.",
+      "Give each trade-in a rating out of 10. Do not rate sell/watch players.",
+      "Always include Top 5 trade-ins when eligible live buy/value data is supplied. If fewer than five eligible players remain, list the eligible players that remain.",
+      "Return exactly these sections in this order: Sell watch, Top 5 trade-ins, Recommended Moves.",
+      "Order Sell watch by urgency and context. Rank Top 5 trade-ins by rating, highest first.",
+      "If a sell is not clear, say hold rather than forcing one.",
+      "When recommending moves, treat keeping the user's remaining bank below about 100k as a real constraint when the visible bank and prices make that possible.",
+      "Do not recommend only an expensive sell to a much cheaper trade-in if that leaves hundreds of thousands unused. If a cheap replacement is the best value, pair it with a second move that upgrades a cheap owned player to a more expensive target using the freed salary. If you cannot identify a good second upgrade, prefer a one-trade move from the expensive sell to a more expensive trade-in that keeps bank under about 100k.",
+      "When suggesting a two-trade path, use a cheap owned player visible in the squad as the second sell and a real trade-in target from the supplied buy/value data as the upgrade. Do not invent the second sell or buy.",
+      "Do not ask follow-up questions. Make the best reasonable assumption and mention critical uncertainty briefly inside Recommended Moves.",
+      "Do not offer follow-up actions or say phrases like if you want, I can, or I'll show. Find Trades is a one-shot answer.",
+      "Do not expose backend rules, snapshot rules, guardrails, sell/watch data, live momentum snapshots, highly-sold snapshots, thresholds, eligibility filters, uploaded squad checks, or phrases like negative ownership delta sell rule. Do not add a Notes section unless there is critical screenshot uncertainty.",
+      extraContext ? `Extra user context: ${extraContext}` : "",
+    ].filter(Boolean).join("\n")
+
+    setIsTradeSuggestorSubmitting(true)
+    setTradeSuggestorError(null)
+    setTradeSuggestorResult(null)
+    try {
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: prompt,
+          persist: false,
+          imageAttachments: attachments.map((screenshot) => {
+            const slotLabel = TRADE_SCREENSHOT_SLOTS.find((slot) => slot.key === screenshot.slot)?.label ?? screenshot.slot
+            return {
+              name: `${slotLabel}: ${screenshot.name}`,
+              context: "fantasy",
+              mediaType: screenshot.mediaType,
+              dataUrl: screenshot.dataUrl,
+            }
+          }),
+        }),
+      })
+      const contentType = response.headers.get("content-type") ?? ""
+      const data = contentType.includes("application/json")
+        ? ((await response.json()) as FantasyTradeSuggestorResponse)
+        : null
+      const assistantMessage = data?.assistantMessage ?? data?.error
+      if (!response.ok || !assistantMessage) {
+        throw new Error(assistantMessage ?? "Unable to generate trade suggestions.")
+      }
+      setTradeSuggestorResult(
+        expandInitialSurnamePlayerNames(assistantMessage, fantasyPlayers.map((player) => player.name))
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to generate trade suggestions."
+      setTradeSuggestorError(
+        message.toLowerCase() === "fetch failed"
+          ? "Could not reach the AI route. Make sure the local dev server is running and has external network access."
+          : message
+      )
+    } finally {
+      setIsTradeSuggestorSubmitting(false)
+    }
+  }
 
   const navigateToPlayer = useCallback(
     (name: string) => {
@@ -1105,6 +1885,31 @@ export function FantasyDashboard({
         : null,
     [lineupsProjections, selectedFantasyPlayer]
   )
+  const selectedRelevantOuts = useMemo(() => {
+    if (
+      lineupsProjections?.source !== "lineups" ||
+      !selectedLineupRole?.isOnField ||
+      !selectedLineupRole.team ||
+      !selectedLineupRole.position
+    ) {
+      return relevantOuts
+    }
+
+    const namedLineupPlayers = new Set(lineupsProjections.roleByPlayerName.keys())
+    const fantasyPlayerByName = new Map(
+      fantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
+    )
+    return relevantOutCandidates
+      .filter((row) => isRelevantOutCandidate({
+        row,
+        lineupTeam: selectedLineupRole.team,
+        lineupPosition: selectedLineupRole.position,
+        namedLineupPlayers,
+        fantasyPlayerByName,
+      }))
+      .slice(0, 8)
+  }, [fantasyPlayers, lineupsProjections, relevantOutCandidates, relevantOuts, selectedLineupRole])
+
   const selectedFantasyCoachRound = useMemo(() => {
     return lineupsProjections?.round ?? selectedFantasyCoachMetrics.round
   }, [lineupsProjections, selectedFantasyCoachMetrics])
@@ -1486,6 +2291,10 @@ export function FantasyDashboard({
     const rows2026 = allData.filter((row) => row.Year === ALL_PLAYERS_STATS_YEAR)
     const localNames = Array.from(new Set(rows2026.map((row) => row.Name))).sort()
     const rowsByName = new Map<string, PlayerStat[]>()
+    const namedLineupPlayers = new Set(lineupsProjections?.roleByPlayerName.keys() ?? [])
+    const fantasyPlayerByName = new Map(
+      fantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
+    )
 
     for (const row of rows2026) {
       const rows = rowsByName.get(row.Name) ?? []
@@ -1512,10 +2321,7 @@ export function FantasyDashboard({
         resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
         resolvePlayerImage(player.name, teamHint, playerImages)
       const projectionRound = lineupsProjections?.round ?? coachMetrics.round
-      const fallbackProjection =
-        lineupsProjections?.source === "lineup_unaware"
-          ? lineupsProjections.projectionByPlayerName.get(normaliseProjectionPlayerName(player.name))
-          : null
+      const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(normaliseProjectionPlayerName(player.name)) ?? null
       const rawProjection =
         lineupsProjections?.projectionByPlayerId.get(player.id) ??
         (fallbackProjection != null
@@ -1524,6 +2330,29 @@ export function FantasyDashboard({
         coachMetrics.projection ??
         player.projectedAvg ??
         0
+      const pricedAt = player.pricedAt
+      const value = rawProjection != null && pricedAt != null ? rawProjection - pricedAt : null
+      const lineupRole =
+        lineupsProjections?.roleByPlayerId.get(player.id) ??
+        lineupsProjections?.roleByPlayerName.get(normaliseProjectionPlayerName(player.name)) ??
+        null
+      const nextMajorByeRound = getNextMajorByeRound(projectionRound)
+      const byeTeam = lineupRole?.team ?? teamHint ?? imageRow?.team ?? null
+      const playsNextMajorBye = teamPlaysInRound(draw2026Data, nextMajorByeRound, byeTeam)
+      const relevantOutRows =
+        lineupsProjections?.source === "lineups" && lineupRole?.isOnField && lineupRole.team && lineupRole.position
+          ? relevantOutCandidates
+            .filter(
+              (row) => isRelevantOutCandidate({
+                row,
+                lineupTeam: lineupRole.team,
+                lineupPosition: lineupRole.position,
+                namedLineupPlayers,
+                fantasyPlayerByName,
+              })
+            )
+            .slice(0, 8)
+          : []
 
       return {
         player,
@@ -1533,16 +2362,21 @@ export function FantasyDashboard({
         last3: averageNumbers(recentScores),
         ppm: totalMinutes > 0 ? totalFantasy / totalMinutes : null,
         weeklyChange: ownershipDelta,
+        pricedAt,
         projection: rawProjection,
+        value,
         breakeven: applyFantasyBreakEvenOffset(
           coachMetrics.breakEven ?? player.be ?? null,
           player.id,
           projectionRound
         ),
+        relevantOuts: relevantOutRows,
+        nextMajorByeRound,
+        playsNextMajorBye,
         gamesPlayed: playerRows.length || player.gamesPlayed || 0,
       }
     })
-  }, [allData, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages])
+  }, [allData, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
 
   const fantasyAnalyticsPoints = useMemo<FantasyAnalyticsPoint[]>(
     () =>
@@ -1674,10 +2508,12 @@ export function FantasyDashboard({
       if (effectiveSort.column === "weeklyChange") return row.weeklyChange
       if (effectiveSort.column === "ownPercent") return row.player.ownedBy
       if (effectiveSort.column === "price") return row.player.cost
+      if (effectiveSort.column === "pricedAt") return row.pricedAt
       if (effectiveSort.column === "avg2026") return row.avg2026
       if (effectiveSort.column === "last3") return row.last3
       if (effectiveSort.column === "ppm") return row.ppm
       if (effectiveSort.column === "projection") return row.projection
+      if (effectiveSort.column === "value") return row.value
       if (effectiveSort.column === "breakeven") return row.breakeven
       if (effectiveSort.column === "gamesPlayed") return row.gamesPlayed
 
@@ -1701,6 +2537,15 @@ export function FantasyDashboard({
     })
   }, [allPlayersPositionFilter, allPlayersSort, allPlayersTableRows])
 
+  const availableAllPlayersMobileSortOptions = useMemo(
+    () => ALL_PLAYERS_MOBILE_SORT_OPTIONS.filter((option) => hasFantasyPlotAccess || !option.proOnly),
+    [hasFantasyPlotAccess]
+  )
+  const selectedAllPlayersMobileSortLabel =
+    availableAllPlayersMobileSortOptions.find((option) => option.key === allPlayersSort.column)?.label ??
+    availableAllPlayersMobileSortOptions[0]?.label ??
+    "Weekly"
+
   const toggleAllPlayersSort = useCallback((column: AllPlayersSortKey, disabled = false) => {
     if (disabled) return
     setAllPlayersSort((current) => ({
@@ -1719,10 +2564,7 @@ export function FantasyDashboard({
   const selectedAdjustedProjection = useMemo(
     () => {
       if (!selectedFantasyPlayer) return null
-      const fallbackProjection =
-        lineupsProjections?.source === "lineup_unaware"
-          ? lineupsProjections.projectionByPlayerName.get(normaliseProjectionPlayerName(selectedFantasyPlayer.name))
-          : null
+      const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(normaliseProjectionPlayerName(selectedFantasyPlayer.name)) ?? null
       return (
         lineupsProjections?.projectionByPlayerId.get(selectedFantasyPlayer.id) ??
         (fallbackProjection != null
@@ -2071,97 +2913,127 @@ export function FantasyDashboard({
               options={playerSearchOptions}
               onChange={navigateToPlayer}
               placeholder="Search player..."
+              showLoadingOnType
             />
           </div>
         </section>
 
         {showOwnedCards ? (
-          <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.46fr)_minmax(0,1fr)] xl:items-stretch">
-            {fantasyProjectionArticle ? (
+          <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.46fr)_minmax(0,1fr)] xl:items-stretch">
+            <button
+              type="button"
+              onClick={() => {
+                setIsTradeSuggestorOpen(true)
+                setTradeSuggestorError(null)
+              }}
+              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/40 bg-[linear-gradient(135deg,#6d28d9,#a21caf)] px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(88,28,135,0.34)] transition-colors hover:border-violet-200 hover:bg-[linear-gradient(135deg,#7c3aed,#c026d3)] xl:order-2 xl:self-start"
+            >
+              <span className="inline-flex items-center gap-2">
+                <SparkAiIcon className="h-5 w-5 text-violet-100" />
+                <span className="text-sm font-bold">Find Trades</span>
+              </span>
+              <span className="text-[10px] font-medium text-violet-100/85">
+                Submit screenshots to get personalised trades
+              </span>
+            </button>
+            <div className="grid grid-cols-8 items-center gap-4 xl:order-1">
               <Link
-                href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
-                className="group overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 xl:order-2"
-              >
-                <div className={`relative grid h-28 ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-                  <span className="absolute left-2 top-2 z-10 rounded-md border border-white/15 bg-[#0e1330]/85 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-white shadow-sm backdrop-blur">
-                    Article
-                  </span>
-                  {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
-                    <div key={url} className="min-w-0 overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={`${fantasyProjectionArticle.title} header ${index + 1}`}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between gap-3 px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-white">
-                      {fantasyProjectionArticle.title}
-                    </div>
-                  </div>
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/10 bg-nrl-panel-2 text-base text-nrl-text">
-                    →
-                  </span>
-                </div>
-              </Link>
-            ) : null}
-            <div className="grid grid-cols-2 gap-2 xl:order-1 xl:grid-cols-1">
-              <div className="group rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))]">
-                <Link
-                  href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
+                href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
                 onClick={() => setIsFantasyAnalyticsPending(true)}
-                className={`relative inline-flex h-full min-h-10 w-full cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-center text-[11px] font-semibold transition-colors group-hover:bg-[#29335f] xl:min-h-[100%] ${
+                className={`relative col-span-8 flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] ${
                   showFantasyAnalytics
-                    ? "border-nrl-accent bg-[#20284a] text-white hover:text-white"
-                    : "border-transparent bg-[#20284a] text-white hover:text-white"
+                    ? "border-nrl-accent bg-[#20284a]"
+                    : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
                 }`}
               >
-                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-nrl-accent px-1 py-px text-[6px] font-bold uppercase tracking-wide text-[#07131f]">
-                  New
+                <span className="inline-flex items-center gap-2 text-sm font-bold">
+                  <TrendGraphIcon className="h-4 w-4 text-nrl-accent" />
+                  Find Value
                 </span>
-                Fantasy Analytics
+                <span className="mt-1 text-[10px] font-medium text-nrl-muted">
+                  Projections vs price, stat trends & template teams
+                </span>
                 {isFantasyAnalyticsPending ? (
-                  <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                  <span className="absolute inset-x-5 bottom-2 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
                     <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
                   </span>
                 ) : null}
               </Link>
-            </div>
-            <div className="group rounded-xl border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))]">
-              {hasFantasyPlotAccess ? (
-                <Link
-                  href="/dashboard/fantasy/draft"
-                  onClick={() => setIsFantasyDraftPending(true)}
-                  className="relative inline-flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center text-[11px] font-semibold text-white transition-colors hover:text-white group-hover:bg-[#29335f] xl:min-h-[100%]"
-                >
-                  Draft / H2H Projection and Odds
-                  {isFantasyDraftPending ? (
-                    <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
-                      <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+              <div className="group col-span-5 self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))]">
+                {hasFantasyPlotAccess ? (
+                  <Link
+                    href="/dashboard/fantasy/draft"
+                    onClick={() => setIsFantasyDraftPending(true)}
+                    className="relative inline-flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center leading-tight text-white transition-colors hover:text-white group-hover:bg-[#29335f]"
+                  >
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
+                      <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
+                      Draft / H2H Odds
                     </span>
-                  ) : null}
-                </Link>
-              ) : (
+                    <span className="mt-1 text-[9px] font-medium text-nrl-muted">
+                      See how likely you are to win your matchup
+                    </span>
+                    {isFantasyDraftPending ? (
+                      <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                        <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                      </span>
+                    ) : null}
+                  </Link>
+                ) : (
+                  <Link
+                    href="/dashboard/fantasy/draft"
+                    onClick={() => setIsFantasyDraftPending(true)}
+                    className="relative flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center transition-colors group-hover:bg-[#29335f]"
+                  >
+                    <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold leading-tight text-white">
+                      <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
+                      Draft / H2H Odds
+                    </div>
+                    <div className="mt-1 text-[9px] font-medium leading-tight text-nrl-muted">
+                      See how likely you are to win your matchup
+                    </div>
+                    {isFantasyDraftPending ? (
+                      <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                        <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                      </span>
+                    ) : null}
+                  </Link>
+                )}
+              </div>
+              {fantasyProjectionArticle ? (
                 <Link
-                  href="/dashboard/fantasy/draft"
-                  onClick={() => setIsFantasyDraftPending(true)}
-                  className="relative flex h-full min-h-10 w-full items-center justify-center rounded-md border border-transparent bg-[#20284a] px-3 py-2 text-center transition-colors group-hover:bg-[#29335f] xl:min-h-[100%]"
+                  href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
+                  aria-label={`Read ${fantasyProjectionArticle.title}`}
+                  className="group relative col-span-3 flex min-h-[68px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70"
                 >
-                  <div className="text-[11px] font-semibold text-white">
-                    Draft / H2H Projection and Odds
+                  <div className={`absolute inset-0 grid ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                    {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
+                      <div key={`${url}-${index}`} className="min-w-0 overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt=""
+                          className="h-full w-full object-cover opacity-70 transition-transform duration-300 group-hover:scale-[1.03]"
+                        />
+                      </div>
+                    ))}
                   </div>
-                  {isFantasyDraftPending ? (
-                    <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
-                      <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                  <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.95),rgba(14,19,48,0.74),rgba(14,19,48,0.45))]" />
+                  <div className="relative flex h-full min-h-[68px] w-full items-center justify-between gap-3 px-5 py-2.5">
+                    <div className="min-w-0">
+                      <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent">
+                        Article
+                      </div>
+                      <div className="mt-1 overflow-hidden text-[10px] font-bold uppercase leading-tight tracking-[0.1em] text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                        {fantasyProjectionArticle.title}
+                      </div>
+                    </div>
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel-2/80 text-base text-nrl-text">
+                      →
                     </span>
-                  ) : null}
+                  </div>
                 </Link>
-              )}
-            </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -2817,6 +3689,22 @@ export function FantasyDashboard({
               <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">All Players</div>
             </div>
             <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-full border border-nrl-border bg-nrl-panel-2 p-1 md:hidden">
+                {(["cards", "table"] as const).map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => setAllPlayersMobileView(view)}
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                      allPlayersMobileView === view
+                        ? "bg-nrl-accent text-[#07131f]"
+                        : "text-nrl-muted hover:text-nrl-text"
+                    }`}
+                  >
+                    {view === "cards" ? "Cards" : "Table"}
+                  </button>
+                ))}
+              </div>
               <div className="min-w-[150px]">
                 <Select
                   label=""
@@ -2827,8 +3715,189 @@ export function FantasyDashboard({
               </div>
             </div>
           </div>
-          <div className="h-[756px] overflow-y-auto overflow-x-auto">
-            <table className="w-full min-w-[980px] border-collapse text-left text-xs table-fixed">
+          <div className={`${allPlayersMobileView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2 md:hidden`}>
+            <div className="flex items-end gap-2">
+              <div className="w-40">
+                <Select
+                  label="Sort by"
+                  value={selectedAllPlayersMobileSortLabel}
+                  options={availableAllPlayersMobileSortOptions.map((option) => option.label)}
+                  onChange={(label) => {
+                    const option = availableAllPlayersMobileSortOptions.find((item) => item.label === label)
+                    if (!option) return
+                    setAllPlayersSort((current) => ({
+                      column: option.key,
+                      direction: current.column === option.key ? current.direction : "desc",
+                    }))
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAllPlayersSort((current) => ({
+                    ...current,
+                    direction: current.direction === "asc" ? "desc" : "asc",
+                  }))
+                }}
+                className="mb-px grid h-[30px] w-10 shrink-0 place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-bold text-nrl-accent transition-colors hover:border-nrl-accent"
+                aria-label={`Sort ${allPlayersSort.direction === "asc" ? "descending" : "ascending"}`}
+              >
+                {allPlayersSort.direction === "asc" ? "↑" : "↓"}
+              </button>
+            </div>
+          </div>
+          <div className={`${allPlayersMobileView === "cards" ? "block" : "hidden"} max-h-[760px] space-y-2 overflow-y-auto p-2.5 md:hidden`}>
+            {sortedAllPlayersTableRows.length === 0 ? (
+              <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
+                No {ALL_PLAYERS_STATS_YEAR} player stats available.
+              </div>
+            ) : (
+              sortedAllPlayersTableRows.map((row) => {
+                const thumbnailUrl = getPlayerThumbnailUrl(row.imageRow)
+                const cardStats = [
+                  {
+                    key: "weeklyChange",
+                    label: "Weekly",
+                    value: formatOwnershipDelta(row.weeklyChange),
+                    valueClassName: getOwnershipDeltaClass(row.weeklyChange),
+                  },
+                  {
+                    key: "projection",
+                    label: "Proj",
+                    value: formatTableNumber(row.projection),
+                    valueClassName: `text-nrl-text ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
+                  },
+                  {
+                    key: "pricedAt",
+                    label: "Priced At",
+                    value: formatTableNumber(row.pricedAt, 0),
+                    valueClassName: "text-nrl-text",
+                  },
+                  {
+                    key: "value",
+                    label: "Value",
+                    value: formatSignedTableNumber(row.value),
+                    valueClassName: `${getFantasyValueClass(row.value)} ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
+                  },
+                  {
+                    key: "ownPercent",
+                    label: "Own",
+                    value: formatPercent(row.player.ownedBy),
+                    valueClassName: "text-nrl-accent",
+                  },
+                  {
+                    key: "price",
+                    label: "Price",
+                    value: formatPrice(row.player.cost),
+                    valueClassName: "text-nrl-text",
+                  },
+                  {
+                    key: "breakeven",
+                    label: "BE",
+                    value: formatTableNumber(row.breakeven),
+                    valueClassName: `text-nrl-text ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
+                  },
+                  {
+                    key: "avg2026",
+                    label: "Avg",
+                    value: formatTableNumber(row.avg2026),
+                    valueClassName: "text-nrl-text",
+                  },
+                  {
+                    key: "last3",
+                    label: "L3",
+                    value: formatTableNumber(row.last3),
+                    valueClassName: "text-nrl-text",
+                  },
+                  {
+                    key: "ppm",
+                    label: "PPM",
+                    value: formatTableNumber(row.ppm, 2),
+                    valueClassName: "text-nrl-text",
+                  },
+                  {
+                    key: "gamesPlayed",
+                    label: "Games",
+                    value: row.gamesPlayed || "-",
+                    valueClassName: "text-nrl-text",
+                  },
+                ]
+                const selectedCardStat =
+                  cardStats.find((stat) => stat.key === allPlayersSort.column) ??
+                  (allPlayersSort.column === "position"
+                    ? { key: "position", label: "Pos", value: row.player.positionLabel, valueClassName: "text-nrl-text" }
+                    : { key: "name", label: "Sort", value: allPlayersSort.direction === "asc" ? "A-Z" : "Z-A", valueClassName: "text-nrl-text" })
+
+                return (
+                  <button
+                    key={row.player.id}
+                    type="button"
+                    onClick={() => navigateToPlayer(row.player.name)}
+                    className="block w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-left transition-colors hover:border-white/25"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-2.5">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-[11px] text-nrl-muted">
+                          {thumbnailUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={thumbnailUrl}
+                              alt=""
+                              className="h-full w-full object-cover object-top"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span>{getPlayerInitials(row.player.name)}</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="min-w-0">
+                            <div className="truncate text-[13px] font-bold text-nrl-text">{row.player.name}</div>
+                          </div>
+                          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                            <span>{row.player.positionLabel}</span>
+                            <PlayerContextTags
+                              relevantOuts={row.relevantOuts}
+                              nextMajorByeRound={row.nextMajorByeRound}
+                              playsNextMajorBye={row.playsNextMajorBye}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
+                          {selectedCardStat.label}
+                        </div>
+                        <div className={`text-[13px] font-bold ${selectedCardStat.valueClassName}`}>
+                          {selectedCardStat.value}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <div className="flex min-w-max gap-4">
+                        {cardStats.map((stat) => (
+                          <div
+                            key={stat.key}
+                            className="min-w-[3.75rem]"
+                          >
+                            <div className={`text-[8px] font-semibold uppercase tracking-wide ${stat.key === allPlayersSort.column ? "text-nrl-accent" : "text-nrl-muted"}`}>
+                              {stat.label}
+                            </div>
+                            <div className={`mt-0.5 text-[12px] font-bold ${stat.valueClassName}`}>
+                              {stat.value}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })
+            )}
+          </div>
+          <div className={`${allPlayersMobileView === "table" ? "block" : "hidden"} h-[756px] overflow-y-auto overflow-x-auto md:block`}>
+            <table className="w-full min-w-[1100px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>
                   <th
@@ -2893,12 +3962,21 @@ export function FantasyDashboard({
                           </div>
                         </td>
                         <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-32 sm:min-w-32 sm:max-w-32 sm:px-2 lg:sticky lg:left-[3.75rem] lg:z-[1]">
-                          <span className="block min-w-0 truncate" title={row.player.name}>
-                            {row.player.name}
-                          </span>
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="block min-w-0 truncate" title={row.player.name}>
+                              {row.player.name}
+                            </span>
+                          </div>
                         </td>
-                      <td className="w-[72px] min-w-[72px] max-w-[72px] border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px] sm:px-3">
-                        {row.player.positionLabel}
+                      <td className="w-40 min-w-40 max-w-40 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted sm:w-44 sm:min-w-44 sm:max-w-44 sm:px-3">
+                        <div className="flex min-w-0 items-center justify-center gap-1.5">
+                          <span>{row.player.positionLabel}</span>
+                          <PlayerContextTags
+                            relevantOuts={row.relevantOuts}
+                            nextMajorByeRound={row.nextMajorByeRound}
+                            playsNextMajorBye={row.playsNextMajorBye}
+                          />
+                        </div>
                       </td>
                       <td className={`w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getOwnershipDeltaClass(row.weeklyChange)}`}>
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("weeklyChange")}`}>
@@ -2912,6 +3990,11 @@ export function FantasyDashboard({
                       </td>
                       <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         {formatPrice(row.player.cost)}
+                      </td>
+                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
+                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("pricedAt")}`}>
+                          {formatTableNumber(row.pricedAt, 0)}
+                        </span>
                       </td>
                       <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:px-3">
                         <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("avg2026")}`}>
@@ -2929,6 +4012,11 @@ export function FantasyDashboard({
                       <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         <span className={!hasFantasyPlotAccess ? "inline-block blur-[3px] select-none" : ""}>
                           {formatTableNumber(row.projection)}
+                        </span>
+                      </td>
+                      <td className={`w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getFantasyValueClass(row.value)}`}>
+                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("value")} ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`}>
+                          {formatSignedTableNumber(row.value)}
                         </span>
                       </td>
                       <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
@@ -2990,15 +4078,7 @@ export function FantasyDashboard({
                             Lineup: {selectedLineupRole.position}
                           </span>
                         ) : null}
-                        {lineupsProjections?.source === "lineups" ? (
-                          <span className="rounded-md border border-emerald-400/35 bg-emerald-400/10 px-1 py-0.5 font-semibold text-emerald-300 sm:px-2 sm:py-1">
-                            Lineups available
-                          </span>
-                        ) : lineupsProjections?.source === "lineup_unaware" ? (
-                          <span className="rounded-md border border-amber-400/40 bg-amber-400/10 px-1 py-0.5 font-semibold text-amber-300 sm:px-2 sm:py-1">
-                            Lineups unavailable
-                          </span>
-                        ) : null}
+                        <CasualtyWardPills rows={casualtyWardRows} />
                         {isLoadingStats ? (
                           <span className="rounded-md border border-nrl-accent/30 bg-nrl-accent/10 px-1 py-0.5 text-nrl-accent sm:px-2 sm:py-1">
                             Loading season data…
@@ -3076,6 +4156,8 @@ export function FantasyDashboard({
                   playerName={selectedFantasyPlayer.name}
                 />
               ) : null}
+
+              <RelevantOutsList rows={selectedRelevantOuts} />
 
               <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -3813,6 +4895,135 @@ export function FantasyDashboard({
             <div className="xl:sticky xl:top-24">{draw2026Panel}</div>
           </div>
         </section>
+      ) : null}
+
+      {isTradeSuggestorOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-3 py-4 backdrop-blur-sm sm:px-4">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-nrl-border bg-[#11172e] shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-nrl-border bg-[#11172e]/95 px-4 py-3 backdrop-blur">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-violet-300">
+                  <SparkAiIcon className="h-7 w-7" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-white">Find Trades</div>
+                  <div className="text-[10px] text-nrl-muted">Fantasy Trade Suggestor</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTradeSuggestorOpen(false)}
+                className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-nrl-border text-lg leading-none text-nrl-muted transition-colors hover:border-nrl-accent hover:text-white"
+                aria-label="Close Find Trades"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                {TRADE_SCREENSHOT_SLOTS.map((slot) => {
+                  const screenshot = tradeScreenshots[slot.key]
+                  const uploading = isTradeSuggestorUploading === slot.key
+                  return (
+                    <label
+                      key={slot.key}
+                      className="flex min-h-24 cursor-pointer flex-col justify-between rounded-lg border border-dashed border-nrl-border bg-nrl-panel p-3 transition-colors hover:border-nrl-accent/70"
+                    >
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="sr-only"
+                        onChange={(event) => {
+                          void handleTradeScreenshotChange(slot.key, event.currentTarget.files)
+                          event.currentTarget.value = ""
+                        }}
+                      />
+                      <span className="flex min-w-0 items-center gap-3">
+                        {screenshot ? (
+                          <span className="flex h-20 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={screenshot.dataUrl}
+                              alt={`${slot.label} screenshot preview`}
+                              className="h-full w-full object-contain"
+                            />
+                          </span>
+                        ) : null}
+                        <span className="min-w-0">
+                          <span className="block text-xs font-bold uppercase tracking-wide text-nrl-accent">
+                            {slot.label}
+                          </span>
+                          <span className="mt-1 block text-[10px] text-nrl-muted">{slot.hint}</span>
+                        </span>
+                      </span>
+                      {uploading || !screenshot ? (
+                        <span className="mt-2 truncate rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1.5 text-[11px] text-nrl-text">
+                          {uploading ? "Processing..." : "Upload screenshot"}
+                        </span>
+                      ) : null}
+                    </label>
+                  )
+                })}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                  Extra context
+                </label>
+                <textarea
+                  value={tradeSuggestorNotes}
+                  onChange={(event) => setTradeSuggestorNotes(event.target.value)}
+                  rows={2}
+                  maxLength={500}
+                  placeholder="Bank, trades remaining, players you want to hold..."
+                  className="w-full resize-none rounded-lg border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent"
+                />
+              </div>
+
+              {tradeSuggestorError ? (
+                <div className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                  {tradeSuggestorError}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-[10px] text-nrl-muted">
+                  {tradeSuggestorReady ? "Ready" : "Waiting for screenshots"}
+                </div>
+                {userId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleRunTradeSuggestor()
+                    }}
+                    disabled={!tradeSuggestorReady || isTradeSuggestorSubmitting || Boolean(isTradeSuggestorUploading)}
+                    className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-full border border-violet-300/50 bg-[linear-gradient(135deg,#7c3aed,#00f58a)] px-4 py-2 text-sm font-bold text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <SparkAiIcon className="h-5 w-5" />
+                    {isTradeSuggestorSubmitting ? "Finding trades..." : "Find Trades"}
+                  </button>
+                ) : (
+                  <SignInButton mode="modal">
+                    <button
+                      type="button"
+                      className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-full border border-violet-300/50 bg-[linear-gradient(135deg,#7c3aed,#00f58a)] px-4 py-2 text-sm font-bold text-[#07131f]"
+                    >
+                      <SparkAiIcon className="h-5 w-5" />
+                      Sign in
+                    </button>
+                  </SignInButton>
+                )}
+              </div>
+
+              {tradeSuggestorResult ? (
+                <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
+                  <FantasyTradeSuggestorResult content={tradeSuggestorResult} />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   )

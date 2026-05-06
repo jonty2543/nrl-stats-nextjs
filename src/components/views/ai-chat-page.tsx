@@ -573,7 +573,6 @@ export function AiChatPage({
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const fantasyFileInputRef = useRef<HTMLInputElement | null>(null);
   const bettingFileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadMenuRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -716,7 +715,6 @@ export function AiChatPage({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to upload screenshots.");
     } finally {
-      if (fantasyFileInputRef.current) fantasyFileInputRef.current.value = "";
       if (bettingFileInputRef.current) bettingFileInputRef.current.value = "";
     }
   };
@@ -1149,15 +1147,6 @@ export function AiChatPage({
               <div className="flex items-end gap-2">
                 <div ref={uploadMenuRef} className="relative shrink-0">
                   <input
-                    ref={fantasyFileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    multiple
-                    className="sr-only"
-                    id="ai-fantasy-screenshot-upload"
-                    onChange={(event) => void handleScreenshotUpload(event.target.files, "fantasy")}
-                  />
-                  <input
                     ref={bettingFileInputRef}
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
@@ -1178,15 +1167,8 @@ export function AiChatPage({
                   {isUploadMenuOpen ? (
                     <div className="absolute bottom-12 left-0 w-72 rounded-2xl border border-nrl-border bg-nrl-panel p-2 shadow-2xl shadow-black/40">
                       <label
-                        htmlFor="ai-fantasy-screenshot-upload"
-                        className="flex w-full items-center gap-3 whitespace-nowrap rounded-xl px-3 py-3 text-left text-sm font-semibold text-nrl-text transition-colors hover:bg-nrl-panel-2"
-                      >
-                        <UploadGlyph />
-                        <span>Upload fantasy screenshots</span>
-                      </label>
-                      <label
                         htmlFor="ai-betting-screenshot-upload"
-                        className="mt-1 flex w-full items-center gap-3 whitespace-nowrap rounded-xl px-3 py-3 text-left text-sm font-semibold text-nrl-text transition-colors hover:bg-nrl-panel-2"
+                        className="flex w-full items-center gap-3 whitespace-nowrap rounded-xl px-3 py-3 text-left text-sm font-semibold text-nrl-text transition-colors hover:bg-nrl-panel-2"
                       >
                         <UploadGlyph />
                         <span>Upload betting screenshots</span>

@@ -3,13 +3,14 @@ import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { fetchApprovedArticles } from "@/lib/articles"
 import { isAccessibleSeason } from "@/lib/access/season-access"
+import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
   fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
-import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats } from "@/lib/supabase/queries"
+import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats, fetchRelevantCasualtyWardOutCandidates } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -33,7 +34,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticles] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticles, relevantOutCandidates, draw2026Data] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchLineupsProjectionsByPlayerId(),
@@ -41,6 +42,8 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
     fetchLatestFantasyOwnershipBaselineSnapshot(),
     fetchPlayerImages(),
     fetchApprovedArticles(),
+    fetchRelevantCasualtyWardOutCandidates(),
+    loadDraw2026Data().catch(() => null),
   ])
   const fantasyProjectionArticle = approvedArticles.find((article) => {
     const title = normaliseArticleTitle(article.title)
@@ -73,6 +76,8 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
       playerRouteBasePath="/dashboard/fantasy"
       ownershipBaselineSnapshot={ownershipBaselineSnapshot}
       playerImages={playerImages}
+      relevantOutCandidates={relevantOutCandidates}
+      draw2026Data={draw2026Data}
       fantasyProjectionArticle={
         fantasyProjectionArticle
           ? {

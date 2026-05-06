@@ -54,6 +54,18 @@ export interface PositionFantasySd5yRecord {
   fantasy_cv: number | null;
 }
 
+export interface CasualtyWardRecord {
+  player: string;
+  team: string | null;
+  position: string | null;
+  injury: string | null;
+  returnDate: string | null;
+  games: number | null;
+  averageFantasy: number | null;
+  sourceUrl: string | null;
+  scrapedAt: string | null;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -69,6 +81,70 @@ function normaliseTeamKey(value: unknown): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function relevantOutsTeamGroup(value: string | null | undefined): string | null {
+  const key = normaliseTeamKey(value);
+  if (!key) return null;
+  const aliases: Array<[string, string[]]> = [
+    ["broncos", ["broncos", "brisbane broncos"]],
+    ["bulldogs", ["bulldogs", "canterbury bankstown bulldogs", "canterbury bulldogs"]],
+    ["cowboys", ["cowboys", "north queensland cowboys"]],
+    ["dragons", ["dragons", "st george illawarra dragons"]],
+    ["dolphins", ["dolphins", "the dolphins"]],
+    ["eels", ["eels", "parramatta eels"]],
+    ["knights", ["knights", "newcastle knights"]],
+    ["panthers", ["panthers", "penrith panthers"]],
+    ["rabbitohs", ["rabbitohs", "south sydney rabbitohs", "souths"]],
+    ["raiders", ["raiders", "canberra raiders"]],
+    ["roosters", ["roosters", "sydney roosters"]],
+    ["sea eagles", ["sea eagles", "manly sea eagles", "manly warringah sea eagles", "manly"]],
+    ["sharks", ["sharks", "cronulla sharks", "cronulla sutherland sharks"]],
+    ["storm", ["storm", "melbourne storm"]],
+    ["tigers", ["tigers", "wests tigers"]],
+    ["titans", ["titans", "gold coast titans"]],
+    ["warriors", ["warriors", "new zealand warriors", "nz warriors"]],
+  ];
+  for (const [group, names] of aliases) {
+    if (names.includes(key)) return group;
+  }
+  return key;
+}
+
+function isRelevantOutsTeamMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  const leftGroup = relevantOutsTeamGroup(left);
+  const rightGroup = relevantOutsTeamGroup(right);
+  return Boolean(leftGroup && rightGroup && leftGroup === rightGroup);
+}
+
+function toNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalisePositionText(value: string | null | undefined): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function relevantOutsPositionGroup(value: string | null | undefined): string | null {
+  const normalised = normalisePositionText(value);
+  if (!normalised) return null;
+  if (["fullback", "fb"].includes(normalised)) return "fullback";
+  if (["wing", "winger", "w"].includes(normalised)) return "wing";
+  if (["centre", "center", "ctr"].includes(normalised)) return "centre";
+  if (["halfback", "five eighth", "five eighths", "5 8", "58", "half"].includes(normalised)) return "halves";
+  if (["lock", "prop", "front row", "front rower"].includes(normalised)) return "middle";
+  if (["2nd row", "second row", "second rower", "back row", "back rower"].includes(normalised)) return "second-row";
+  if (["hooker", "dummy half"].includes(normalised)) return "hooker";
+  return normalised;
+}
+
+function isRelevantOutsPositionMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  const leftGroup = relevantOutsPositionGroup(left);
+  const rightGroup = relevantOutsPositionGroup(right);
+  return Boolean(leftGroup && rightGroup && leftGroup === rightGroup);
 }
 
 // ---------------------------------------------------------------------------
@@ -1278,6 +1354,108 @@ export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
       generatedAt: new Date().toISOString(),
     };
   }
+}
+
+export async function fetchCasualtyWardForPlayer(playerName: string): Promise<CasualtyWardRecord[]> {
+  const name = playerName.trim();
+  if (!name) return [];
+
+  const supabase = createServerSupabaseClient("nrl");
+  const { data, error } = await supabase
+    .from("casualty_ward")
+    .select("player, team, injury, return_date, source_url, scraped_at")
+    .ilike("player", name)
+    .order("scraped_at", { ascending: false })
+    .limit(5);
+
+  if (error) {
+    console.warn(`Unable to fetch casualty ward rows for ${name}; using empty set.`, error);
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    player: toNullableString(row.player) ?? name,
+    team: toNullableString(row.team),
+    position: toNullableString(row.position),
+    injury: toNullableString(row.injury),
+    returnDate: toNullableString(row.return_date),
+    games: toFiniteNumber(row.games),
+    averageFantasy: toFiniteNumber(row.average_fantasy),
+    sourceUrl: toNullableString(row.source_url),
+    scrapedAt: toNullableString(row.scraped_at),
+  }));
+}
+
+export async function fetchRelevantCasualtyWardOuts({
+  team,
+  position,
+  excludePlayer,
+}: {
+  team: string | null | undefined;
+  position: string | null | undefined;
+  excludePlayer?: string | null;
+}): Promise<CasualtyWardRecord[]> {
+  const teamName = team?.trim();
+  const positionName = position?.trim();
+  if (!teamName || !positionName) return [];
+
+  const supabase = createServerSupabaseClient("nrl");
+  let query = supabase
+    .from("casualty_ward")
+    .select("player, team, position, injury, return_date, games, average_fantasy, source_url, scraped_at")
+    .order("average_fantasy", { ascending: false })
+    .limit(200);
+
+  if (excludePlayer?.trim()) {
+    query = query.neq("player", excludePlayer.trim());
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn(`Unable to fetch relevant casualty ward outs for ${teamName} ${positionName}; using empty set.`, error);
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[])
+    .map((row) => ({
+      player: toNullableString(row.player) ?? "",
+      team: toNullableString(row.team),
+      position: toNullableString(row.position),
+      injury: toNullableString(row.injury),
+      returnDate: toNullableString(row.return_date),
+      games: toFiniteNumber(row.games),
+      averageFantasy: toFiniteNumber(row.average_fantasy),
+      sourceUrl: toNullableString(row.source_url),
+      scrapedAt: toNullableString(row.scraped_at),
+    }))
+    .filter((row) => isRelevantOutsTeamMatch(row.team, teamName) && isRelevantOutsPositionMatch(row.position, positionName))
+    .slice(0, 8);
+}
+
+export async function fetchRelevantCasualtyWardOutCandidates(): Promise<CasualtyWardRecord[]> {
+  const supabase = createServerSupabaseClient("nrl");
+  const { data, error } = await supabase
+    .from("casualty_ward")
+    .select("player, team, position, injury, return_date, games, average_fantasy, source_url, scraped_at")
+    .order("average_fantasy", { ascending: false })
+    .limit(500);
+
+  if (error) {
+    console.warn("Unable to fetch relevant casualty ward out candidates; using empty set.", error);
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    player: toNullableString(row.player) ?? "",
+    team: toNullableString(row.team),
+    position: toNullableString(row.position),
+    injury: toNullableString(row.injury),
+    returnDate: toNullableString(row.return_date),
+    games: toFiniteNumber(row.games),
+    averageFantasy: toFiniteNumber(row.average_fantasy),
+    sourceUrl: toNullableString(row.source_url),
+    scrapedAt: toNullableString(row.scraped_at),
+  }));
 }
 
 export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord[]> {

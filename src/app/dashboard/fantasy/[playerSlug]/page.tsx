@@ -14,8 +14,11 @@ import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchAvailableYears,
+  fetchCasualtyWardForPlayer,
   fetchFantasyPlayerStatsAllYears,
   fetchPlayerImages,
+  fetchRelevantCasualtyWardOuts,
+  fetchRelevantCasualtyWardOutCandidates,
   fetchTeamLogos,
 } from "@/lib/supabase/queries"
 
@@ -23,6 +26,13 @@ export const dynamic = "force-dynamic"
 
 function defaultRecentYears(years: string[], maxYears = 4): string[] {
   return years.slice(0, Math.min(maxYears, years.length))
+}
+
+function normaliseLineupPlayerName(value: unknown): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
 }
 
 interface FantasyPlayerPageProps {
@@ -62,7 +72,26 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
   )
-  const initialPlayerStats = await fetchFantasyPlayerStatsAllYears(selectedPlayer.name)
+  const selectedLineupRole = lineupsProjections.roleByPlayerId.get(selectedPlayer.id) ?? null
+  const shouldFetchRelevantOuts =
+    lineupsProjections.source === "lineups" &&
+    Boolean(selectedLineupRole?.isOnField && selectedLineupRole.team && selectedLineupRole.position)
+
+  const [initialPlayerStats, casualtyWardRows, rawRelevantOuts, relevantOutCandidates] = await Promise.all([
+    fetchFantasyPlayerStatsAllYears(selectedPlayer.name),
+    fetchCasualtyWardForPlayer(selectedPlayer.name),
+    shouldFetchRelevantOuts
+      ? fetchRelevantCasualtyWardOuts({
+        team: selectedLineupRole?.team,
+        position: selectedLineupRole?.position,
+        excludePlayer: selectedPlayer.name,
+      })
+      : Promise.resolve([]),
+    fetchRelevantCasualtyWardOutCandidates(),
+  ])
+  const relevantOuts = rawRelevantOuts.filter(
+    (row) => !lineupsProjections.roleByPlayerName.has(normaliseLineupPlayerName(row.player))
+  )
 
   return (
     <div className="space-y-4">
@@ -88,6 +117,9 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
         showPlayerComments
         playerRouteBasePath="/dashboard/fantasy"
         ownershipBaselineSnapshot={ownershipBaselineSnapshot}
+        casualtyWardRows={casualtyWardRows}
+        relevantOuts={relevantOuts}
+        relevantOutCandidates={relevantOutCandidates}
       />
     </div>
   )

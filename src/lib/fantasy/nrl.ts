@@ -63,16 +63,13 @@ export interface FantasyOwnershipBaselineSnapshot {
   points: FantasyOwnershipBaselinePoint[]
 }
 
-export interface FantasyOwnershipBaselinePoint {
-  playerId: number
-  name: string
-  ownedBy: number | null
-}
-
-export interface FantasyOwnershipBaselineSnapshot {
-  capturedAt: string
-  snapshotWeekBrisbane: string
-  points: FantasyOwnershipBaselinePoint[]
+export interface CasualtyWardRecord {
+  team: string | null
+  player: string
+  injury: string | null
+  returnDate: string | null
+  sourceUrl: string | null
+  scrapedAt: string | null
 }
 
 interface FantasyPlayerRaw {
@@ -429,6 +426,41 @@ export async function fetchLatestFantasyOwnershipBaselineSnapshot(): Promise<Fan
   };
 }
 
+export async function fetchCasualtyWardSnapshot(): Promise<CasualtyWardRecord[]> {
+  try {
+    const supabase = createServerSupabaseClient()
+    const { data, error } = await supabase
+      .schema("nrl")
+      .from("casualty_ward")
+      .select("team, player, injury, return_date, source_url, scraped_at")
+      .order("team", { ascending: true })
+      .order("player", { ascending: true })
+
+    if (error || !data) {
+      if (error) console.warn("Unable to fetch casualty ward.", error.message)
+      return []
+    }
+
+    return data
+      .map((row) => {
+        const player = typeof row.player === "string" ? row.player.trim() : ""
+        if (!player) return null
+        return {
+          team: typeof row.team === "string" ? row.team : null,
+          player,
+          injury: typeof row.injury === "string" ? row.injury : null,
+          returnDate: typeof row.return_date === "string" ? row.return_date : null,
+          sourceUrl: typeof row.source_url === "string" ? row.source_url : null,
+          scrapedAt: typeof row.scraped_at === "string" ? row.scraped_at : null,
+        }
+      })
+      .filter((row): row is CasualtyWardRecord => row !== null)
+  } catch (error) {
+    console.warn("Unable to fetch casualty ward.", error)
+    return []
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Lineups-based fantasy projections
 // ---------------------------------------------------------------------------
@@ -478,6 +510,14 @@ function normaliseProjectionPlayerName(value: unknown): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
+}
+
+function isZeroProjectionLineupPosition(value: unknown): boolean {
+  const position = String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+  return position === "reserve" || position === "replacement"
 }
 
 function toFiniteProjectionNumber(value: unknown): number | null {
@@ -555,26 +595,37 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     const { data, error } = await supabase
       .schema("nrl")
       .from("lineups")
-      .select("player_id, fantasy_projection, position, team, number, is_on_field")
+      .select("player, player_id, fantasy_projection, position, team, number, is_on_field")
       .eq("round", roundLabel)
       .gte("match_date", lineupCutoffUtc)
 
     if (error || !data) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
 
     const projectionByPlayerId = new Map<number, number>()
+    const projectionByPlayerName = new Map<string, number>()
     const roleByPlayerId = new Map<number, LineupsPlayerRole>()
+    const roleByPlayerName = new Map<string, LineupsPlayerRole>()
     for (const row of data) {
-      if (row.player_id != null && row.fantasy_projection != null) {
-        projectionByPlayerId.set(Number(row.player_id), row.fantasy_projection as number)
+      const playerNameKey = normaliseProjectionPlayerName(row.player)
+      const projection = isZeroProjectionLineupPosition(row.position)
+        ? 0
+        : toFiniteProjectionNumber(row.fantasy_projection)
+      if (projection != null) {
+        if (row.player_id != null) {
+          projectionByPlayerId.set(Number(row.player_id), projection)
+        }
+        if (playerNameKey) projectionByPlayerName.set(playerNameKey, projection)
+      }
+      const role = {
+        position: typeof row.position === "string" ? row.position : null,
+        team: typeof row.team === "string" ? row.team : null,
+        number: row.number == null ? null : Number(row.number),
+        isOnField: Boolean(row.is_on_field),
       }
       if (row.player_id != null) {
-        roleByPlayerId.set(Number(row.player_id), {
-          position: typeof row.position === "string" ? row.position : null,
-          team: typeof row.team === "string" ? row.team : null,
-          number: row.number == null ? null : Number(row.number),
-          isOnField: Boolean(row.is_on_field),
-        })
+        roleByPlayerId.set(Number(row.player_id), role)
       }
+      if (playerNameKey) roleByPlayerName.set(playerNameKey, role)
     }
 
     return {
@@ -582,9 +633,9 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
       source: "lineups",
       lineupsAvailable: true,
       projectionByPlayerId,
-      projectionByPlayerName: new Map(),
+      projectionByPlayerName,
       roleByPlayerId,
-      roleByPlayerName: new Map(),
+      roleByPlayerName,
     }
   } catch (err) {
     console.warn("Unable to fetch lineups projections.", err)

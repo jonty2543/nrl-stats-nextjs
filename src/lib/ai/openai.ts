@@ -1,5 +1,6 @@
 import "server-only";
 
+import { request as httpsRequest } from "node:https";
 import { PLAYER_STATS, TEAM_STATS, TEAMS } from "@/lib/data/constants";
 import {
   getAiReasoningEffortForPlan,
@@ -9,11 +10,15 @@ import {
 } from "@/lib/ai/access";
 import type { AiPlan, AiReasoningEffort } from "@/lib/ai/access";
 import { fetchMatches, fetchTeamStats } from "@/lib/supabase/queries";
+import { fetchCasualtyWardSnapshot } from "@/lib/fantasy/nrl";
+import type { CasualtyWardRecord } from "@/lib/fantasy/nrl";
 import { AI_TOOL_DEFINITIONS, executeAiTool } from "@/lib/ai/tools";
 import type { AiToolAccessPolicy, AiToolExecutionResult } from "@/lib/ai/tools/types";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_AI_MODEL = "gpt-5-mini";
+const OPENAI_HTTP_ATTEMPT_TIMEOUT_MS = 75_000;
+const OPENAI_HTTP_RETRY_DELAYS_MS = [0, 1_200];
 const MAX_TOOL_ROUNDS = 8;
 const MAX_OUTPUT_TOKENS = 1800;
 const MAX_IMAGE_OUTPUT_TOKENS = 2800;
@@ -62,6 +67,7 @@ Rules:
 - If a player or team name appears to contain a minor spelling mistake, use the closest unambiguous canonical match from the internal data instead of refusing or guessing broadly.
 - When the user asks about a named player's fantasy scoring, treat "Fantasy" as the player game-log Fantasy stat, not as a fantasy trade or ownership question.
 - Use get_player_stats or rank_players_by_stat for player stat questions about Fantasy. Reserve get_fantasy_snapshot for trade, price, ownership, projection, or breakeven questions.
+- For NRL Fantasy position filters, use fantasy slots rather than historical positions: hooker -> HOK, prop/middle/lock -> MID, second row/2RF/edge -> EDG, halfback/five-eighth/halves -> HLF, centre -> CTR, fullback/winger -> WFB.
 - For fantasy value questions under a price cap, use get_fantasy_snapshot with sortBy="avg_points_desc" and requireOwnershipRise=false.
 - For fantasy buy, trade, or ownership-momentum questions, use get_fantasy_snapshot with sortBy="ownership_delta_desc" and requireOwnershipRise=true.
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
@@ -88,6 +94,7 @@ Rules:
 - For short-turnaround or rest-days team record questions, prefer get_team_short_turnaround_records.
 - For weekday, weekend, Thursday/Friday night, or day-of-week questions, derive the weekday from the existing Date field. Do not require a separate weekday column. If the tool cannot group by a computed weekday directly, fetch bounded Date/team/result rows and calculate weekday from each Date before ranking.
 - If the first successful tool call is not enough, call another tool and continue. Do not stop with a generic failure after a partial tool chain.
+- If a fantasy projection feed for a future round is not available, still answer clear prompts with the latest available projection snapshot plus draw/bye context, and label it as best-effort.
 - Call tools silently. Do not narrate that you are about to fetch data, inspect stats, request a tool, or aggregate results.
 - Do not output internal notes, bracketed notes, planning text, or progress updates.
 - Only return the final user-facing answer after you have enough tool results to answer.
@@ -132,6 +139,7 @@ Rules:
 - Treat "base stats" as exactly: floor(all run metres / 10) + tackles made + floor(kicking metres / 30) + (conversions * 2), unless the user explicitly defines it differently.
 - For leaguewide questions about base-to-fantasy ratio, use get_player_base_fantasy_ratios instead of trying to derive the ratio manually from separate tool calls.
 - For fantasy price, trade, ownership, buy, value, projection, or breakeven questions, prefer get_fantasy_snapshot.
+- For NRL Fantasy position filters, use fantasy slots rather than historical positions: hooker -> HOK, prop/middle/lock -> MID, second row/2RF/edge -> EDG, halfback/five-eighth/halves -> HLF, centre -> CTR, fullback/winger -> WFB.
 - For fantasy value questions under a price cap, use get_fantasy_snapshot with sortBy="avg_points_desc" and requireOwnershipRise=false.
 - For fantasy buy, trade, or ownership-momentum questions, use get_fantasy_snapshot with sortBy="ownership_delta_desc" and requireOwnershipRise=true.
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
@@ -144,6 +152,7 @@ Rules:
 - For player stat rate rankings like per 80 minutes, prefer rank_players_by_stat with rateBasis="per_80"; when the prompt says players are averaging 40+ minutes, set minAverageMinutes to 40.
 - Resolve "this season" and relative season wording using app context or the available seasons tool before answering.
 - For home vs away, team splits, multi-condition comparisons, and league-wide rankings, derive the answer from the capability tools instead of guessing.
+- If a fantasy projection feed for a future round is not available, still answer clear prompts with the latest available projection snapshot plus draw/bye context, and label it as best-effort.
 - For team result or margin questions, prefer team_stats because it has one row per team per match with Result, Margin, Opponent Points, and Point Differential.
 - For team possession battle count/ranking questions, use get_team_possession_battle_records. "Wins the possession battle" means Possession % greater than Opponent Possession %.
 - For other team possession questions, use team_stats fields "Possession %", "Opponent Possession %", "Time In Possession", and "Completion Rate".
@@ -248,20 +257,23 @@ function buildImageOnlySystemInstructions(plan: AiPlan): string {
     "Give useful fantasy trade advice even if bank, trade count, or exact prices are not visible. State those assumptions briefly.",
     "DNP or bye can be mentioned as a short-term availability issue, but it is not a sell reason by itself.",
     "The NRL Fantasy bye/DNP marker is a black/dark circle with a white square. Do not call that an injury, suspension, dropped status, or priority sell reason.",
-    "Only recommend sells for visible players with negative ownership delta and no low-breakeven price-rise signal. Injury, suspension, or dropped/out markers can explain urgency, but do not override positive ownership delta or low breakeven.",
-    "Prioritise visible injured players among eligible sell candidates. In the screenshot key, injury is a red cross/plus marker.",
+    "Include visible squad players with ownership delta <= -1% in Sell Watch, then grade the trade-out using projection, pricedAt, breakeven, L3 average, ownership delta, injury/availability markers, and next major bye availability. Low BE, projection near/above pricedAt, strong L3, and playing the next major bye can make the recommendation Hold / Possible sell rather than a hard sell.",
+    "If a visible squad player is not playing and has strong negative ownership movement, mention them in Sell Watch even if the uploaded screenshot predates final team status.",
+    "Only mention injury when a red cross/plus marker is visibly attached to that exact player. If no red cross/plus is visible, do not call the player injured.",
+    "Do not mention an injury marker for J. Hughes/Hughes unless the marker is unambiguously attached to his exact player tile.",
     "Do not recommend buying players already visible in the user's squad.",
     "Never say a user should buy a player again, buy back a player they already own, or trade a player out and then back in.",
     "Only recommend trade-in targets from the real fantasy snapshot data supplied in the user message. Do not invent names, clubs, ownership deltas, prices, or form notes.",
     "If the user explicitly says they do not want to sell or trade out a player, do not suggest that player as the sell. Treat them as a hold and suggest targets only if the upgrade can be funded another way.",
-    "For buys and sells, weigh ownership delta, breakeven, pricedAt, L3 average, round projection, and projection-vs-pricedAt. Low breakeven supports buys because price rises are easier; do not recommend selling players with low breakevens. High breakeven, L3/projection below pricedAt, and negative ownership support sells.",
+    "For buys and sells, weigh ownership delta, breakeven, pricedAt, L3 average, round projection, and projection-vs-pricedAt. Low breakeven supports buys and is a hold signal for sell/watch players, while high breakeven, L3/projection below pricedAt, and negative ownership support stronger sells.",
     "Only recommend buys with positive ownership delta. Do not recommend a player as a buy if their ownership delta is negative.",
-    "Only recommend sells with negative ownership delta. Do not recommend a player as a sell if their ownership delta is positive.",
+    "Do not recommend a player as a hard sell if their ownership delta is positive.",
     "Use positions from the real fantasy snapshot when available. Do not infer positions from bench slot labels like INT.",
-    "Resolve abbreviated names against real NRL Fantasy player names. For initial + surname, if exactly one real player matches that first initial and surname, use that player. If multiple real players match, ask the user to clarify.",
+    "Resolve abbreviated names against real NRL Fantasy player names. For initial + surname, if exactly one real player matches that first initial and surname, use that player. If multiple real players match, state the uncertainty briefly instead of guessing.",
     "Never invent a first name for an abbreviation. J. Hughes should resolve to Jahrome Hughes unless another real J. Hughes is present in the relevant player data; do not call him Jye Hughes.",
     "Keep the response concise, direct, and plain English for a sports fan.",
     "Do not mention internal tools, schemas, or implementation details.",
+    "Write for non-technical users with clear, friendly, direct advice. Do not mention thresholds, backend rules, guardrails, live momentum snapshots, highly-sold snapshots, eligibility filters, uploaded squad checks, or follow-up actions. Do not ask follow-up questions.",
     ...accessLines,
   ].join("\n");
 }
@@ -271,9 +283,9 @@ function getFantasyNumber(entry: Record<string, unknown>, key: string): number |
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function hasNegativeOwnershipDelta(entry: Record<string, unknown>): boolean {
+function hasSellWatchOwnershipDelta(entry: Record<string, unknown>): boolean {
   const ownershipDelta = getFantasyNumber(entry, "ownershipDelta");
-  return ownershipDelta != null && ownershipDelta < 0;
+  return ownershipDelta != null && ownershipDelta <= -1;
 }
 
 function hasPositiveOwnershipDelta(entry: Record<string, unknown>): boolean {
@@ -281,22 +293,34 @@ function hasPositiveOwnershipDelta(entry: Record<string, unknown>): boolean {
   return ownershipDelta != null && ownershipDelta > 0;
 }
 
-function hasLowFantasyBreakEven(entry: Record<string, unknown>): boolean {
-  const breakEven = getFantasyNumber(entry, "breakEven");
-  if (breakEven == null) return false;
+function normalizeFantasyName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+}
 
-  const scoringBenchmarks = [
-    getFantasyNumber(entry, "projection"),
-    getFantasyNumber(entry, "last3Avg"),
-    getFantasyNumber(entry, "avgPoints"),
-    getFantasyNumber(entry, "pricedAt"),
-  ].filter((value): value is number => value != null);
+function parseFantasyNameParts(value: string): { first: string; last: string } {
+  const tokens = normalizeFantasyName(value).split(" ").filter(Boolean);
+  return {
+    first: tokens[0] ?? "",
+    last: tokens[tokens.length - 1] ?? "",
+  };
+}
 
-  if (scoringBenchmarks.length === 0) {
-    return breakEven <= 35;
-  }
+function fantasyNamesMatch(left: string, right: string): boolean {
+  const leftNorm = normalizeFantasyName(left);
+  const rightNorm = normalizeFantasyName(right);
+  if (!leftNorm || !rightNorm) return false;
+  if (leftNorm === rightNorm) return true;
 
-  return breakEven <= Math.max(...scoringBenchmarks);
+  const leftParts = parseFantasyNameParts(left);
+  const rightParts = parseFantasyNameParts(right);
+  return Boolean(
+    leftParts.last &&
+      rightParts.last &&
+      leftParts.last === rightParts.last &&
+      leftParts.first[0] &&
+      rightParts.first[0] &&
+      leftParts.first[0] === rightParts.first[0]
+  );
 }
 
 function filterFantasySnapshotPlayersForContext(
@@ -308,17 +332,153 @@ function filterFantasySnapshotPlayersForContext(
   }
 
   if (context === "sell") {
-    return players.filter((entry) => hasNegativeOwnershipDelta(entry) && !hasLowFantasyBreakEven(entry));
+    return players.filter((entry) => hasSellWatchOwnershipDelta(entry));
   }
 
   return players;
+}
+
+function filterFantasySnapshotResultPlayers(
+  result: AiToolExecutionResult,
+  excludedNames: string[]
+): AiToolExecutionResult {
+  if (!result.ok || excludedNames.length === 0) return result;
+  const players = Array.isArray(result.data.players)
+    ? result.data.players.filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null)
+    : [];
+  return {
+    ...result,
+    data: {
+      ...result.data,
+      players: players.filter((entry) => {
+        const name = typeof entry.name === "string" ? entry.name : "";
+        return !excludedNames.some((excludedName) => fantasyNamesMatch(name, excludedName));
+      }),
+    },
+  };
+}
+
+function getFantasySnapshotPlayerNames(result: AiToolExecutionResult | null | undefined): string[] {
+  if (!result?.ok || !Array.isArray(result.data.players)) return [];
+  return result.data.players
+    .map((entry) =>
+      typeof entry === "object" && entry !== null && typeof (entry as Record<string, unknown>).name === "string"
+        ? String((entry as Record<string, unknown>).name)
+        : ""
+    )
+    .filter((name) => name.length > 0);
+}
+
+function getFantasySnapshotNamedToPlayPlayerNames(result: AiToolExecutionResult | null | undefined): string[] {
+  if (!result?.ok || !Array.isArray(result.data.players)) return [];
+  return result.data.players
+    .map((entry) => {
+      if (typeof entry !== "object" || entry === null) return "";
+      const record = entry as Record<string, unknown>;
+      return record.namedToPlay === true && typeof record.name === "string" ? record.name : "";
+    })
+    .filter((name) => name.length > 0);
+}
+
+function getFantasySnapshotEffectiveRound(result: AiToolExecutionResult): number | null {
+  return result.ok && typeof result.data.effectiveRound === "number" ? result.data.effectiveRound : null;
+}
+
+function parseCasualtyWardReturnWindow(returnDate: string | null, currentRound: number | null) {
+  const raw = returnDate?.trim() ?? "";
+  const normalized = raw.toLowerCase();
+  if (!raw || /\b(tbc|indefinite|unknown|indefinitely)\b/.test(normalized)) {
+    return { label: "return timeline TBC", advice: "tbc" as const };
+  }
+
+  const weekMatch = normalized.match(/(\d+)\s*(?:-|to|–|—)?\s*(\d+)?\s*weeks?/);
+  if (weekMatch) {
+    const minWeeks = Number.parseInt(weekMatch[1] ?? "", 10);
+    const maxWeeks = Number.parseInt(weekMatch[2] ?? weekMatch[1] ?? "", 10);
+    if (Number.isFinite(minWeeks) && Number.isFinite(maxWeeks)) {
+      return {
+        label: minWeeks === maxWeeks ? `about ${minWeeks} week${minWeeks === 1 ? "" : "s"}` : `about ${minWeeks}-${maxWeeks} weeks`,
+        advice: maxWeeks <= 2 ? "short" as const : minWeeks >= 3 ? "long" as const : "range" as const,
+      };
+    }
+  }
+
+  const returnRounds = [...raw.matchAll(/\b(?:round|rd|r)?\s*(\d{1,2})\b/gi)]
+    .map((match) => Number.parseInt(match[1] ?? "", 10))
+    .filter((round) => Number.isFinite(round));
+  if (currentRound != null && returnRounds.length > 0) {
+    const weeks = returnRounds.map((round) => Math.max(0, round - currentRound));
+    const minWeeks = Math.min(...weeks);
+    const maxWeeks = Math.max(...weeks);
+    return {
+      label: minWeeks === maxWeeks ? `${raw} (about ${minWeeks} week${minWeeks === 1 ? "" : "s"})` : `${raw} (about ${minWeeks}-${maxWeeks} weeks)`,
+      advice: maxWeeks <= 2 ? "short" as const : minWeeks >= 3 ? "long" as const : "range" as const,
+    };
+  }
+
+  return { label: raw, advice: "unknown" as const };
+}
+
+function formatCasualtyWardContext(
+  records: CasualtyWardRecord[],
+  visiblePlayerNames: string[],
+  currentRound: number | null,
+  namedToPlayPlayerNames: string[] = [],
+  includeProMetrics = true
+): string {
+  if (records.length === 0 || visiblePlayerNames.length === 0) return "";
+
+  const matchedRecords = records.filter((record) =>
+    visiblePlayerNames.some((playerName) => fantasyNamesMatch(record.player, playerName))
+  );
+  if (matchedRecords.length === 0) {
+    return [
+      "NRL casualty ward context: no extracted visible player matched nrl.casualty_ward.",
+      "If the screenshot clearly shows a red injury marker for a player with no casualty ward row, say the return timeline is not verified in the casualty ward and suggest checking the latest injury news before locking the trade.",
+    ].join("\n");
+  }
+
+  const ignoredNamedPlayers = matchedRecords.filter((record) =>
+    namedToPlayPlayerNames.some((playerName) => fantasyNamesMatch(record.player, playerName))
+  );
+  const activeRecords = matchedRecords.filter((record) =>
+    !namedToPlayPlayerNames.some((playerName) => fantasyNamesMatch(record.player, playerName))
+  );
+
+  if (activeRecords.length === 0) {
+    return [
+      `NRL casualty ward context for visible players${currentRound != null ? `, using R${currentRound} as the current fantasy round` : ""}:`,
+      `Ignored casualty ward rows because these visible player(s) are named to play this week in lineups: ${ignoredNamedPlayers.map((record) => record.player).join(", ")}.`,
+      "Do not treat those players as injured based on casualty ward.",
+    ].join("\n");
+  }
+
+  const lines = activeRecords.map((record, index) => {
+    const returnWindow = parseCasualtyWardReturnWindow(record.returnDate, currentRound);
+    return `${index + 1}. ${record.player}${record.team ? ` (${record.team})` : ""} - ${record.injury ?? "injury unknown"}, return ${returnWindow.label}, duration signal ${returnWindow.advice}.`;
+  });
+
+  return [
+    `NRL casualty ward context for visible players${currentRound != null ? `, using R${currentRound} as the current fantasy round` : ""}:`,
+    ignoredNamedPlayers.length > 0
+      ? `Ignored casualty ward rows because these visible player(s) are named to play this week in lineups: ${ignoredNamedPlayers.map((record) => record.player).join(", ")}. Do not treat them as injured based on casualty ward.`
+      : "",
+    ...lines,
+    "Use this only when a red injury/plus marker or clear out/unavailable status is attached to the player.",
+    includeProMetrics
+      ? "If the casualty ward return is 2 weeks or less, suggest a potential hold when BE is low and projection/value signals are strong."
+      : "If the casualty ward return is 2 weeks or less, suggest a potential hold when ownership, recent form, price, and bye coverage are favourable.",
+    "If the return is 3 weeks or more, treat them as a stronger sell candidate.",
+    "If the return is TBC/unknown or a mixed range, say the timeline is uncertain and suggest checking the latest injury news before deciding.",
+  ].join("\n");
 }
 
 function formatFantasySnapshotContext(
   result: AiToolExecutionResult,
   label = "trade-in",
   extraInstruction?: string,
-  context: "buy" | "sell" | "neutral" = "neutral"
+  context: "buy" | "sell" | "neutral" = "neutral",
+  includeProMetrics = true
 ): string {
   if (!result.ok) {
     return `Real fantasy snapshot unavailable: ${result.error}`;
@@ -332,7 +492,7 @@ function formatFantasySnapshotContext(
     : [];
   const effectiveRound = typeof result.data.effectiveRound === "number" ? result.data.effectiveRound : null;
 
-  const lines = players.map((entry, index) => {
+    const lines = players.map((entry, index) => {
     const name = typeof entry.name === "string" ? entry.name : "Unknown";
     const team = typeof entry.team === "string" ? entry.team : "team unknown";
     const position = typeof entry.position === "string" ? entry.position : "position unknown";
@@ -359,8 +519,27 @@ function formatFantasySnapshotContext(
           ? "plays next major bye"
           : "misses next major bye"
         : "next major bye availability unknown";
+    const namedToPlay =
+      typeof entry.namedToPlay === "boolean"
+        ? entry.namedToPlay
+          ? "named to play this week"
+          : "not named in lineups this week"
+        : "lineup status unknown";
 
-    return `${index + 1}. ${name} (${team}, ${position}) - ${price}, ${ownedBy}, ${ownershipDelta}, ${avgPoints}, ${last3Avg}, ${pricedAt}, ${projection}, ${projectionVsPricedAt}, ${breakEven}, ${nextMajorByeRound}, ${playsNextMajorByeRound}`;
+    const details = [
+      price,
+      ownedBy,
+      ownershipDelta,
+      avgPoints,
+      last3Avg,
+      pricedAt,
+      ...(includeProMetrics ? [projection, projectionVsPricedAt, breakEven] : []),
+      nextMajorByeRound,
+      playsNextMajorByeRound,
+      namedToPlay,
+    ];
+
+    return `${index + 1}. ${name} (${team}, ${position}) - ${details.join(", ")}`;
   });
 
   return [
@@ -505,25 +684,34 @@ function buildFantasyScreenshotPrompt(userMessage: string, imageInputs: AiImageA
 
 Use the screenshots to extract the visible fantasy squad, then use internal fantasy data before recommending trades.
 When suggesting trades:
-- Treat injured, DNP, suspended, dropped, or clearly unavailable players as availability concerns, but only recommend a sell when the player also has negative ownership delta and no low breakeven.
+- Treat confirmed injury, suspension, dropped status, or clear unavailability as availability context, but grade every trade-out using ownership delta, projection, pricedAt, breakeven, L3 average, and next major bye availability.
+- Only say a player is injured when a red cross/plus marker is visibly attached to that exact player. If no red cross/plus is visible, do not call the player injured.
+- Do not mention an injury marker for J. Hughes/Hughes unless the marker is unambiguously attached to his exact player tile.
 - Do not recommend selling a player only because they are on a bye. A bye is shown as a black circle with a white square; treat that as temporary unavailability, not a sell signal.
-- Name the visible player or players the screenshot shows should be considered for trade-out because of injury, DNP, suspension, dropped status, major negative ownership momentum, or poor squad balance, but do not recommend the sell if ownership delta is positive or breakeven is low.
+- Do not use screenshot slot, bench, INT, EMG, reserve, or emergency placement as a sell reason. Good players can sit in any squad slot; location is only for identifying owned players.
+- Do not infer this-week availability from screenshot slot or absence from a snapshot. If real metrics are unavailable for a visible player and there is no clear injury/suspension marker, treat them as a hold/no clear sell instead of inventing projection 0 or unknown stats.
+- Do not list pure holds as numbered sell/watch entries. If a visible player has ownership delta <= -1% but good BE/projection/bye context, list them as Hold / Possible sell with lower urgency.
+- Use real player names from internal fantasy data. Do not output OCR-invented names or expand abbreviated names unless they match a real player.
+- Name visible player or players for Sell Watch when they have ownership delta <= -1% or confirmed unavailability. If the ownership drop is negative but BE is low, projection is close to/above pricedAt, L3 is strong, and they play the next major bye, frame it as Hold / Possible sell rather than a hard sell.
+- If a visible squad player is not playing and has strong negative ownership movement, mention them in Sell Watch even if the uploaded screenshot predates final team status.
 - Provide concrete buy targets from internal fantasy data using positive ownership percentage increase/ownership delta. Include each buy target's ownership increase in the answer.
 - Do not recommend buys with negative ownership delta.
-- Do not recommend buying any player already visible in the user's squad. If a player is already owned, discuss whether to hold or sell them instead.
+- Do not recommend buying any player already visible anywhere in the user's screenshots, including starters, bench, INT, EMG, reserves, trade-out rows, or current squad lists. If a player is already owned, discuss whether to hold or sell them instead.
 - If the user explicitly says they do not want to sell or trade out a player, do not suggest that player as the sell. Treat them as a hold and suggest targets only if the upgrade can be funded another way.
 - Prefer buy targets with strong positive ownership/transfer momentum, unless budget or squad balance makes that impossible.
-- Prefer sell candidates with negative ownership/transfer momentum when they are not playable, underperforming, or blocking squad balance.
-- Do not recommend sells with positive ownership delta, and do not recommend selling players with low breakevens.
+- Prefer stronger sell recommendations when negative ownership/transfer momentum combines with high BE, poor projection-vs-pricedAt, weak L3, injury/unavailability, or poor bye coverage.
+- Do not recommend hard sells with positive ownership delta. Low breakeven is a hold signal, not a reason to omit a player with ownership delta <= -1% from Sell Watch.
 - Maintain a legal fieldable squad: cover 17 selected players first, then bench depth.
 - Use the draw/upcoming fixtures where available: account for each player/team’s next opponent, home/away status, and near-term fixture run.
 - Build with the 2026 draw and major bye rounds in mind: rounds 12, 15, and 18 only count the best 13 selected scorers, so warn when buying a player whose team does not play in the next major bye round.
-- Respect visible positions, captain/vice-captain, bench, emergencies, and any visible round.
+- Respect actual fantasy position labels, captain/vice-captain, and any visible round, but do not treat bench or emergency placement as a sell signal.
+- When recommending trade paths, try to keep remaining bank below 100k when visible bank and prices make that possible; prefer efficient use of spare salary over leaving excess cash unused.
 - If budget, bank, trade count, or exact prices are not visible, state the assumption and give conditional trade paths instead of pretending it is known.
 - Resolve abbreviated screenshot names against real NRL Fantasy player names. For an initial + surname like "J. Hughes", if exactly one real player matches that first initial and surname, use that player.
 - Never invent a first name for an abbreviation. "J. Hughes" should resolve to Jahrome Hughes unless another real J. Hughes is present in the relevant player data; do not call him Jye Hughes.
-- If multiple real players match the same initial + surname, ask the user which one they mean before relying on that player.
-- If a name is ambiguous from the screenshot, say so briefly and ask the user to confirm before relying on that player.`);
+- If multiple real players match the same initial + surname, state the uncertainty briefly rather than guessing.
+- If a name is ambiguous from the screenshot, say so briefly in the notes rather than asking a follow-up question.
+- Write for non-technical users with clear, friendly, direct advice. Do not mention thresholds, backend rules, guardrails, live momentum snapshots, highly-sold snapshots, eligibility filters, uploaded squad checks, or follow-up actions. Do not ask follow-up questions.`);
   }
 
   if (bettingImages.length > 0) {
@@ -555,6 +743,84 @@ function buildOpenAiUserInputContent(userMessage: string, imageInputs: AiImageAt
       detail: "high" as const,
     })),
   ];
+}
+
+function parseVisibleFantasyPlayerNames(text: string): string[] {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+      return [];
+    }
+  }
+
+  const rawPlayers: unknown[] = Array.isArray(parsed)
+    ? parsed
+    : typeof parsed === "object" && parsed !== null && Array.isArray((parsed as Record<string, unknown>).players)
+      ? (parsed as Record<string, unknown>).players as unknown[]
+      : [];
+  const names: string[] = [];
+  for (const value of rawPlayers) {
+    const name = typeof value === "string"
+      ? value
+      : typeof value === "object" && value !== null && typeof (value as Record<string, unknown>).name === "string"
+        ? String((value as Record<string, unknown>).name)
+        : "";
+    const cleanedName = name.replace(/\s+/g, " ").trim();
+    if (!cleanedName || cleanedName.length > 60 || !/[a-z]/i.test(cleanedName)) continue;
+    if (!names.some((existing) => fantasyNamesMatch(existing, cleanedName))) names.push(cleanedName);
+    if (names.length >= 40) break;
+  }
+  return names;
+}
+
+async function extractVisibleFantasyPlayerNamesFromImages(
+  model: string,
+  imageInputs: AiImageAttachmentInput[]
+): Promise<string[]> {
+  if (imageInputs.length === 0) return [];
+  const squadImageInputs = imageInputs.filter((image) => !/^trade screen:/i.test(image.name));
+  const extractionImageInputs = squadImageInputs.length > 0 ? squadImageInputs : imageInputs;
+
+  try {
+    const response = await createOpenAiResponse({
+      model,
+      reasoning: { effort: "low" },
+      instructions: [
+        "Extract visible NRL Fantasy player names from the uploaded team screenshots.",
+        "Include starters, bench, interchange, emergencies, reserves, trade-out rows, and any visible current-squad list.",
+        "Return only JSON in this exact shape: {\"players\":[\"Full Name\"]}.",
+        "Do not include player names from market tables, suggested trade-ins, player search results, or generic buy lists.",
+        "Use the text visible in the screenshots. If a first name is abbreviated, keep the abbreviation.",
+      ].join("\n"),
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text" as const,
+              text: "List every player name visible in these NRL Fantasy screenshots as JSON only.",
+            },
+            ...extractionImageInputs.map((image) => ({
+              type: "input_image" as const,
+              image_url: image.dataUrl,
+              detail: "high" as const,
+            })),
+          ],
+        },
+      ],
+      max_output_tokens: 900,
+    });
+    return parseVisibleFantasyPlayerNames(stripFinalAnswerPrefix(extractAssistantText(response)));
+  } catch {
+    return [];
+  }
 }
 
 function getModelHistoryWindow(history: AiConversationHistoryMessage[]): AiConversationHistoryMessage[] {
@@ -839,9 +1105,112 @@ function isQuotaOrBillingError(message: string): boolean {
 function isTransientOpenAiProcessingError(message: string): boolean {
   const normalized = message.toLowerCase();
   return (
+    normalized.includes("openai responses api fetch failed") ||
+    normalized.includes("connect timeout") ||
+    normalized.includes("timed out") ||
+    normalized.includes("econnreset") ||
+    normalized.includes("etimedout") ||
+    normalized.includes("eai_again") ||
     normalized.includes("an error occurred while processing your request") ||
     normalized.includes("request id req_")
   );
+}
+
+interface OpenAiHttpResponse {
+  status: number;
+  statusText: string;
+  bodyText: string;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatOpenAiNetworkError(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown network error";
+  const code = "code" in error && typeof error.code === "string" ? ` ${error.code}` : "";
+  return `${error.message}${code}`;
+}
+
+function isRetriableOpenAiHttpStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 429 || status >= 500;
+}
+
+function postOpenAiResponsePayload(
+  payload: Record<string, unknown>,
+  apiKey: string
+): Promise<OpenAiHttpResponse> {
+  const url = new URL(OPENAI_RESPONSES_URL);
+  const body = JSON.stringify(payload);
+
+  return new Promise((resolve, reject) => {
+    const request = httpsRequest(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: `${url.pathname}${url.search}`,
+        method: "POST",
+        timeout: OPENAI_HTTP_ATTEMPT_TIMEOUT_MS,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body).toString(),
+        },
+      },
+      (response) => {
+        let bodyText = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          bodyText += chunk;
+        });
+        response.on("end", () => {
+          resolve({
+            status: response.statusCode ?? 0,
+            statusText: response.statusMessage ?? "",
+            bodyText,
+          });
+        });
+      }
+    );
+
+    request.on("timeout", () => {
+      request.destroy(new Error(`OpenAI Responses API request timed out after ${OPENAI_HTTP_ATTEMPT_TIMEOUT_MS}ms`));
+    });
+    request.on("error", reject);
+    request.end(body);
+  });
+}
+
+async function postOpenAiResponseWithRetry(
+  payload: Record<string, unknown>,
+  apiKey: string
+): Promise<OpenAiHttpResponse> {
+  let lastError = "";
+
+  for (let attempt = 0; attempt < OPENAI_HTTP_RETRY_DELAYS_MS.length; attempt += 1) {
+    const delay = OPENAI_HTTP_RETRY_DELAYS_MS[attempt];
+    if (delay > 0) {
+      await sleep(delay);
+    }
+
+    try {
+      const response = await postOpenAiResponsePayload(payload, apiKey);
+      if (
+        attempt < OPENAI_HTTP_RETRY_DELAYS_MS.length - 1 &&
+        isRetriableOpenAiHttpStatus(response.status)
+      ) {
+        lastError = `status ${response.status}`;
+        continue;
+      }
+      return response;
+    } catch (error) {
+      lastError = formatOpenAiNetworkError(error);
+      if (attempt >= OPENAI_HTTP_RETRY_DELAYS_MS.length - 1) break;
+    }
+  }
+
+  throw new Error(`OpenAI Responses API fetch failed after ${OPENAI_HTTP_RETRY_DELAYS_MS.length} attempts: ${lastError}`);
 }
 
 async function createOpenAiResponse(payload: Record<string, unknown>): Promise<OpenAiResponse> {
@@ -850,20 +1219,13 @@ async function createOpenAiResponse(payload: Record<string, unknown>): Promise<O
     throw new Error("OPENAI_API_KEY is not configured.");
   }
 
-  const response = await fetch(OPENAI_RESPONSES_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const response = await postOpenAiResponseWithRetry(payload, apiKey);
 
-  if (!response.ok) {
+  if (response.status < 200 || response.status >= 300) {
     let message = `OpenAI Responses API request failed with status ${response.status}.`;
 
     try {
-      const errorPayload = (await response.json()) as {
+      const errorPayload = JSON.parse(response.bodyText) as {
         error?: { message?: string };
       };
       if (typeof errorPayload.error?.message === "string" && errorPayload.error.message.length > 0) {
@@ -876,7 +1238,11 @@ async function createOpenAiResponse(payload: Record<string, unknown>): Promise<O
     throw new Error(message);
   }
 
-  return (await response.json()) as OpenAiResponse;
+  try {
+    return JSON.parse(response.bodyText) as OpenAiResponse;
+  } catch {
+    throw new Error("OpenAI Responses API returned invalid JSON.");
+  }
 }
 
 async function continueOpenAiToolLoop(params: {
@@ -1143,6 +1509,23 @@ function isWeakAssistantResponse(text: string, toolActivity: AiToolActivity[] = 
   }
 
   return false;
+}
+
+function isPatchablePoorAssistantResponse(userMessage: string, assistantMessage: string): boolean {
+  const normalizedAnswer = assistantMessage.trim().toLowerCase();
+  if (!normalizedAnswer || !requiresInternalToolCall(userMessage)) {
+    return false;
+  }
+
+  const poorPatterns = [
+    /\bi could not find matching fantasy players\b/,
+    /\bi couldn['’]?t find enough current fantasy snapshot data\b/,
+    /\bi can['’]?t make any concrete trade suggestions\b/,
+    /\bdirect compare players result\b/,
+    /\bi can['’]?t produce a guaranteed\b/,
+  ];
+
+  return poorPatterns.some((pattern) => pattern.test(normalizedAnswer));
 }
 
 function buildRepairPrompt(userMessage: string, assistantMessage: string): string {
@@ -2612,6 +2995,147 @@ function formatFantasyPrice(cost: number | null): string {
   return `$${Math.round(cost / 1000)}k`;
 }
 
+function extractFantasySnapshotPositionFilters(userMessage: string): string[] | null {
+  const normalized = userMessage.toLowerCase();
+  const matches: string[] = [];
+  const add = (label: string) => {
+    if (!matches.includes(label)) matches.push(label);
+  };
+
+  if (/\b(hooker|hookers|hok)\b/.test(normalized)) add("HOK");
+  if (/\b(prop|props|middle|middles|mid|lock|locks)\b/.test(normalized)) add("MID");
+  if (/\b(edge|edges|2rf|2nd\s*row|2nd\s*rows|second[- ]row|second[- ]rows|back[- ]row|back[- ]rows)\b/.test(normalized)) add("EDG");
+  if (/\b(halfback|halfbacks|half|halves|five[- ]eighth|five[- ]eighths|5\/8|hlf)\b/.test(normalized)) add("HLF");
+  if (/\b(centre|centres|center|centers|ctr)\b/.test(normalized)) add("CTR");
+  if (/\b(fullback|fullbacks|winger|wingers|wing|wings|wfb)\b/.test(normalized)) add("WFB");
+
+  if (/\b(forward|forwards|pack)\b/.test(normalized)) {
+    ["HOK", "MID", "EDG"].forEach(add);
+  }
+  if (/\b(back|backs|outside backs|outside back)\b/.test(normalized)) {
+    ["CTR", "WFB"].forEach(add);
+  }
+
+  return matches.length > 0 ? matches : null;
+}
+
+function formatFantasySnapshotLine(entry: Record<string, unknown>, index: number): string {
+  const position = typeof entry.position === "string" ? entry.position : "N/A";
+  const price = typeof entry.price === "number" ? formatFantasyPrice(entry.price) : "-";
+  const projection = typeof entry.projection === "number" ? `proj ${entry.projection.toFixed(1)}` : null;
+  const projectedAvg =
+    projection == null && typeof entry.projectedAvg === "number"
+      ? `projected avg ${entry.projectedAvg.toFixed(1)}`
+      : null;
+  const avg = typeof entry.avgPoints === "number" ? `avg ${entry.avgPoints.toFixed(1)}` : null;
+  const last3 = typeof entry.last3Avg === "number" ? `L3 ${entry.last3Avg.toFixed(1)}` : null;
+  const pricedAt = typeof entry.pricedAt === "number" ? `priced at ${entry.pricedAt.toFixed(1)}` : null;
+  const difference =
+    typeof entry.projectionVsPricedAt === "number"
+      ? `value ${entry.projectionVsPricedAt > 0 ? "+" : ""}${entry.projectionVsPricedAt.toFixed(1)}`
+      : null;
+  const ownershipDelta =
+    typeof entry.ownershipDelta === "number"
+      ? `ownership ${entry.ownershipDelta > 0 ? "+" : ""}${entry.ownershipDelta.toFixed(1)}%`
+      : null;
+  const bye =
+    typeof entry.nextMajorByeRound === "number" && typeof entry.playsNextMajorByeRound === "boolean"
+      ? `${entry.playsNextMajorByeRound ? "plays" : "misses"} R${entry.nextMajorByeRound}`
+      : null;
+  const details = [projection, projectedAvg, avg, last3, pricedAt, difference, ownershipDelta, bye]
+    .filter(Boolean)
+    .join(", ");
+
+  return `${index + 1}. ${String(entry.name ?? "Unknown")} (${position}) - ${price}${details ? `, ${details}` : ""}`;
+}
+
+async function tryRunDirectFantasyPositionRankingChat(
+  userMessage: string,
+  access: AiToolAccessPolicy
+): Promise<AiModelChatResult | null> {
+  const normalized = userMessage.toLowerCase();
+  const positions = extractFantasySnapshotPositionFilters(userMessage);
+  const isFantasyPrompt = /\bfantasy\b/.test(normalized);
+  const asksProjection = /\b(projection|projected)\b/.test(normalized);
+  const asksValue = /\b(value|priced at|price)\b/.test(normalized);
+  const asksRanking = /\b(best|top|rank|ranking|leaders?|highest|look best)\b/.test(normalized);
+
+  if (!positions || !isFantasyPrompt || !asksRanking || (!asksProjection && !asksValue)) {
+    return null;
+  }
+
+  const requestedRound = parseRequestedRound(userMessage);
+  const requestedLimit = parseRequestedTopCount(userMessage, 6, 10);
+  const sortBy = asksValue && hasAiProDataAccess(access.plan)
+    ? "projection_vs_priced_at_desc"
+    : asksProjection && hasAiProDataAccess(access.plan)
+      ? "projection_desc"
+      : "avg_points_desc";
+  const { result, activity } = await runToolForLocalFallback(
+    "get_fantasy_snapshot",
+    {
+      round: requestedRound,
+      positions,
+      priceMax: null,
+      sortBy,
+      requireOwnershipRise: false,
+      excludeLocked: false,
+      limit: requestedLimit,
+    },
+    access
+  );
+
+  if (!result.ok) {
+    return buildAiResult(result.error, [activity], "direct-tools");
+  }
+
+  const warnings = Array.isArray(result.data.warnings)
+    ? result.data.warnings.filter((value): value is string => typeof value === "string")
+    : [];
+  const players = Array.isArray(result.data.players)
+    ? result.data.players.filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null)
+    : [];
+  const roundLabel =
+    typeof result.data.effectiveRound === "number"
+      ? result.data.effectiveRound
+      : typeof result.data.requestedRound === "number"
+        ? result.data.requestedRound
+        : null;
+
+  if (players.length === 0) {
+    const label = positions.join("/");
+    return buildAiResult(
+      `I couldn't find matching NRL Fantasy players for ${label}${roundLabel != null ? ` in Round ${roundLabel}` : ""}.`,
+      [activity],
+      "direct-tools"
+    );
+  }
+
+  const heading =
+    asksValue
+      ? `Top ${players.length} fantasy value options`
+      : `Top ${players.length} fantasy projections`;
+  const positionLabel = positions.join("/");
+  const requestedRoundUnavailable =
+    result.data.roundAvailable === false && typeof result.data.requestedRound === "number";
+  const notes = [
+    requestedRoundUnavailable && roundLabel != null
+      ? `Round ${result.data.requestedRound} projections were not available, so this uses the latest available Round ${roundLabel} snapshot.`
+      : null,
+    ...warnings.filter((warning) => !/sign up to pro/i.test(warning)),
+  ].filter(Boolean);
+
+  return buildAiResult(
+    [
+      `${heading}${roundLabel != null ? ` for Round ${roundLabel}` : ""} (${positionLabel}):`,
+      players.map(formatFantasySnapshotLine).join("\n"),
+      notes.length > 0 ? `Notes:\n- ${notes.join("\n- ")}` : "",
+    ].filter(Boolean).join("\n\n"),
+    [activity],
+    "direct-tools"
+  );
+}
+
 async function tryRunDirectFantasyProjectionValueChat(
   userMessage: string,
   access: AiToolAccessPolicy
@@ -2998,7 +3522,6 @@ async function tryRunDirectFantasyPositionTradeFollowUpChat(
     ? result.data.players.filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null)
     : [];
   const heldPlayerTerms = extractHeldPlayerTerms(userMessage);
-  const mentionedHughes = /\bhughes\b/.test(normalized);
   const wantsPremiumTarget =
     /\bexpensive\b|\bpremium\b|\bguns?\b|\btop[- ]shelf\b|\belite\b/.test(normalized);
   const candidates = players
@@ -3047,7 +3570,6 @@ async function tryRunDirectFantasyPositionTradeFollowUpChat(
       heldPlayerTerms.length > 0
         ? `I would not use ${heldPlayerTerms.join(" / ")} as the sell based on your instruction. Treat this as a ${positionLabel} upgrade watchlist and fund it from another trade or after the held player rises in price.`
         : `For a ${positionLabel} upgrade, these are the current options I would check first.`,
-      mentionedHughes ? "Holding Jahrome Hughes for a one-week absence is reasonable unless your squad has no playable cover." : "",
       lines.join("\n"),
       "I have only included buy options with positive ownership delta.",
       "If your bank is tight, take the best option you can afford from that list rather than forcing a second trade.",
@@ -3627,6 +4149,11 @@ async function tryRunDirectToolChat(
     return fantasyPositionTradeFollowUpResult;
   }
 
+  const fantasyPositionRankingResult = await tryRunDirectFantasyPositionRankingChat(userMessage, access);
+  if (fantasyPositionRankingResult) {
+    return fantasyPositionRankingResult;
+  }
+
   const fantasyProjectionValueResult = await tryRunDirectFantasyProjectionValueChat(userMessage, access);
   if (fantasyProjectionValueResult) {
     return fantasyProjectionValueResult;
@@ -3751,7 +4278,7 @@ export async function runAiModelChat(
     return buildAiResult(buildPremiumBettingUpgradeMessage(), [], "policy");
   }
 
-  if (!hasAiProDataAccess(access.plan) && isProjectionRequest(userMessage)) {
+  if (!hasImageInputs && !hasAiProDataAccess(access.plan) && isProjectionRequest(userMessage)) {
     return buildAiResult(buildProjectionUpgradeMessage(), [], "policy");
   }
 
@@ -3807,8 +4334,10 @@ export async function runAiModelChat(
   const reasoningEffort =
     options?.reasoningEffortOverride ?? getOpenAiReasoningEffort(access.plan);
   if (hasImageInputs) {
+    const hasProjectionAccess = hasAiProDataAccess(access.plan);
     const requestedRound = parseRequestedRound(userMessage);
-    const [buySnapshot, valueSnapshot, sellSnapshot] = await Promise.all([
+    const [visiblePlayerNames, buySnapshot, valueSnapshot, sellSnapshot] = await Promise.all([
+      extractVisibleFantasyPlayerNamesFromImages(model, imageInputs),
       runToolForLocalFallback(
         "get_fantasy_snapshot",
         {
@@ -3818,7 +4347,7 @@ export async function runAiModelChat(
           sortBy: "ownership_delta_desc",
           requireOwnershipRise: true,
           excludeLocked: true,
-          limit: 12,
+          limit: 50,
         },
         access
       ),
@@ -3828,10 +4357,10 @@ export async function runAiModelChat(
           round: requestedRound,
           positions: null,
           priceMax: null,
-          sortBy: "projection_vs_priced_at_desc",
+          sortBy: hasProjectionAccess ? "projection_vs_priced_at_desc" : "avg_points_desc",
           requireOwnershipRise: true,
           excludeLocked: true,
-          limit: 12,
+          limit: 50,
         },
         access
       ),
@@ -3844,33 +4373,128 @@ export async function runAiModelChat(
           sortBy: "ownership_delta_asc",
           requireOwnershipRise: false,
           excludeLocked: false,
-          limit: 16,
+          limit: 80,
         },
         access
       ),
     ]);
+    const [visibleSnapshot, casualtyWardRecords] = await Promise.all([
+      visiblePlayerNames.length > 0
+        ? runToolForLocalFallback(
+          "get_fantasy_snapshot",
+          {
+            round: requestedRound,
+            playerNames: visiblePlayerNames,
+            positions: null,
+            priceMax: null,
+            sortBy: "ownership_delta_asc",
+            requireOwnershipRise: false,
+            excludeLocked: false,
+            limit: Math.min(80, Math.max(12, visiblePlayerNames.length + 8)),
+          },
+          access
+        )
+        : Promise.resolve(null),
+      visiblePlayerNames.length > 0 ? fetchCasualtyWardSnapshot() : Promise.resolve([]),
+    ]);
+    const toolActivities = [
+      buySnapshot.activity,
+      valueSnapshot.activity,
+      sellSnapshot.activity,
+      ...(visibleSnapshot ? [visibleSnapshot.activity] : []),
+    ];
+    if (!buySnapshot.result.ok || !valueSnapshot.result.ok || !sellSnapshot.result.ok) {
+      return buildAiResult(
+        "I couldn't load the live fantasy market data needed for Find Trades, so I won't generate trade advice from screenshots alone. Please try again in a moment.",
+        toolActivities,
+        "direct-tools"
+      );
+    }
+    const currentFantasyRound = getFantasySnapshotEffectiveRound(sellSnapshot.result) ?? requestedRound;
+    const visibleMatchedPlayerNames = getFantasySnapshotPlayerNames(visibleSnapshot?.result);
+    const visibleNamedToPlayPlayerNames = getFantasySnapshotNamedToPlayPlayerNames(visibleSnapshot?.result);
+    const tradeInExcludedNames = visibleMatchedPlayerNames.length > 0 ? visibleMatchedPlayerNames : visiblePlayerNames;
+    const buySnapshotResult = filterFantasySnapshotResultPlayers(buySnapshot.result, tradeInExcludedNames);
+    const valueSnapshotResult = filterFantasySnapshotResultPlayers(valueSnapshot.result, tradeInExcludedNames);
     const fantasySnapshotContext = formatFantasySnapshotContext(
-      buySnapshot.result,
+      buySnapshotResult,
       "trade-in momentum",
-      "These are real buy candidates sorted by ownership momentum. Only use players with positive ownership delta as buys. Use them when the player also has sensible BE, L3/projection, or priced-at reasoning.",
-      "buy"
+      hasProjectionAccess
+        ? "These are real buy candidates sorted by ownership momentum after removing players visible in the user's screenshots. Only use players with positive ownership delta as buys. Use them when the player also has sensible BE, L3/projection, or priced-at reasoning."
+        : "These are real buy candidates sorted by ownership momentum after removing players visible in the user's screenshots. Only use players with positive ownership delta as buys. Use ownership change, price, priced-at value, average, L3 average, bye coverage, and named-to-play status.",
+      "buy",
+      hasProjectionAccess
     );
     const fantasyValueContext = formatFantasySnapshotContext(
-      valueSnapshot.result,
-      "trade-in value",
-      "These are real buy candidates sorted by projection-vs-pricedAt value and filtered to positive ownership delta. Do not use negative-ownership players as buys.",
-      "buy"
+      valueSnapshotResult,
+      hasProjectionAccess ? "trade-in value" : "trade-in form/value",
+      hasProjectionAccess
+        ? "These are real buy candidates sorted by projection-vs-pricedAt value after removing players visible in the user's screenshots, and filtered to positive ownership delta. Do not use negative-ownership players as buys."
+        : "These are real buy candidates sorted by season average after removing players visible in the user's screenshots, and filtered to positive ownership delta. Use them as form/value options, not projection-based calls.",
+      "buy",
+      hasProjectionAccess
     );
     const fantasySellContext = formatFantasySnapshotContext(
       sellSnapshot.result,
-      "highly-sold",
-      "Use this list only to support sell recommendations for screenshot-visible players with negative ownership deltas and no low-BE price-rise signal. Do not recommend selling screenshot players just for DNP/bye.",
-      "sell"
+      "sell/watch",
+      hasProjectionAccess
+        ? "Use this list to assess screenshot-visible sell/watch candidates. Include visible players with ownership delta -1.0% or worse, plus visible players who are not playing or unavailable, then judge them by ownership delta, BE, projection, pricedAt, projection-vs-pricedAt, L3 average, injury/availability marker, and next major bye availability. Low BE, projection near/above pricedAt, strong L3, and playing the next major bye support Hold / Possible sell rather than hard sell."
+        : "Use this list to assess screenshot-visible sell/watch candidates. Include visible players with ownership delta -1.0% or worse, plus visible players who are not playing or unavailable, then judge them by ownership delta, price, pricedAt, season average, L3 average, injury/availability marker, named-to-play status, and next major bye availability. Do not use projections or breakevens for free users.",
+      "sell",
+      hasProjectionAccess
     );
+    const visiblePlayerContext =
+      visibleSnapshot?.result.ok
+        ? formatFantasySnapshotContext(
+          visibleSnapshot.result,
+          "visible owned player reference",
+          hasProjectionAccess
+            ? "These are players extracted from the user's screenshots and matched to real fantasy data. Use this reference for real player names, positions, prices, ownership change, BE, projection, pricedAt, L3, and bye context. Never recommend these players as trade-ins. Use this reference to find additional sell/watch candidates when a visible player has a high BE, projection below pricedAt, confirmed injury/unavailability, weak L3/projection, or poor bye coverage."
+            : "These are players extracted from the user's screenshots and matched to real fantasy data. Use this reference for real player names, positions, prices, ownership change, pricedAt, average, L3, named-to-play status, and bye context. Never recommend these players as trade-ins. Use this reference to find additional sell/watch candidates when a visible player has negative ownership, confirmed injury/unavailability, weak recent form, high price for output, or poor bye coverage.",
+          "neutral",
+          hasProjectionAccess
+        )
+        : visiblePlayerNames.length > 0
+          ? `Visible owned players extracted from screenshots: ${visiblePlayerNames.join(", ")}. Never recommend these players as trade-ins.`
+          : "";
+    const casualtyWardContext = formatCasualtyWardContext(
+      casualtyWardRecords,
+      visibleMatchedPlayerNames.length > 0 ? visibleMatchedPlayerNames : visiblePlayerNames,
+      currentFantasyRound,
+      visibleNamedToPlayPlayerNames,
+      hasProjectionAccess
+    );
+    const proMetricInstruction = hasProjectionAccess
+      ? [
+        "- Use projections, breakevens, projection-vs-pricedAt, ownership change, price, L3 average, named-to-play status, casualty ward context, and next major bye availability.",
+        "- If a visible player has ownership delta -1.0% or worse but BE is low, projection is similar to pricedAt, L3 is solid, and they play the next major bye, list them as Hold / Possible sell with lower urgency rather than a hard sell.",
+        "- If the casualty ward says the player is expected back in 2 weeks or less, treat that as a hold signal, especially when BE is low and projection/value context is strong.",
+        "- Strong sell recommendations require negative ownership delta plus poor value signals, such as high BE, weak projection-vs-pricedAt, weak L3/projection, injury/unavailability, or poor bye coverage.",
+        "- Explain buy and sell reasoning using the supplied ownership delta, BE, L3 average, pricedAt, projection, and projection-vs-pricedAt fields, but never describe backend rules or guardrails to the user.",
+        "- Do not give sell/watch players ratings or scores. In each sell/watch title, include player name, real fantasy position, price, and projection only. In each trade-in title, include player name, real fantasy position, price, projection, and rating.",
+        "- In the details, use the label 'Ownership change:' instead of 'Own % delta:', then include BE, priced at, L3 average, projection-vs-pricedAt, and next major bye availability.",
+        "- Low BE supports buys because the player can rise in price faster. High BE, negative ownership, and L3/projection below pricedAt support sells.",
+      ]
+      : [
+        "- This is a free-user Find Trades answer. Keep the same three sections and useful recommendations, but do not use projections, breakevens, or projection-vs-pricedAt as trade reasons.",
+        "- Add one short sentence near the start of Recommended Moves saying that Pro unlocks projection and breakeven-based trade calls, and that this answer is based on ownership movement, recent form, price, bye coverage, lineup status, and injury context.",
+        "- Use ownership change, price, pricedAt, season average, L3 average, named-to-play status, casualty ward context, and next major bye availability.",
+        "- Try to list 3 Sell watch candidates using negative ownership change, weak L3 or season average for the price, injury/unavailability, poor bye coverage, or awkward squad/cash fit. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
+        "- If a visible player has negative ownership movement but strong L3 form, useful bye coverage, and no availability issue, list them as Hold / Possible sell with lower urgency rather than a hard sell.",
+        "- If the casualty ward says the player is expected back in 2 weeks or less, treat that as a potential hold when ownership, recent form, price, and bye coverage are favourable.",
+        "- Strong sell recommendations require negative ownership movement plus a poor free-user signal, such as weak recent form for the price, injury/unavailability, or poor bye coverage.",
+        "- Explain buy and sell reasoning using the supplied ownership change, price, pricedAt, average, L3 average, named-to-play status, casualty ward context, and next major bye availability. Do not mention specific projections or breakevens.",
+        "- Do not give sell/watch players ratings or scores. In each sell/watch title, include player name, real fantasy position, and price only. In each trade-in title, include player name, real fantasy position, price, and rating.",
+        "- In the details, use the label 'Ownership change:' instead of 'Own % delta:', then include priced at, average/L3 form, next major bye availability, and one normal-sentence reason. Do not include BE, projection, or projection-vs-pricedAt.",
+      ];
     const imageUserMessage = [
       userMessage,
       "",
       "Real data guardrails for this screenshot answer:",
+      visiblePlayerContext,
+      "",
+      casualtyWardContext,
+      "",
       fantasySnapshotContext,
       "",
       fantasyValueContext,
@@ -3879,18 +4503,45 @@ export async function runAiModelChat(
       "",
       "When writing the answer:",
       "- Sells must come from visible screenshot players only.",
-      "- DNP or bye is not a sell reason by itself. Only suggest selling a DNP/bye player if they also have a real negative ownership delta in the highly-sold snapshot and no low breakeven.",
+      ...proMetricInstruction,
+      "- A Sell watch player should appear by real name in the sell/watch data above with ownership delta -1.0% or worse, or in the visible owned player reference with meaningful sell/watch signals supplied for this user's access level.",
+      "- If a visible player is not playing and has a strong negative ownership delta, mention them in Sell watch even if the uploaded screenshot was taken before final team status was known.",
+      "- Write for non-technical users: clear, friendly, direct advice. Do not explain thresholds, filters, snapshots, or backend rules.",
+      "- Write every reason as one normal sentence. Do not use compressed stat shorthand or fragments like 'value v pricedAt', 'momentum + ownership', 'scored floor', 'field 13', or 'helps field 13'. Say things like projects well for his price, ownership is rising, has a reliable scoring floor, or helps your major-bye coverage.",
+      "- Tone for Sell watch: advice first, warm and practical. Do not sound like OCR/debug output. Say a player is out, unavailable, or a high-priority sell when appropriate, then explain the fantasy implication in normal language.",
+      "- For an injured expensive player, explain that selling can free salary to bring in a stronger replacement or premium option. Do not write blunt phrases like 'avoid a zero score', 'projection is 0', 'your screenshot shows', or 'red injury marker'.",
+      "- Use real player names and positions from the visible owned player reference or snapshots. Do not use OCR-read position labels when a real fantasy position is available.",
+      "- Do not output OCR-invented names or expand abbreviated names unless they match a real player.",
+      "- Do not use screenshot slot, bench, INT, EMG, reserve, or emergency placement as a sell reason. Good players can sit in any squad slot; location only helps identify the user's owned players.",
+      "- Do not infer this-week availability from screenshot slot, bench/EMG placement, or absence from a snapshot. If real metrics are unavailable for a visible player and there is no clear injury/suspension marker, do not list them as a numbered Sell watch item.",
+      "- Do not write '(not in snapshot)' for a player who appears in the visible owned player reference. Use the visible owned player reference fields instead.",
+      "- Do not claim a player is injured unless a red cross/plus is visibly attached to that exact player in the screenshot. Do not infer injury from name, status memory, DNP, bye, or prior examples.",
+      "- For any visible player with a red cross/plus injury marker or clear out/unavailable status, consult the NRL casualty ward context before deciding hold versus sell.",
+      "- If the casualty ward lists a player but the visible owned player reference says he is named to play this week, ignore the casualty ward for that player and do not call him injured from casualty ward.",
+      "- If the casualty ward says the player is out for 3 weeks or more, treat that as a strong sell signal.",
+      "- If the casualty ward return is TBC/unknown, or no matching casualty ward row is supplied for a red cross/plus player, say the timeline is uncertain and suggest checking the latest injury news before locking the trade.",
+      "- Do not use the phrase 'visible red injury marker' unless a red cross/plus is plainly attached to the exact player row/card. If uncertain, omit injury completely.",
+      "- Do not mention an injury marker for J. Hughes/Hughes unless the marker is unambiguously attached to his exact player tile.",
+      "- DNP or bye is not a sell reason by itself. Use the supplied weekly ownership delta, recent form, price/value, and access-appropriate metrics to assess any visible sell/watch candidate.",
       "- Treat DNP and the black/dark circle with a white square as bye/non-playing-round markers, not injury or dropped status.",
-      "- Prioritise visible injury marker sells among eligible sell candidates. In the provided screenshot key, the injury marker is a red cross/plus.",
-      "- Negative-ownership sell recommendations require the visible player to appear in the real highly-sold snapshot above.",
+      "- If no red cross/plus is clearly attached to the exact player, do not mention an injury marker for that player.",
       "- Do not recommend a buy with negative ownership delta.",
-      "- Do not recommend a sell with positive ownership delta.",
-      "- Do not recommend selling a player with a low breakeven.",
-      "- Trade-ins must come only from the real fantasy trade-in momentum/value snapshots above.",
-      "- Explain buy and sell reasoning using the supplied ownership delta, BE, L3 average, pricedAt, projection, and projection-vs-pricedAt fields.",
-      "- Low BE supports buys because the player can rise in price faster. High BE, negative ownership, and L3/projection below pricedAt support sells.",
+      hasProjectionAccess
+        ? "- If a visible player has positive ownership delta, treat that as a hold signal unless the screenshot clearly shows injury, suspension, or non-selection. Low breakeven is a hold signal, not a reason to omit a negative-delta player from Sell watch."
+        : "- If a visible player has positive ownership delta, strong recent form, or useful bye coverage, treat that as a hold signal unless the screenshot clearly shows injury, suspension, or non-selection.",
+      "- Trade-ins must come only from the real fantasy trade-in momentum/value snapshots above, after excluding every player visible anywhere in the screenshots.",
+      "- Before writing Top 5 trade-ins, remove all already-owned visible players, including starters, bench, INT, EMG, reserves, trade-out rows, and current squad lists. If a candidate appears in the visible owned player reference, omit them from Top 5 trade-ins.",
+      "- Always include Top 5 trade-ins when the trade-in momentum/value snapshots contain eligible players. If fewer than five remain, list the eligible players that remain. Do not say no live buy list was available when the trade-in snapshots above contain players.",
+      "- Do not invent trade-in names outside the snapshots. If fewer than five eligible non-owned trade-ins remain after excluding visible squad players, list fewer than five.",
       "- Include ownership delta only when it appears in the real fantasy snapshot above.",
+      "- Include next major bye availability for every buy/sell when it appears in the real fantasy snapshot above.",
       "- Do not mention buying again, buying back, or re-buying an already owned player.",
+      "- In Recommended Moves, treat keeping the user's remaining bank below about 100k as a real constraint when the visible bank and player prices make that possible.",
+      "- Do not recommend only an expensive sell to a much cheaper trade-in if that leaves hundreds of thousands unused. If a cheap replacement is the best value, pair it with a second move that upgrades a cheap owned player to a more expensive target using the freed salary. If you cannot identify a good second upgrade, prefer a one-trade move from the expensive sell to a more expensive trade-in that keeps bank under about 100k.",
+      "- When suggesting a two-trade path, use a cheap owned player visible in the squad as the second sell and a real trade-in target from the supplied buy/value data as the upgrade. Do not invent the second sell or buy.",
+      "- Return sections in this order: Sell watch, Top 5 trade-ins, Recommended Moves. Order sell/watch candidates by urgency and context, and rank trade-ins by rating, highest first. Do not include a Notes section unless there is critical screenshot uncertainty.",
+      "- Do not write phrases like 'negative ownership delta sell rule', 'sell rules followed', 'snapshot threshold', 'threshold for a clear sell', 'live snapshot you supplied', 'live momentum snapshot', 'highly-sold snapshot', 'sell/watch data', 'all buys come from', 'uploaded squad', 'backend rule', 'guardrail', or 'limitation'.",
+      "- Do not ask follow-up questions or offer follow-up actions in a dashboard trade suggestor answer. Do not say phrases like 'if you want', 'I can', or 'I'll show'. Make the best reasonable assumption and mention critical uncertainty briefly inside Recommended Moves.",
     ].join("\n");
 
     const response = await createOpenAiResponse({
@@ -3913,7 +4564,7 @@ export async function runAiModelChat(
 
     return {
       assistantMessage,
-      toolActivity: [buySnapshot.activity, valueSnapshot.activity, sellSnapshot.activity],
+      toolActivity: toolActivities,
       artifacts: [],
       model,
       usage: {
@@ -4069,6 +4720,13 @@ export async function runAiModelChat(
       }
     }
 
+    if (!hasImageInputs && isPatchablePoorAssistantResponse(userMessage, assistantMessage)) {
+      const fallbackResult = await tryRunDirectToolChat(userMessage, history, access);
+      if (fallbackResult) {
+        return fallbackResult;
+      }
+    }
+
     if (!hasImageInputs && requiresInternalToolCall(userMessage) && !hasSuccessfulInternalToolCall(toolActivity)) {
       return {
         assistantMessage: buildRequiredToolFollowUpQuestion(userMessage),
@@ -4113,6 +4771,7 @@ export async function runAiModelChat(
               history: options?.history,
               access,
               clarificationCount: options?.clarificationCount,
+              imageInputs: options?.imageInputs,
               reasoningEffortOverride: retryEffort,
               transientRetryAttempted: true,
             });

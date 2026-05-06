@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import type { LineupMatch, LineupPlayer, LineupTeam, LineupTryscorerOdds } from "@/lib/lineups/nrl-lineups"
+import type { LineupCasualtyOut, LineupMatch, LineupPlayer, LineupTeam, LineupTryscorerOdds } from "@/lib/lineups/nrl-lineups"
 
 interface LineupsDashboardProps {
   matches: LineupMatch[]
   teamLogos: Record<string, string>
   tryscorerOdds: Record<string, LineupTryscorerOdds>
+  canAccessNotableOuts: boolean
+  casualtyWardOuts: Record<string, LineupCasualtyOut[]>
   playerAverages: Record<string, Record<AverageStatKey, number>>
 }
 
@@ -81,7 +83,7 @@ const LANE_Y: Record<Slot, number> = {
 }
 
 const PORTRAIT_DEPTH_X: Record<Slot, number> = {
-  FB: 10,
+  FB: 8.5,
   LW: 16,
   LC: 16,
   RW: 16,
@@ -183,19 +185,22 @@ function PlayerMetric({
   displayMode,
   tryscorerOdds,
   playerAverages,
+  compact,
 }: {
   player: LineupPlayer
   displayMode: DisplayMode
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
+  compact: boolean
 }) {
   const playerKey = normaliseKey(player.player)
+  const textClass = compact ? "text-[10px]" : "text-[11px]"
 
   if (displayMode === "fantasy") {
     return player.fantasyProjection != null ? (
-      <div className="text-[10px] font-semibold leading-tight text-emerald-100/90">{Math.round(player.fantasyProjection)} proj</div>
+      <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>{Math.round(player.fantasyProjection)} proj</div>
     ) : (
-      <div className="text-[10px] font-semibold leading-tight text-emerald-100/60">-</div>
+      <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
     )
   }
 
@@ -203,20 +208,20 @@ function PlayerMetric({
     const odds = tryscorerOdds[playerKey]
     const logo = odds?.bestBookie ? BOOKIE_LOGOS[odds.bestBookie] : null
     return odds?.bestPrice != null ? (
-      <div className="mt-0.5 flex items-center justify-center gap-1 text-[10px] font-semibold leading-tight text-emerald-100/90">
+      <div className={`mt-0.5 flex items-center justify-center gap-1 ${textClass} font-semibold leading-tight text-emerald-100/90`}>
         {logo ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logo} alt={odds.bestBookie ?? ""} className="h-2.5 w-auto object-contain" loading="lazy" />
+          <img src={logo} alt={odds.bestBookie ?? ""} className={`${compact ? "h-2.5" : "h-3"} w-auto object-contain`} loading="lazy" />
         ) : null}
         <span>{odds.bestPrice.toFixed(2)}</span>
       </div>
     ) : (
-      <div className="text-[10px] font-semibold leading-tight text-emerald-100/60">-</div>
+      <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
     )
   }
 
   return (
-    <div className="text-[10px] font-semibold leading-tight text-emerald-100/90">
+    <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>
       {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} avg
     </div>
   )
@@ -301,11 +306,11 @@ function PitchPlayer({
 
   return (
     <div
-      className={`${compact ? "w-14 sm:w-16" : "w-16 sm:w-18"} absolute z-[2] -translate-x-1/2 -translate-y-1/2 text-center`}
+      className={`${compact ? "w-14 sm:w-16" : "w-20"} absolute z-[2] -translate-x-1/2 -translate-y-1/2 text-center`}
       style={position}
       title={`${player.player}${player.sideSource === "override" ? " - side override" : ""}`}
     >
-      <div className={`${compact ? "h-9 w-9 sm:h-10 sm:w-10" : "h-10 w-10 sm:h-11 sm:w-11"} relative mx-auto`}>
+      <div className={`${compact ? "h-9 w-9 sm:h-10 sm:w-10" : "h-12 w-12"} relative mx-auto`}>
         <div className="grid h-full w-full place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-nrl-panel shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -314,14 +319,20 @@ function PitchPlayer({
             <span className="text-[10px] font-bold text-nrl-muted">{initials(player.player)}</span>
           )}
         </div>
-        <div className={`absolute -right-3 -top-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white ${player.sideSource === "override" ? "bg-blue-500" : "bg-blue-950"}`}>
+        <div className={`${compact ? "-right-3 px-1.5 text-[9px]" : "-right-3.5 px-2 text-[10px]"} absolute -top-1 rounded-full py-0.5 font-bold text-white ${player.sideSource === "override" ? "bg-blue-500" : "bg-blue-950"}`}>
           {slot}
         </div>
       </div>
-      <div className={`${compact ? "max-w-[3.45rem] text-[9px]" : "text-[10px]"} mx-auto mt-1 truncate font-bold leading-tight text-white drop-shadow`} title={player.player}>
+      <div className={`${compact ? "max-w-[3.45rem] text-[9px]" : "text-[11px]"} mx-auto mt-1 truncate font-bold leading-tight text-white drop-shadow`} title={player.player}>
         {displayName(player)}
       </div>
-      <PlayerMetric player={player} displayMode={displayMode} tryscorerOdds={tryscorerOdds} playerAverages={playerAverages} />
+      <PlayerMetric
+        player={player}
+        displayMode={displayMode}
+        tryscorerOdds={tryscorerOdds}
+        playerAverages={playerAverages}
+        compact={compact}
+      />
     </div>
   )
 }
@@ -378,7 +389,7 @@ function Pitch({
   return (
     <div className={`${sizeClass} relative overflow-hidden rounded-lg border-2 border-emerald-300/45 bg-[radial-gradient(circle_at_50%_50%,rgba(0,245,138,0.16),transparent_30%),linear-gradient(90deg,rgba(8,26,33,0.98),rgba(15,112,73,0.92)_50%,rgba(8,26,33,0.98))]`}>
       <FieldLines orientation={orientation} />
-      <div className={orientation === "portrait" ? "absolute left-2 top-2 z-[4]" : "absolute left-3 top-3 z-[4]"}>
+      <div className={orientation === "portrait" ? "absolute left-2 top-2 z-[4]" : "absolute left-1/2 top-3 z-[4] -translate-x-1/2"}>
         <DisplayModeControl
           displayMode={displayMode}
           onDisplayModeChange={onDisplayModeChange}
@@ -431,6 +442,89 @@ function TeamBench({ team }: { team: LineupTeam | null }) {
   )
 }
 
+function getTeamOuts(team: LineupTeam | null, casualtyWardOuts: Record<string, LineupCasualtyOut[]>): LineupCasualtyOut[] {
+  if (!team) return []
+  const namedPlayers = new Set(team.players.map((player) => normaliseKey(player.player)).filter(Boolean))
+  const candidates = [team.teamName, team.team]
+  for (const candidate of candidates) {
+    const outs = casualtyWardOuts?.[normaliseKey(candidate)]
+    if (outs?.length) return outs.filter((out) => !namedPlayers.has(normaliseKey(out.player)))
+  }
+  return []
+}
+
+function TeamNotableOuts({ team, outs }: { team: LineupTeam | null; outs: LineupCasualtyOut[] }) {
+  return (
+    <div className="min-w-0 rounded-md bg-nrl-panel/55 p-2">
+      <div className="truncate text-[10px] font-bold uppercase tracking-wide text-nrl-muted">{team?.team ?? "Team"}</div>
+      {outs.length > 0 ? (
+        <div className="mt-1.5 grid gap-1.5">
+          {outs.map((out) => (
+            <div key={`${out.team}-${out.player}-${out.injury ?? ""}-${out.returnDate ?? ""}`} className="min-w-0">
+              <div className="truncate text-[11px] font-semibold leading-tight text-nrl-text">{out.player}</div>
+              <div className="truncate text-[10px] leading-tight text-nrl-muted">
+                {out.injury ?? "Unavailable"} · Return: {out.returnDate ?? "TBC"}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-1.5 text-[11px] text-nrl-muted">No notable outs listed</div>
+      )}
+    </div>
+  )
+}
+
+function InjuryIcon() {
+  return (
+    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-red-300/35 bg-red-500/15 text-red-100" aria-hidden="true">
+      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none">
+        <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      </svg>
+    </span>
+  )
+}
+
+function NotableOuts({
+  homeTeam,
+  awayTeam,
+  casualtyWardOuts,
+}: {
+  homeTeam: LineupTeam | null
+  awayTeam: LineupTeam | null
+  casualtyWardOuts: Record<string, LineupCasualtyOut[]>
+}) {
+  const homeOuts = getTeamOuts(homeTeam, casualtyWardOuts)
+  const awayOuts = getTeamOuts(awayTeam, casualtyWardOuts)
+  const totalOuts = homeOuts.length + awayOuts.length
+
+  return (
+    <details className="group/notable mt-3 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel/70">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2 py-2 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 items-center gap-2">
+          <InjuryIcon />
+          <span className="truncate text-[10px] font-bold uppercase tracking-wide text-nrl-muted">Notable Outs</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="text-[10px] font-semibold tabular-nums text-nrl-muted">{totalOuts}</span>
+          <svg
+            viewBox="0 0 16 16"
+            className="h-4 w-4 text-nrl-muted transition-transform group-open/notable:rotate-180"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      </summary>
+      <div className="grid gap-2 border-t border-nrl-border p-2 sm:grid-cols-2">
+        <TeamNotableOuts team={homeTeam} outs={homeOuts} />
+        <TeamNotableOuts team={awayTeam} outs={awayOuts} />
+      </div>
+    </details>
+  )
+}
+
 function DisplayModeControl({
   displayMode,
   onDisplayModeChange,
@@ -465,6 +559,8 @@ function LineupCard({
   displayMode,
   onDisplayModeChange,
   tryscorerOdds,
+  canAccessNotableOuts,
+  casualtyWardOuts,
   playerAverages,
 }: {
   match: LineupMatch
@@ -473,6 +569,8 @@ function LineupCard({
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
   tryscorerOdds: Record<string, LineupTryscorerOdds>
+  canAccessNotableOuts: boolean
+  casualtyWardOuts: Record<string, LineupCasualtyOut[]>
   playerAverages: Record<string, Record<AverageStatKey, number>>
 }) {
   const homePlayers = match.homeTeam?.players ?? []
@@ -523,12 +621,19 @@ function LineupCard({
           <TeamBench team={match.homeTeam} />
           <TeamBench team={match.awayTeam} />
         </div>
+        {canAccessNotableOuts ? (
+          <NotableOuts
+            homeTeam={match.homeTeam}
+            awayTeam={match.awayTeam}
+            casualtyWardOuts={casualtyWardOuts}
+          />
+        ) : null}
       </div>
     </details>
   )
 }
 
-export function LineupsDashboard({ matches, teamLogos, tryscorerOdds, playerAverages }: LineupsDashboardProps) {
+export function LineupsDashboard({ matches, teamLogos, tryscorerOdds, canAccessNotableOuts, casualtyWardOuts, playerAverages }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("fantasy")
 
   return (
@@ -551,6 +656,8 @@ export function LineupsDashboard({ matches, teamLogos, tryscorerOdds, playerAver
               displayMode={displayMode}
               onDisplayModeChange={setDisplayMode}
               tryscorerOdds={tryscorerOdds}
+              canAccessNotableOuts={canAccessNotableOuts}
+              casualtyWardOuts={casualtyWardOuts}
               playerAverages={playerAverages}
             />
           ))}

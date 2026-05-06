@@ -3817,7 +3817,7 @@ export function FantasyDashboard({
                   onChange={setAllPlayersPositionFilter}
                 />
               </div>
-              <label className="inline-flex min-h-[28px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[9px] font-bold uppercase tracking-wide text-nrl-muted">
+              <label className="inline-flex min-h-[28px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-[linear-gradient(#20284a,#20284a)_padding-box,linear-gradient(90deg,#ef4444,#f59e0b,#22c55e,#06b6d4,#6366f1,#a855f7)_border-box] px-2 text-[9px] font-bold uppercase tracking-wide text-nrl-muted">
                 <span>Tags</span>
                 <input
                   type="checkbox"
@@ -4537,7 +4537,7 @@ export function FantasyDashboard({
                   </div>
                 </div>
 
-                <div className={analysisLocked ? "pointer-events-none select-none opacity-45 blur-[2px]" : undefined}>
+                <div className={analysisLocked ? "pointer-events-none select-none mt-3 max-h-[360px] overflow-hidden rounded-lg opacity-45 blur-[2px]" : undefined}>
                 {(analysisLocked || showRollingAveragePlot) && trendFilteredRows.length > 0 ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-start justify-between gap-3">

@@ -1689,6 +1689,7 @@ export function FantasyDashboard({
   const [allPlayersView, setAllPlayersView] = useState<"cards" | "table">("cards")
   const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
   const [allPlayersTagFilters, setAllPlayersTagFilters] = useState<string[]>([])
+  const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(true)
   const showFantasyAnalytics = initialShowFantasyAnalytics
   const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("projection")
   const [fantasyAnalyticsPositionFilter, setFantasyAnalyticsPositionFilter] = useState("All Positions")
@@ -3803,6 +3804,18 @@ export function FantasyDashboard({
                   </button>
                 ))}
               </div>
+              <label className="inline-flex min-h-[30px] cursor-pointer items-center gap-2 rounded-full border border-nrl-border bg-nrl-panel-2 px-2.5 text-[10px] font-bold uppercase tracking-wide text-nrl-muted">
+                <span>Tags</span>
+                <input
+                  type="checkbox"
+                  checked={showAllPlayersCardTags}
+                  onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
+                  className="sr-only"
+                />
+                <span className={`relative h-4 w-7 rounded-full border transition-colors ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                  <span className={`absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-3.5 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
+                </span>
+              </label>
               <div className="min-w-[150px]">
                 <Select
                   label=""
@@ -3878,16 +3891,16 @@ export function FantasyDashboard({
                     valueClassName: getOwnershipDeltaClass(row.weeklyChange),
                   },
                   {
-                    key: "projection",
-                    label: "Proj",
-                    value: formatTableNumber(row.projection),
-                    valueClassName: `text-nrl-text ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
-                  },
-                  {
                     key: "pricedAt",
                     label: "Priced At",
                     value: formatTableNumber(row.pricedAt, 0),
                     valueClassName: "text-nrl-text",
+                  },
+                  {
+                    key: "projection",
+                    label: "Proj",
+                    value: formatTableNumber(row.projection),
+                    valueClassName: `text-nrl-text ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
                   },
                   {
                     key: "value",
@@ -3972,13 +3985,15 @@ export function FantasyDashboard({
                           </div>
                           <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted md:block">
                             <span>{row.player.positionLabel}</span>
-                            <PlayerContextTags
-                              relevantOuts={row.relevantOuts}
-                              nextMajorByeRound={row.nextMajorByeRound}
-                              playsNextMajorBye={row.playsNextMajorBye}
-                              originChance={row.originChance}
-                              className="md:mt-1"
-                            />
+                            {showAllPlayersCardTags ? (
+                              <PlayerContextTags
+                                relevantOuts={row.relevantOuts}
+                                nextMajorByeRound={row.nextMajorByeRound}
+                                playsNextMajorBye={row.playsNextMajorBye}
+                                originChance={row.originChance}
+                                className="md:mt-1"
+                              />
+                            ) : null}
                           </div>
                         </div>
                       </div>

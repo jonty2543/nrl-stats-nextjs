@@ -2212,33 +2212,6 @@ export default async function Home() {
                     </div>
                   </div>
                 )}
-
-                {articlePreviewRows.length > 1 ? (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {articlePreviewRows.slice(1, 3).map((article) => (
-                      <Link
-                        key={article.id}
-                        href={`/dashboard/articles/${article.slug}`}
-                        className="group overflow-hidden rounded-xl border border-white/8 bg-[#1b2140] transition-colors hover:border-white/18"
-                      >
-                        <div className="grid grid-cols-[8rem_minmax(0,1fr)]">
-                          <div className="h-full min-h-32 bg-[#20274a]">
-                            {article.imageUrls[0] ? (
-                              <ImageWithFallback sources={[article.imageUrls[0]]} alt="" className="h-full w-full object-cover" />
-                            ) : null}
-                          </div>
-                          <div className="min-w-0 p-3">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">
-                              {article.displayName} · {formatArticleDate(article.approvedAt ?? article.createdAt)}
-                            </div>
-                            <div className="mt-2 line-clamp-2 text-sm font-bold leading-5 text-white group-hover:text-emerald-200">{article.title}</div>
-                            <div className="mt-2 line-clamp-2 text-xs leading-5 text-white/55">{articlePreviewText(article.body, 110)}</div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             </PreviewFrame>
           </FeatureSection>

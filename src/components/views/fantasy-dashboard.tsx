@@ -1613,7 +1613,7 @@ export function FantasyDashboard({
   fantasyProjectionArticle = null,
 }: FantasyDashboardProps) {
   const router = useRouter()
-  const { isLoaded: isAuthLoaded, userId } = useAuth()
+  const { userId } = useAuth()
   const initialSelectedYears = useMemo(
     () => {
       if (availableYears.includes(ALL_PLAYERS_STATS_YEAR)) return [ALL_PLAYERS_STATS_YEAR]
@@ -1715,7 +1715,6 @@ export function FantasyDashboard({
   }
 
   const handleRunTradeSuggestor = async () => {
-    if (!isAuthLoaded) return
     if (!tradeSuggestorReady) {
       setTradeSuggestorError("Upload starters, bench, and trade screen screenshots first.")
       return

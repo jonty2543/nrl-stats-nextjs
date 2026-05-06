@@ -249,6 +249,7 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
   { key: "change", label: "Weekly Deltas" },
   { key: "ownership", label: "Total Ownership" },
 ]
+const ALL_PLAYERS_BYE_FILTER_ALL = "All Bye Tags"
 const TRADE_SCREENSHOT_SLOTS: Array<{ key: TradeScreenshotSlot; label: string; hint: string }> = [
   { key: "starters", label: "Starters", hint: "Selected 13 / field view" },
   { key: "bench", label: "Bench", hint: "Interchange + emergencies" },
@@ -1086,6 +1087,11 @@ function getNextMajorByeRound(currentRound: number | null | undefined): number |
   return MAJOR_BYE_ROUNDS.find((byeRound) => byeRound >= round) ?? null
 }
 
+function formatNextMajorByeTag(round: number | null, plays: boolean | null): string | null {
+  if (!round || plays === null) return null
+  return `${plays ? "✓" : "✕"} Rd${round}`
+}
+
 function teamPlaysInRound(draw2026Data: Draw2026Data | null | undefined, round: number | null, team: string | null | undefined): boolean | null {
   if (!draw2026Data?.rows?.length || !round || !team) return null
   const teamKey = relevantOutsTeamGroup(team) ?? normaliseTeamKey(team)
@@ -1649,6 +1655,7 @@ export function FantasyDashboard({
   })
   const [allPlayersMobileView, setAllPlayersMobileView] = useState<"cards" | "table">("cards")
   const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
+  const [allPlayersByeFilter, setAllPlayersByeFilter] = useState(ALL_PLAYERS_BYE_FILTER_ALL)
   const showFantasyAnalytics = initialShowFantasyAnalytics
   const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("projection")
   const [fantasyAnalyticsPositionFilter, setFantasyAnalyticsPositionFilter] = useState("All Positions")
@@ -2399,6 +2406,13 @@ export function FantasyDashboard({
     })
   }, [allData, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
 
+  const selectedAllPlayersTableRow = useMemo(
+    () => selectedFantasyPlayer
+      ? allPlayersTableRows.find((row) => row.player.id === selectedFantasyPlayer.id) ?? null
+      : null,
+    [allPlayersTableRows, selectedFantasyPlayer]
+  )
+
   const fantasyAnalyticsPoints = useMemo<FantasyAnalyticsPoint[]>(
     () =>
       allPlayersTableRows.map((row) => ({
@@ -2514,10 +2528,15 @@ export function FantasyDashboard({
   }, [allPlayersTableRows, fantasyTemplateMode])
 
   const sortedAllPlayersTableRows = useMemo(() => {
-    const filteredRows =
+    let filteredRows =
       allPlayersPositionFilter === "All Positions"
         ? allPlayersTableRows
         : allPlayersTableRows.filter((row) => row.player.positionLabels.includes(allPlayersPositionFilter))
+    if (allPlayersByeFilter !== ALL_PLAYERS_BYE_FILTER_ALL) {
+      filteredRows = filteredRows.filter(
+        (row) => formatNextMajorByeTag(row.nextMajorByeRound, row.playsNextMajorBye) === allPlayersByeFilter
+      )
+    }
     const effectiveSort =
       allPlayersSort.column === "weeklyChange" && filteredRows.every((row) => row.weeklyChange === null)
         ? { column: "projection" as const, direction: "desc" as const }
@@ -2556,7 +2575,16 @@ export function FantasyDashboard({
 
       return String(aValue).localeCompare(String(bValue)) * direction
     })
-  }, [allPlayersPositionFilter, allPlayersSort, allPlayersTableRows])
+  }, [allPlayersByeFilter, allPlayersPositionFilter, allPlayersSort, allPlayersTableRows])
+
+  const allPlayersByeFilterOptions = useMemo(() => {
+    const options = new Set<string>([ALL_PLAYERS_BYE_FILTER_ALL])
+    for (const row of allPlayersTableRows) {
+      const label = formatNextMajorByeTag(row.nextMajorByeRound, row.playsNextMajorBye)
+      if (label) options.add(label)
+    }
+    return Array.from(options)
+  }, [allPlayersTableRows])
 
   const availableAllPlayersMobileSortOptions = useMemo(
     () => ALL_PLAYERS_MOBILE_SORT_OPTIONS.filter((option) => hasFantasyPlotAccess || !option.proOnly),
@@ -3734,6 +3762,14 @@ export function FantasyDashboard({
                   onChange={setAllPlayersPositionFilter}
                 />
               </div>
+              <div className="min-w-[116px]">
+                <Select
+                  label=""
+                  value={allPlayersByeFilter}
+                  options={allPlayersByeFilterOptions}
+                  onChange={setAllPlayersByeFilter}
+                />
+              </div>
             </div>
           </div>
           <div className={`${allPlayersMobileView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2 md:hidden`}>
@@ -4101,7 +4137,17 @@ export function FantasyDashboard({
                             Lineup: {selectedLineupRole.position}
                           </span>
                         ) : null}
-                        <CasualtyWardPills rows={casualtyWardRows} />
+                        {selectedAllPlayersTableRow ? (
+                          <PlayerContextTags
+                            relevantOuts={selectedAllPlayersTableRow.relevantOuts}
+                            nextMajorByeRound={selectedAllPlayersTableRow.nextMajorByeRound}
+                            playsNextMajorBye={selectedAllPlayersTableRow.playsNextMajorBye}
+                            originChance={selectedAllPlayersTableRow.originChance}
+                          />
+                        ) : null}
+                        <CasualtyWardPills
+                          rows={lineupsProjections?.source === "lineups" && selectedLineupRole ? [] : casualtyWardRows}
+                        />
                         {isLoadingStats ? (
                           <span className="rounded-md border border-nrl-accent/30 bg-nrl-accent/10 px-1 py-0.5 text-nrl-accent sm:px-2 sm:py-1">
                             Loading season data…

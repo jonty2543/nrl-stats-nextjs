@@ -2968,14 +2968,14 @@ export function FantasyDashboard({
         </section>
 
         {showOwnedCards ? (
-          <div className="grid gap-5 xl:grid-cols-4 xl:items-stretch">
+          <div className="grid gap-5 xl:grid-cols-2 xl:items-stretch">
             <button
               type="button"
               onClick={() => {
                 setIsTradeSuggestorOpen(true)
                 setTradeSuggestorError(null)
               }}
-              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/40 bg-[linear-gradient(135deg,#6d28d9,#a21caf)] px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(88,28,135,0.34)] transition-colors hover:border-violet-200 hover:bg-[linear-gradient(135deg,#7c3aed,#c026d3)] xl:order-2 xl:min-h-[88px]"
+              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/40 bg-[linear-gradient(135deg,#6d28d9,#a21caf)] px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(88,28,135,0.34)] transition-colors hover:border-violet-200 hover:bg-[linear-gradient(135deg,#7c3aed,#c026d3)] xl:order-1 xl:min-h-[64px] xl:py-2"
             >
               <span className="inline-flex items-center gap-2">
                 <SparkAiIcon className="h-5 w-5 text-violet-100" />
@@ -2989,7 +2989,7 @@ export function FantasyDashboard({
               <Link
                 href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
                 onClick={() => setIsFantasyAnalyticsPending(true)}
-                className={`relative col-span-8 flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] xl:order-1 xl:col-span-1 xl:min-h-[88px] ${
+                className={`relative col-span-8 flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] xl:order-3 xl:col-span-1 xl:min-h-[64px] xl:py-2 ${
                   showFantasyAnalytics
                     ? "border-nrl-accent bg-[#20284a]"
                     : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
@@ -3008,12 +3008,12 @@ export function FantasyDashboard({
                   </span>
                 ) : null}
               </Link>
-              <div className="group col-span-5 self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))] xl:order-3 xl:col-span-1">
+              <div className="group col-span-5 self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))] xl:order-2 xl:col-span-1">
                 {hasFantasyPlotAccess ? (
                   <Link
                     href="/dashboard/fantasy/draft"
                     onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative inline-flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center leading-tight text-white transition-colors hover:text-white group-hover:bg-[#29335f] xl:min-h-[76px]"
+                    className="relative inline-flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center leading-tight text-white transition-colors hover:text-white group-hover:bg-[#29335f] xl:min-h-[52px]"
                   >
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
                       <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
@@ -3032,7 +3032,7 @@ export function FantasyDashboard({
                   <Link
                     href="/dashboard/fantasy/draft"
                     onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center transition-colors group-hover:bg-[#29335f] xl:min-h-[76px]"
+                    className="relative flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center transition-colors group-hover:bg-[#29335f] xl:min-h-[52px]"
                   >
                     <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold leading-tight text-white">
                       <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
@@ -3053,7 +3053,7 @@ export function FantasyDashboard({
                 <Link
                   href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
                   aria-label={`Read ${fantasyProjectionArticle.title}`}
-                  className="group relative col-span-3 flex min-h-[68px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 xl:order-4 xl:col-span-1 xl:min-h-[88px]"
+                  className="group relative col-span-3 flex min-h-[68px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 xl:order-4 xl:col-span-1 xl:min-h-[64px]"
                 >
                   <div className={`absolute inset-0 grid ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                     {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
@@ -3068,7 +3068,7 @@ export function FantasyDashboard({
                     ))}
                   </div>
                   <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.95),rgba(14,19,48,0.74),rgba(14,19,48,0.45))]" />
-                  <div className="relative flex h-full min-h-[68px] w-full items-center justify-between gap-3 px-5 py-2.5 xl:min-h-[88px]">
+                  <div className="relative flex h-full min-h-[68px] w-full items-center justify-between gap-3 px-5 py-2.5 xl:min-h-[64px] xl:py-2">
                     <div className="min-w-0">
                       <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent">
                         Article
@@ -3804,7 +3804,7 @@ export function FantasyDashboard({
               </button>
             </div>
           </div>
-          <div className={`${allPlayersView === "cards" ? "grid" : "hidden"} max-h-[760px] grid-cols-1 gap-2 overflow-y-auto p-2.5 md:grid-cols-2`}>
+          <div className={`${allPlayersView === "cards" ? "grid" : "hidden"} max-h-[760px] grid-cols-1 gap-2 overflow-y-auto p-2.5`}>
             {sortedAllPlayersTableRows.length === 0 ? (
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
                 No {ALL_PLAYERS_STATS_YEAR} player stats available.
@@ -3891,9 +3891,9 @@ export function FantasyDashboard({
                     key={row.player.id}
                     type="button"
                     onClick={() => navigateToPlayer(row.player.name)}
-                    className="block w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-left transition-colors hover:border-white/25"
-                  >
-                    <div className="flex items-start justify-between gap-3">
+	                    className="block w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-left transition-colors hover:border-white/25 md:flex md:items-center md:gap-4"
+	                  >
+	                    <div className="flex items-start justify-between gap-3 md:w-[250px] md:shrink-0 md:items-center">
                       <div className="flex min-w-0 items-start gap-2.5">
                         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-[11px] text-nrl-muted">
                           {thumbnailUrl ? (
@@ -3923,7 +3923,7 @@ export function FantasyDashboard({
                           </div>
                         </div>
                       </div>
-                      <div className="shrink-0 text-right">
+	                      <div className="shrink-0 text-right md:hidden">
                         <div className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
                           {selectedCardStat.label}
                         </div>
@@ -3932,12 +3932,12 @@ export function FantasyDashboard({
                         </div>
                       </div>
                     </div>
-                    <div className="mt-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      <div className="flex min-w-max gap-4">
+	                    <div className="mt-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mt-0 md:min-w-0 md:flex-1">
+	                      <div className="flex min-w-max gap-4 md:w-full md:min-w-0">
                         {cardStats.map((stat) => (
                           <div
                             key={stat.key}
-                            className="min-w-[3.75rem]"
+	                            className="min-w-[4rem] md:min-w-[4.25rem]"
                           >
                             <div className={`text-[8px] font-semibold uppercase tracking-wide ${stat.key === allPlayersSort.column ? "text-nrl-accent" : "text-nrl-muted"}`}>
                               {stat.label}

@@ -255,6 +255,9 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
 const FANTASY_FILTER_TAG_RELEVANT_OUTS = "Relevant Outs"
 const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin Chance"
 const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
+const FANTASY_LOCKED_VALUE_BOX_CLASS =
+  "inline-flex h-5 w-12 items-center justify-center rounded bg-[#263154] text-slate-100"
+const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[3px] select-none"
 const TRADE_SCREENSHOT_SLOTS: Array<{ key: TradeScreenshotSlot; label: string; hint: string }> = [
   { key: "starters", label: "Starters", hint: "Selected 13 / field view" },
   { key: "bench", label: "Bench", hint: "Interchange + emergencies" },
@@ -1165,7 +1168,10 @@ function PlayerContextTags({
           }`}
           title={playsNextMajorBye ? `Plays in Round ${nextMajorByeRound}` : `Bye in Round ${nextMajorByeRound}`}
         >
-          <span aria-hidden="true">{playsNextMajorBye ? "✓" : "✕"} </span>Rd{nextMajorByeRound}
+          <span aria-hidden="true" className={playsNextMajorBye ? "text-emerald-300" : "text-rose-300"}>
+            {playsNextMajorBye ? "✓" : "✕"}{" "}
+          </span>
+          Rd{nextMajorByeRound}
         </span>
       ) : null}
       {relevantOuts.length > 0 ? (
@@ -1173,7 +1179,7 @@ function PlayerContextTags({
           className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-slate-100"
           title={formatRelevantOutTag(relevantOuts)}
         >
-          <span aria-hidden="true">⚠ </span>{formatRelevantOutTag(relevantOuts)}
+          <span aria-hidden="true" className="text-amber-300">⚠ </span>{formatRelevantOutTag(relevantOuts)}
         </span>
       ) : null}
       {originChance ? (
@@ -3901,14 +3907,14 @@ export function FantasyDashboard({
                     key: "projection",
                     label: "Proj",
                     value: formatTableNumber(row.projection),
-                    valueClassName: `text-nrl-text ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
+                    valueClassName: "text-nrl-text",
                     locked: true,
                   },
                   {
                     key: "value",
                     label: "Value",
                     value: formatSignedTableNumber(row.value),
-                    valueClassName: `${getFantasyValueClass(row.value)} ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
+                    valueClassName: getFantasyValueClass(row.value),
                     locked: true,
                   },
                   {
@@ -3929,7 +3935,7 @@ export function FantasyDashboard({
                     key: "breakeven",
                     label: "BE",
                     value: formatTableNumber(row.breakeven),
-                    valueClassName: `text-nrl-text ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
+                    valueClassName: "text-nrl-text",
                     locked: true,
                   },
                   {
@@ -3969,6 +3975,8 @@ export function FantasyDashboard({
                   (allPlayersSort.column === "position"
                     ? { key: "position", label: "Pos", value: row.player.positionLabel, valueClassName: "text-nrl-text" }
                     : { key: "name", label: "Sort", value: allPlayersSort.direction === "asc" ? "A-Z" : "Z-A", valueClassName: "text-nrl-text" })
+                const selectedCardStatLocked =
+                  !hasFantasyPlotAccess && "locked" in selectedCardStat && selectedCardStat.locked
 
                 return (
                   <button
@@ -4014,9 +4022,15 @@ export function FantasyDashboard({
                         <div className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
                           {selectedCardStat.label}
                         </div>
-                        <div className={`text-[13px] font-bold ${selectedCardStat.valueClassName}`}>
-                          {selectedCardStat.value}
-                        </div>
+                        {selectedCardStatLocked ? (
+                          <div className={`ml-auto mt-0.5 ${FANTASY_LOCKED_VALUE_BOX_CLASS}`}>
+                            <span className={FANTASY_LOCKED_VALUE_TEXT_CLASS}>{selectedCardStat.value}</span>
+                          </div>
+                        ) : (
+                          <div className={`text-[13px] font-bold ${selectedCardStat.valueClassName}`}>
+                            {selectedCardStat.value}
+                          </div>
+                        )}
                       </div>
                     </div>
 	                    <div className="mt-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mt-0 md:min-w-0 md:flex-1">
@@ -4029,9 +4043,15 @@ export function FantasyDashboard({
                             <div className={`text-[8px] font-semibold uppercase tracking-wide ${stat.key === allPlayersSort.column ? "text-nrl-accent" : "text-nrl-muted"}`}>
                               {stat.label}
                             </div>
-                            <div className={`mt-0.5 text-[12px] font-bold ${stat.valueClassName}`}>
-                              {stat.value}
-                            </div>
+                            {!hasFantasyPlotAccess && stat.locked ? (
+                              <div className={`mt-0.5 ${FANTASY_LOCKED_VALUE_BOX_CLASS}`}>
+                                <span className={FANTASY_LOCKED_VALUE_TEXT_CLASS}>{stat.value}</span>
+                              </div>
+                            ) : (
+                              <div className={`mt-0.5 text-[12px] font-bold ${stat.valueClassName}`}>
+                                {stat.value}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -4148,18 +4168,24 @@ export function FantasyDashboard({
                         {formatTableNumber(row.ppm, 2)}
                       </td>
                       <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
-                        <span className={!hasFantasyPlotAccess ? "inline-block blur-[3px] select-none" : ""}>
+                        <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : "inline-block"}>
+                          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
                           {formatTableNumber(row.projection)}
+                          </span>
                         </span>
                       </td>
-                      <td className={`w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getFantasyValueClass(row.value)}`}>
-                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("value")} ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`}>
+                      <td className={`w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${hasFantasyPlotAccess ? getFantasyValueClass(row.value) : "text-nrl-text"}`}>
+                        <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("value")}`}>
+                          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
                           {formatSignedTableNumber(row.value)}
+                          </span>
                         </span>
                       </td>
                       <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
-                        <span className={!hasFantasyPlotAccess ? "inline-block blur-[3px] select-none" : ""}>
+                        <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : "inline-block"}>
+                          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
                           {formatTableNumber(row.breakeven)}
+                          </span>
                         </span>
                       </td>
                       <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0 sm:px-3">
@@ -4511,7 +4537,8 @@ export function FantasyDashboard({
                   </div>
                 </div>
 
-                {!analysisLocked && showRollingAveragePlot && trendFilteredRows.length > 0 ? (
+                <div className={analysisLocked ? "pointer-events-none select-none opacity-45 blur-[2px]" : undefined}>
+                {(analysisLocked || showRollingAveragePlot) && trendFilteredRows.length > 0 ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4564,7 +4591,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                {!analysisLocked && showOpponentHeatmap ? (
+                {analysisLocked || showOpponentHeatmap ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4643,7 +4670,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                {!analysisLocked && showFantasyBoxPlot ? (
+                {analysisLocked || showFantasyBoxPlot ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4776,7 +4803,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                {!analysisLocked && showStatVsFantasyPlot ? (
+                {analysisLocked || showStatVsFantasyPlot ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4801,7 +4828,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                {!analysisLocked && showWithWithoutPlot && hasLoginAccess && teammate !== "None" ? (
+                {(analysisLocked || showWithWithoutPlot) && hasLoginAccess && teammate !== "None" ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4826,6 +4853,7 @@ export function FantasyDashboard({
                     )}
                   </div>
                 ) : null}
+                </div>
 
                 {analysisLocked ? (
                   <div className="absolute inset-0 flex items-center justify-center rounded-xl">

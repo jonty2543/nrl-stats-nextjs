@@ -621,6 +621,53 @@ function isRelevantOutsTeamMatch(left: string | null | undefined, right: string 
   return Boolean(leftGroup && rightGroup && leftGroup === rightGroup)
 }
 
+function findFantasyPlayerForCasualtyRow(
+  row: CasualtyWardRecord,
+  fantasyPlayerByName: Map<string, FantasyPlayerSnapshot>
+): FantasyPlayerSnapshot | null {
+  return fantasyPlayerByName.get(normaliseProjectionPlayerName(row.player)) ?? null
+}
+
+function casualtyRowPosition(row: CasualtyWardRecord, fantasyPlayer: FantasyPlayerSnapshot | null): string | null {
+  return row.position ?? fantasyPlayer?.positionLabel ?? fantasyPlayer?.positionLabels[0] ?? null
+}
+
+function casualtyRowGames(row: CasualtyWardRecord, fantasyPlayer: FantasyPlayerSnapshot | null): number | null {
+  return row.games ?? fantasyPlayer?.gamesPlayed ?? null
+}
+
+function casualtyRowAverageFantasy(row: CasualtyWardRecord, fantasyPlayer: FantasyPlayerSnapshot | null): number | null {
+  return row.averageFantasy ?? fantasyPlayer?.avgPoints ?? null
+}
+
+function isRelevantOutCandidate({
+  row,
+  lineupTeam,
+  lineupPosition,
+  namedLineupPlayers,
+  fantasyPlayerByName,
+}: {
+  row: CasualtyWardRecord
+  lineupTeam: string | null | undefined
+  lineupPosition: string | null | undefined
+  namedLineupPlayers: Set<string>
+  fantasyPlayerByName: Map<string, FantasyPlayerSnapshot>
+}): boolean {
+  const playerKey = normaliseProjectionPlayerName(row.player)
+  if (!playerKey || namedLineupPlayers.has(playerKey)) return false
+
+  const fantasyPlayer = findFantasyPlayerForCasualtyRow(row, fantasyPlayerByName)
+  const games = casualtyRowGames(row, fantasyPlayer)
+  const averageFantasy = casualtyRowAverageFantasy(row, fantasyPlayer)
+
+  return (
+    (games ?? 0) >= 2 &&
+    (averageFantasy ?? 0) >= 30 &&
+    isRelevantOutsTeamMatch(row.team, lineupTeam) &&
+    isRelevantOutsPositionMatch(casualtyRowPosition(row, fantasyPlayer), lineupPosition)
+  )
+}
+
 function normaliseProjectionPlayerName(value: string | null | undefined): string {
   return String(value ?? "")
     .toLowerCase()
@@ -1584,17 +1631,32 @@ export function FantasyDashboard({
       .map((slot) => tradeScreenshots[slot.key])
       .filter((screenshot): screenshot is FantasyTradeScreenshot => screenshot !== null)
     const extraContext = tradeSuggestorNotes.trim()
+    const tradeSuggestorMetricInstructions = hasFantasyPlotAccess
+      ? [
+        "Use live fantasy data for both buys and sells: weekly ownership change, breakeven, projection, priced at, L3 average, and projection vs priced at. Projection vs priced at is important.",
+        "Try to list 3 Sell watch candidates every time. Use visible squad players only, prioritising confirmed injury/unavailability, negative ownership change, high BE, projection below priced at, weak L3/projection, or poor bye coverage. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
+        "List a visible player in Sell watch when live data shows their ownership delta is -1.0% or worse, BE is high, projection is below priced at, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using projection, priced at, BE, L3 average, ownership delta, injury/availability markers, and next major bye availability.",
+        "If a player is -1.0% or worse in ownership delta but BE is lower than priced at, projection is similar to priced at, L3 is sound, and they play the next major bye, frame them as Hold / Possible sell rather than a hard sell.",
+        "In each sell/watch player title, include the player name, position, price, and projection, but no rating. In each trade-in title, include the player name, position, price, projection, and rating.",
+        "For each sell or buy, use the label Ownership change: and include BE, priced at, L3 average, projection vs priced at, next major bye availability, and one short reason.",
+      ]
+      : [
+        "Use live fantasy data available to free users: weekly ownership change, price, priced at, season average, L3 average, named-to-play status, casualty ward context, and next major bye availability.",
+        "State briefly in Recommended Moves that Pro unlocks projection and breakeven-based trade calls, and that this answer is based on ownership movement, recent form, price, bye coverage, lineup status, and injury context.",
+        "Try to list 3 Sell watch candidates every time. Use visible squad players only, prioritising confirmed injury/unavailability, negative ownership change, weak L3 or season average for the price, poor bye coverage, or awkward cash/squad fit. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
+        "List a visible player in Sell watch when live data shows their ownership delta is -1.0% or worse, their recent form is weak for the price, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using free-user data only.",
+        "If a player is -1.0% or worse in ownership delta but L3 is sound, bye coverage is useful, and there is no availability issue, frame them as Hold / Possible sell rather than a hard sell.",
+        "In each sell/watch player title, include the player name, position, and price, but no rating. In each trade-in title, include the player name, position, price, and rating.",
+        "For each sell or buy, use the label Ownership change: and include priced at, average/L3 form, next major bye availability, and one short reason. Do not include projections, breakevens, or projection vs priced at for free users.",
+      ]
     const prompt = [
       "Fantasy Trade Suggestor dashboard request.",
       "Read the uploaded NRL Fantasy screenshots: starters, bench, and trade screen.",
       "Give a concise, friendly trade summary for this week.",
-      "Use live fantasy data for both buys and sells: weekly ownership change, breakeven, projection, priced at, L3 average, and projection vs priced at. Projection vs priced at is important.",
+      ...tradeSuggestorMetricInstructions,
       "Include whether each buy/sell plays or misses the next major bye round.",
       "Only suggest sells from players visible in the user's squad screenshots. Do not invent sell candidates.",
-      "Try to list 3 Sell watch candidates every time. Use visible squad players only, prioritising confirmed injury/unavailability, negative ownership change, high BE, projection below priced at, weak L3/projection, or poor bye coverage. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
-      "List a visible player in Sell watch when live data shows their ownership delta is -1.0% or worse, BE is high, projection is below priced at, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using projection, priced at, BE, L3 average, ownership delta, injury/availability markers, and next major bye availability.",
       "If a visible player is not playing and has a strong negative ownership delta, mention them in Sell watch even if the screenshot was taken before final team status was known.",
-      "If a player is -1.0% or worse in ownership delta but BE is lower than priced at, projection is similar to priced at, L3 is sound, and they play the next major bye, frame them as Hold / Possible sell rather than a hard sell.",
       "Write for non-technical users: be clear, friendly, and direct. Do not mention thresholds, snapshots, filters, or why a backend rule did or did not trigger.",
       "Write every reason as one normal sentence. Do not use compressed stat shorthand or fragments like value v pricedAt, momentum + ownership, scored floor, field 13, or helps field 13. Say things like projects well for his price, ownership is rising, has a reliable scoring floor, or helps your major-bye coverage.",
       "Tone for Sell watch: advice first, warm and practical. Do not sound like OCR/debug output. For an injured expensive player, explain that selling can free salary to bring in a stronger replacement or premium option. Do not write blunt phrases like projection is 0, avoid a zero score, your screenshot shows, or red injury marker.",
@@ -1603,7 +1665,9 @@ export function FantasyDashboard({
       "A player visible anywhere in the user's screenshots is already owned. Do not recommend any visible squad player as a trade-in, even if they appear in the buy data.",
       "Use real player names from live data. Do not output OCR-invented names or expand abbreviated names unless they match a real player.",
       "Do not say a player has an injury marker unless a red cross/plus is visibly attached to that exact player in the screenshots.",
-      "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold, especially with a low BE; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news.",
+      hasFantasyPlotAccess
+        ? "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold, especially with a low BE; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news."
+        : "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold when recent form, price and bye coverage are favourable; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news.",
       "If casualty ward lists a player but current lineups say he is named to play this week, ignore casualty ward for that player and do not describe him as injured from casualty ward.",
       "Do not use the phrase visible red injury marker unless a red cross/plus is plainly attached to the exact player row/card. If uncertain, omit injury completely.",
       "Do not mention an injury marker for J. Hughes/Hughes unless the marker is unambiguously attached to his exact player tile.",
@@ -1612,8 +1676,6 @@ export function FantasyDashboard({
       "Always include Top 5 trade-ins when eligible live buy/value data is supplied. If fewer than five eligible players remain, list the eligible players that remain.",
       "Return exactly these sections in this order: Sell watch, Top 5 trade-ins, Recommended Moves.",
       "Order Sell watch by urgency and context. Rank Top 5 trade-ins by rating, highest first.",
-      "In each sell/watch player title, include the player name, position, price, and projection, but no rating. In each trade-in title, include the player name, position, price, projection, and rating.",
-      "For each sell or buy, use the label Ownership change: and include BE, priced at, L3 average, projection vs priced at, next major bye availability, and one short reason.",
       "If a sell is not clear, say hold rather than forcing one.",
       "When recommending moves, treat keeping the user's remaining bank below about 100k as a real constraint when the visible bank and prices make that possible.",
       "Do not recommend only an expensive sell to a much cheaper trade-in if that leaves hundreds of thousands unused. If a cheap replacement is the best value, pair it with a second move that upgrades a cheap owned player to a more expensive target using the freed salary. If you cannot identify a good second upgrade, prefer a one-trade move from the expensive sell to a more expensive trade-in that keeps bank under about 100k.",
@@ -1747,6 +1809,31 @@ export function FantasyDashboard({
         : null,
     [lineupsProjections, selectedFantasyPlayer]
   )
+  const selectedRelevantOuts = useMemo(() => {
+    if (
+      lineupsProjections?.source !== "lineups" ||
+      !selectedLineupRole?.isOnField ||
+      !selectedLineupRole.team ||
+      !selectedLineupRole.position
+    ) {
+      return relevantOuts
+    }
+
+    const namedLineupPlayers = new Set(lineupsProjections.roleByPlayerName.keys())
+    const fantasyPlayerByName = new Map(
+      fantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
+    )
+    return relevantOutCandidates
+      .filter((row) => isRelevantOutCandidate({
+        row,
+        lineupTeam: selectedLineupRole.team,
+        lineupPosition: selectedLineupRole.position,
+        namedLineupPlayers,
+        fantasyPlayerByName,
+      }))
+      .slice(0, 8)
+  }, [fantasyPlayers, lineupsProjections, relevantOutCandidates, relevantOuts, selectedLineupRole])
+
   const selectedFantasyCoachRound = useMemo(() => {
     return lineupsProjections?.round ?? selectedFantasyCoachMetrics.round
   }, [lineupsProjections, selectedFantasyCoachMetrics])
@@ -2129,6 +2216,9 @@ export function FantasyDashboard({
     const localNames = Array.from(new Set(rows2026.map((row) => row.Name))).sort()
     const rowsByName = new Map<string, PlayerStat[]>()
     const namedLineupPlayers = new Set(lineupsProjections?.roleByPlayerName.keys() ?? [])
+    const fantasyPlayerByName = new Map(
+      fantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
+    )
 
     for (const row of rows2026) {
       const rows = rowsByName.get(row.Name) ?? []
@@ -2174,10 +2264,13 @@ export function FantasyDashboard({
         lineupsProjections?.source === "lineups" && lineupRole?.isOnField && lineupRole.team && lineupRole.position
           ? relevantOutCandidates
             .filter(
-              (row) =>
-                isRelevantOutsTeamMatch(row.team, lineupRole.team) &&
-                isRelevantOutsPositionMatch(row.position, lineupRole.position) &&
-                !namedLineupPlayers.has(normaliseProjectionPlayerName(row.player))
+              (row) => isRelevantOutCandidate({
+                row,
+                lineupTeam: lineupRole.team,
+                lineupPosition: lineupRole.position,
+                namedLineupPlayers,
+                fantasyPlayerByName,
+              })
             )
             .slice(0, 8)
           : []
@@ -3981,7 +4074,7 @@ export function FantasyDashboard({
                 />
               ) : null}
 
-              <RelevantOutsList rows={relevantOuts} />
+              <RelevantOutsList rows={selectedRelevantOuts} />
 
               <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

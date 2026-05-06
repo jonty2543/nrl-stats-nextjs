@@ -1403,8 +1403,6 @@ export async function fetchRelevantCasualtyWardOuts({
   let query = supabase
     .from("casualty_ward")
     .select("player, team, position, injury, return_date, games, average_fantasy, source_url, scraped_at")
-    .gte("games", 2)
-    .gte("average_fantasy", 30)
     .order("average_fantasy", { ascending: false })
     .limit(200);
 
@@ -1439,10 +1437,8 @@ export async function fetchRelevantCasualtyWardOutCandidates(): Promise<Casualty
   const { data, error } = await supabase
     .from("casualty_ward")
     .select("player, team, position, injury, return_date, games, average_fantasy, source_url, scraped_at")
-    .gte("games", 2)
-    .gte("average_fantasy", 30)
     .order("average_fantasy", { ascending: false })
-    .limit(200);
+    .limit(500);
 
   if (error) {
     console.warn("Unable to fetch relevant casualty ward out candidates; using empty set.", error);

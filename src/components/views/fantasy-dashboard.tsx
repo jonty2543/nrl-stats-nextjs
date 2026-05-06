@@ -1160,8 +1160,8 @@ function PlayerContextTags({
         <span
           className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
             playsNextMajorBye
-              ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-300"
-              : "border-rose-400/35 bg-rose-400/10 text-rose-300"
+              ? "border-emerald-400/35 bg-emerald-400/10 text-slate-100"
+              : "border-rose-400/35 bg-rose-400/10 text-slate-100"
           }`}
           title={playsNextMajorBye ? `Plays in Round ${nextMajorByeRound}` : `Bye in Round ${nextMajorByeRound}`}
         >
@@ -1170,7 +1170,7 @@ function PlayerContextTags({
       ) : null}
       {relevantOuts.length > 0 ? (
         <span
-          className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300"
+          className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-slate-100"
           title={formatRelevantOutTag(relevantOuts)}
         >
           <span aria-hidden="true">⚠ </span>{formatRelevantOutTag(relevantOuts)}
@@ -3882,74 +3882,88 @@ export function FantasyDashboard({
             ) : (
               sortedAllPlayersTableRows.map((row) => {
                 const thumbnailUrl = getPlayerThumbnailUrl(row.imageRow)
-                const cardStats = [
+                const baseCardStats = [
                   {
                     key: "weeklyChange",
                     label: "Weekly",
                     value: formatOwnershipDelta(row.weeklyChange),
                     valueClassName: getOwnershipDeltaClass(row.weeklyChange),
+                    locked: false,
                   },
                   {
                     key: "pricedAt",
                     label: "Priced At",
                     value: formatTableNumber(row.pricedAt, 0),
                     valueClassName: "text-nrl-text",
+                    locked: false,
                   },
                   {
                     key: "projection",
                     label: "Proj",
                     value: formatTableNumber(row.projection),
                     valueClassName: `text-nrl-text ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
+                    locked: true,
                   },
                   {
                     key: "value",
                     label: "Value",
                     value: formatSignedTableNumber(row.value),
                     valueClassName: `${getFantasyValueClass(row.value)} ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
+                    locked: true,
                   },
                   {
                     key: "ownPercent",
                     label: "Own",
                     value: formatPercent(row.player.ownedBy),
                     valueClassName: "text-nrl-accent",
+                    locked: false,
                   },
                   {
                     key: "price",
                     label: "Price",
                     value: formatPrice(row.player.cost),
                     valueClassName: "text-nrl-text",
+                    locked: false,
                   },
                   {
                     key: "breakeven",
                     label: "BE",
                     value: formatTableNumber(row.breakeven),
                     valueClassName: `text-nrl-text ${!hasFantasyPlotAccess ? "blur-[3px] select-none" : ""}`,
+                    locked: true,
                   },
                   {
                     key: "avg2026",
                     label: "Avg",
                     value: formatTableNumber(row.avg2026),
                     valueClassName: "text-nrl-text",
+                    locked: false,
                   },
                   {
                     key: "last3",
                     label: "L3",
                     value: formatTableNumber(row.last3),
                     valueClassName: "text-nrl-text",
+                    locked: false,
                   },
                   {
                     key: "ppm",
                     label: "PPM",
                     value: formatTableNumber(row.ppm, 2),
                     valueClassName: "text-nrl-text",
+                    locked: false,
                   },
                   {
                     key: "gamesPlayed",
                     label: "Games",
                     value: row.gamesPlayed || "-",
                     valueClassName: "text-nrl-text",
+                    locked: false,
                   },
                 ]
+                const cardStats = hasFantasyPlotAccess
+                  ? baseCardStats
+                  : [...baseCardStats.filter((stat) => !stat.locked), ...baseCardStats.filter((stat) => stat.locked)]
                 const selectedCardStat =
                   cardStats.find((stat) => stat.key === allPlayersSort.column) ??
                   (allPlayersSort.column === "position"

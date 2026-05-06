@@ -512,6 +512,14 @@ function normaliseProjectionPlayerName(value: unknown): string {
     .trim()
 }
 
+function isZeroProjectionLineupPosition(value: unknown): boolean {
+  const position = String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+  return position === "reserve" || position === "replacement"
+}
+
 function toFiniteProjectionNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string" && value.trim()) {
@@ -599,7 +607,9 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     const roleByPlayerName = new Map<string, LineupsPlayerRole>()
     for (const row of data) {
       const playerNameKey = normaliseProjectionPlayerName(row.player)
-      const projection = toFiniteProjectionNumber(row.fantasy_projection)
+      const projection = isZeroProjectionLineupPosition(row.position)
+        ? 0
+        : toFiniteProjectionNumber(row.fantasy_projection)
       if (projection != null) {
         if (row.player_id != null) {
           projectionByPlayerId.set(Number(row.player_id), projection)

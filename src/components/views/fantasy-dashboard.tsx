@@ -3912,13 +3912,14 @@ export function FantasyDashboard({
                           <div className="min-w-0">
                             <div className="truncate text-[13px] font-bold text-nrl-text">{row.player.name}</div>
                           </div>
-                          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted md:block">
                             <span>{row.player.positionLabel}</span>
                             <PlayerContextTags
                               relevantOuts={row.relevantOuts}
                               nextMajorByeRound={row.nextMajorByeRound}
                               playsNextMajorBye={row.playsNextMajorBye}
                               originChance={row.originChance}
+                              className="md:mt-1"
                             />
                           </div>
                         </div>
@@ -4131,7 +4132,7 @@ export function FantasyDashboard({
                         ) : null}
                         {selectedAllPlayersTableRow ? (
                           <PlayerContextTags
-                            relevantOuts={selectedAllPlayersTableRow.relevantOuts}
+                            relevantOuts={[]}
                             nextMajorByeRound={selectedAllPlayersTableRow.nextMajorByeRound}
                             playsNextMajorBye={selectedAllPlayersTableRow.playsNextMajorBye}
                             originChance={selectedAllPlayersTableRow.originChance}

@@ -1178,7 +1178,7 @@ function PlayerContextTags({
       ) : null}
       {originChance ? (
         <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-orange-400/35 bg-orange-400/15 px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-orange-200"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-blue-300/35 bg-[linear-gradient(135deg,rgba(220,38,38,0.34),rgba(37,99,235,0.34))] px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-slate-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
           title="Origin Chance"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}

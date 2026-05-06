@@ -1116,16 +1116,6 @@ function PlayerContextTags({
 
   return (
     <div className={`flex min-w-0 flex-wrap items-center gap-1.5 ${className}`}>
-      {originChance ? (
-        <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-orange-400/35 bg-orange-400/15 px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-orange-200"
-          title="Origin Chance"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logos/SOO.webp" alt="" className="h-3 w-3 rounded-sm object-contain" loading="lazy" />
-          Origin Chance
-        </span>
-      ) : null}
       {showByeTag ? (
         <span
           className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
@@ -1144,6 +1134,16 @@ function PlayerContextTags({
           title={formatRelevantOutTag(relevantOuts)}
         >
           <span aria-hidden="true">⚠ </span>{formatRelevantOutTag(relevantOuts)}
+        </span>
+      ) : null}
+      {originChance ? (
+        <span
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-orange-400/35 bg-orange-400/15 px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-orange-200"
+          title="Origin Chance"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logos/SOO.webp" alt="" className="h-3 w-3 rounded-sm object-contain" loading="lazy" />
+          Origin Chance
         </span>
       ) : null}
     </div>

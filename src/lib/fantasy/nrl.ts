@@ -63,6 +63,15 @@ export interface FantasyOwnershipBaselineSnapshot {
   points: FantasyOwnershipBaselinePoint[]
 }
 
+export interface CasualtyWardRecord {
+  team: string | null
+  player: string
+  injury: string | null
+  returnDate: string | null
+  sourceUrl: string | null
+  scrapedAt: string | null
+}
+
 interface FantasyPlayerRaw {
   id?: unknown
   first_name?: unknown
@@ -354,25 +363,14 @@ export function getTopFantasyOwnershipRise(deltaByPlayerId: Map<number, number |
   return topRise
 }
 
-export function getProjectionWeeklyChangeOffset(weeklyDelta: number | null, topRise: number | null): number {
-  if (weeklyDelta == null || topRise == null || topRise <= 0) return 0
-  const ratio = weeklyDelta / topRise
-  if (ratio >= 0.66) return 3
-  if (ratio >= 0.33) return 2
-  if (ratio > 0) return 1
-  if (ratio >= -0.33) return -1
-  if (ratio >= -0.66) return -2
-  return -3
-}
-
 export function applyFantasyProjectionOffset(
   value: number | null,
   weeklyDelta: number | null,
   topRise: number | null,
 ): number | null {
-  if (value == null) return value
-  if (value === 0) return 0
-  return Math.round(value + getProjectionWeeklyChangeOffset(weeklyDelta, topRise))
+  void weeklyDelta
+  void topRise
+  return value
 }
 
 export function applyFantasyBreakEvenOffset(
@@ -410,7 +408,6 @@ export async function fetchLatestFantasyOwnershipBaselineSnapshot(): Promise<Fan
     .schema("shortside")
     .from("fantasy_ownership_snapshots")
     .select("captured_at, snapshot_week_brisbane, snapshot_data")
-    .eq("snapshot_type", "weekly_sunday_11pm_brisbane")
     .order("captured_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -429,28 +426,148 @@ export async function fetchLatestFantasyOwnershipBaselineSnapshot(): Promise<Fan
   };
 }
 
+export async function fetchCasualtyWardSnapshot(): Promise<CasualtyWardRecord[]> {
+  try {
+    const supabase = createServerSupabaseClient()
+    const { data, error } = await supabase
+      .schema("nrl")
+      .from("casualty_ward")
+      .select("team, player, injury, return_date, source_url, scraped_at")
+      .order("team", { ascending: true })
+      .order("player", { ascending: true })
+
+    if (error || !data) {
+      if (error) console.warn("Unable to fetch casualty ward.", error.message)
+      return []
+    }
+
+    return data
+      .map((row) => {
+        const player = typeof row.player === "string" ? row.player.trim() : ""
+        if (!player) return null
+        return {
+          team: typeof row.team === "string" ? row.team : null,
+          player,
+          injury: typeof row.injury === "string" ? row.injury : null,
+          returnDate: typeof row.return_date === "string" ? row.return_date : null,
+          sourceUrl: typeof row.source_url === "string" ? row.source_url : null,
+          scrapedAt: typeof row.scraped_at === "string" ? row.scraped_at : null,
+        }
+      })
+      .filter((row): row is CasualtyWardRecord => row !== null)
+  } catch (error) {
+    console.warn("Unable to fetch casualty ward.", error)
+    return []
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Lineups-based fantasy projections
 // ---------------------------------------------------------------------------
 
+export interface LineupsPlayerRole {
+  position: string | null
+  team: string | null
+  number: number | null
+  isOnField: boolean
+}
+
+export type FantasyProjectionSource = "lineups" | "lineup_unaware" | "none"
+
 export interface LineupsProjectionSnapshot {
   /** Parsed integer round number, e.g. 9. Null when lineups table is empty. */
   round: number | null
-  /** Maps NRL player_id to fantasy_projection. Missing players default to 0 at call sites. */
+  source: FantasyProjectionSource
+  lineupsAvailable: boolean
+  /** Maps NRL player_id → fantasy_projection. Missing players default to 0 at call sites. */
   projectionByPlayerId: Map<number, number>
+  /** Maps normalised player name → pre-lineups fantasy_projection/model_projection fallback. */
+  projectionByPlayerName: Map<string, number>
+  /** Maps NRL player_id → named lineup role for the selected lineups round. */
+  roleByPlayerId: Map<number, LineupsPlayerRole>
+  /** Maps normalised player name → assumed pre-lineups role. */
+  roleByPlayerName: Map<string, LineupsPlayerRole>
+}
+
+function emptyLineupsProjectionSnapshot(source: FantasyProjectionSource = "none"): LineupsProjectionSnapshot {
+  return {
+    round: null,
+    source,
+    lineupsAvailable: source === "lineups",
+    projectionByPlayerId: new Map(),
+    projectionByPlayerName: new Map(),
+    roleByPlayerId: new Map(),
+    roleByPlayerName: new Map(),
+  }
+}
+
+function getLineupCutoffUtc(): string {
+  return new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+}
+
+function normaliseProjectionPlayerName(value: unknown): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
+function toFiniteProjectionNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+async function fetchLineupUnawareProjectionSnapshot(cutoffUtc: string): Promise<LineupsProjectionSnapshot> {
+  const supabase = createServerSupabaseClient()
+  const { data, error } = await supabase
+    .schema("nrl")
+    .from("lineup_unaware_fantasy_projections")
+    .select("player, team, assumed_jersey, assumed_position, projection, model_projection, kickoff_utc")
+    .gte("kickoff_utc", cutoffUtc)
+
+  if (error || !data) return emptyLineupsProjectionSnapshot("lineup_unaware")
+
+  const snapshot = emptyLineupsProjectionSnapshot("lineup_unaware")
+  for (const row of data) {
+    const nameKey = normaliseProjectionPlayerName(row.player)
+    if (!nameKey) continue
+
+    const projection =
+      toFiniteProjectionNumber(row.model_projection) ??
+      toFiniteProjectionNumber(row.projection)
+    if (projection != null) {
+      snapshot.projectionByPlayerName.set(nameKey, projection)
+    }
+
+    snapshot.roleByPlayerName.set(nameKey, {
+      position: typeof row.assumed_position === "string" ? row.assumed_position : null,
+      team: typeof row.team === "string" ? row.team : null,
+      number: row.assumed_jersey == null ? null : Number(row.assumed_jersey),
+      isOnField: true,
+    })
+  }
+
+  return snapshot
 }
 
 export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjectionSnapshot> {
   try {
     const supabase = createServerSupabaseClient()
-    const today = new Date().toISOString().split("T")[0]
+    const lineupCutoffUtc = getLineupCutoffUtc()
+
+    // Prefer the next upcoming lineups round. Before team lists are released,
+    // use the lineup-unaware model instead of stale previous-round lineups.
     let roundLabel: string | null = null
 
     const { data: upcoming } = await supabase
       .schema("nrl")
       .from("lineups")
       .select("round")
-      .gte("match_date", today)
+      .gte("match_date", lineupCutoffUtc)
       .order("match_date", { ascending: true })
       .limit(1)
       .maybeSingle()
@@ -458,39 +575,60 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     if (upcoming?.round) {
       roundLabel = upcoming.round as string
     } else {
-      const { data: latest } = await supabase
-        .schema("nrl")
-        .from("lineups")
-        .select("round")
-        .order("match_date", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      roundLabel = (latest?.round as string) ?? null
+      return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
     }
 
-    if (!roundLabel) return { round: null, projectionByPlayerId: new Map() }
+    if (!roundLabel) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
 
+    // Parse the integer out of labels like "9", "Round 9", "Round 9 - 2026"
     const roundNumMatch = roundLabel.match(/\d+/)
     const round = roundNumMatch ? Number.parseInt(roundNumMatch[0], 10) : null
 
     const { data, error } = await supabase
       .schema("nrl")
       .from("lineups")
-      .select("player_id, fantasy_projection")
+      .select("player, player_id, fantasy_projection, position, team, number, is_on_field")
       .eq("round", roundLabel)
+      .gte("match_date", lineupCutoffUtc)
 
-    if (error || !data) return { round, projectionByPlayerId: new Map() }
+    if (error || !data) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
 
     const projectionByPlayerId = new Map<number, number>()
+    const projectionByPlayerName = new Map<string, number>()
+    const roleByPlayerId = new Map<number, LineupsPlayerRole>()
+    const roleByPlayerName = new Map<string, LineupsPlayerRole>()
     for (const row of data) {
-      if (row.player_id != null && row.fantasy_projection != null) {
-        projectionByPlayerId.set(Number(row.player_id), row.fantasy_projection as number)
+      const playerNameKey = normaliseProjectionPlayerName(row.player)
+      const projection = toFiniteProjectionNumber(row.fantasy_projection)
+      if (projection != null) {
+        if (row.player_id != null) {
+          projectionByPlayerId.set(Number(row.player_id), projection)
+        }
+        if (playerNameKey) projectionByPlayerName.set(playerNameKey, projection)
       }
+      const role = {
+        position: typeof row.position === "string" ? row.position : null,
+        team: typeof row.team === "string" ? row.team : null,
+        number: row.number == null ? null : Number(row.number),
+        isOnField: Boolean(row.is_on_field),
+      }
+      if (row.player_id != null) {
+        roleByPlayerId.set(Number(row.player_id), role)
+      }
+      if (playerNameKey) roleByPlayerName.set(playerNameKey, role)
     }
 
-    return { round, projectionByPlayerId }
-  } catch (error) {
-    console.warn("Unable to fetch lineups projections.", error)
-    return { round: null, projectionByPlayerId: new Map() }
+    return {
+      round,
+      source: "lineups",
+      lineupsAvailable: true,
+      projectionByPlayerId,
+      projectionByPlayerName,
+      roleByPlayerId,
+      roleByPlayerName,
+    }
+  } catch (err) {
+    console.warn("Unable to fetch lineups projections.", err)
+    return emptyLineupsProjectionSnapshot()
   }
 }

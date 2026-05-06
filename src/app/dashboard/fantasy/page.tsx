@@ -3,6 +3,7 @@ import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { fetchApprovedArticles } from "@/lib/articles"
 import { isAccessibleSeason } from "@/lib/access/season-access"
+import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
@@ -33,7 +34,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticles, relevantOutCandidates] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticles, relevantOutCandidates, draw2026Data] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchLineupsProjectionsByPlayerId(),
@@ -42,6 +43,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
     fetchPlayerImages(),
     fetchApprovedArticles(),
     fetchRelevantCasualtyWardOutCandidates(),
+    loadDraw2026Data().catch(() => null),
   ])
   const fantasyProjectionArticle = approvedArticles.find((article) => {
     const title = normaliseArticleTitle(article.title)
@@ -75,6 +77,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
       ownershipBaselineSnapshot={ownershipBaselineSnapshot}
       playerImages={playerImages}
       relevantOutCandidates={relevantOutCandidates}
+      draw2026Data={draw2026Data}
       fantasyProjectionArticle={
         fantasyProjectionArticle
           ? {

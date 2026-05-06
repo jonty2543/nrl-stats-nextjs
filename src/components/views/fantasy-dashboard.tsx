@@ -160,6 +160,8 @@ interface AllPlayersTableRow {
   breakeven: number | null
   weeklyChange: number | null
   relevantOuts: CasualtyWardRecord[]
+  nextMajorByeRound: number | null
+  playsNextMajorBye: boolean | null
   gamesPlayed: number
 }
 
@@ -1073,6 +1075,65 @@ function formatRelevantOutTag(rows: CasualtyWardRecord[]): string {
   const [row] = rows
   if (!row) return ""
   return `${row.player} ${formatRelevantOutReturnTag(row.returnDate)}`
+}
+
+const MAJOR_BYE_ROUNDS = [12, 15, 18] as const
+
+function getNextMajorByeRound(currentRound: number | null | undefined): number | null {
+  const round = typeof currentRound === "number" && Number.isFinite(currentRound) ? currentRound : 1
+  return MAJOR_BYE_ROUNDS.find((byeRound) => byeRound >= round) ?? null
+}
+
+function teamPlaysInRound(draw2026Data: Draw2026Data | null | undefined, round: number | null, team: string | null | undefined): boolean | null {
+  if (!draw2026Data?.rows?.length || !round || !team) return null
+  const teamKey = relevantOutsTeamGroup(team) ?? normaliseTeamKey(team)
+  if (!teamKey) return null
+  return draw2026Data.rows.some(
+    (row) =>
+      row.round === round &&
+      ((relevantOutsTeamGroup(row.home) ?? normaliseTeamKey(row.home)) === teamKey ||
+        (relevantOutsTeamGroup(row.away) ?? normaliseTeamKey(row.away)) === teamKey)
+  )
+}
+
+function PlayerContextTags({
+  relevantOuts,
+  nextMajorByeRound,
+  playsNextMajorBye,
+  className = "",
+}: {
+  relevantOuts: CasualtyWardRecord[]
+  nextMajorByeRound: number | null
+  playsNextMajorBye: boolean | null
+  className?: string
+}) {
+  const showByeTag = nextMajorByeRound !== null && playsNextMajorBye !== null
+  if (!showByeTag && relevantOuts.length === 0) return null
+
+  return (
+    <div className={`flex min-w-0 flex-wrap items-center gap-1.5 ${className}`}>
+      {showByeTag ? (
+        <span
+          className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
+            playsNextMajorBye
+              ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-300"
+              : "border-rose-400/35 bg-rose-400/10 text-rose-300"
+          }`}
+          title={playsNextMajorBye ? `Plays in Round ${nextMajorByeRound}` : `Bye in Round ${nextMajorByeRound}`}
+        >
+          <span aria-hidden="true">{playsNextMajorBye ? "✓" : "✕"} </span>Rd{nextMajorByeRound}
+        </span>
+      ) : null}
+      {relevantOuts.length > 0 ? (
+        <span
+          className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300"
+          title={formatRelevantOutTag(relevantOuts)}
+        >
+          <span aria-hidden="true">⚠ </span>{formatRelevantOutTag(relevantOuts)}
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
@@ -2275,6 +2336,9 @@ export function FantasyDashboard({
         lineupsProjections?.roleByPlayerId.get(player.id) ??
         lineupsProjections?.roleByPlayerName.get(normaliseProjectionPlayerName(player.name)) ??
         null
+      const nextMajorByeRound = getNextMajorByeRound(projectionRound)
+      const byeTeam = lineupRole?.team ?? teamHint ?? imageRow?.team ?? null
+      const playsNextMajorBye = teamPlaysInRound(draw2026Data, nextMajorByeRound, byeTeam)
       const relevantOutRows =
         lineupsProjections?.source === "lineups" && lineupRole?.isOnField && lineupRole.team && lineupRole.position
           ? relevantOutCandidates
@@ -2307,10 +2371,12 @@ export function FantasyDashboard({
           projectionRound
         ),
         relevantOuts: relevantOutRows,
+        nextMajorByeRound,
+        playsNextMajorBye,
         gamesPlayed: playerRows.length || player.gamesPlayed || 0,
       }
     })
-  }, [allData, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
+  }, [allData, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
 
   const fantasyAnalyticsPoints = useMemo<FantasyAnalyticsPoint[]>(
     () =>
@@ -3786,16 +3852,8 @@ export function FantasyDashboard({
                           )}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex min-w-0 items-center gap-1.5">
+                          <div className="min-w-0">
                             <div className="truncate text-[13px] font-bold text-nrl-text">{row.player.name}</div>
-                            {row.relevantOuts.length > 0 ? (
-                              <span
-                                className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300"
-                                title={formatRelevantOutTag(row.relevantOuts)}
-                              >
-                                <span aria-hidden="true">⚠ </span>{formatRelevantOutTag(row.relevantOuts)}
-                              </span>
-                            ) : null}
                           </div>
                           <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
                             {row.player.positionLabel}
@@ -3811,6 +3869,12 @@ export function FantasyDashboard({
                         </div>
                       </div>
                     </div>
+                    <PlayerContextTags
+                      relevantOuts={row.relevantOuts}
+                      nextMajorByeRound={row.nextMajorByeRound}
+                      playsNextMajorBye={row.playsNextMajorBye}
+                      className="mt-2"
+                    />
                     <div className="mt-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                       <div className="flex min-w-max gap-4">
                         {cardStats.map((stat) => (
@@ -3903,15 +3967,13 @@ export function FantasyDashboard({
                             <span className="block min-w-0 truncate" title={row.player.name}>
                               {row.player.name}
                             </span>
-                            {row.relevantOuts.length > 0 ? (
-                              <span
-                                className="max-w-[7rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300"
-                                title={formatRelevantOutTag(row.relevantOuts)}
-                              >
-                                <span aria-hidden="true">⚠ </span>{formatRelevantOutTag(row.relevantOuts)}
-                              </span>
-                            ) : null}
                           </div>
+                          <PlayerContextTags
+                            relevantOuts={row.relevantOuts}
+                            nextMajorByeRound={row.nextMajorByeRound}
+                            playsNextMajorBye={row.playsNextMajorBye}
+                            className="mt-1"
+                          />
                         </td>
                       <td className="w-[72px] min-w-[72px] max-w-[72px] border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-muted sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px] sm:px-3">
                         {row.player.positionLabel}

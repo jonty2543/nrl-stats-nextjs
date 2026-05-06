@@ -82,6 +82,7 @@ const AI_GUARDRAILS = [
 ];
 
 const AI_AUDIT_PREFIX = "[ai-audit]";
+const FIND_TRADES_PROMPT_PREFIX = "Fantasy Trade Suggestor dashboard request.";
 
 function truncateForAudit(text: string, maxLength = 160): string {
   const compact = text.replace(/\s+/g, " ").trim();
@@ -696,6 +697,12 @@ export async function POST(request: Request) {
   const imageAttachments = toImageAttachments(body.imageAttachments);
   const toolName = typeof body.toolName === "string" ? body.toolName.trim() : "";
   const shouldPersist = body.persist !== false;
+  const allowAnonymousFindTrades =
+    !userId &&
+    !shouldPersist &&
+    !toolName &&
+    imageAttachments.length > 0 &&
+    message.startsWith(FIND_TRADES_PROMPT_PREFIX);
 
   if (!message) {
     return NextResponse.json(
@@ -719,7 +726,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!userId) {
+  if (!userId && !allowAnonymousFindTrades) {
     return NextResponse.json(
       {
         status: "unauthorized",

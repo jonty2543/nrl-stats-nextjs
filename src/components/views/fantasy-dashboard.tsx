@@ -1716,10 +1716,6 @@ export function FantasyDashboard({
 
   const handleRunTradeSuggestor = async () => {
     if (!isAuthLoaded) return
-    if (!userId) {
-      setTradeSuggestorError("Sign in to use Find Trades.")
-      return
-    }
     if (!tradeSuggestorReady) {
       setTradeSuggestorError("Upload starters, bench, and trade screen screenshots first.")
       return
@@ -1733,8 +1729,11 @@ export function FantasyDashboard({
       ? [
         "Use live fantasy data for both buys and sells: weekly ownership change, breakeven, projection, priced at, L3 average, and projection vs priced at. Projection vs priced at is important.",
         "Try to list 3 Sell watch candidates every time. Use visible squad players only, prioritising confirmed injury/unavailability, negative ownership change, high BE, projection below priced at, weak L3/projection, or poor bye coverage. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
+        "Unless a player is injured, out, suspended, not named, or has another clear availability problem, their BE must be above priced at before they can be listed in Sell watch.",
+        "If projection is 50+ and projection vs priced at is -5.0 or better, do not list them in Sell watch unless there is a clear offsetting issue like injury, not named, missing an upcoming major bye, Origin risk, or another serious squad/cash constraint.",
         "List a visible player in Sell watch when live data shows their ownership delta is -1.0% or worse, BE is high, projection is below priced at, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using projection, priced at, BE, L3 average, ownership delta, injury/availability markers, and next major bye availability.",
         "If a player is -1.0% or worse in ownership delta but BE is lower than priced at, projection is similar to priced at, L3 is sound, and they play the next major bye, frame them as Hold / Possible sell rather than a hard sell.",
+        "Do not say recent form has slipped when L3 average is above priced at.",
         "In each sell/watch player title, include the player name, position, price, and projection, but no rating. In each trade-in title, include the player name, position, price, projection, and rating.",
         "For each sell or buy, use the label Ownership change: and include BE, priced at, L3 average, projection vs priced at, next major bye availability, and one short reason.",
       ]
@@ -1766,6 +1765,7 @@ export function FantasyDashboard({
       hasFantasyPlotAccess
         ? "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold, especially with a low BE; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news."
         : "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold when recent form, price and bye coverage are favourable; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news.",
+      "Use supplied casualty ward role-pressure and Origin chance context only as secondary tie-breakers. Do not let them outweigh clear ownership, form, value, injury, bye or lineup signals.",
       "If casualty ward lists a player but current lineups say he is named to play this week, ignore casualty ward for that player and do not describe him as injured from casualty ward.",
       "Do not use the phrase visible red injury marker unless a red cross/plus is plainly attached to the exact player row/card. If uncertain, omit injury completely.",
       "Do not mention an injury marker for J. Hughes/Hughes unless the marker is unambiguously attached to his exact player tile.",
@@ -5053,29 +5053,17 @@ export function FantasyDashboard({
                 <div className="text-[10px] text-nrl-muted">
                   {tradeSuggestorReady ? "Ready" : "Waiting for screenshots"}
                 </div>
-                {userId ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleRunTradeSuggestor()
-                    }}
-                    disabled={!tradeSuggestorReady || isTradeSuggestorSubmitting || Boolean(isTradeSuggestorUploading)}
-                    className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-full border border-violet-300/50 bg-[linear-gradient(135deg,#7c3aed,#00f58a)] px-4 py-2 text-sm font-bold text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <SparkAiIcon className="h-5 w-5" />
-                    {isTradeSuggestorSubmitting ? "Finding trades..." : "Find Trades"}
-                  </button>
-                ) : (
-                  <SignInButton mode="modal">
-                    <button
-                      type="button"
-                      className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-full border border-violet-300/50 bg-[linear-gradient(135deg,#7c3aed,#00f58a)] px-4 py-2 text-sm font-bold text-[#07131f]"
-                    >
-                      <SparkAiIcon className="h-5 w-5" />
-                      Sign in
-                    </button>
-                  </SignInButton>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleRunTradeSuggestor()
+                  }}
+                  disabled={!tradeSuggestorReady || isTradeSuggestorSubmitting || Boolean(isTradeSuggestorUploading)}
+                  className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-full border border-violet-300/50 bg-[linear-gradient(135deg,#7c3aed,#00f58a)] px-4 py-2 text-sm font-bold text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <SparkAiIcon className="h-5 w-5" />
+                  {isTradeSuggestorSubmitting ? "Finding trades..." : "Find Trades"}
+                </button>
               </div>
 
               {tradeSuggestorResult ? (

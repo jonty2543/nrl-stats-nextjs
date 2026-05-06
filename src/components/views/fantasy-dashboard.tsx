@@ -1063,6 +1063,7 @@ function CasualtyWardPills({ rows }: { rows: CasualtyWardRecord[] }) {
 function formatRelevantOutReturnTag(value: string | null): string {
   const trimmed = value?.trim()
   if (!trimmed) return "TBC"
+  if (/\b2027\b/.test(trimmed)) return "TBC"
   const round = trimmed.match(/^round\s+(.+)$/i)
   if (round?.[1]) return `R${round[1].trim()}`
   return trimmed

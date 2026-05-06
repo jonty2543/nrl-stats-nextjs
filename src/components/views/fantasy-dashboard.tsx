@@ -254,6 +254,7 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
 ]
 const FANTASY_FILTER_TAG_RELEVANT_OUTS = "Relevant Outs"
 const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin Chance"
+const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
 const TRADE_SCREENSHOT_SLOTS: Array<{ key: TradeScreenshotSlot; label: string; hint: string }> = [
   { key: "starters", label: "Starters", hint: "Selected 13 / field view" },
   { key: "bench", label: "Bench", hint: "Interchange + emergencies" },
@@ -1663,7 +1664,7 @@ export function FantasyDashboard({
   fantasyProjectionArticle = null,
 }: FantasyDashboardProps) {
   const router = useRouter()
-  const { userId } = useAuth()
+  const { isLoaded: isAuthLoaded, userId } = useAuth()
   const initialSelectedYears = useMemo(
     () => {
       if (availableYears.includes(ALL_PLAYERS_STATS_YEAR)) return [ALL_PLAYERS_STATS_YEAR]
@@ -1706,7 +1707,8 @@ export function FantasyDashboard({
   const [allPlayersView, setAllPlayersView] = useState<"cards" | "table">("cards")
   const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
   const [allPlayersTagFilters, setAllPlayersTagFilters] = useState<string[]>([])
-  const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(true)
+  const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(false)
+  const [cardTagsPreferenceHydrated, setCardTagsPreferenceHydrated] = useState(false)
   const showFantasyAnalytics = initialShowFantasyAnalytics
   const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("projection")
   const [fantasyAnalyticsPositionFilter, setFantasyAnalyticsPositionFilter] = useState("All Positions")
@@ -1740,6 +1742,37 @@ export function FantasyDashboard({
   const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata)
   const analysisLocked = !hasFantasyPlotAccess
   const playerDetailsRef = useRef<HTMLElement | null>(null)
+  const cardTagsPreferenceUserIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!isAuthLoaded) return
+    if (!userId) {
+      cardTagsPreferenceUserIdRef.current = null
+      setShowAllPlayersCardTags(false)
+      setCardTagsPreferenceHydrated(true)
+      return
+    }
+
+    try {
+      const saved = window.localStorage.getItem(`${FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX}:${userId}`)
+      setShowAllPlayersCardTags(saved === "true")
+    } catch {
+      setShowAllPlayersCardTags(false)
+    } finally {
+      cardTagsPreferenceUserIdRef.current = userId
+      setCardTagsPreferenceHydrated(true)
+    }
+  }, [isAuthLoaded, userId])
+
+  useEffect(() => {
+    if (!isAuthLoaded || !userId || !cardTagsPreferenceHydrated) return
+    if (cardTagsPreferenceUserIdRef.current !== userId) return
+    try {
+      window.localStorage.setItem(`${FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX}:${userId}`, String(showAllPlayersCardTags))
+    } catch {
+      // Ignore preference storage failures.
+    }
+  }, [cardTagsPreferenceHydrated, isAuthLoaded, showAllPlayersCardTags, userId])
 
   const scrollToPlayerDetails = useCallback(() => {
     if (typeof window === "undefined") return

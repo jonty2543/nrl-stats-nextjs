@@ -4,7 +4,7 @@
 create table if not exists shortside.user_bets (
   id uuid primary key default gen_random_uuid(),
   clerk_user_id text not null,
-  market text not null check (market in ('H2H', 'Line', 'Total')),
+  market text not null check (market in ('H2H', 'Line', 'Total', 'Tryscorer')),
   match_date date not null,
   match_name text not null,
   selection text not null,
@@ -27,6 +27,13 @@ create index if not exists user_bets_user_placed_idx
 
 create index if not exists user_bets_user_match_idx
   on shortside.user_bets (clerk_user_id, match_date, match_name);
+
+alter table shortside.user_bets
+drop constraint if exists user_bets_market_check;
+
+alter table shortside.user_bets
+add constraint user_bets_market_check
+check (market in ('H2H', 'Line', 'Total', 'Tryscorer'));
 
 create or replace function shortside.set_updated_at_user_bets()
 returns trigger

@@ -235,10 +235,18 @@ function buildSlotOptionLists(
   playerPool: DraftPricingPoolPlayer[],
   optionLabelById: Map<number, string>,
   slotLabels: readonly string[],
+  allowCrossTeamDuplicates = false,
 ): string[][] {
-  const globallySelected = new Set<number>(
-    [...currentSlots, ...otherSlots].filter((playerId): playerId is number => playerId != null)
+  // In H2H mode players can appear on both teams, so only deduplicate within
+  // the current team's own slots. In draft mode deduplicate globally.
+  const ownSelected = new Set<number>(
+    currentSlots.filter((playerId): playerId is number => playerId != null)
   )
+  const otherSelected = allowCrossTeamDuplicates
+    ? new Set<number>()
+    : new Set<number>(otherSlots.filter((playerId): playerId is number => playerId != null))
+
+  const globallySelected = new Set<number>([...ownSelected, ...otherSelected])
 
   return currentSlots.map((currentId, index) =>
     playerPool
@@ -315,8 +323,8 @@ function ProjectionPill({
     <div
       className={`inline-flex flex-col items-center justify-center rounded-full border font-semibold ${
         size === "lg"
-          ? "min-w-[54px] px-2 py-1 text-[15px] leading-none md:min-w-[66px] md:px-2.5 md:text-[17px]"
-          : "min-w-[36px] px-1.5 py-0.5 text-[10px] leading-none md:min-w-[40px] md:px-2 md:text-[11px]"
+          ? "min-w-[46px] px-1.5 py-1 text-[13px] leading-none md:min-w-[66px] md:px-2.5 md:text-[17px]"
+          : "min-w-[32px] px-1 py-0.5 text-[9px] leading-none md:min-w-[40px] md:px-2 md:text-[11px]"
       } ${
         tone === "played"
           ? "border-emerald-400 bg-emerald-500/14 text-emerald-200"
@@ -337,6 +345,7 @@ function TeamHeader({
   teamLabel,
   onTeamLabelChange,
   players,
+  selectedCaptainId,
   totalSlots,
   playerPoolById,
   fantasyPlayersById,
@@ -350,6 +359,7 @@ function TeamHeader({
   teamLabel: string
   onTeamLabelChange: (value: string) => void
   players: Array<DraftPricingPlayer | null>
+  selectedCaptainId: number | null
   totalSlots: number
   playerPoolById: Map<number, DraftPricingPoolPlayer>
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
@@ -362,23 +372,27 @@ function TeamHeader({
   const selectedPlayers = players.filter((player): player is DraftPricingPlayer => player != null)
   const selectedCount = selectedPlayers.length
   const [selectedSavedTeamId, setSelectedSavedTeamId] = useState("")
-  const activeCaptainId =
-    selectedPlayers.find((player) => !player.isBye && player.id != null)?.id ?? null
-  const avatarSources = teamAvatarSources(players, activeCaptainId, playerPoolById, fantasyPlayersById, playerImages)
+  const avatarSources = teamAvatarSources(
+    players,
+    selectedCaptainId,
+    playerPoolById,
+    fantasyPlayersById,
+    playerImages
+  )
   const alignClass = side === "left" ? "items-start text-left" : "items-end text-right"
 
   return (
-    <div className={`flex flex-col ${alignClass}`}>
-      <div className="flex h-10 w-10 items-end justify-center overflow-hidden rounded-full border border-nrl-border bg-[linear-gradient(180deg,#243055,#181f39)] shadow-sm md:h-14 md:w-14">
+      <div className={`flex flex-col ${alignClass}`}>
+      <div className="flex h-8 w-8 items-end justify-center overflow-hidden rounded-full border border-nrl-border bg-[linear-gradient(180deg,#243055,#181f39)] shadow-sm md:h-14 md:w-14">
         <ImageWithFallback sources={avatarSources} alt={teamLabel} className="h-full w-full object-cover object-top" />
       </div>
-      <div className="mt-1 text-[10px] font-semibold text-nrl-muted md:mt-2 md:text-xs">{selectedCount}/{totalSlots}</div>
+      <div className="mt-1 text-[9px] font-semibold text-nrl-muted md:mt-2 md:text-xs">{selectedCount}/{totalSlots}</div>
       <input
         value={teamLabel}
         onChange={(event) => onTeamLabelChange(event.target.value)}
-        className="mt-1 w-full max-w-[140px] border border-nrl-border bg-[#20284a] px-2 py-1 text-[11px] font-bold text-nrl-text outline-none focus:border-fuchsia-400 md:mt-2 md:max-w-[205px] md:px-2 md:text-[13px]"
+        className="mt-1 w-full max-w-[148px] rounded-md border border-nrl-border bg-[#20284a] px-1.5 py-1 text-[10px] font-bold text-nrl-text outline-none focus:border-fuchsia-400 md:mt-2 md:max-w-[240px] md:px-2 md:text-[13px]"
       />
-      <div className="mt-1 flex w-full max-w-[140px] flex-col gap-1.5 md:mt-2 md:max-w-[205px] md:gap-2">
+      <div className="mt-1 flex w-full max-w-[148px] flex-col gap-1 md:mt-2 md:max-w-[240px] md:gap-2">
         <select
           value={selectedSavedTeamId}
           onChange={(event) => {
@@ -387,7 +401,7 @@ function TeamHeader({
             if (!selectedId) return
             onLoadSavedTeam(selectedId)
           }}
-          className="w-full border border-nrl-border bg-[#20284a] px-2 py-1 text-[10px] text-nrl-muted outline-none focus:border-fuchsia-400 md:px-2 md:text-xs"
+          className="w-full rounded-md border border-nrl-border bg-[#20284a] px-1.5 py-1 text-[9px] text-nrl-muted outline-none focus:border-fuchsia-400 md:px-2 md:text-xs"
         >
           <option value="">Saved teams</option>
           {savedTeams.map((savedTeam) => (
@@ -396,11 +410,11 @@ function TeamHeader({
             </option>
           ))}
         </select>
-        <div className={`flex gap-2 ${side === "right" ? "justify-end" : "justify-start"}`}>
+        <div className={`flex gap-1.5 ${side === "right" ? "justify-end" : "justify-start"}`}>
           <button
             type="button"
             onClick={onSaveCurrentTeam}
-            className="border border-nrl-border bg-[#20284a] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text md:px-2 md:text-[10px] md:tracking-[0.14em]"
+            className="rounded-md border border-nrl-border bg-[#20284a] px-1.5 py-1 text-[8px] font-semibold uppercase tracking-[0.06em] text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text md:px-2 md:text-[10px] md:tracking-[0.14em]"
           >
             Save
           </button>
@@ -412,7 +426,7 @@ function TeamHeader({
               setSelectedSavedTeamId("")
             }}
             disabled={!selectedSavedTeamId}
-            className="border border-nrl-border bg-[#20284a] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-nrl-muted transition-colors hover:border-rose-400 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50 md:px-2 md:text-[10px] md:tracking-[0.14em]"
+            className="rounded-md border border-nrl-border bg-[#20284a] px-1.5 py-1 text-[8px] font-semibold uppercase tracking-[0.06em] text-nrl-muted transition-colors hover:border-rose-400 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50 md:px-2 md:text-[10px] md:tracking-[0.14em]"
           >
             Delete
           </button>
@@ -463,40 +477,42 @@ function EditableBoardRow({
   const rightName = rightPlayer ? fantasyPlayersById.get(rightPlayer.id ?? -1)?.name ?? rightPlayer.name : ""
 
   return (
-    <div className="grid grid-cols-[12px_minmax(0,1fr)_38px_18px_38px_minmax(0,1fr)_12px] items-center gap-1 border-t border-nrl-border px-1.5 py-1.5 first:border-t-0 md:grid-cols-[16px_minmax(0,1fr)_48px_54px_48px_minmax(0,1fr)_16px] md:gap-1.5 md:px-2">
-      <div className="text-center text-[8px] font-bold uppercase tracking-[0.1em] text-nrl-muted [writing-mode:vertical-rl] rotate-180 md:text-[10px] md:tracking-[0.12em]">
+    <div className="grid grid-cols-[10px_minmax(0,1fr)_34px_16px_34px_minmax(0,1fr)_10px] items-center gap-1 border-t border-nrl-border px-1 py-1.5 first:border-t-0 md:grid-cols-[16px_minmax(0,1fr)_48px_54px_48px_minmax(0,1fr)_16px] md:gap-1.5 md:px-2">
+      <div className="text-center text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted [writing-mode:vertical-rl] rotate-180 md:text-[10px] md:tracking-[0.12em]">
         {slotLabel}
       </div>
 
-      <div className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-1 md:grid-cols-[30px_minmax(0,1fr)] md:gap-1.5">
-        <div className={`group relative flex h-6 w-6 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${leftPlayer?.id === leftCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
+      <div className="grid grid-cols-[20px_minmax(0,1fr)] items-center gap-1 md:grid-cols-[30px_minmax(0,1fr)] md:gap-1.5">
+        <div className={`group relative flex h-5 w-5 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${leftPlayer?.id === leftCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
           <ImageWithFallback
             sources={leftPlayer ? playerImageSources(leftPlayer, playerPoolById, fantasyPlayersById, playerImages) : ["/body-shot.png"]}
             alt={leftName || "Player"}
             className="h-full w-full object-cover object-top"
           />
         </div>
-        <div className="min-w-0 max-w-[106px] md:max-w-[131px]">
-          <div className="truncate text-[10px] font-semibold text-nrl-text md:text-[13px]">
+        <div className="min-w-0 w-full max-w-[126px] md:max-w-[168px]">
+          <div className="truncate text-[9px] font-semibold text-nrl-text md:text-[13px]">
             {leftPlayer ? formatCompactPlayerName(leftName) : "-"}
           </div>
-          <div className="mt-0.5 grid grid-cols-[minmax(0,1fr)_22px] items-center gap-1 md:grid-cols-[minmax(0,1fr)_24px]">
+          <div className="mt-0.5 grid grid-cols-[minmax(0,1fr)_20px] items-center gap-1 md:grid-cols-[minmax(0,1fr)_24px]">
             <SearchableSelect
               label=""
               value={leftValue}
               options={leftOptions}
               onChange={onLeftChange}
               placeholder={`Select ${slotLabel}`}
+              inputClassName="px-1.5 py-0.5 text-[9px] md:px-2 md:py-1 md:text-[10px]"
+              dropdownClassName="min-w-[13rem] max-w-[16rem] md:min-w-[16rem] md:max-w-[20rem]"
             />
             <button
               type="button"
               onClick={() => onLeftCaptainSelect(leftPlayer?.id === leftCaptainId ? null : leftPlayer?.id ?? null)}
               disabled={!leftPlayer || leftPlayer.isBye}
               aria-label={leftPlayer?.id === leftCaptainId ? `Unset ${leftName} as captain` : `Set ${leftName || "player"} as captain`}
-              className={`h-[26px] rounded-md border text-[10px] font-bold uppercase leading-none transition-colors md:h-[28px] ${
+              className={`h-[24px] rounded-md border text-[9px] font-bold uppercase leading-none transition-colors md:h-[28px] ${
                 leftPlayer?.id === leftCaptainId
                   ? "border-orange-400 bg-orange-500/14 text-orange-200"
-                  : "border-nrl-border bg-[#20284a] text-nrl-muted hover:border-orange-400 hover:text-orange-200"
+                : "border-nrl-border bg-[#20284a] text-nrl-muted hover:border-orange-400 hover:text-orange-200"
               } disabled:cursor-not-allowed disabled:opacity-40`}
             >
               C
@@ -519,7 +535,7 @@ function EditableBoardRow({
         />
       </div>
 
-      <div className="text-center text-[8px] font-bold uppercase tracking-[0.08em] text-nrl-muted md:text-[9px] md:tracking-[0.16em]">vs</div>
+      <div className="text-center text-[7px] font-bold uppercase tracking-[0.05em] text-nrl-muted md:text-[9px] md:tracking-[0.16em]">vs</div>
 
         <div className="flex justify-center">
           <ProjectionPill
@@ -535,18 +551,18 @@ function EditableBoardRow({
         />
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_24px] items-center gap-1 md:grid-cols-[minmax(0,1fr)_30px] md:gap-1.5">
-        <div className="min-w-0 max-w-[106px] justify-self-end text-right md:max-w-[131px]">
-          <div className="truncate text-[10px] font-semibold text-nrl-text md:text-[13px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_20px] items-center gap-1 md:grid-cols-[minmax(0,1fr)_30px] md:gap-1.5">
+        <div className="min-w-0 w-full max-w-[126px] justify-self-end text-right md:max-w-[168px]">
+          <div className="truncate text-[9px] font-semibold text-nrl-text md:text-[13px]">
             {rightPlayer ? formatCompactPlayerName(rightName) : "-"}
           </div>
-          <div className="mt-0.5 grid grid-cols-[22px_minmax(0,1fr)] items-center gap-1 md:grid-cols-[24px_minmax(0,1fr)]">
+          <div className="mt-0.5 grid grid-cols-[20px_minmax(0,1fr)] items-center gap-1 md:grid-cols-[24px_minmax(0,1fr)]">
             <button
               type="button"
               onClick={() => onRightCaptainSelect(rightPlayer?.id === rightCaptainId ? null : rightPlayer?.id ?? null)}
               disabled={!rightPlayer || rightPlayer.isBye}
               aria-label={rightPlayer?.id === rightCaptainId ? `Unset ${rightName} as captain` : `Set ${rightName || "player"} as captain`}
-              className={`h-[26px] rounded-md border text-[10px] font-bold uppercase leading-none transition-colors md:h-[28px] ${
+              className={`h-[24px] rounded-md border text-[9px] font-bold uppercase leading-none transition-colors md:h-[28px] ${
                 rightPlayer?.id === rightCaptainId
                   ? "border-orange-400 bg-orange-500/14 text-orange-200"
                   : "border-nrl-border bg-[#20284a] text-nrl-muted hover:border-orange-400 hover:text-orange-200"
@@ -560,10 +576,12 @@ function EditableBoardRow({
               options={rightOptions}
               onChange={onRightChange}
               placeholder={`Select ${slotLabel}`}
+              inputClassName="px-1.5 py-0.5 text-[9px] md:px-2 md:py-1 md:text-[10px]"
+              dropdownClassName="min-w-[13rem] max-w-[16rem] md:min-w-[16rem] md:max-w-[20rem]"
             />
           </div>
         </div>
-        <div className={`group relative flex h-6 w-6 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${rightPlayer?.id === rightCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
+        <div className={`group relative flex h-5 w-5 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${rightPlayer?.id === rightCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
           <ImageWithFallback
             sources={rightPlayer ? playerImageSources(rightPlayer, playerPoolById, fantasyPlayersById, playerImages) : ["/body-shot.png"]}
             alt={rightName || "Player"}
@@ -572,7 +590,7 @@ function EditableBoardRow({
         </div>
       </div>
 
-      <div className="text-center text-[9px] font-bold uppercase tracking-[0.1em] text-nrl-muted [writing-mode:vertical-rl]">
+      <div className="text-center text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted [writing-mode:vertical-rl] md:text-[9px] md:tracking-[0.1em]">
         {slotLabel}
       </div>
     </div>
@@ -640,14 +658,15 @@ function EditableMatchupBoard({
   const awaySummary = summariseBoardTeam(awayPlayers, captainSelections.away)
 
   return (
-    <article className="overflow-hidden border border-nrl-border bg-nrl-panel shadow-[0_18px_45px_rgba(8,12,24,0.22)]">
-      <div className="border-b border-nrl-border bg-nrl-panel px-2 py-3 md:px-4 md:py-5">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 md:items-center md:gap-3">
+    <article className="overflow-visible rounded-lg border border-nrl-border bg-nrl-panel shadow-[0_18px_45px_rgba(8,12,24,0.22)]">
+      <div className="border-b border-nrl-border bg-nrl-panel px-1.5 py-2.5 md:px-4 md:py-5">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-1.5 md:items-center md:gap-3">
           <TeamHeader
             side="left"
             teamLabel={homeLabel}
             onTeamLabelChange={onHomeLabelChange}
             players={homePlayers}
+            selectedCaptainId={captainSelections.home}
             totalSlots={slotLabels.length}
             playerPoolById={playerPoolById}
             fantasyPlayersById={fantasyPlayersById}
@@ -658,22 +677,22 @@ function EditableMatchupBoard({
             onDeleteSavedTeam={onDeleteSavedTeam}
           />
 
-          <div className="flex min-w-[92px] flex-col items-center md:min-w-[168px]">
-            <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-nrl-muted md:text-[10px] md:tracking-[0.18em]">
+          <div className="flex min-w-[76px] flex-col items-center md:min-w-[168px]">
+            <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-nrl-muted md:text-[10px] md:tracking-[0.18em]">
               Scores
             </div>
-            <div className="mt-2 flex items-center gap-1 md:mt-2.5 md:gap-2.5">
+            <div className="mt-1.5 flex items-center gap-1 md:mt-2.5 md:gap-2.5">
               <ProjectionPill value={homeSummary.total} size="lg" blurred={blurValues} />
               <ProjectionPill value={awaySummary.total} size="lg" blurred={blurValues} />
             </div>
-            <div className="mt-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-nrl-muted md:mt-4 md:text-[10px] md:tracking-[0.18em]">
+            <div className="mt-2 text-[8px] font-semibold uppercase tracking-[0.12em] text-nrl-muted md:mt-4 md:text-[10px] md:tracking-[0.18em]">
               Odds
             </div>
-            <div className="mt-2 flex items-center gap-1 md:mt-2 md:gap-2.5">
-              <span className={`rounded-full border border-violet-400/70 bg-[#20284a] px-2 py-1 text-[13px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px] ${blurValues ? "blur-[5px] select-none" : ""}`}>
+            <div className="mt-1.5 flex items-center gap-1 md:mt-2 md:gap-2.5">
+              <span className={`rounded-full border border-violet-400/70 bg-[#20284a] px-1.5 py-1 text-[11px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px] ${blurValues ? "blur-[5px] select-none" : ""}`}>
                 {formatOdds(homePrice)}
               </span>
-              <span className={`rounded-full border border-violet-400/70 bg-[#20284a] px-2 py-1 text-[13px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px] ${blurValues ? "blur-[5px] select-none" : ""}`}>
+              <span className={`rounded-full border border-violet-400/70 bg-[#20284a] px-1.5 py-1 text-[11px] font-bold leading-none text-nrl-text md:px-2.5 md:text-[17px] ${blurValues ? "blur-[5px] select-none" : ""}`}>
                 {formatOdds(awayPrice)}
               </span>
             </div>
@@ -684,6 +703,7 @@ function EditableMatchupBoard({
             teamLabel={awayLabel}
             onTeamLabelChange={onAwayLabelChange}
             players={awayPlayers}
+            selectedCaptainId={captainSelections.away}
             totalSlots={slotLabels.length}
             playerPoolById={playerPoolById}
             fantasyPlayersById={fantasyPlayersById}
@@ -696,11 +716,11 @@ function EditableMatchupBoard({
         </div>
       </div>
 
-      <div className="bg-[#20284a] px-1 py-1.5 text-[10px] font-semibold text-nrl-muted md:px-3 md:text-[11px]">
-        <div className="grid grid-cols-[12px_minmax(0,1fr)_38px_18px_38px_minmax(0,1fr)_12px] items-center gap-1 md:grid-cols-[16px_minmax(0,1fr)_48px_54px_48px_minmax(0,1fr)_16px] md:gap-1.5">
+      <div className="bg-[#20284a] px-1 py-1 text-[9px] font-semibold text-nrl-muted md:px-3 md:text-[11px]">
+        <div className="grid grid-cols-[10px_minmax(0,1fr)_34px_16px_34px_minmax(0,1fr)_10px] items-center gap-1 md:grid-cols-[16px_minmax(0,1fr)_48px_54px_48px_minmax(0,1fr)_16px] md:gap-1.5">
           <div />
           <div>{homeLabel}</div>
-          <div className="col-span-3 flex items-center justify-center gap-3 text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-muted md:text-[10px] md:tracking-[0.16em]">
+          <div className="col-span-3 flex items-center justify-center gap-2 text-[8px] font-semibold uppercase tracking-[0.1em] text-nrl-muted md:text-[10px] md:tracking-[0.16em]">
             <div className="flex items-center gap-1">
               <span className="inline-block h-2 w-2 rounded-full bg-violet-300" />
               <span>Proj</span>
@@ -779,6 +799,7 @@ export function FantasyDraftPricingPage({
   const [captainSelections, setCaptainSelections] = useState<CaptainSelections>({ home: null, away: null })
   const [savedTeams, setSavedTeams] = useState<SavedDraftTeamPreset[]>([])
   const [hasLoadedSavedState, setHasLoadedSavedState] = useState(false)
+  const [isBackPending, setIsBackPending] = useState(false)
 
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
   const ownershipDeltaByPlayerId = useMemo(
@@ -844,13 +865,15 @@ export function FantasyDraftPricingPage({
     [playerPool]
   )
 
+  const isH2h = matchupMode === "h2h"
+
   const homeSlotOptions = useMemo(
-    () => buildSlotOptionLists(homeSlots, awaySlots, playerPool, optionLabelById, slotLabels),
-    [homeSlots, awaySlots, playerPool, optionLabelById, slotLabels]
+    () => buildSlotOptionLists(homeSlots, awaySlots, playerPool, optionLabelById, slotLabels, isH2h),
+    [homeSlots, awaySlots, playerPool, optionLabelById, slotLabels, isH2h]
   )
   const awaySlotOptions = useMemo(
-    () => buildSlotOptionLists(awaySlots, homeSlots, playerPool, optionLabelById, slotLabels),
-    [awaySlots, homeSlots, playerPool, optionLabelById, slotLabels]
+    () => buildSlotOptionLists(awaySlots, homeSlots, playerPool, optionLabelById, slotLabels, isH2h),
+    [awaySlots, homeSlots, playerPool, optionLabelById, slotLabels, isH2h]
   )
 
   const duplicateSelectedIds = useMemo(() => {
@@ -874,7 +897,8 @@ export function FantasyDraftPricingPage({
   const awayComplete = awaySlots.every((playerId) => playerId != null)
 
   const marketSummary = useMemo(() => {
-    if (!homeComplete || !awayComplete || duplicateSelectedIds.size > 0) return null
+    // In H2H mode, duplicate players across teams are allowed so don't block odds calculation.
+    if (!homeComplete || !awayComplete || (!isH2h && duplicateSelectedIds.size > 0)) return null
 
     const homePlayers = slotLabels.map((slotLabel, index) => buildBoardPlayer(homeSlots[index], slotLabel, playerPoolById))
     const awayPlayers = slotLabels.map((slotLabel, index) => buildBoardPlayer(awaySlots[index], slotLabel, playerPoolById))
@@ -894,7 +918,7 @@ export function FantasyDraftPricingPage({
       homeOdds: fairDecimalOdds(homeWinProbability),
       awayOdds: fairDecimalOdds(1 - homeWinProbability),
     }
-  }, [homeComplete, awayComplete, duplicateSelectedIds, homeSlots, awaySlots, playerPoolById, effectiveCaptainSelections.home, effectiveCaptainSelections.away, slotLabels])
+  }, [homeComplete, awayComplete, isH2h, duplicateSelectedIds, homeSlots, awaySlots, playerPoolById, effectiveCaptainSelections.home, effectiveCaptainSelections.away, slotLabels])
 
   const homePrice = marketSummary?.homeOdds ?? null
   const awayPrice = marketSummary?.awayOdds ?? null
@@ -1045,20 +1069,24 @@ export function FantasyDraftPricingPage({
   }
 
   return (
-    <div className="space-y-4">
+      <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           href="/dashboard/fantasy"
+          onClick={() => setIsBackPending(true)}
           className="inline-flex items-center rounded-md border border-nrl-border bg-nrl-panel px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:text-nrl-accent"
         >
           Back to Fantasy Dashboard
+          {isBackPending ? (
+            <span className="ml-2 h-3 w-3 animate-spin rounded-full border-2 border-nrl-muted/30 border-t-nrl-accent" />
+          ) : null}
         </Link>
       </div>
 
-      <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
-        <div className="mb-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent xl:leading-none">Draft / H2H Projection and Odds</div>
+      <section className="rounded-xl border border-nrl-border bg-nrl-panel p-3 md:p-4">
+        <div className="mb-3 flex flex-col gap-3 xl:mb-4 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-nrl-accent xl:text-xs xl:leading-none">Draft / H2H Projection and Odds</div>
             <div className="inline-flex rounded-full border border-nrl-border bg-[#20284a] p-1">
               {([
                 ["draft", "Draft"],
@@ -1073,7 +1101,7 @@ export function FantasyDraftPricingPage({
                     setHomeSlots((current) => resizeSlots(current, nextSlotLabels.length))
                     setAwaySlots((current) => resizeSlots(current, nextSlotLabels.length))
                   }}
-                  className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                  className={`rounded-full px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] transition-colors md:px-3 md:text-[10px] md:tracking-[0.14em] ${
                     matchupMode === value
                       ? "bg-[linear-gradient(135deg,rgba(34,197,94,0.18),rgba(168,85,247,0.22))] text-nrl-text"
                       : "text-nrl-muted hover:text-nrl-text"
@@ -1085,7 +1113,7 @@ export function FantasyDraftPricingPage({
             </div>
             {locked ? (
               <BillingPageLink
-                className="rounded-full border border-[rgba(0,245,138,0.28)] bg-[linear-gradient(135deg,rgba(91,61,173,0.28),rgba(12,93,74,0.24))] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:border-nrl-accent"
+                className="rounded-full border border-[rgba(0,245,138,0.28)] bg-[linear-gradient(135deg,rgba(91,61,173,0.28),rgba(12,93,74,0.24))] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:border-nrl-accent md:px-3 md:text-[10px] md:tracking-[0.16em]"
               >
                 Sign Up To Pro
               </BillingPageLink>
@@ -1093,11 +1121,11 @@ export function FantasyDraftPricingPage({
           </div>
 
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex min-w-[160px] flex-col">
+            <label className="flex min-w-[136px] flex-col md:min-w-[160px]">
               <select
                 value={round}
                 onChange={(event) => setRound(event.target.value)}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1.5 text-[13px] text-nrl-text outline-none focus:border-nrl-accent md:px-3 md:py-2 md:text-sm"
               >
                 {roundOptions.map((option) => (
                   <option key={option} value={option}>
@@ -1114,7 +1142,7 @@ export function FantasyDraftPricingPage({
                 setAwaySlots(buildEmptySlots(slotLabels.length))
                 setCaptainSelections({ home: null, away: null })
               }}
-              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1.5 text-[13px] font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text md:px-3 md:py-2 md:text-sm"
             >
               Clear
             </button>

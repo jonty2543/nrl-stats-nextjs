@@ -1,22 +1,7 @@
-import Image from "next/image";
-
 export default function AboutPage() {
   return (
     <div className="rounded-xl border border-nrl-border bg-nrl-panel p-6">
-      <div className="flex items-center gap-3">
-        <Image
-          src="/logo-mark.svg"
-          alt="Short Side logo"
-          width={40}
-          height={40}
-          priority
-        />
-        <div>
-          <h1 className="text-xl font-bold text-nrl-text">About Short Side</h1>
-        </div>
-      </div>
-
-      <div className="mt-5 max-w-3xl text-sm leading-6 text-nrl-text">
+      <div className="max-w-3xl text-sm leading-6 text-nrl-text">
         <p>
           Short Side exists to bring smarter analysis to Rugby League.
         </p>

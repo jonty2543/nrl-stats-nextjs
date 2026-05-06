@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache, revalidateTag } from "next/cache";
 import type { AiPlan } from "@/lib/ai/access";
 import { canViewAiRuntimeMetadata, hasAiBettingModelAccess, hasAiPlotAccess } from "@/lib/ai/access";
 import type { AiChartArtifact, AiToolActivity } from "@/lib/ai/openai";
@@ -251,10 +252,14 @@ export function sanitizeAiMessagesForAccess(
   messages: AiPersistedMessage[],
   plan: AiPlan
 ): AiPersistedMessage[] {
-  return messages.map((message) => {
+  return messages.flatMap((message) => {
     const runtimeMetadataVisible = canViewAiRuntimeMetadata(plan);
 
     if (isMessageRestrictedForPlan(message, plan)) {
+      if (plan === "free") {
+        return [];
+      }
+
       return {
         ...message,
         content: buildAiThreadAccessMessage(plan),
@@ -266,11 +271,11 @@ export function sanitizeAiMessagesForAccess(
       };
     }
 
-    return {
+    return [{
       ...message,
       model: runtimeMetadataVisible ? message.model : null,
       usage: runtimeMetadataVisible ? message.usage : null,
-    };
+    }];
   });
 }
 
@@ -408,12 +413,8 @@ export async function loadAiThreadListForUser(
     }));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (isKnownPersistenceError(message)) {
-      console.warn("AI thread list unavailable.", message);
-      return [];
-    }
-
-    throw error;
+    console.warn("AI thread list unavailable.", message);
+    return [];
   }
 }
 
@@ -457,6 +458,78 @@ export async function loadAiThreadForUser(
   }
 }
 
+export async function deleteAiThreadForUser(
+  userId: string | null | undefined,
+  threadId: string | null | undefined
+): Promise<boolean> {
+  if (!userId || !threadId) return false;
+
+  try {
+    const thread = await findThreadForUser(userId, threadId);
+    if (!thread) {
+      return false;
+    }
+
+    const supabase = getAiSupabaseClient();
+    const { error: messageError } = await supabase
+      .from("ai_messages")
+      .delete()
+      .eq("thread_id", thread.id);
+
+    if (messageError) {
+      throw new Error(messageError.message);
+    }
+
+    const { error: threadError } = await supabase
+      .from("ai_threads")
+      .delete()
+      .eq("id", thread.id)
+      .eq("clerk_user_id", userId);
+
+    if (threadError) {
+      throw new Error(threadError.message);
+    }
+
+    revalidateTag(`ai-usage-${userId}`, "max");
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isKnownPersistenceError(message)) {
+      console.warn("AI thread deletion unavailable.", message);
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function countAiMessagesForUserUncached(
+  userId: string,
+  startIso: string,
+  endIso: string
+): Promise<number> {
+  const supabase = getAiSupabaseClient();
+  const { count, error } = await supabase
+    .from("ai_messages")
+    .select("id,ai_threads!inner(clerk_user_id)", { count: "exact", head: true })
+    .eq("role", "user")
+    .eq("ai_threads.clerk_user_id", userId)
+    .gte("created_at", startIso)
+    .lt("created_at", endIso);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+// Cache per-user usage count for 60 seconds — avoids a JOIN query on every AI page load and chat call.
+function getCachedAiMessageCount(userId: string, startIso: string, endIso: string) {
+  return unstable_cache(
+    () => countAiMessagesForUserUncached(userId, startIso, endIso),
+    [`ai-usage-${userId}-${startIso}`],
+    { revalidate: 60, tags: [`ai-usage-${userId}`] }
+  )();
+}
+
 export async function getAiUsageForUser(
   userId: string | null | undefined,
   chatLimit: number | null,
@@ -474,21 +547,8 @@ export async function getAiUsageForUser(
   }
 
   try {
-    const supabase = getAiSupabaseClient();
     const { startIso, endIso } = getUtcUsageRange(new Date(), quotaPeriodDays);
-    const { count, error } = await supabase
-      .from("ai_messages")
-      .select("id,ai_threads!inner(clerk_user_id)", { count: "exact", head: true })
-      .eq("role", "user")
-      .eq("ai_threads.clerk_user_id", userId)
-      .gte("created_at", startIso)
-      .lt("created_at", endIso);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    const usedInPeriod = count ?? 0;
+    const usedInPeriod = await getCachedAiMessageCount(userId, startIso, endIso);
 
     return {
       chatLimit,
@@ -567,6 +627,9 @@ export async function saveAiAssistantTurn({
     if (updateError) {
       throw new Error(updateError.message);
     }
+
+    // Bust the per-user usage cache so the next page load reflects the new message.
+    revalidateTag(`ai-usage-${userId}`, "max");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (isKnownPersistenceError(message)) {

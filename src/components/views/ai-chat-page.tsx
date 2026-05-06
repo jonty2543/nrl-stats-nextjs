@@ -1,8 +1,9 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { AiPlan } from "@/lib/ai/access";
 import type { AiPersistedMessage, AiThreadListItem } from "@/lib/ai/persistence";
@@ -44,6 +45,11 @@ interface AiChatApiResponse {
   availableTools: Array<{ name: string; description: string }>;
 }
 
+interface DirectToolRequest {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+}
+
 interface PendingImageAttachment {
   id: string;
   name: string;
@@ -53,6 +59,12 @@ interface PendingImageAttachment {
 }
 
 const MAX_SCREENSHOTS = 3;
+const MAX_IMAGE_DATA_URL_LENGTH = 650_000;
+
+type WakeLockSentinelLike = {
+  release: () => Promise<void>;
+  addEventListener: (type: "release", listener: () => void) => void;
+};
 
 async function parseAiChatResponse(response: Response): Promise<AiChatApiResponse> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -91,6 +103,13 @@ function formatLimit(limit: number | null, periodLabel: string): string {
 function formatRemainingChats(remaining: number | null, periodLabel: string): string {
   const periodText = periodLabel === "day" ? "today" : `this ${periodLabel}`;
   return remaining == null ? "Unlimited remaining" : `${remaining} remaining ${periodText}`;
+}
+
+function formatQuotaReachedMessage(plan: AiPlan, limit: number | null, periodLabel: string): string {
+  const planLabel = formatPlanLabel(plan);
+  const limitText = limit == null ? "your AI message limit" : `${limit} message${limit === 1 ? "" : "s"}`;
+  const periodText = periodLabel === "day" ? "today" : `this ${periodLabel}`;
+  return `${planLabel} limit reached: ${limitText} ${periodText}.`;
 }
 
 function formatThreadTime(timestamp: string): string {
@@ -229,36 +248,153 @@ const PROMPT_VARIABLE_OPTIONS = {
   season: ["2026", "2025", "2024", "2023"],
   minGames: ["3", "5", "6", "8", "10"],
   minMinutes: ["20", "30", "40", "50", "60"],
-  market: ["H2H", "Line", "Total"],
-  round: ["1", "2", "3", "4", "5", "6", "7", "8"],
+  round: ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
 } as const;
 
 type PromptVariableKey = keyof typeof PROMPT_VARIABLE_OPTIONS;
+type PromptVariables = Partial<Record<PromptVariableKey, string>>;
+type DirectPromptTool = {
+  name: string;
+  input: Record<string, unknown>;
+};
 
 const DEFAULT_PROMPTS: Array<{
   id: string;
   label: string;
   template: string;
   variables: PromptVariableKey[];
+  getTool: (values: PromptVariables) => DirectPromptTool;
 }> = [
-  { id: "player-stat-rate", label: "Player rate ranking", template: "Among [position]s with [minGames]+ games in [season], who has the lowest [stat] per game?", variables: ["position", "minGames", "season", "stat"] },
-  { id: "player-stat-leaders", label: "Player stat leaders", template: "Which [position]s average the most [stat] in [season], minimum [minGames] games?", variables: ["position", "stat", "season", "minGames"] },
-  { id: "player-vs-player", label: "Player comparison", template: "Compare [player] and [player2] for [stat] in [season].", variables: ["player", "player2", "stat", "season"] },
-  { id: "player-last-season", label: "Player season summary", template: "Summarise [player]'s [stat] in [season], including average, total, and best game.", variables: ["player", "stat", "season"] },
-  { id: "minutes-filter", label: "Minutes filter", template: "Among [position]s averaging [minMinutes]+ minutes in [season], who has the best [stat] per game?", variables: ["position", "minMinutes", "season", "stat"] },
-  { id: "team-stat-rank", label: "Team stat ranking", template: "Rank teams by average [teamStat] in [season].", variables: ["teamStat", "season"] },
-  { id: "team-profile", label: "Team profile", template: "Show [team]'s [teamStat] trend in [season], with round-by-round context.", variables: ["team", "teamStat", "season"] },
-  { id: "team-comparison", label: "Team comparison", template: "Compare [team] and [team2] for [teamStat] in [season].", variables: ["team", "team2", "teamStat", "season"] },
-  { id: "team-home-away", label: "Home vs away", template: "Which teams have the biggest home vs away win-rate gap in [season]?", variables: ["season"] },
-  { id: "fantasy-value", label: "Fantasy value", template: "Which [position]s look best for fantasy value in round [round]?", variables: ["position", "round"] },
-  { id: "fantasy-player", label: "Fantasy player check", template: "Give me the fantasy outlook for [player] in round [round].", variables: ["player", "round"] },
-  { id: "fantasy-projection", label: "Fantasy projection", template: "Which [position]s have the best fantasy projection in round [round]?", variables: ["position", "round"] },
-  { id: "fantasy-breakeven", label: "Fantasy breakeven", template: "Which [position]s have the lowest fantasy breakevens in round [round]?", variables: ["position", "round"] },
-  { id: "betting-market", label: "Market snapshot", template: "Summarise the best [market] betting prices for [team] this week.", variables: ["market", "team"] },
-  { id: "betting-edge", label: "Betting edge", template: "Where is the biggest [market] model edge for [team] this week?", variables: ["market", "team"] },
-  { id: "betting-matchup", label: "Matchup odds", template: "Compare [team] vs [team2] across [market] markets.", variables: ["team", "team2", "market"] },
-  { id: "matchup-players", label: "Matchup players", template: "Which [team] players have the strongest [stat] matchup against [team2]?", variables: ["team", "stat", "team2"] },
-  { id: "recent-form", label: "Recent form", template: "Which [position]s have improved most in [stat] recently in [season]?", variables: ["position", "stat", "season"] },
+  {
+    id: "player-stat-leaders",
+    label: "Player stat leaders",
+    template: "Which [position]s average the most [stat] in [season], minimum [minGames] games?",
+    variables: ["position", "stat", "season", "minGames"],
+    getTool: (values) => ({
+      name: "rank_players_by_stat",
+      input: {
+        statKey: values.stat,
+        years: [values.season],
+        limit: 8,
+        sortOrder: "desc",
+        aggregation: "avg",
+        rateBasis: "per_game",
+        minGames: Number(values.minGames),
+        minAverageMinutes: null,
+        filters: { opponent: null, position: values.position, finals: null, minutesOver: null, minutesUnder: null, teammate: null, teammatePosition: null, withWithout: null },
+      },
+    }),
+  },
+  {
+    id: "player-stat-lowest",
+    label: "Lowest player rates",
+    template: "Among [position]s with [minGames]+ games in [season], who has the lowest [stat] per game?",
+    variables: ["position", "minGames", "season", "stat"],
+    getTool: (values) => ({
+      name: "rank_players_by_stat",
+      input: {
+        statKey: values.stat,
+        years: [values.season],
+        limit: 8,
+        sortOrder: "asc",
+        aggregation: "avg",
+        rateBasis: "per_game",
+        minGames: Number(values.minGames),
+        minAverageMinutes: null,
+        filters: { opponent: null, position: values.position, finals: null, minutesOver: null, minutesUnder: null, teammate: null, teammatePosition: null, withWithout: null },
+      },
+    }),
+  },
+  {
+    id: "minutes-filter",
+    label: "Minutes filter",
+    template: "Among [position]s averaging [minMinutes]+ minutes in [season], who has the best [stat] per game?",
+    variables: ["position", "minMinutes", "season", "stat"],
+    getTool: (values) => ({
+      name: "rank_players_by_stat",
+      input: {
+        statKey: values.stat,
+        years: [values.season],
+        limit: 8,
+        sortOrder: "desc",
+        aggregation: "avg",
+        rateBasis: "per_game",
+        minGames: 3,
+        minAverageMinutes: Number(values.minMinutes),
+        filters: { opponent: null, position: values.position, finals: null, minutesOver: null, minutesUnder: null, teammate: null, teammatePosition: null, withWithout: null },
+      },
+    }),
+  },
+  {
+    id: "team-stat-rank",
+    label: "Team stat ranking",
+    template: "Rank teams by average [teamStat] in [season].",
+    variables: ["teamStat", "season"],
+    getTool: (values) => ({
+      name: "rank_teams_by_stat",
+      input: { statKey: values.teamStat, years: [values.season], limit: 8, sortOrder: "desc" },
+    }),
+  },
+  {
+    id: "team-home-away",
+    label: "Home vs away",
+    template: "Which teams have the biggest home vs away win-rate gap in [season]?",
+    variables: ["season"],
+    getTool: (values) => ({
+      name: "get_team_home_away_win_rates",
+      input: { team: null, years: [values.season], limit: 8, sortOrder: "desc" },
+    }),
+  },
+  {
+    id: "possession-records",
+    label: "Possession records",
+    template: "Which teams win the possession battle most often in [season]?",
+    variables: ["season"],
+    getTool: (values) => ({
+      name: "get_team_possession_battle_records",
+      input: { team: null, years: [values.season], limit: 8, sortOrder: "desc" },
+    }),
+  },
+  {
+    id: "player-vs-player",
+    label: "Player comparison",
+    template: "Compare [player] and [player2] for [stat] in [season].",
+    variables: ["player", "player2", "stat", "season"],
+    getTool: (values) => ({
+      name: "compare_players",
+      input: { players: [values.player, values.player2], stats: [values.stat], years: [values.season] },
+    }),
+  },
+  {
+    id: "fantasy-value",
+    label: "Fantasy value",
+    template: "Which [position]s look best for fantasy value in round [round]?",
+    variables: ["position", "round"],
+    getTool: (values) => ({
+      name: "get_fantasy_snapshot",
+      input: { round: Number(values.round), positions: [values.position ?? ""], priceMax: null, sortBy: "projection_vs_priced_at_desc", requireOwnershipRise: false, excludeLocked: true, limit: 8 },
+    }),
+  },
+  {
+    id: "fantasy-projection",
+    label: "Fantasy projections",
+    template: "Which [position]s have the best fantasy projection in round [round]?",
+    variables: ["position", "round"],
+    getTool: (values) => ({
+      name: "get_fantasy_snapshot",
+      input: { round: Number(values.round), positions: [values.position ?? ""], priceMax: null, sortBy: "projection_desc", requireOwnershipRise: false, excludeLocked: true, limit: 8 },
+    }),
+  },
+  {
+    id: "betting-market",
+    label: "H2H prices",
+    template: "What are the best H2H prices this week?",
+    variables: [],
+    getTool: () => ({
+      name: "get_betting_snapshot",
+      input: { market: "H2H", dateFrom: null, dateTo: null },
+    }),
+  },
 ];
 
 function buildPromptFromTemplate(template: string, values: Partial<Record<PromptVariableKey, string>>) {
@@ -320,20 +456,35 @@ async function buildPendingImageAttachment(
 
   const sourceDataUrl = await readFileAsDataUrl(file);
   const image = await loadHtmlImage(sourceDataUrl);
-  const maxEdge = 1400;
-  const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const maxWidth = 900;
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
   const canvasContext = canvas.getContext("2d");
   if (!canvasContext) {
     throw new Error("Unable to process image.");
   }
 
-  canvasContext.drawImage(image, 0, 0, width, height);
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.84);
+  let scale = Math.min(1, maxWidth / image.naturalWidth);
+  let dataUrl = "";
+  for (const widthScale of [1, 0.82, 0.68, 0.54, 0.42]) {
+    const width = Math.max(1, Math.round(image.naturalWidth * scale * widthScale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale * widthScale));
+    canvas.width = width;
+    canvas.height = height;
+    canvasContext.drawImage(image, 0, 0, width, height);
+
+    for (const quality of [0.78, 0.68, 0.58, 0.48]) {
+      dataUrl = canvas.toDataURL("image/jpeg", quality);
+      if (dataUrl.length <= MAX_IMAGE_DATA_URL_LENGTH) break;
+    }
+
+    if (dataUrl.length <= MAX_IMAGE_DATA_URL_LENGTH) break;
+    scale *= 0.9;
+  }
+
+  if (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+    throw new Error("That screenshot is too large to upload. Try cropping it or uploading fewer screenshots.");
+  }
+
   return {
     id: `${file.name}-${file.size}-${file.lastModified}`,
     name: file.name,
@@ -368,8 +519,11 @@ function RugbyLoadingMessage({ status, runnerImageSrc }: { status: string; runne
 
 function NrlAiTitle({ className = "" }: { className?: string }) {
   return (
-    <span className={`font-bold text-nrl-text ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 font-bold text-nrl-text ${className}`}>
       NRL <span className="font-semibold italic text-nrl-accent">AI</span>
+      <span className="rounded-full bg-nrl-accent/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-accent">
+        Beta
+      </span>
     </span>
   );
 }
@@ -387,8 +541,21 @@ export function AiChatPage({
   nextUpcomingRound,
   tools,
 }: AiChatPageProps) {
+  const router = useRouter();
   const { isLoaded: isAuthLoaded, userId } = useAuth();
+  const { user } = useUser();
+  const profileImageUrl = user?.imageUrl ?? null;
+  const profileInitials =
+    [user?.firstName, user?.lastName]
+      .map((name) => name?.trim()[0])
+      .filter(Boolean)
+      .join("")
+      .toUpperCase() ||
+    user?.fullName?.trim().slice(0, 2).toUpperCase() ||
+    user?.primaryEmailAddress?.emailAddress.trim().slice(0, 2).toUpperCase() ||
+    "SS";
   const [message, setMessage] = useState("");
+  const [pendingDirectTool, setPendingDirectTool] = useState<DirectToolRequest | null>(null);
   const [messages, setMessages] = useState<AiPersistedMessage[]>(initialMessages);
   const [threadId, setThreadId] = useState<string | null>(initialThreadId);
   const [threads, setThreads] = useState<AiThreadListItem[]>(initialThreads);
@@ -403,12 +570,15 @@ export function AiChatPage({
   const [error, setError] = useState<string | null>(null);
   const [pendingImages, setPendingImages] = useState<PendingImageAttachment[]>([]);
   const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
+  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const bettingFileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadMenuRef = useRef<HTMLDivElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   const quotaReached =
-    !isUsageTrackingAvailable || (remainingInPeriod != null && remainingInPeriod <= 0);
+    isUsageTrackingAvailable && (remainingInPeriod != null && remainingInPeriod <= 0);
 
   useEffect(() => {
     setMessages(initialMessages);
@@ -469,6 +639,55 @@ export function AiChatPage({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [isUploadMenuOpen]);
 
+  useEffect(() => {
+    if (!isSubmitting) {
+      void wakeLockRef.current?.release().catch(() => undefined);
+      wakeLockRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+
+    const requestWakeLock = async () => {
+      const wakeLock = "wakeLock" in navigator
+        ? (navigator.wakeLock as { request?: (type: "screen") => Promise<WakeLockSentinelLike> })
+        : null;
+      if (!wakeLock?.request || document.visibilityState !== "visible") return;
+
+      try {
+        const sentinel = await wakeLock.request("screen");
+        if (cancelled) {
+          await sentinel.release().catch(() => undefined);
+          return;
+        }
+        wakeLockRef.current = sentinel;
+        sentinel.addEventListener("release", () => {
+          if (wakeLockRef.current === sentinel) {
+            wakeLockRef.current = null;
+          }
+        });
+      } catch {
+        wakeLockRef.current = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !wakeLockRef.current) {
+        void requestWakeLock();
+      }
+    };
+
+    void requestWakeLock();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      void wakeLockRef.current?.release().catch(() => undefined);
+      wakeLockRef.current = null;
+    };
+  }, [isSubmitting]);
+
   const handleScreenshotUpload = async (
     files: FileList | null,
     context: PendingImageAttachment["context"]
@@ -496,13 +715,11 @@ export function AiChatPage({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to upload screenshots.");
     } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      if (bettingFileInputRef.current) bettingFileInputRef.current.value = "";
     }
   };
 
-  const submitPrompt = async (overrideMessage?: string) => {
+  const submitPrompt = async (overrideMessage?: string, directTool?: DirectToolRequest) => {
     const submittedImages = overrideMessage ? [] : pendingImages;
     const hasBettingImages = submittedImages.some((image) => image.context === "betting");
     const fallbackMessage =
@@ -534,12 +751,17 @@ export function AiChatPage({
     setMessages((current) => [...current, localUserMessage]);
     if (!overrideMessage) {
       setMessage("");
+      setPendingDirectTool(null);
       setPendingImages([]);
     }
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const result = await fetch("/api/ai/chat", {
         method: "POST",
+        signal: abortController.signal,
         headers: {
           "Content-Type": "application/json",
         },
@@ -557,6 +779,8 @@ export function AiChatPage({
             mediaType: image.mediaType,
             dataUrl: image.dataUrl,
           })),
+          toolName: directTool?.toolName ?? pendingDirectTool?.toolName,
+          toolInput: directTool?.toolInput ?? pendingDirectTool?.toolInput,
         }),
       });
 
@@ -596,6 +820,14 @@ export function AiChatPage({
         }),
       ]);
     } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        setMessages((current) => current.filter((entry) => entry.id !== localUserMessage.id));
+        setMessage(trimmed);
+        setPendingDirectTool(directTool ?? pendingDirectTool);
+        setPendingImages(submittedImages);
+        return;
+      }
+
       const errorMessage = caught instanceof Error ? caught.message : "";
       setError(
         errorMessage === "Failed to fetch" || errorMessage === "fetch failed"
@@ -603,9 +835,16 @@ export function AiChatPage({
           : errorMessage || "Unable to send request."
       );
     } finally {
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
       setIsSubmitting(false);
       setLoadingPrompt(null);
     }
+  };
+
+  const stopCurrentRequest = () => {
+    abortControllerRef.current?.abort();
   };
 
   const handleChoice = (choice: AiPersistedMessage["choices"][number]) => {
@@ -621,10 +860,39 @@ export function AiChatPage({
     void submitPrompt(nextMessage);
   };
 
+  const handleDeleteThread = async (deletedThreadId: string) => {
+    if (deletingThreadId || !window.confirm("Delete this chat?")) return;
+
+    setDeletingThreadId(deletedThreadId);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/ai/threads/${deletedThreadId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error || "Unable to delete chat.");
+      }
+
+      setThreads((current) => current.filter((thread) => thread.threadId !== deletedThreadId));
+      if (deletedThreadId === threadId) {
+        setThreadId(null);
+        setMessages([]);
+        router.replace("/dashboard/ai?new=1");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to delete chat.");
+    } finally {
+      setDeletingThreadId(null);
+    }
+  };
+
   void tools;
 
   const hasConversation = messages.length > 0 || isSubmitting;
-  const fillRandomPrompt = () => {
+  const buildRandomPrompt = () => {
     const prompt = DEFAULT_PROMPTS[Math.floor(Math.random() * DEFAULT_PROMPTS.length)];
     const values = Object.fromEntries(
       prompt.variables.map((variable) => {
@@ -637,9 +905,21 @@ export function AiChatPage({
             : options[Math.floor(Math.random() * options.length)];
         return [variable, value];
       })
-    ) as Partial<Record<PromptVariableKey, string>>;
+    ) as PromptVariables;
 
-    setMessage(buildPromptFromTemplate(prompt.template, values));
+    return {
+      message: buildPromptFromTemplate(prompt.template, values),
+      tool: prompt.getTool(values),
+    };
+  };
+
+  const submitRandomPrompt = () => {
+    const prompt = buildRandomPrompt();
+    setMessage(prompt.message);
+    setPendingDirectTool({
+      toolName: prompt.tool.name,
+      toolInput: prompt.tool.input,
+    });
   };
 
   return (
@@ -696,21 +976,35 @@ export function AiChatPage({
             threads.map((thread) => {
               const isActive = thread.threadId === threadId;
               return (
-                <Link
+                <div
                   key={thread.threadId}
-                  href={`/dashboard/ai?thread=${thread.threadId}`}
-                  onClick={() => setIsSidebarOpen(false)}
-                  className={`block rounded-xl px-3 py-3 transition-colors ${
+                  className={`group flex items-center gap-1 rounded-xl transition-colors ${
                     isActive
                       ? "bg-nrl-accent/10 text-nrl-text"
                       : "text-nrl-muted hover:bg-nrl-panel-2 hover:text-nrl-text"
                   }`}
                 >
-                  <div className="truncate text-sm font-medium text-nrl-text">
-                    {thread.title || "Untitled conversation"}
-                  </div>
-                  <div className="mt-1 text-[11px] text-nrl-muted">{formatThreadTime(thread.lastMessageAt)}</div>
-                </Link>
+                  <Link
+                    href={`/dashboard/ai?thread=${thread.threadId}`}
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="min-w-0 flex-1 px-3 py-3"
+                  >
+                    <div className="truncate text-sm font-medium text-nrl-text">
+                      {thread.title || "Untitled conversation"}
+                    </div>
+                    <div className="mt-1 text-[11px] text-nrl-muted">{formatThreadTime(thread.lastMessageAt)}</div>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteThread(thread.threadId)}
+                    disabled={deletingThreadId === thread.threadId}
+                    className="mr-2 grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-semibold text-nrl-muted opacity-100 transition-colors hover:bg-red-500/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                    aria-label={`Delete ${thread.title || "untitled conversation"}`}
+                    title="Delete chat"
+                  >
+                    x
+                  </button>
+                </div>
               );
             })
           )}
@@ -718,8 +1012,12 @@ export function AiChatPage({
 
         <div className="border-t border-nrl-border px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-nrl-accent text-xs font-bold text-nrl-bg">
-              SS
+            <div
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-nrl-accent bg-cover bg-center text-xs font-bold text-nrl-bg"
+              style={profileImageUrl ? { backgroundImage: `url("${profileImageUrl}")` } : undefined}
+              aria-label="User profile photo"
+            >
+              {!profileImageUrl ? profileInitials : null}
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-nrl-text">{formatPlanLabel(plan)}</div>
@@ -800,7 +1098,7 @@ export function AiChatPage({
                 {isSubmitting ? (
                   <RugbyLoadingMessage
                     runnerImageSrc={loadingRunnerImageSrc}
-                    status={getLoadingStages(loadingPrompt ?? message)[loadingStageIndex] ?? "Thinking it through..."}
+                    status={loadingPrompt ? getLoadingStages(loadingPrompt)[loadingStageIndex] ?? "" : ""}
                   />
                 ) : null}
                 <div ref={bottomRef} className="h-32 sm:h-36" />
@@ -810,13 +1108,21 @@ export function AiChatPage({
         </div>
 
         <div
-          className={`pointer-events-none absolute inset-x-0 z-20 ${
+          className={`pointer-events-none z-20 ${
             hasConversation
-              ? "bottom-0 bg-nrl-bg/98 px-0 pb-4 pt-5 shadow-[0_-24px_36px_rgba(2,5,23,0.92)] sm:pb-6"
-              : "top-[calc(50%-1.75rem)] -translate-y-1/2"
+              ? "fixed inset-x-0 bottom-0 bg-nrl-bg/98 px-0 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-5 shadow-[0_-24px_36px_rgba(2,5,23,0.92)] sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:absolute"
+              : "absolute inset-x-0 top-[calc(50%-1.75rem)] -translate-y-1/2"
           }`}
         >
           <div className={`mx-auto w-full max-w-3xl px-4 sm:px-6 ${hasConversation ? "" : "pb-4 sm:pb-6"}`}>
+            {quotaReached ? (
+              <div className="pointer-events-auto mb-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-xs font-medium text-amber-100">
+                {formatQuotaReachedMessage(plan, chatLimit, chatQuotaPeriodLabel)}{" "}
+                <Link href="/dashboard/billing" className="font-semibold text-nrl-accent underline underline-offset-2">
+                  Upgrade plan
+                </Link>
+              </div>
+            ) : null}
             <div className="pointer-events-auto rounded-[1.75rem] border border-nrl-border bg-nrl-panel/95 p-2 shadow-2xl shadow-black/30 backdrop-blur">
               {pendingImages.length > 0 ? (
                 <div className="mb-2 flex flex-wrap gap-2 px-2 pt-1">
@@ -841,15 +1147,13 @@ export function AiChatPage({
               <div className="flex items-end gap-2">
                 <div ref={uploadMenuRef} className="relative shrink-0">
                   <input
-                    ref={fileInputRef}
+                    ref={bettingFileInputRef}
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     multiple
-                    className="hidden"
-                    onChange={(event) => {
-                      const context = event.currentTarget.dataset.context === "betting" ? "betting" : "fantasy";
-                      void handleScreenshotUpload(event.target.files, context);
-                    }}
+                    className="sr-only"
+                    id="ai-betting-screenshot-upload"
+                    onChange={(event) => void handleScreenshotUpload(event.target.files, "betting")}
                   />
                   <button
                     type="button"
@@ -862,35 +1166,23 @@ export function AiChatPage({
                   </button>
                   {isUploadMenuOpen ? (
                     <div className="absolute bottom-12 left-0 w-72 rounded-2xl border border-nrl-border bg-nrl-panel p-2 shadow-2xl shadow-black/40">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          fileInputRef.current?.setAttribute("data-context", "fantasy");
-                          fileInputRef.current?.click();
-                        }}
+                      <label
+                        htmlFor="ai-betting-screenshot-upload"
                         className="flex w-full items-center gap-3 whitespace-nowrap rounded-xl px-3 py-3 text-left text-sm font-semibold text-nrl-text transition-colors hover:bg-nrl-panel-2"
                       >
                         <UploadGlyph />
-                        <span>Upload fantasy screenshots</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          fileInputRef.current?.setAttribute("data-context", "betting");
-                          fileInputRef.current?.click();
-                        }}
-                        className="mt-1 flex w-full items-center gap-3 whitespace-nowrap rounded-xl px-3 py-3 text-left text-sm font-semibold text-nrl-text transition-colors hover:bg-nrl-panel-2"
-                      >
-                        <UploadGlyph />
                         <span>Upload betting screenshots</span>
-                      </button>
+                      </label>
                     </div>
                   ) : null}
                 </div>
                 <textarea
                   ref={textareaRef}
                   value={message}
-                  onChange={(event) => setMessage(event.target.value)}
+                  onChange={(event) => {
+                    setMessage(event.target.value);
+                    setPendingDirectTool(null);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
@@ -904,7 +1196,7 @@ export function AiChatPage({
                 />
                 <button
                   type="button"
-                  onClick={fillRandomPrompt}
+                  onClick={submitRandomPrompt}
                   disabled={isSubmitting || quotaReached}
                   className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-lg text-nrl-muted transition-colors hover:bg-nrl-panel-2 hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-40"
                   aria-label="Random prompt"
@@ -915,15 +1207,22 @@ export function AiChatPage({
                 <button
                   type="button"
                   onClick={() => {
-                    if (message.trim() || pendingImages.length > 0) {
+                    if (isSubmitting) {
+                      stopCurrentRequest();
+                    } else if (message.trim() || pendingImages.length > 0) {
                       void submitPrompt();
                     }
                   }}
-                  disabled={isSubmitting || (!message.trim() && pendingImages.length === 0) || quotaReached}
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-nrl-accent text-lg font-bold text-nrl-bg transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Send message"
+                  disabled={!isSubmitting && ((!message.trim() && pendingImages.length === 0) || quotaReached)}
+                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-lg font-bold transition-opacity disabled:cursor-not-allowed disabled:opacity-40 ${
+                    isSubmitting
+                      ? "border border-rose-400/45 text-sm text-rose-200 hover:bg-rose-500/15"
+                      : "bg-nrl-accent text-nrl-bg"
+                  }`}
+                  aria-label={isSubmitting ? "Stop response" : "Send message"}
+                  title={isSubmitting ? "Stop response" : "Send message"}
                 >
-                  {isSubmitting ? "..." : "↑"}
+                  {isSubmitting ? "■" : "↑"}
                 </button>
               </div>
             </div>

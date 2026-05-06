@@ -58,7 +58,7 @@ interface YearBoundary {
 
 const ROLLING_WINDOW_OPTIONS = [3, 5, 10, 20] as const
 const MAIN_CHART_WIDTH = 960
-const MAIN_CHART_HEIGHT = 320
+const MAIN_CHART_HEIGHT = 400
 const OVERVIEW_CHART_WIDTH = 960
 const OVERVIEW_CHART_HEIGHT = 100
 const MAIN_PADDING = { top: 14, right: 18, bottom: 28, left: 30 }
@@ -171,7 +171,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   rows,
   defaultStartYear,
   headerTitle = "Fantasy Trend",
-  mainChartClassName,
+  mainChartClassName = "h-[400px] w-full sm:h-[320px]",
   rollingWindow: controlledRollingWindow,
   onRollingWindowChange,
   showInternalControls = true,
@@ -499,11 +499,11 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   const selectionLeft =
     OVERVIEW_PADDING.left +
     (safeStartIndex / overviewCountDenominator) *
-      (OVERVIEW_CHART_WIDTH - OVERVIEW_PADDING.left - OVERVIEW_PADDING.right)
+    (OVERVIEW_CHART_WIDTH - OVERVIEW_PADDING.left - OVERVIEW_PADDING.right)
   const selectionRight =
     OVERVIEW_PADDING.left +
     (safeEndIndex / overviewCountDenominator) *
-      (OVERVIEW_CHART_WIDTH - OVERVIEW_PADDING.left - OVERVIEW_PADDING.right)
+    (OVERVIEW_CHART_WIDTH - OVERVIEW_PADDING.left - OVERVIEW_PADDING.right)
   const selectionWidth = Math.max(selectionRight - selectionLeft, 14)
 
   const handlePointerDown = (mode: DragMode) => (event: ReactPointerEvent<SVGRectElement>) => {
@@ -546,11 +546,11 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   const hoveredValue = hoveredRow ? getValue(hoveredRow) : null
   const hoveredCompareValues = hoveredChartPoint
     ? compareSeriesData.map((series) => ({
-        label: series.label,
-        color: series.color,
-        value: series.selectedValues[hoveredChartPoint.index] ?? null,
-        rolling: series.rollingSelected[hoveredChartPoint.index] ?? null,
-      }))
+      label: series.label,
+      color: series.color,
+      value: series.selectedValues[hoveredChartPoint.index] ?? null,
+      rolling: series.rollingSelected[hoveredChartPoint.index] ?? null,
+    }))
     : []
   const resolvedPrimarySeriesLabel = primarySeriesLabel ?? valueLabel
   const hasHeaderInfo = Boolean(headerTitle) || compareSeriesData.length > 0
@@ -559,250 +559,269 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   return (
     <div className={`border-b border-nrl-border bg-nrl-panel-2/30 ${showTopRow ? "px-2 py-3 sm:px-4 sm:py-4" : "px-0 py-0"}`}>
       {showTopRow ? (
-      <div className={`mb-2 flex flex-wrap items-center gap-2 sm:mb-3 sm:gap-3 ${hasHeaderInfo ? "justify-between" : "justify-end"}`}>
-        {hasHeaderInfo ? (
-          <div>
-            {headerTitle ? (
-              <div className="text-[11px] font-bold uppercase tracking-wide text-nrl-accent sm:text-xs">
-                {headerTitle}
-              </div>
-            ) : null}
-            {compareSeriesData.length > 0 ? (
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-nrl-muted">
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-nrl-accent" />
-                <span>{resolvedPrimarySeriesLabel}</span>
-              </div>
-              {compareSeriesData.map((series) => (
-                <div key={series.label} className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: softenSeriesColor(series.color) }}
-                  />
-                  <span>{series.label}</span>
+        <div className={`mb-2 flex flex-wrap items-center gap-2 sm:mb-3 sm:gap-3 ${hasHeaderInfo ? "justify-between" : "justify-end"}`}>
+          {hasHeaderInfo ? (
+            <div>
+              {headerTitle ? (
+                <div className="text-[11px] font-bold uppercase tracking-wide text-nrl-accent sm:text-xs">
+                  {headerTitle}
                 </div>
-              ))}
+              ) : null}
+              {compareSeriesData.length > 0 ? (
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-nrl-muted">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-nrl-accent" />
+                    <span>{resolvedPrimarySeriesLabel}</span>
+                  </div>
+                  {compareSeriesData.map((series) => (
+                    <div key={series.label} className="flex items-center gap-2">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: softenSeriesColor(series.color) }}
+                      />
+                      <span>{series.label}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            ) : null}
-          </div>
-        ) : null}
-        {showInternalControls ? (
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
-            Rolling Avg
-          </span>
-          <div className="flex items-center overflow-hidden rounded-md border border-nrl-border bg-nrl-panel">
-            {ROLLING_WINDOW_OPTIONS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => handleRollingWindowChange(option)}
-                className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${
-                  rollingWindow === option
-                    ? "bg-nrl-accent/15 text-nrl-accent"
-                    : "text-nrl-muted hover:text-nrl-text"
-                }`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+          ) : null}
+          {showInternalControls ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                Rolling Avg
+              </span>
+              <div className="flex items-center overflow-hidden rounded-md border border-nrl-border bg-nrl-panel">
+                {ROLLING_WINDOW_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => handleRollingWindowChange(option)}
+                    className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${rollingWindow === option
+                      ? "bg-nrl-accent/15 text-nrl-accent"
+                      : "text-nrl-muted hover:text-nrl-text"
+                      }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
-        ) : null}
-      </div>
       ) : null}
 
       <div className={`w-full ${showTopRow ? "" : "px-2 py-3 sm:px-4 sm:py-4"}`}>
         <div className="w-full space-y-2 sm:space-y-3">
           <div className="relative">
-          <svg
-            ref={mainChartRef}
-            viewBox={`0 0 ${MAIN_CHART_WIDTH} ${MAIN_CHART_HEIGHT}`}
-            className={`rolling-trend-main-chart ${mainChartClassName ?? "h-[240px] w-full sm:h-[320px]"}`}
-          >
-            {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
-              const value = selectedMaxScore * tick
-              const y = MAIN_PADDING.top + mainInnerHeight - tick * mainInnerHeight
-              return (
-                <g key={tick}>
-                  <line
-                    x1={MAIN_PADDING.left}
-                    x2={MAIN_CHART_WIDTH - MAIN_PADDING.right}
-                    y1={y}
-                    y2={y}
-                    stroke="rgba(154,164,191,0.18)"
-                    strokeWidth="1"
-                  />
-                  <text
-                    x={MAIN_PADDING.left - 8}
-                    y={y + 3}
-                    textAnchor="end"
-                    className="fill-nrl-muted text-[9px] font-semibold"
-                  >
-                    {Math.round(value)}
-                  </text>
-                </g>
-              )
-            })}
-
-            {selectedYearBoundaries
-              .filter((boundary, index, boundaries) => {
-                if (index === 0) return true
-                const prev = boundaries[index - 1]
-                const currentLocalStart = Math.max(boundary.startIndex, safeStartIndex) - safeStartIndex
-                const prevLocalStart = Math.max(prev.startIndex, safeStartIndex) - safeStartIndex
-                const currentX =
-                  MAIN_PADDING.left +
-                  (currentLocalStart / selectedCountDenominator) * mainInnerWidth
-                const prevX =
-                  MAIN_PADDING.left +
-                  (prevLocalStart / selectedCountDenominator) * mainInnerWidth
-                return currentX - prevX >= 42
-              })
-              .map((boundary) => {
-              const localStartIndex = Math.max(boundary.startIndex, safeStartIndex) - safeStartIndex
-              const x =
-                MAIN_PADDING.left +
-                (localStartIndex / selectedCountDenominator) * mainInnerWidth
-
-              return (
-                <g key={boundary.year}>
-                  <line
-                    x1={x}
-                    x2={x}
-                    y1={MAIN_PADDING.top}
-                    y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
-                    stroke="rgba(154,164,191,0.12)"
-                    strokeWidth="1"
-                  />
-                  <text
-                    x={x + 4}
-                    y={MAIN_CHART_HEIGHT - 8}
-                    className="fill-nrl-muted text-[9px] font-semibold"
-                  >
-                    {boundary.year}
-                  </text>
-                </g>
-              )
-            })}
-
-            {selectedRows.map((row, index) => {
-              const score = getValue(row)
-              const x =
-                MAIN_PADDING.left +
-                (index / selectedCountDenominator) * mainInnerWidth
-              const barHeight = (score / selectedMaxScore) * mainInnerHeight
-              const y = MAIN_PADDING.top + mainInnerHeight - barHeight
-              const seriesOffsetBase = -((totalBarSeries - 1) * groupedBarWidth) / 2
-
-              return (
-                <g key={`${getYearLabel(row)}-${row.Round}-${index}`}>
-                  <rect
-                    x={x + seriesOffsetBase - groupedBarWidth / 2}
-                    y={y}
-                    width={groupedBarWidth}
-                    height={Math.max(barHeight, 1)}
-                    rx="2"
-                    fill={primaryBarColor}
-                  />
-                  {compareSeriesData.map((series, seriesIndex) => {
-                    const compareScore = series.selectedValues[index]
-                    if (compareScore == null) return null
-                    const compareBarHeight = (compareScore / selectedMaxScore) * mainInnerHeight
-                    const compareY = MAIN_PADDING.top + mainInnerHeight - compareBarHeight
-                    const compareX =
-                      x + seriesOffsetBase + (seriesIndex + 1) * groupedBarWidth - groupedBarWidth / 2
-
-                    return (
-                      <rect
-                        key={`${series.label}-${index}`}
-                        x={compareX}
-                        y={compareY}
-                        width={groupedBarWidth}
-                        height={Math.max(compareBarHeight, 1)}
-                        rx="2"
-                        fill={softenSeriesColor(series.color)}
-                      />
-                    )
-                  })}
-                </g>
-              )
-            })}
-
-            <path
-              d={selectedLinePath}
-              fill="none"
-              stroke={primaryLineColor}
-              strokeWidth="2.25"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-            {compareLinePaths.map((series) =>
-              series.path ? (
-                <path
-                  key={series.label}
-                  d={series.path}
-                  fill="none"
-                  stroke={series.color}
-                  strokeWidth="2.1"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-              ) : null
-            )}
-            {hoveredChartPoint ? (
+            <svg
+              ref={mainChartRef}
+              viewBox={`0 0 ${MAIN_CHART_WIDTH} ${MAIN_CHART_HEIGHT}`}
+              className={`rolling-trend-main-chart ${mainChartClassName}`}
+            >
+              {/* Axis Lines (to match the user's red 'L' drawing) */}
               <line
-                x1={
-                  MAIN_PADDING.left +
-                  (hoveredChartPoint.index / selectedCountDenominator) * mainInnerWidth
-                }
-                x2={
-                  MAIN_PADDING.left +
-                  (hoveredChartPoint.index / selectedCountDenominator) * mainInnerWidth
-                }
+                x1={MAIN_PADDING.left}
+                x2={MAIN_PADDING.left}
                 y1={MAIN_PADDING.top}
                 y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
-                stroke="rgba(245,247,255,0.28)"
-                strokeWidth="1"
-                strokeDasharray="4 4"
+                stroke="rgba(154,164,191,0.35)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
               />
-            ) : null}
-            <rect
-              x={MAIN_PADDING.left}
-              y={MAIN_PADDING.top}
-              width={mainInnerWidth}
-              height={mainInnerHeight}
-              fill="transparent"
-              onPointerMove={handleMainChartMove}
-              onPointerLeave={() => setHoveredChartPoint(null)}
-            />
-          </svg>
-          {hoveredRow && hoveredChartPoint ? (
-            <div
-              className="pointer-events-none absolute z-10 max-w-[260px] rounded-md border border-nrl-border bg-[#171717]/95 px-3 py-2 text-[10px] shadow-xl"
-              style={{
-                left: `${hoveredChartPoint.localX}px`,
-                top: `${hoveredChartPoint.localY}px`,
-                transform: shouldFlipTooltip
-                  ? "translate(calc(-100% - 16px), -100%)"
-                  : "translate(16px, -100%)",
-              }}
-            >
-              <div className="font-semibold text-nrl-text">{hoveredTooltipTitle}</div>
-              <div className="mt-1 text-nrl-text">
-                <span style={{ color: compareSeriesData.length > 0 ? "rgba(0, 245, 138, 0.95)" : undefined }}>
-                  {resolvedPrimarySeriesLabel}
-                </span>
-                : {hoveredValue?.toFixed(1) ?? "-"} · {rollingWindow} MA {hoveredRollingValue?.toFixed(1) ?? "-"}
-              </div>
-              {hoveredCompareValues.map((series) => (
-                <div key={series.label} className="mt-1 text-nrl-text">
-                  <span style={{ color: series.color }}>{series.label}</span>:{" "}
-                  {series.value?.toFixed(1) ?? "-"} · {rollingWindow} MA {series.rolling?.toFixed(1) ?? "-"}
+              <line
+                x1={MAIN_PADDING.left}
+                x2={MAIN_CHART_WIDTH - MAIN_PADDING.right}
+                y1={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
+                y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
+                stroke="rgba(154,164,191,0.35)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+
+              {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
+                const value = selectedMaxScore * tick
+                const y = MAIN_PADDING.top + mainInnerHeight - tick * mainInnerHeight
+                return (
+                  <g key={tick}>
+                    <line
+                      x1={MAIN_PADDING.left}
+                      x2={MAIN_CHART_WIDTH - MAIN_PADDING.right}
+                      y1={y}
+                      y2={y}
+                      stroke="rgba(154,164,191,0.18)"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={MAIN_PADDING.left - 8}
+                      y={y + 3}
+                      textAnchor="end"
+                      className="fill-nrl-muted text-[9px] font-semibold"
+                    >
+                      {Math.round(value)}
+                    </text>
+                  </g>
+                )
+              })}
+
+              {selectedYearBoundaries
+                .filter((boundary, index, boundaries) => {
+                  if (index === 0) return true
+                  const prev = boundaries[index - 1]
+                  const currentLocalStart = Math.max(boundary.startIndex, safeStartIndex) - safeStartIndex
+                  const prevLocalStart = Math.max(prev.startIndex, safeStartIndex) - safeStartIndex
+                  const currentX =
+                    MAIN_PADDING.left +
+                    (currentLocalStart / selectedCountDenominator) * mainInnerWidth
+                  const prevX =
+                    MAIN_PADDING.left +
+                    (prevLocalStart / selectedCountDenominator) * mainInnerWidth
+                  return currentX - prevX >= 42
+                })
+                .map((boundary) => {
+                  const localStartIndex = Math.max(boundary.startIndex, safeStartIndex) - safeStartIndex
+                  const x =
+                    MAIN_PADDING.left +
+                    (localStartIndex / selectedCountDenominator) * mainInnerWidth
+
+                  return (
+                    <g key={boundary.year}>
+                      <line
+                        x1={x}
+                        x2={x}
+                        y1={MAIN_PADDING.top}
+                        y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
+                        stroke="rgba(154,164,191,0.12)"
+                        strokeWidth="1"
+                      />
+                      <text
+                        x={x + 4}
+                        y={MAIN_CHART_HEIGHT - 8}
+                        className="fill-nrl-muted text-[9px] font-semibold"
+                      >
+                        {boundary.year}
+                      </text>
+                    </g>
+                  )
+                })}
+
+              {selectedRows.map((row, index) => {
+                const score = getValue(row)
+                const x =
+                  MAIN_PADDING.left +
+                  (index / selectedCountDenominator) * mainInnerWidth
+                const barHeight = (score / selectedMaxScore) * mainInnerHeight
+                const y = MAIN_PADDING.top + mainInnerHeight - barHeight
+                const seriesOffsetBase = -((totalBarSeries - 1) * groupedBarWidth) / 2
+
+                return (
+                  <g key={`${getYearLabel(row)}-${row.Round}-${index}`}>
+                    <rect
+                      x={x + seriesOffsetBase - groupedBarWidth / 2}
+                      y={y}
+                      width={groupedBarWidth}
+                      height={Math.max(barHeight, 1)}
+                      rx="2"
+                      fill={primaryBarColor}
+                    />
+                    {compareSeriesData.map((series, seriesIndex) => {
+                      const compareScore = series.selectedValues[index]
+                      if (compareScore == null) return null
+                      const compareBarHeight = (compareScore / selectedMaxScore) * mainInnerHeight
+                      const compareY = MAIN_PADDING.top + mainInnerHeight - compareBarHeight
+                      const compareX =
+                        x + seriesOffsetBase + (seriesIndex + 1) * groupedBarWidth - groupedBarWidth / 2
+
+                      return (
+                        <rect
+                          key={`${series.label}-${index}`}
+                          x={compareX}
+                          y={compareY}
+                          width={groupedBarWidth}
+                          height={Math.max(compareBarHeight, 1)}
+                          rx="2"
+                          fill={softenSeriesColor(series.color)}
+                        />
+                      )
+                    })}
+                  </g>
+                )
+              })}
+
+              <path
+                d={selectedLinePath}
+                fill="none"
+                stroke={primaryLineColor}
+                strokeWidth="2.25"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {compareLinePaths.map((series) =>
+                series.path ? (
+                  <path
+                    key={series.label}
+                    d={series.path}
+                    fill="none"
+                    stroke={series.color}
+                    strokeWidth="2.1"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                ) : null
+              )}
+              {hoveredChartPoint ? (
+                <line
+                  x1={
+                    MAIN_PADDING.left +
+                    (hoveredChartPoint.index / selectedCountDenominator) * mainInnerWidth
+                  }
+                  x2={
+                    MAIN_PADDING.left +
+                    (hoveredChartPoint.index / selectedCountDenominator) * mainInnerWidth
+                  }
+                  y1={MAIN_PADDING.top}
+                  y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
+                  stroke="rgba(245,247,255,0.28)"
+                  strokeWidth="1"
+                  strokeDasharray="4 4"
+                />
+              ) : null}
+              <rect
+                x={MAIN_PADDING.left}
+                y={MAIN_PADDING.top}
+                width={mainInnerWidth}
+                height={mainInnerHeight}
+                fill="transparent"
+                onPointerMove={handleMainChartMove}
+                onPointerLeave={() => setHoveredChartPoint(null)}
+              />
+            </svg>
+            {hoveredRow && hoveredChartPoint ? (
+              <div
+                className="pointer-events-none absolute z-10 max-w-[260px] rounded-md border border-nrl-border bg-[#171717]/95 px-3 py-2 text-[10px] shadow-xl"
+                style={{
+                  left: `${hoveredChartPoint.localX}px`,
+                  top: `${hoveredChartPoint.localY}px`,
+                  transform: shouldFlipTooltip
+                    ? "translate(calc(-100% - 16px), -100%)"
+                    : "translate(16px, -100%)",
+                }}
+              >
+                <div className="font-semibold text-nrl-text">{hoveredTooltipTitle}</div>
+                <div className="mt-1 text-nrl-text">
+                  <span style={{ color: compareSeriesData.length > 0 ? "rgba(0, 245, 138, 0.95)" : undefined }}>
+                    {resolvedPrimarySeriesLabel}
+                  </span>
+                  : {hoveredValue?.toFixed(1) ?? "-"} · {rollingWindow} MA {hoveredRollingValue?.toFixed(1) ?? "-"}
                 </div>
-              ))}
-            </div>
-          ) : null}
+                {hoveredCompareValues.map((series) => (
+                  <div key={series.label} className="mt-1 text-nrl-text">
+                    <span style={{ color: series.color }}>{series.label}</span>:{" "}
+                    {series.value?.toFixed(1) ?? "-"} · {rollingWindow} MA {series.rolling?.toFixed(1) ?? "-"}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <svg
@@ -824,7 +843,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
               const x =
                 OVERVIEW_PADDING.left +
                 (midpoint / overviewCountDenominator) *
-                  (OVERVIEW_CHART_WIDTH - OVERVIEW_PADDING.left - OVERVIEW_PADDING.right)
+                (OVERVIEW_CHART_WIDTH - OVERVIEW_PADDING.left - OVERVIEW_PADDING.right)
               return (
                 <text
                   key={boundary.year}

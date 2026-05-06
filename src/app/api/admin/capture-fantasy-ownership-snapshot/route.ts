@@ -4,7 +4,7 @@ import { fetchFantasyPlayersSnapshot } from "@/lib/fantasy/nrl";
 
 export const dynamic = "force-dynamic";
 
-const SNAPSHOT_TYPE = "weekly_sunday_11pm_brisbane";
+const SNAPSHOT_TYPE = "weekly_monday_10am_brisbane";
 
 interface OwnershipSnapshotPoint {
   playerId: number;

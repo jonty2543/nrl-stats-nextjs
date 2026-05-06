@@ -83,6 +83,40 @@ function normaliseTeamKey(value: unknown): string {
     .trim();
 }
 
+function relevantOutsTeamGroup(value: string | null | undefined): string | null {
+  const key = normaliseTeamKey(value);
+  if (!key) return null;
+  const aliases: Array<[string, string[]]> = [
+    ["broncos", ["broncos", "brisbane broncos"]],
+    ["bulldogs", ["bulldogs", "canterbury bankstown bulldogs", "canterbury bulldogs"]],
+    ["cowboys", ["cowboys", "north queensland cowboys"]],
+    ["dragons", ["dragons", "st george illawarra dragons"]],
+    ["dolphins", ["dolphins", "the dolphins"]],
+    ["eels", ["eels", "parramatta eels"]],
+    ["knights", ["knights", "newcastle knights"]],
+    ["panthers", ["panthers", "penrith panthers"]],
+    ["rabbitohs", ["rabbitohs", "south sydney rabbitohs", "souths"]],
+    ["raiders", ["raiders", "canberra raiders"]],
+    ["roosters", ["roosters", "sydney roosters"]],
+    ["sea eagles", ["sea eagles", "manly sea eagles", "manly warringah sea eagles", "manly"]],
+    ["sharks", ["sharks", "cronulla sharks", "cronulla sutherland sharks"]],
+    ["storm", ["storm", "melbourne storm"]],
+    ["tigers", ["tigers", "wests tigers"]],
+    ["titans", ["titans", "gold coast titans"]],
+    ["warriors", ["warriors", "new zealand warriors", "nz warriors"]],
+  ];
+  for (const [group, names] of aliases) {
+    if (names.includes(key)) return group;
+  }
+  return key;
+}
+
+function isRelevantOutsTeamMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  const leftGroup = relevantOutsTeamGroup(left);
+  const rightGroup = relevantOutsTeamGroup(right);
+  return Boolean(leftGroup && rightGroup && leftGroup === rightGroup);
+}
+
 function toNullableString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -1369,11 +1403,10 @@ export async function fetchRelevantCasualtyWardOuts({
   let query = supabase
     .from("casualty_ward")
     .select("player, team, position, injury, return_date, games, average_fantasy, source_url, scraped_at")
-    .ilike("team", teamName)
     .gte("games", 2)
     .gte("average_fantasy", 30)
     .order("average_fantasy", { ascending: false })
-    .limit(30);
+    .limit(200);
 
   if (excludePlayer?.trim()) {
     query = query.neq("player", excludePlayer.trim());
@@ -1397,7 +1430,7 @@ export async function fetchRelevantCasualtyWardOuts({
       sourceUrl: toNullableString(row.source_url),
       scrapedAt: toNullableString(row.scraped_at),
     }))
-    .filter((row) => isRelevantOutsPositionMatch(row.position, positionName))
+    .filter((row) => isRelevantOutsTeamMatch(row.team, teamName) && isRelevantOutsPositionMatch(row.position, positionName))
     .slice(0, 8);
 }
 

@@ -587,6 +587,40 @@ function isRelevantOutsPositionMatch(left: string | null | undefined, right: str
   return Boolean(leftGroup && rightGroup && leftGroup === rightGroup)
 }
 
+function relevantOutsTeamGroup(value: string | null | undefined): string | null {
+  const key = normaliseTeamKey(value)
+  if (!key) return null
+  const aliases: Array<[string, string[]]> = [
+    ["broncos", ["broncos", "brisbane broncos"]],
+    ["bulldogs", ["bulldogs", "canterbury bankstown bulldogs", "canterbury bulldogs"]],
+    ["cowboys", ["cowboys", "north queensland cowboys"]],
+    ["dragons", ["dragons", "st george illawarra dragons"]],
+    ["dolphins", ["dolphins", "the dolphins"]],
+    ["eels", ["eels", "parramatta eels"]],
+    ["knights", ["knights", "newcastle knights"]],
+    ["panthers", ["panthers", "penrith panthers"]],
+    ["rabbitohs", ["rabbitohs", "south sydney rabbitohs", "souths"]],
+    ["raiders", ["raiders", "canberra raiders"]],
+    ["roosters", ["roosters", "sydney roosters"]],
+    ["sea eagles", ["sea eagles", "manly sea eagles", "manly warringah sea eagles", "manly"]],
+    ["sharks", ["sharks", "cronulla sharks", "cronulla sutherland sharks"]],
+    ["storm", ["storm", "melbourne storm"]],
+    ["tigers", ["tigers", "wests tigers"]],
+    ["titans", ["titans", "gold coast titans"]],
+    ["warriors", ["warriors", "new zealand warriors", "nz warriors"]],
+  ]
+  for (const [group, names] of aliases) {
+    if (names.includes(key)) return group
+  }
+  return key
+}
+
+function isRelevantOutsTeamMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  const leftGroup = relevantOutsTeamGroup(left)
+  const rightGroup = relevantOutsTeamGroup(right)
+  return Boolean(leftGroup && rightGroup && leftGroup === rightGroup)
+}
+
 function normaliseProjectionPlayerName(value: string | null | undefined): string {
   return String(value ?? "")
     .toLowerCase()
@@ -2141,7 +2175,7 @@ export function FantasyDashboard({
           ? relevantOutCandidates
             .filter(
               (row) =>
-                normaliseTeamKey(row.team) === normaliseTeamKey(lineupRole.team) &&
+                isRelevantOutsTeamMatch(row.team, lineupRole.team) &&
                 isRelevantOutsPositionMatch(row.position, lineupRole.position) &&
                 !namedLineupPlayers.has(normaliseProjectionPlayerName(row.player))
             )

@@ -1075,7 +1075,8 @@ function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
             key={`${row.player}-${row.position ?? "position"}-${index}`}
             className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm text-nrl-text"
           >
-            {row.player}: {row.injury ?? "TBC"}, return {row.returnDate ?? "TBC"}
+            <span className="mr-1 text-amber-300" aria-hidden="true">⚠</span>
+            {row.player} {row.injury ?? "TBC"} {row.returnDate ?? "TBC"}
           </div>
         ))}
       </div>

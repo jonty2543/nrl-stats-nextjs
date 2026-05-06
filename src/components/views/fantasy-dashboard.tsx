@@ -1060,6 +1060,20 @@ function CasualtyWardPills({ rows }: { rows: CasualtyWardRecord[] }) {
   )
 }
 
+function formatRelevantOutReturnTag(value: string | null): string {
+  const trimmed = value?.trim()
+  if (!trimmed) return "TBC"
+  const round = trimmed.match(/^round\s+(.+)$/i)
+  if (round?.[1]) return `R${round[1].trim()}`
+  return trimmed
+}
+
+function formatRelevantOutTag(rows: CasualtyWardRecord[]): string {
+  const [row] = rows
+  if (!row) return ""
+  return `${row.player} ${formatRelevantOutReturnTag(row.returnDate)}`
+}
+
 function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
   if (rows.length === 0) return null
 
@@ -1075,8 +1089,7 @@ function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
             key={`${row.player}-${row.position ?? "position"}-${index}`}
             className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm text-nrl-text"
           >
-            <span className="mr-1 text-amber-300" aria-hidden="true">⚠</span>
-            {row.player} {row.injury ?? "TBC"} {row.returnDate ?? "TBC"}
+            {row.player}: {row.injury ?? "TBC"}, return {row.returnDate ?? "TBC"}
           </div>
         ))}
       </div>
@@ -3775,8 +3788,11 @@ export function FantasyDashboard({
                           <div className="flex min-w-0 items-center gap-1.5">
                             <div className="truncate text-[13px] font-bold text-nrl-text">{row.player.name}</div>
                             {row.relevantOuts.length > 0 ? (
-                              <span className="shrink-0 rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300">
-                                Relevant outs
+                              <span
+                                className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300"
+                                title={formatRelevantOutTag(row.relevantOuts)}
+                              >
+                                {formatRelevantOutTag(row.relevantOuts)}
                               </span>
                             ) : null}
                           </div>
@@ -3887,8 +3903,11 @@ export function FantasyDashboard({
                               {row.player.name}
                             </span>
                             {row.relevantOuts.length > 0 ? (
-                              <span className="shrink-0 rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300">
-                                Relevant outs
+                              <span
+                                className="max-w-[7rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300"
+                                title={formatRelevantOutTag(row.relevantOuts)}
+                              >
+                                {formatRelevantOutTag(row.relevantOuts)}
                               </span>
                             ) : null}
                           </div>

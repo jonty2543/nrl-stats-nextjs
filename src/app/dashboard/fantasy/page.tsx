@@ -10,7 +10,7 @@ import {
   fetchLatestFantasyOwnershipBaselineSnapshot,
   fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
-import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats, fetchRelevantCasualtyWardOutCandidates } from "@/lib/supabase/queries"
+import { fetchAvailableYears, fetchOriginChances, fetchPlayerImages, fetchPlayerStats, fetchRelevantCasualtyWardOutCandidates } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -34,7 +34,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticles, relevantOutCandidates, draw2026Data] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticles, relevantOutCandidates, draw2026Data, originChances] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchLineupsProjectionsByPlayerId(),
@@ -44,6 +44,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
     fetchApprovedArticles(),
     fetchRelevantCasualtyWardOutCandidates(),
     loadDraw2026Data().catch(() => null),
+    fetchOriginChances(),
   ])
   const fantasyProjectionArticle = approvedArticles.find((article) => {
     const title = normaliseArticleTitle(article.title)
@@ -78,6 +79,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
       playerImages={playerImages}
       relevantOutCandidates={relevantOutCandidates}
       draw2026Data={draw2026Data}
+      originChances={originChances}
       fantasyProjectionArticle={
         fantasyProjectionArticle
           ? {

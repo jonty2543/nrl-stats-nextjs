@@ -66,6 +66,12 @@ export interface CasualtyWardRecord {
   scrapedAt: string | null;
 }
 
+export interface OriginChanceRecord {
+  player: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -1455,6 +1461,26 @@ export async function fetchRelevantCasualtyWardOutCandidates(): Promise<Casualty
     averageFantasy: toFiniteNumber(row.average_fantasy),
     sourceUrl: toNullableString(row.source_url),
     scrapedAt: toNullableString(row.scraped_at),
+  }));
+}
+
+export async function fetchOriginChances(): Promise<OriginChanceRecord[]> {
+  const supabase = createServerSupabaseClient("nrl");
+  const { data, error } = await supabase
+    .from("origin_chances")
+    .select("player, created_at, updated_at")
+    .order("player", { ascending: true })
+    .limit(1000);
+
+  if (error) {
+    console.warn("Unable to fetch Origin chance rows; using empty set.", error);
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    player: toNullableString(row.player) ?? "",
+    createdAt: toNullableString(row.created_at),
+    updatedAt: toNullableString(row.updated_at),
   }));
 }
 

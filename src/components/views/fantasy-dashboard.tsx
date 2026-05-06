@@ -13,7 +13,7 @@ import type {
   LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import { PLAYER_STATS } from "@/lib/data/constants"
-import type { CasualtyWardRecord, PlayerImageRecord } from "@/lib/supabase/queries"
+import type { CasualtyWardRecord, OriginChanceRecord, PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   applyFantasyBreakEvenOffset,
   FANTASY_POSITION_MAP,
@@ -75,6 +75,7 @@ interface FantasyDashboardProps {
   casualtyWardRows?: CasualtyWardRecord[]
   relevantOuts?: CasualtyWardRecord[]
   relevantOutCandidates?: CasualtyWardRecord[]
+  originChances?: OriginChanceRecord[]
   availableYears: string[]
   defaultYears: string[]
   initialPlayerStats: PlayerStat[]
@@ -162,6 +163,7 @@ interface AllPlayersTableRow {
   relevantOuts: CasualtyWardRecord[]
   nextMajorByeRound: number | null
   playsNextMajorBye: boolean | null
+  originChance: boolean
   gamesPlayed: number
 }
 
@@ -1100,18 +1102,30 @@ function PlayerContextTags({
   relevantOuts,
   nextMajorByeRound,
   playsNextMajorBye,
+  originChance,
   className = "",
 }: {
   relevantOuts: CasualtyWardRecord[]
   nextMajorByeRound: number | null
   playsNextMajorBye: boolean | null
+  originChance: boolean
   className?: string
 }) {
   const showByeTag = nextMajorByeRound !== null && playsNextMajorBye !== null
-  if (!showByeTag && relevantOuts.length === 0) return null
+  if (!showByeTag && !originChance && relevantOuts.length === 0) return null
 
   return (
     <div className={`flex min-w-0 flex-wrap items-center gap-1.5 ${className}`}>
+      {originChance ? (
+        <span
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-orange-400/35 bg-orange-400/15 px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-orange-200"
+          title="Origin Chance"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logos/SOO.webp" alt="" className="h-3 w-3 rounded-sm object-contain" loading="lazy" />
+          Origin Chance
+        </span>
+      ) : null}
       {showByeTag ? (
         <span
           className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
@@ -1573,6 +1587,7 @@ export function FantasyDashboard({
   casualtyWardRows = [],
   relevantOuts = [],
   relevantOutCandidates = [],
+  originChances = [],
   lineupsProjections,
   availableYears,
   defaultYears,
@@ -2287,6 +2302,11 @@ export function FantasyDashboard({
     return map
   }, [fantasyPlayers, ownershipBaselineByPlayerId])
 
+  const originChancePlayerNames = useMemo(
+    () => new Set(originChances.map((row) => normaliseProjectionPlayerName(row.player)).filter(Boolean)),
+    [originChances]
+  )
+
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
     const rows2026 = allData.filter((row) => row.Year === ALL_PLAYERS_STATS_YEAR)
     const localNames = Array.from(new Set(rows2026.map((row) => row.Name))).sort()
@@ -2373,10 +2393,11 @@ export function FantasyDashboard({
         relevantOuts: relevantOutRows,
         nextMajorByeRound,
         playsNextMajorBye,
+        originChance: originChancePlayerNames.has(normaliseProjectionPlayerName(player.name)),
         gamesPlayed: playerRows.length || player.gamesPlayed || 0,
       }
     })
-  }, [allData, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
+  }, [allData, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
 
   const fantasyAnalyticsPoints = useMemo<FantasyAnalyticsPoint[]>(
     () =>
@@ -3861,6 +3882,7 @@ export function FantasyDashboard({
                               relevantOuts={row.relevantOuts}
                               nextMajorByeRound={row.nextMajorByeRound}
                               playsNextMajorBye={row.playsNextMajorBye}
+                              originChance={row.originChance}
                             />
                           </div>
                         </div>
@@ -3975,6 +3997,7 @@ export function FantasyDashboard({
                             relevantOuts={row.relevantOuts}
                             nextMajorByeRound={row.nextMajorByeRound}
                             playsNextMajorBye={row.playsNextMajorBye}
+                            originChance={row.originChance}
                           />
                         </div>
                       </td>

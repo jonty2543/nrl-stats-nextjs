@@ -1653,7 +1653,7 @@ export function FantasyDashboard({
     column: "weeklyChange",
     direction: "desc",
   })
-  const [allPlayersMobileView, setAllPlayersMobileView] = useState<"cards" | "table">("cards")
+  const [allPlayersView, setAllPlayersView] = useState<"cards" | "table">("cards")
   const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
   const [allPlayersByeFilter, setAllPlayersByeFilter] = useState(ALL_PLAYERS_BYE_FILTER_ALL)
   const showFantasyAnalytics = initialShowFantasyAnalytics
@@ -2968,14 +2968,14 @@ export function FantasyDashboard({
         </section>
 
         {showOwnedCards ? (
-          <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.46fr)_minmax(0,1fr)] xl:items-stretch">
+          <div className="grid gap-5 xl:grid-cols-4 xl:items-stretch">
             <button
               type="button"
               onClick={() => {
                 setIsTradeSuggestorOpen(true)
                 setTradeSuggestorError(null)
               }}
-              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/40 bg-[linear-gradient(135deg,#6d28d9,#a21caf)] px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(88,28,135,0.34)] transition-colors hover:border-violet-200 hover:bg-[linear-gradient(135deg,#7c3aed,#c026d3)] xl:order-2 xl:self-start"
+              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/40 bg-[linear-gradient(135deg,#6d28d9,#a21caf)] px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(88,28,135,0.34)] transition-colors hover:border-violet-200 hover:bg-[linear-gradient(135deg,#7c3aed,#c026d3)] xl:order-2 xl:min-h-[88px]"
             >
               <span className="inline-flex items-center gap-2">
                 <SparkAiIcon className="h-5 w-5 text-violet-100" />
@@ -2985,11 +2985,11 @@ export function FantasyDashboard({
                 Submit screenshots to get personalised trades
               </span>
             </button>
-            <div className="grid grid-cols-8 items-center gap-4 xl:order-1">
+            <div className="grid grid-cols-8 items-center gap-4 xl:contents">
               <Link
                 href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
                 onClick={() => setIsFantasyAnalyticsPending(true)}
-                className={`relative col-span-8 flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] ${
+                className={`relative col-span-8 flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] xl:order-1 xl:col-span-1 xl:min-h-[88px] ${
                   showFantasyAnalytics
                     ? "border-nrl-accent bg-[#20284a]"
                     : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
@@ -3008,12 +3008,12 @@ export function FantasyDashboard({
                   </span>
                 ) : null}
               </Link>
-              <div className="group col-span-5 self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))]">
+              <div className="group col-span-5 self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))] xl:order-3 xl:col-span-1">
                 {hasFantasyPlotAccess ? (
                   <Link
                     href="/dashboard/fantasy/draft"
                     onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative inline-flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center leading-tight text-white transition-colors hover:text-white group-hover:bg-[#29335f]"
+                    className="relative inline-flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center leading-tight text-white transition-colors hover:text-white group-hover:bg-[#29335f] xl:min-h-[76px]"
                   >
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
                       <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
@@ -3032,7 +3032,7 @@ export function FantasyDashboard({
                   <Link
                     href="/dashboard/fantasy/draft"
                     onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center transition-colors group-hover:bg-[#29335f]"
+                    className="relative flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center transition-colors group-hover:bg-[#29335f] xl:min-h-[76px]"
                   >
                     <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold leading-tight text-white">
                       <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
@@ -3053,7 +3053,7 @@ export function FantasyDashboard({
                 <Link
                   href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
                   aria-label={`Read ${fantasyProjectionArticle.title}`}
-                  className="group relative col-span-3 flex min-h-[68px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70"
+                  className="group relative col-span-3 flex min-h-[68px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 xl:order-4 xl:col-span-1 xl:min-h-[88px]"
                 >
                   <div className={`absolute inset-0 grid ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                     {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
@@ -3068,7 +3068,7 @@ export function FantasyDashboard({
                     ))}
                   </div>
                   <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.95),rgba(14,19,48,0.74),rgba(14,19,48,0.45))]" />
-                  <div className="relative flex h-full min-h-[68px] w-full items-center justify-between gap-3 px-5 py-2.5">
+                  <div className="relative flex h-full min-h-[68px] w-full items-center justify-between gap-3 px-5 py-2.5 xl:min-h-[88px]">
                     <div className="min-w-0">
                       <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent">
                         Article
@@ -3738,14 +3738,14 @@ export function FantasyDashboard({
               <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">All Players</div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="inline-flex rounded-full border border-nrl-border bg-nrl-panel-2 p-1 md:hidden">
+              <div className="inline-flex rounded-full border border-nrl-border bg-nrl-panel-2 p-1">
                 {(["cards", "table"] as const).map((view) => (
                   <button
                     key={view}
                     type="button"
-                    onClick={() => setAllPlayersMobileView(view)}
+                    onClick={() => setAllPlayersView(view)}
                     className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                      allPlayersMobileView === view
+                      allPlayersView === view
                         ? "bg-nrl-accent text-[#07131f]"
                         : "text-nrl-muted hover:text-nrl-text"
                     }`}
@@ -3772,7 +3772,7 @@ export function FantasyDashboard({
               </div>
             </div>
           </div>
-          <div className={`${allPlayersMobileView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2 md:hidden`}>
+          <div className={`${allPlayersView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2`}>
             <div className="flex items-end gap-2">
               <div className="w-40">
                 <Select
@@ -3804,7 +3804,7 @@ export function FantasyDashboard({
               </button>
             </div>
           </div>
-          <div className={`${allPlayersMobileView === "cards" ? "block" : "hidden"} max-h-[760px] space-y-2 overflow-y-auto p-2.5 md:hidden`}>
+          <div className={`${allPlayersView === "cards" ? "grid" : "hidden"} max-h-[760px] grid-cols-1 gap-2 overflow-y-auto p-2.5 md:grid-cols-2`}>
             {sortedAllPlayersTableRows.length === 0 ? (
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
                 No {ALL_PLAYERS_STATS_YEAR} player stats available.
@@ -3954,7 +3954,7 @@ export function FantasyDashboard({
               })
             )}
           </div>
-          <div className={`${allPlayersMobileView === "table" ? "block" : "hidden"} h-[756px] overflow-y-auto overflow-x-auto md:block`}>
+          <div className={`${allPlayersView === "table" ? "block" : "hidden"} h-[756px] overflow-y-auto overflow-x-auto`}>
             <table className="w-full min-w-[1100px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>

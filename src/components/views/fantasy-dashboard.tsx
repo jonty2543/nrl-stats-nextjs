@@ -3792,7 +3792,7 @@ export function FantasyDashboard({
                                 className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300"
                                 title={formatRelevantOutTag(row.relevantOuts)}
                               >
-                                {formatRelevantOutTag(row.relevantOuts)}
+                                <span aria-hidden="true">⚠ </span>{formatRelevantOutTag(row.relevantOuts)}
                               </span>
                             ) : null}
                           </div>
@@ -3907,7 +3907,7 @@ export function FantasyDashboard({
                                 className="max-w-[7rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-amber-300"
                                 title={formatRelevantOutTag(row.relevantOuts)}
                               >
-                                {formatRelevantOutTag(row.relevantOuts)}
+                                <span aria-hidden="true">⚠ </span>{formatRelevantOutTag(row.relevantOuts)}
                               </span>
                             ) : null}
                           </div>

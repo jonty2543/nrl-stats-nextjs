@@ -7,6 +7,7 @@ interface MultiSelectProps {
   value: string[];
   options: string[];
   onChange: (value: string[]) => void;
+  placeholder?: string;
   disabledOptions?: Record<string, string>;
   openFooter?: ReactNode;
 }
@@ -16,6 +17,7 @@ export function MultiSelect({
   value,
   options,
   onChange,
+  placeholder = "Select year(s)",
   disabledOptions,
   openFooter,
 }: MultiSelectProps) {
@@ -87,7 +89,7 @@ export function MultiSelect({
           <div className="flex items-center justify-between gap-1">
             <div className="flex flex-wrap gap-0.5">
               {selectedOptions.length === 0 ? (
-                <span className="text-[10px] text-nrl-muted">Select year(s)</span>
+                <span className="text-[10px] text-nrl-muted">{placeholder}</span>
               ) : (
                 <>
                   {previewOptions.map((opt) => (

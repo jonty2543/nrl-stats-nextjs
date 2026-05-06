@@ -30,6 +30,7 @@ import {
 } from "@/lib/data/transform"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Select } from "@/components/ui/select"
+import { MultiSelect } from "@/components/ui/multi-select"
 import { PillRadio } from "@/components/ui/pill-radio"
 import { YearRangeSlider } from "@/components/ui/year-range-slider"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
@@ -171,6 +172,7 @@ interface FantasyAnalyticsPoint {
   name: string
   position: string
   positionLabels: string[]
+  byeTag: string | null
   price: number | null
   pricedAt: number | null
   avg2026: number | null
@@ -196,6 +198,7 @@ interface GlobalStatVsFantasyPoint {
   name: string
   position: string
   positionLabels: string[]
+  byeTag: string | null
   statValue: number
   fantasyAvg: number
 }
@@ -249,7 +252,6 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
   { key: "change", label: "Weekly Deltas" },
   { key: "ownership", label: "Total Ownership" },
 ]
-const ALL_PLAYERS_BYE_FILTER_ALL = "All Bye Tags"
 const TRADE_SCREENSHOT_SLOTS: Array<{ key: TradeScreenshotSlot; label: string; hint: string }> = [
   { key: "starters", label: "Starters", hint: "Selected 13 / field view" },
   { key: "bench", label: "Bench", hint: "Interchange + emergencies" },
@@ -674,10 +676,12 @@ function isRelevantOutCandidate({
 }
 
 function normaliseProjectionPlayerName(value: string | null | undefined): string {
-  return String(value ?? "")
+  const key = String(value ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
+  if (key === "api koroisau") return "apisai koroisau"
+  return key
 }
 
 function isFantasyPlayerUnavailableForFallback(player: FantasyPlayerSnapshot): boolean {
@@ -1659,7 +1663,7 @@ export function FantasyDashboard({
   })
   const [allPlayersView, setAllPlayersView] = useState<"cards" | "table">("cards")
   const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
-  const [allPlayersByeFilter, setAllPlayersByeFilter] = useState(ALL_PLAYERS_BYE_FILTER_ALL)
+  const [allPlayersByeFilters, setAllPlayersByeFilters] = useState<string[]>([])
   const showFantasyAnalytics = initialShowFantasyAnalytics
   const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("projection")
   const [fantasyAnalyticsPositionFilter, setFantasyAnalyticsPositionFilter] = useState("All Positions")
@@ -2425,6 +2429,7 @@ export function FantasyDashboard({
         name: row.player.name,
         position: row.player.positionLabel,
         positionLabels: row.player.positionLabels,
+        byeTag: formatNextMajorByeTag(row.nextMajorByeRound, row.playsNextMajorBye),
         price: row.player.cost,
         pricedAt: row.player.pricedAt,
         avg2026: row.avg2026,
@@ -2442,6 +2447,7 @@ export function FantasyDashboard({
         return (
           (fantasyAnalyticsPositionFilter === "All Positions" ||
             point.positionLabels.includes(fantasyAnalyticsPositionFilter)) &&
+          (allPlayersByeFilters.length === 0 || (point.byeTag !== null && allPlayersByeFilters.includes(point.byeTag))) &&
           point.pricedAt !== null &&
           metricValue !== null &&
           metricValue > 0 &&
@@ -2450,7 +2456,7 @@ export function FantasyDashboard({
         )
       })
     },
-    [fantasyAnalyticsMetric, fantasyAnalyticsPoints, fantasyAnalyticsPositionFilter]
+    [allPlayersByeFilters, fantasyAnalyticsMetric, fantasyAnalyticsPoints, fantasyAnalyticsPositionFilter]
   )
   const fantasyAnalyticsMetricOption =
     FANTASY_ANALYTICS_METRICS.find((metric) => metric.key === fantasyAnalyticsMetric) ?? FANTASY_ANALYTICS_METRICS[0]
@@ -2481,6 +2487,7 @@ export function FantasyDashboard({
         name: row.player.name,
         position: row.player.positionLabel,
         positionLabels: row.player.positionLabels,
+        byeTag: formatNextMajorByeTag(row.nextMajorByeRound, row.playsNextMajorBye),
         statValue,
         fantasyAvg: row.avg2026,
       }]
@@ -2488,10 +2495,13 @@ export function FantasyDashboard({
   }, [allData, allPlayersTableRows, selectedGlobalStatVsFantasyOption.key])
   const filteredGlobalStatVsFantasyPoints = useMemo(
     () =>
-      globalStatVsFantasyPositionFilter === "All Positions"
-        ? globalStatVsFantasyPoints
-        : globalStatVsFantasyPoints.filter((point) => point.positionLabels.includes(globalStatVsFantasyPositionFilter)),
-    [globalStatVsFantasyPoints, globalStatVsFantasyPositionFilter]
+      globalStatVsFantasyPoints.filter(
+        (point) =>
+          (globalStatVsFantasyPositionFilter === "All Positions" ||
+            point.positionLabels.includes(globalStatVsFantasyPositionFilter)) &&
+          (allPlayersByeFilters.length === 0 || (point.byeTag !== null && allPlayersByeFilters.includes(point.byeTag)))
+      ),
+    [allPlayersByeFilters, globalStatVsFantasyPoints, globalStatVsFantasyPositionFilter]
   )
   const globalStatVsFantasyCorrelation = useMemo(() => {
     if (filteredGlobalStatVsFantasyPoints.length < 2) return null
@@ -2538,9 +2548,12 @@ export function FantasyDashboard({
       allPlayersPositionFilter === "All Positions"
         ? allPlayersTableRows
         : allPlayersTableRows.filter((row) => row.player.positionLabels.includes(allPlayersPositionFilter))
-    if (allPlayersByeFilter !== ALL_PLAYERS_BYE_FILTER_ALL) {
+    if (allPlayersByeFilters.length > 0) {
       filteredRows = filteredRows.filter(
-        (row) => formatNextMajorByeTag(row.nextMajorByeRound, row.playsNextMajorBye) === allPlayersByeFilter
+        (row) => {
+          const tag = formatNextMajorByeTag(row.nextMajorByeRound, row.playsNextMajorBye)
+          return tag !== null && allPlayersByeFilters.includes(tag)
+        }
       )
     }
     const effectiveSort =
@@ -2581,10 +2594,10 @@ export function FantasyDashboard({
 
       return String(aValue).localeCompare(String(bValue)) * direction
     })
-  }, [allPlayersByeFilter, allPlayersPositionFilter, allPlayersSort, allPlayersTableRows])
+  }, [allPlayersByeFilters, allPlayersPositionFilter, allPlayersSort, allPlayersTableRows])
 
   const allPlayersByeFilterOptions = useMemo(() => {
-    const options = new Set<string>([ALL_PLAYERS_BYE_FILTER_ALL])
+    const options = new Set<string>()
     for (const row of allPlayersTableRows) {
       const label = formatNextMajorByeTag(row.nextMajorByeRound, row.playsNextMajorBye)
       if (label) options.add(label)
@@ -3768,12 +3781,21 @@ export function FantasyDashboard({
                   onChange={setAllPlayersPositionFilter}
                 />
               </div>
-              <div className="min-w-[116px]">
-                <Select
+              <div className="min-w-[150px]">
+                <MultiSelect
                   label=""
-                  value={allPlayersByeFilter}
+                  value={allPlayersByeFilters}
                   options={allPlayersByeFilterOptions}
-                  onChange={setAllPlayersByeFilter}
+                  onChange={(value) => {
+                    setAllPlayersByeFilters(value)
+                    setFantasyAnalyticsZoom(1)
+                    setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
+                    setSelectedFantasyAnalyticsPoint(null)
+                    setGlobalStatVsFantasyZoom(1)
+                    setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
+                    setSelectedGlobalStatVsFantasyPoint(null)
+                  }}
+                  placeholder="All Tags"
                 />
               </div>
             </div>

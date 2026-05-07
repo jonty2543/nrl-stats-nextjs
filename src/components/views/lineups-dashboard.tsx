@@ -228,8 +228,8 @@ function PlayerMetric({
 }
 
 function playerSlot(player: LineupPlayer): Slot | null {
-  if (!player.isOnField) return null
   const position = player.position.toLowerCase()
+  if (position.includes("interchange") || position.includes("reserve")) return null
   if (player.number === 1 || position.includes("fullback")) return "FB"
   if (player.number === 6) return player.side === "right" ? "HLF" : "FE"
   if (player.number === 7) return player.side === "left" ? "FE" : "HLF"
@@ -426,7 +426,7 @@ function Pitch({
 }
 
 function TeamBench({ team }: { team: LineupTeam | null }) {
-  const bench = team?.players.filter((player) => !player.isOnField || (player.number != null && player.number >= 14)) ?? []
+  const bench = team?.players.filter((player) => !playerSlot(player)) ?? []
   return (
     <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel/70 p-2">
       <div className="mb-1 truncate text-[10px] font-bold uppercase tracking-wide text-nrl-muted">{team?.team ?? "Team"} bench</div>

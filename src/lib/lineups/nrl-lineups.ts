@@ -127,8 +127,7 @@ function getTodayInBrisbane(): string {
   return `${year}-${month}-${day}`
 }
 
-function nominalSide(number: number | null, isOnField: boolean): LineupSide {
-  if (!isOnField) return "bench"
+function nominalSide(number: number | null): LineupSide {
   if (number === 5 || number === 4 || number === 11 || number === 6) return "left"
   if (number === 2 || number === 3 || number === 12 || number === 7) return "right"
   if (number === 9 || number === 1) return "spine"
@@ -200,7 +199,7 @@ function buildPlayer(row: RawRow, overrides: Map<string, LineupSide>): LineupPla
   const override = overrideKey(matchId, team, playerId, number)
     .map((key) => overrides.get(key))
     .find((side): side is LineupSide => Boolean(side))
-  const side = override ?? nominalSide(number, isOnField)
+  const side = override ?? nominalSide(number)
 
   return {
     matchId,

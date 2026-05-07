@@ -4340,7 +4340,7 @@ export function FantasyDashboard({
                   <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Filters</div>
                   <div className="text-[10px] text-nrl-muted">Applies to player game log and filtered analysis</div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+                <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
                   <YearRangeSlider
                     label="Season"
                     value={selectedYears}
@@ -4395,7 +4395,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_auto]">
+                <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_auto]">
                   <SearchableSelect
                     label="Teammate"
                     value={teammate}

@@ -13,9 +13,8 @@ import {
 } from "@/components/views/player-comparison"
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
-import { fetchApprovedArticles } from "@/lib/articles"
+import type { Article } from "@/lib/articles"
 import type { Draw2026Data } from "@/lib/draw/types"
-import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   applyFantasyBreakEvenOffset,
   applyFantasyProjectionOffset,
@@ -24,26 +23,19 @@ import {
   fetchFantasyPlayersSnapshot,
   getTopFantasyOwnershipRise,
   getFantasyCoachRoundMetrics,
-  fetchLatestFantasyOwnershipBaselineSnapshot,
   type FantasyCoachPlayerSnapshot,
   type FantasyPlayerSnapshot,
 } from "@/lib/fantasy/nrl"
-import {
-  fetchUpcomingLineups,
-  fetchUpcomingTryscorerOdds,
-  type LineupPlayer,
-  type LineupTeam,
-  type LineupTryscorerOdds,
+import type {
+  LineupMatch,
+  LineupPlayer,
+  LineupTeam,
+  LineupTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
 import type { PlayerStat } from "@/lib/data/types"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   fetchAvailableYears,
-  fetchBettingOddsSnapshot,
-  fetchPlayerStats,
-  fetchFantasyPlayerStatsAllYears,
-  fetchPlayerImages,
-  fetchTeamLogos,
 } from "@/lib/supabase/queries"
 
 export const revalidate = 120
@@ -609,27 +601,23 @@ function buildRecentFormRows(
   })
 }
 
-function buildPlayerLeaderEntries(
-  rows: PlayerStat[],
-  statKey: keyof PlayerStat | string,
+function buildFantasySnapshotLeaderEntries(
+  fantasyPlayers: FantasyPlayerSnapshot[],
+  metric: "totalPoints" | "avgPoints" | "ownedBy",
   playerImages: PlayerImageRecord[],
 ): LandingLeaderEntry[] {
-  const grouped = new Map<string, { name: string; team: string; value: number }>()
-
-  for (const row of rows) {
-    const key = `${row.Name}|${row.Team}`
-    const current = grouped.get(key) ?? { name: row.Name, team: row.Team, value: 0 }
-    current.value += toFiniteNumber(row[statKey]) ?? 0
-    grouped.set(key, current)
-  }
-
-  return [...grouped.values()]
-    .filter((entry) => entry.value > 0)
+  return fantasyPlayers
+    .map((player) => ({
+      name: player.name,
+      team: player.positionLabel,
+      value: player[metric],
+    }))
+    .filter((entry): entry is { name: string; team: string; value: number } => entry.value != null && entry.value > 0)
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name))
     .slice(0, 8)
     .map((entry) => ({
       ...entry,
-      imageSources: buildPlayerImageSources(entry.name, entry.team, playerImages),
+      imageSources: buildPlayerImageSources(entry.name, null, playerImages),
     }))
 }
 
@@ -959,36 +947,30 @@ export default async function Home() {
   const [
     fantasyPlayers,
     fantasyCoachPlayers,
-    ownershipBaselineSnapshot,
-    bettingSnapshot,
     availableYears,
-    playerImages,
-    draw2026Data,
-    lineups,
-    teamLogos,
-    tryscorerOdds,
-    approvedArticles,
   ] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
-    fetchLatestFantasyOwnershipBaselineSnapshot(),
-    fetchBettingOddsSnapshot(),
     fetchAvailableYears(),
-    fetchPlayerImages(),
-    loadDraw2026Data().catch(() => null),
-    fetchUpcomingLineups(),
-    fetchTeamLogos(),
-    fetchUpcomingTryscorerOdds(),
-    fetchApprovedArticles(),
   ])
+  const bettingSnapshot: BettingOddsSnapshot = {
+    h2h: [],
+    line: [],
+    total: [],
+    tryscorer: [],
+    generatedAt: "",
+  }
+  const playerImages: PlayerImageRecord[] = []
+  const approvedArticles: Article[] = []
+  const teamLogos: Record<string, string> = {}
+  const draw2026Data: Draw2026Data | null = null
+  const lineups: LineupMatch[] = []
+  const tryscorerOdds: Record<string, LineupTryscorerOdds> = {}
 
   const previewYears = [...availableYears].map(String).sort((a, b) => Number(b) - Number(a)).slice(0, 3)
   const plotYears = previewYears.filter((year) => year !== "2024")
-  const spotlightLocalRows = fantasyPlayers[0]?.name
-    ? await fetchFantasyPlayerStatsAllYears(fantasyPlayers[0].name)
-    : []
 
-  const ownershipDeltaByPlayerId = buildFantasyOwnershipDeltaByPlayerId(fantasyPlayers, ownershipBaselineSnapshot)
+  const ownershipDeltaByPlayerId = buildFantasyOwnershipDeltaByPlayerId(fantasyPlayers, null)
   const topOwnershipRise = getTopFantasyOwnershipRise(ownershipDeltaByPlayerId)
   const topOwnershipBuyTargets = fantasyPlayers
     .map((player) => ({
@@ -1010,11 +992,11 @@ export default async function Home() {
     : null
   const spotlightCoachMetrics = getFantasyCoachRoundMetrics(spotlightCoachPlayer)
   const fantasyRoundLabel = spotlightCoachMetrics.round != null ? `Round ${spotlightCoachMetrics.round}` : "Round X"
-  const spotlightRows = spotlightFantasyPlayer?.name === fantasyPlayers[0]?.name
-    ? spotlightLocalRows
-    : spotlightFantasyPlayer
-      ? await fetchFantasyPlayerStatsAllYears(spotlightFantasyPlayer.name)
-      : []
+  const statsPlayer1Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nathan Cleary"], 0)
+  const statsPlayer2Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nicholas Hynes", "Nicho Hynes"], 1)
+  const spotlightRows: PlayerStat[] = []
+  const statsPlayer1RowsRaw: PlayerStat[] = []
+  const statsPlayer2RowsRaw: PlayerStat[] = []
 
   const spotlightSortedRows = sortRowsByDateDesc(spotlightRows)
   const spotlightTeam = primaryTeamForRows(spotlightSortedRows)
@@ -1075,14 +1057,6 @@ export default async function Home() {
   const homeLineupPlayers = getLineupStartingPlayers(lineupsLandingMatch?.homeTeam ?? null)
   const awayLineupPlayers = getLineupStartingPlayers(lineupsLandingMatch?.awayTeam ?? null)
   const articlePreviewRows = approvedArticles.slice(0, 3)
-  const statsPlayer1Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nathan Cleary"], 0)
-  const statsPlayer2Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nicholas Hynes", "Nicho Hynes"], 1)
-  const latestPreviewYear = previewYears[0] ?? ""
-  const [statsPlayer1RowsRaw, statsPlayer2RowsRaw, leaderSeasonRows] = await Promise.all([
-    statsPlayer1Name ? fetchFantasyPlayerStatsAllYears(statsPlayer1Name) : Promise.resolve([]),
-    statsPlayer2Name ? fetchFantasyPlayerStatsAllYears(statsPlayer2Name) : Promise.resolve([]),
-    latestPreviewYear ? fetchPlayerStats([latestPreviewYear]) : Promise.resolve([]),
-  ])
   const statsPlayer1Rows = sortRowsByDateDesc(statsPlayer1RowsRaw)
   const statsPlayer2Rows = sortRowsByDateDesc(statsPlayer2RowsRaw)
   const statsPlayers = [
@@ -1116,8 +1090,7 @@ export default async function Home() {
       }
     : null
   const statsPercentileRows = statsSummaryRows.map((row) => {
-    const playerPosition = row.position
-    const scopedRows = leaderSeasonRows.filter((entry) => entry.Position === playerPosition)
+    const scopedRows: PlayerStat[] = []
     const grouped = new Map<string, number[]>()
     for (const statRow of scopedRows) {
       const key = `${statRow.Name}|${statRow.Team}`
@@ -1135,12 +1108,12 @@ export default async function Home() {
     }
   })
   const statsLeaderCards = [
-    { key: "Points", label: "Points" },
-    { key: "Tries", label: "Tries" },
-    { key: "Conversions", label: "Conversions" },
+    { key: "totalPoints" as const, label: "Points" },
+    { key: "avgPoints" as const, label: "Average" },
+    { key: "ownedBy" as const, label: "Ownership %" },
   ].map((card) => ({
     ...card,
-    leaders: buildPlayerLeaderEntries(leaderSeasonRows, card.key, playerImages),
+    leaders: buildFantasySnapshotLeaderEntries(fantasyPlayers, card.key, playerImages),
   }))
 
   return (

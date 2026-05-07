@@ -10,7 +10,7 @@ import {
   fetchLatestFantasyOwnershipBaselineSnapshot,
   fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
-import { fetchAvailableYears, fetchOriginChances, fetchPlayerImages, fetchPlayerStats, fetchRelevantCasualtyWardOutCandidates } from "@/lib/supabase/queries"
+import { fetchAvailableYears, fetchOriginChances, fetchPlayerImages, fetchRelevantCasualtyWardOutCandidates } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -57,11 +57,6 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
   )
-  const allPlayersStatsYear = "2026"
-  const initialPlayerStats = unlockedYears.includes(allPlayersStatsYear)
-    ? await fetchPlayerStats([allPlayersStatsYear])
-    : []
-
   return (
     <FantasyDashboard
       fantasyPlayers={fantasyPlayers}
@@ -69,7 +64,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
       lineupsProjections={lineupsProjections}
       availableYears={unlockedYears}
       defaultYears={initialYears}
-      initialPlayerStats={initialPlayerStats}
+      initialPlayerStats={[]}
       canAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
       initialShowFantasyAnalytics={params.analytics === "1"}

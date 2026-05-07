@@ -14,8 +14,8 @@ async function hasLocalhostAccess(): Promise<boolean> {
 export async function getServerProPlotAccess(
   userId: string | null | undefined
 ): Promise<boolean> {
-  if (await hasLocalhostAccess()) return true;
   if (!userId) return hasProPlotAccess(userId);
+  if (await hasLocalhostAccess()) return true;
   try {
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
@@ -29,8 +29,8 @@ export async function getServerProPlotAccess(
 export async function getServerPremiumAccess(
   userId: string | null | undefined
 ): Promise<boolean> {
-  if (await hasLocalhostAccess()) return true;
   if (!userId) return hasPremiumAccess(userId);
+  if (await hasLocalhostAccess()) return true;
   try {
     const client = await clerkClient();
     const user = await client.users.getUser(userId);

@@ -3817,16 +3817,18 @@ export function FantasyDashboard({
                   onChange={setAllPlayersPositionFilter}
                 />
               </div>
-              <label className="inline-flex min-h-[28px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-[linear-gradient(#20284a,#20284a)_padding-box,linear-gradient(90deg,#ef4444,#f59e0b,#22c55e,#06b6d4,#6366f1,#a855f7)_border-box] px-2 text-[9px] font-bold uppercase tracking-wide text-nrl-muted">
-                <span>Tags</span>
-                <input
-                  type="checkbox"
-                  checked={showAllPlayersCardTags}
-                  onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
-                  className="sr-only"
-                />
-                <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
-                  <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
+              <label className="inline-flex shrink-0 cursor-pointer rounded-full bg-[linear-gradient(90deg,#ef4444,#f59e0b,#22c55e,#06b6d4,#6366f1,#a855f7)] p-[1px]">
+                <span className="inline-flex min-h-[28px] items-center justify-center gap-1.5 rounded-full bg-nrl-panel-2 px-2 text-[9px] font-bold uppercase tracking-wide text-nrl-muted">
+                  <span>Tags</span>
+                  <input
+                    type="checkbox"
+                    checked={showAllPlayersCardTags}
+                    onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
+                    className="sr-only"
+                  />
+                  <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                    <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
+                  </span>
                 </span>
               </label>
               <div className="w-[116px] shrink-0">
@@ -4481,7 +4483,7 @@ export function FantasyDashboard({
                       blurValue={analysisLocked}
                     />
                   </div>
-                  <div className="flex flex-wrap items-center justify-start gap-2">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
                     <FantasyPlotToggleButton
                       active={showRollingAveragePlot}
                       locked={analysisLocked}
@@ -4537,8 +4539,26 @@ export function FantasyDashboard({
                   </div>
                 </div>
 
-                <div className={analysisLocked ? "pointer-events-none select-none mt-3 max-h-[360px] overflow-hidden rounded-lg opacity-45 blur-[2px]" : undefined}>
-                {(analysisLocked || showRollingAveragePlot) && trendFilteredRows.length > 0 ? (
+                {analysisLocked ? (
+                  <div className="mx-auto mt-3 flex w-full justify-center">
+                    <BillingPageLink
+                      className="block rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]"
+                    >
+                      <div className="rounded-[calc(1rem-1px)] bg-slate-950/80 px-4 py-3 text-center backdrop-blur-[2px]">
+                        <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
+                          Sign Up To Pro
+                        </div>
+                        <div className="mt-1 text-xs text-slate-400">
+                          Unlock projections, breakevens and plots.
+                        </div>
+                      </div>
+                    </BillingPageLink>
+                  </div>
+                ) : null}
+
+                {!analysisLocked ? (
+                <div>
+                {showRollingAveragePlot && trendFilteredRows.length > 0 ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4591,7 +4611,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                {analysisLocked || showOpponentHeatmap ? (
+                {showOpponentHeatmap ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4670,7 +4690,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                {analysisLocked || showFantasyBoxPlot ? (
+                {showFantasyBoxPlot ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4803,7 +4823,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                {analysisLocked || showStatVsFantasyPlot ? (
+                {showStatVsFantasyPlot ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4828,7 +4848,7 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
 
-                {(analysisLocked || showWithWithoutPlot) && hasLoginAccess && teammate !== "None" ? (
+                {showWithWithoutPlot && hasLoginAccess && teammate !== "None" ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -4854,23 +4874,8 @@ export function FantasyDashboard({
                   </div>
                 ) : null}
                 </div>
-
-                {analysisLocked ? (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-xl">
-                    <BillingPageLink
-                      className="rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]"
-                    >
-                      <div className="rounded-[calc(1rem-1px)] bg-slate-950/80 px-4 py-3 text-center backdrop-blur-[2px]">
-                        <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
-                          Sign Up To Pro
-                        </div>
-                        <div className="mt-1 text-xs text-slate-400">
-                          Unlock projections, breakevens and plots.
-                        </div>
-                      </div>
-                    </BillingPageLink>
-                  </div>
                 ) : null}
+
               </div>
 
               <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">

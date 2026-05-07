@@ -228,7 +228,7 @@ function PlayerMetric({
 }
 
 function playerSlot(player: LineupPlayer): Slot | null {
-  if (!player.isOnField || (player.number != null && player.number >= 14)) return null
+  if (!player.isOnField) return null
   if (player.number === 1) return "FB"
   if (player.number === 6) return player.side === "right" ? "HLF" : "FE"
   if (player.number === 7) return player.side === "left" ? "FE" : "HLF"

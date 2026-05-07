@@ -229,15 +229,18 @@ function PlayerMetric({
 
 function playerSlot(player: LineupPlayer): Slot | null {
   if (!player.isOnField) return null
-  if (player.number === 1) return "FB"
+  const position = player.position.toLowerCase()
+  if (player.number === 1 || position.includes("fullback")) return "FB"
   if (player.number === 6) return player.side === "right" ? "HLF" : "FE"
   if (player.number === 7) return player.side === "left" ? "FE" : "HLF"
-  if (player.number === 9) return "HK"
-  if (player.number === 13) return "LK"
-  if (player.position.toLowerCase().includes("prop") || player.number === 8 || player.number === 10) return "PR"
-  if (player.position.toLowerCase().includes("wing") || player.number === 2 || player.number === 5) return player.side === "right" ? "RW" : "LW"
-  if (player.position.toLowerCase().includes("centre") || player.number === 3 || player.number === 4) return player.side === "right" ? "RC" : "LC"
-  if (player.position.toLowerCase().includes("row") || player.number === 11 || player.number === 12) return player.side === "right" ? "R2R" : "L2R"
+  if (position.includes("five-eighth") || position.includes("five eighth")) return "FE"
+  if (position.includes("halfback")) return "HLF"
+  if (player.number === 9 || position.includes("hooker")) return "HK"
+  if (player.number === 13 || position.includes("lock")) return "LK"
+  if (position.includes("prop") || player.number === 8 || player.number === 10) return "PR"
+  if (position.includes("wing") || player.number === 2 || player.number === 5) return player.side === "right" ? "RW" : "LW"
+  if (position.includes("centre") || player.number === 3 || player.number === 4) return player.side === "right" ? "RC" : "LC"
+  if (position.includes("row") || player.number === 11 || player.number === 12) return player.side === "right" ? "R2R" : "L2R"
   return null
 }
 

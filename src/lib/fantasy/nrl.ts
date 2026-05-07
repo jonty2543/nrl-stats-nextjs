@@ -159,6 +159,15 @@ function getLatestPrice(cost: number | null, priceHistory: Record<string, number
   return cost
 }
 
+function getNextHistoryValue(history: Record<string, number>): number | null {
+  const entries = Object.entries(history)
+    .map(([round, value]) => ({ round: Number.parseInt(round, 10), value }))
+    .filter((row) => Number.isFinite(row.round))
+    .sort((a, b) => a.round - b.round)
+
+  return entries[0]?.value ?? null
+}
+
 function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
   const id = toInt(raw.id)
   if (id === null) return null
@@ -174,7 +183,6 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
   const positionLabel = positionLabels.join("/") || "N/A"
 
   const priceHistory = extractPriceHistory(raw.stats?.prices)
-  const scoreHistory = extractScoreHistory(raw.stats?.scores)
   const cost = toInt(raw.cost)
   const latestPrice = getLatestPrice(cost, priceHistory)
   const be =
@@ -204,8 +212,8 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
     pricedAt: latestPrice !== null ? latestPrice / 12725 : null,
     isBye: toBool(raw.is_bye),
     locked: toBool(raw.locked),
-    priceHistory,
-    scoreHistory,
+    priceHistory: {},
+    scoreHistory: {},
   }
 }
 
@@ -250,13 +258,15 @@ interface FantasyCoachPlayerRaw {
 function normaliseCoachOne(id: string, raw: FantasyCoachPlayerRaw): FantasyCoachPlayerSnapshot | null {
   const parsedId = toInt(id)
   if (parsedId === null) return null
+  const projectedScores = extractScoreHistory(raw.proj_scores)
+  const breakEvens = extractIntHistory(raw.break_evens)
 
   return {
     id: parsedId,
-    projectedScore: toNum(raw.proj_score),
-    projectedScores: extractScoreHistory(raw.proj_scores),
-    breakEven: toInt(raw.break_even),
-    breakEvens: extractIntHistory(raw.break_evens),
+    projectedScore: toNum(raw.proj_score) ?? getNextHistoryValue(projectedScores),
+    projectedScores: {},
+    breakEven: toInt(raw.break_even) ?? getNextHistoryValue(breakEvens),
+    breakEvens: {},
   }
 }
 

@@ -34,6 +34,27 @@ const BOOKIE_LOGOS: Record<string, string> = {
   Unibet: "/logos/unibet.png",
   Palmerbet: "/logos/palmerbet.png",
   Betright: "/logos/betright.png",
+  Betr: "/logos/betr.png",
+  Deluxebet: "/logos/deluxebet.png",
+  Surgebet: "/logos/surgebet.png",
+}
+
+function normaliseBookieKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "")
+}
+
+const BOOKIE_LOGOS_BY_KEY = Object.fromEntries(
+  Object.entries(BOOKIE_LOGOS).map(([bookie, logo]) => [normaliseBookieKey(bookie), logo])
+)
+
+function resolveBookieLogo(bookie: string | null | undefined): string | null {
+  if (!bookie) return null
+  const candidates = bookie.split(/[,/&+]+/).map((part) => normaliseBookieKey(part)).filter(Boolean)
+  for (const candidate of candidates) {
+    const logo = BOOKIE_LOGOS_BY_KEY[candidate]
+    if (logo) return logo
+  }
+  return BOOKIE_LOGOS_BY_KEY[normaliseBookieKey(bookie)] ?? null
 }
 
 const DISPLAY_MODES: { key: DisplayMode; label: string; shortLabel: string }[] = [
@@ -142,6 +163,29 @@ function formatKickoff(value: string | null): string {
   }).format(new Date(value))
 }
 
+function matchDateKey(match: LineupMatch): string {
+  if (match.matchDate) return match.matchDate
+  if (!match.kickoffUtc) return "tbc"
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(match.kickoffUtc))
+}
+
+function formatMatchDateHeader(dateKey: string): string {
+  if (dateKey === "tbc") return "Date TBC"
+  const date = new Date(`${dateKey}T00:00:00+10:00`)
+  if (Number.isNaN(date.getTime())) return dateKey
+  return new Intl.DateTimeFormat("en-AU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "Australia/Brisbane",
+  }).format(date)
+}
+
 function normaliseImageUrl(value: string | null): string | null {
   if (!value) return null
   const trimmed = value.trim()
@@ -206,7 +250,7 @@ function PlayerMetric({
 
   if (displayMode === "odds") {
     const odds = tryscorerOdds[playerKey]
-    const logo = odds?.bestBookie ? BOOKIE_LOGOS[odds.bestBookie] : null
+    const logo = resolveBookieLogo(odds?.bestBookie)
     return odds?.bestPrice != null ? (
       <div className={`mt-0.5 flex items-center justify-center gap-1 ${textClass} font-semibold leading-tight text-emerald-100/90`}>
         {logo ? (
@@ -228,8 +272,8 @@ function PlayerMetric({
 }
 
 function playerSlot(player: LineupPlayer): Slot | null {
-  if (!player.isOnField) return null
   const position = player.position.toLowerCase()
+  if (position.includes("interchange") || position.includes("reserve")) return null
   if (player.number === 1 || position.includes("fullback")) return "FB"
   if (player.number === 6) return player.side === "right" ? "HLF" : "FE"
   if (player.number === 7) return player.side === "left" ? "FE" : "HLF"
@@ -273,14 +317,14 @@ function TeamBadge({ team, teamLogos }: { team: LineupTeam | null; teamLogos: Re
   const fullName = team?.teamName ?? team?.team ?? "TBC"
 
   return (
-    <div className="flex min-w-0 max-w-full flex-col items-center justify-center gap-1 overflow-hidden text-center">
+    <div className="flex min-w-0 max-w-full flex-col items-center justify-center gap-2 overflow-hidden text-center">
       {logo ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt="" className="h-7 w-7 object-contain" loading="lazy" />
+        <img src={logo} alt="" className="h-12 w-12 object-contain sm:h-14 sm:w-14" loading="lazy" />
       ) : null}
       <div className="w-full min-w-0">
-        <div className="truncate text-xs font-bold text-nrl-text sm:hidden">{shortName}</div>
-        <div className="hidden truncate text-xs font-bold text-nrl-text sm:block sm:text-sm">{fullName}</div>
+        <div className="truncate text-sm font-bold text-nrl-text sm:hidden">{shortName}</div>
+        <div className="hidden truncate text-base font-bold text-nrl-text sm:block">{fullName}</div>
       </div>
     </div>
   )
@@ -322,7 +366,7 @@ function PitchPlayer({
             <span className="text-[10px] font-bold text-nrl-muted">{initials(player.player)}</span>
           )}
         </div>
-        <div className={`${compact ? "-right-3 px-1.5 text-[9px]" : "-right-3.5 px-2 text-[10px]"} absolute -top-1 rounded-full py-0.5 font-bold text-white ${player.sideSource === "override" ? "bg-blue-500" : "bg-blue-950"}`}>
+        <div className={`${compact ? "-right-3 px-1.5 text-[9px]" : "-right-3.5 px-2 text-[10px]"} absolute -top-1 rounded-full bg-blue-950 py-0.5 font-bold text-white`}>
           {slot}
         </div>
       </div>
@@ -426,7 +470,7 @@ function Pitch({
 }
 
 function TeamBench({ team }: { team: LineupTeam | null }) {
-  const bench = team?.players.filter((player) => !player.isOnField || (player.number != null && player.number >= 14)) ?? []
+  const bench = team?.players.filter((player) => !playerSlot(player)) ?? []
   return (
     <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel/70 p-2">
       <div className="mb-1 truncate text-[10px] font-bold uppercase tracking-wide text-nrl-muted">{team?.team ?? "Team"} bench</div>
@@ -638,31 +682,44 @@ function LineupCard({
 
 export function LineupsDashboard({ matches, teamLogos, tryscorerOdds, canAccessNotableOuts, casualtyWardOuts, playerAverages }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("fantasy")
+  const matchDateGroups = matches.reduce<Array<{ dateKey: string; matches: Array<{ match: LineupMatch; index: number }> }>>(
+    (groups, match, index) => {
+      const dateKey = matchDateKey(match)
+      const currentGroup = groups.at(-1)
+      if (currentGroup?.dateKey === dateKey) {
+        currentGroup.matches.push({ match, index })
+      } else {
+        groups.push({ dateKey, matches: [{ match, index }] })
+      }
+      return groups
+    },
+    []
+  )
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-nrl-border bg-nrl-panel p-3">
-        <div>
-          <div className="text-xl font-bold text-nrl-accent">Lineups</div>
-          <div className="mt-1 text-xs text-nrl-muted">Check back here after team lists are announced</div>
-        </div>
-      </div>
-
       {matches.length > 0 ? (
-        <div className="space-y-3">
-          {matches.map((match, index) => (
-            <LineupCard
-              key={match.matchId}
-              match={match}
-              index={index}
-              teamLogos={teamLogos}
-              displayMode={displayMode}
-              onDisplayModeChange={setDisplayMode}
-              tryscorerOdds={tryscorerOdds}
-              canAccessNotableOuts={canAccessNotableOuts}
-              casualtyWardOuts={casualtyWardOuts}
-              playerAverages={playerAverages}
-            />
+        <div className="space-y-6">
+          {matchDateGroups.map((group) => (
+            <section key={group.dateKey} className="space-y-3">
+              <div className="px-1 text-xs font-bold uppercase tracking-[0.18em] text-nrl-accent/90">
+                {formatMatchDateHeader(group.dateKey)}
+              </div>
+              {group.matches.map(({ match, index }) => (
+                <LineupCard
+                  key={match.matchId}
+                  match={match}
+                  index={index}
+                  teamLogos={teamLogos}
+                  displayMode={displayMode}
+                  onDisplayModeChange={setDisplayMode}
+                  tryscorerOdds={tryscorerOdds}
+                  canAccessNotableOuts={canAccessNotableOuts}
+                  casualtyWardOuts={casualtyWardOuts}
+                  playerAverages={playerAverages}
+                />
+              ))}
+            </section>
           ))}
         </div>
       ) : null}

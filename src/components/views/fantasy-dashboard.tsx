@@ -1588,7 +1588,7 @@ function FantasyPlotToggleButton({
       type="button"
       disabled={locked}
       onClick={onClick}
-      className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${locked
+      className={`w-full rounded border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide transition-colors sm:text-[10px] ${locked
         ? "cursor-not-allowed border-white/8 bg-white/[0.035] text-slate-500 shadow-none"
         : active
           ? "cursor-pointer border-nrl-accent bg-nrl-accent/10 text-nrl-accent"
@@ -1624,7 +1624,7 @@ function MetricCard({
         : "px-3 py-2"
         }`}
     >
-      <div className={`${compact ? mobileTight ? "text-[6.5px] sm:text-[7px]" : "text-[7px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
+      <div className={`${compact ? mobileTight ? "min-h-[1.8em] text-[6.5px] leading-[1.15] sm:text-[7px]" : "min-h-[1.8em] text-[7px] leading-[1.15]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
         {label}
       </div>
       <div
@@ -3788,18 +3788,18 @@ export function FantasyDashboard({
 
       {showOwnedCards ? (
         <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-nrl-border bg-nrl-accent/10 px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-accent/10 px-3 py-2">
             <div>
               <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">All Players</div>
             </div>
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-              <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-0.5">
+            <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-0.5 min-[360px]:gap-1 sm:w-auto sm:justify-end sm:gap-1.5">
+              <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-[2px]">
                 {(["cards", "table"] as const).map((view) => (
                   <button
                     key={view}
                     type="button"
                     onClick={() => setAllPlayersView(view)}
-                    className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wide transition-colors ${
+                    className={`rounded-full px-1.5 py-1 text-[8px] font-bold uppercase tracking-wide transition-colors sm:px-2 sm:text-[9px] ${
                       allPlayersView === view
                         ? "bg-nrl-accent text-[#07131f]"
                         : "text-nrl-muted hover:text-nrl-text"
@@ -3809,7 +3809,7 @@ export function FantasyDashboard({
                   </button>
                 ))}
               </div>
-              <div className="w-[126px] shrink-0">
+              <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[126px]">
                 <Select
                   label=""
                   value={allPlayersPositionFilter}
@@ -3817,8 +3817,8 @@ export function FantasyDashboard({
                   onChange={setAllPlayersPositionFilter}
                 />
               </div>
-              <label className="inline-flex shrink-0 cursor-pointer rounded-full bg-[linear-gradient(90deg,#ef4444,#f59e0b,#22c55e,#06b6d4,#6366f1,#a855f7)] p-[1px]">
-                <span className="inline-flex min-h-[28px] items-center justify-center gap-1.5 rounded-full bg-nrl-panel-2 px-2 text-[9px] font-bold uppercase tracking-wide text-nrl-muted">
+              <label className="inline-flex shrink-0 cursor-pointer rounded-full bg-[linear-gradient(90deg,#071632,#1d4ed8,#7dd3fc,#bfdbfe,#1d4ed8,#071632)] p-[1px] shadow-[0_0_0_1px_rgba(125,211,252,0.28),0_0_14px_rgba(37,99,235,0.22)]">
+                <span className="inline-flex min-h-[28px] items-center justify-center gap-1 rounded-full bg-nrl-panel-2 px-1.5 text-[8px] font-bold uppercase tracking-wide text-nrl-muted min-[360px]:px-2 sm:gap-1.5 sm:text-[9px]">
                   <span>Tags</span>
                   <input
                     type="checkbox"
@@ -3826,12 +3826,12 @@ export function FantasyDashboard({
                     onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
                     className="sr-only"
                   />
-                  <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
-                    <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
+                  <span className={`relative h-3.5 w-5 rounded-full border transition-colors sm:w-6 ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                    <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-2.5 bg-nrl-accent sm:translate-x-3" : "translate-x-0.5 bg-nrl-muted"}`} />
                   </span>
                 </span>
               </label>
-              <div className="w-[116px] shrink-0">
+              <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[116px]">
                 <MultiSelect
                   label=""
                   value={allPlayersTagFilters}
@@ -4483,7 +4483,7 @@ export function FantasyDashboard({
                       blurValue={analysisLocked}
                     />
                   </div>
-                  <div className="flex flex-wrap items-center justify-center gap-2">
+                  <div className="mx-auto grid w-full max-w-[43rem] grid-cols-2 gap-2">
                     <FantasyPlotToggleButton
                       active={showRollingAveragePlot}
                       locked={analysisLocked}
@@ -4540,7 +4540,7 @@ export function FantasyDashboard({
                 </div>
 
                 {analysisLocked ? (
-                  <div className="mx-auto mt-3 flex w-full justify-center">
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl px-4">
                     <BillingPageLink
                       className="block rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]"
                     >

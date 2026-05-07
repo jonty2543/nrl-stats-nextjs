@@ -128,7 +128,7 @@ function getTodayInBrisbane(): string {
 }
 
 function nominalSide(number: number | null, isOnField: boolean): LineupSide {
-  if (!isOnField || (number != null && number >= 14)) return "bench"
+  if (!isOnField) return "bench"
   if (number === 5 || number === 4 || number === 11 || number === 6) return "left"
   if (number === 2 || number === 3 || number === 12 || number === 7) return "right"
   if (number === 9 || number === 1) return "spine"

@@ -1825,6 +1825,7 @@ export function FantasyDashboard({
         "Do not say recent form has slipped when L3 average is above priced at.",
         "In each sell/watch player title, include the player name, position, price, and projection, but no rating. In each trade-in title, include the player name, position, price, projection, and rating.",
         "For each sell or buy, use the label Ownership change: and include BE, priced at, L3 average, projection vs priced at, next major bye availability, and one short reason.",
+        "Use supplied player tags when they exist for a suggested player: next major bye tags, Origin Chance as an availability risk, and Relevant out with return timing as a secondary role-security note.",
       ]
       : [
         "For free users, do not use projections, breakevens, projection vs priced at, casualty ward context, or Origin context as trade reasons.",
@@ -1834,6 +1835,7 @@ export function FantasyDashboard({
         "If a player is -1.0% or worse in ownership delta but L3 is sound, bye coverage is useful, and there is no availability issue, frame them as Hold / Possible sell rather than a hard sell.",
         "In each sell/watch player title, include the player name, position, and price, but no rating. In each trade-in title, include the player name, position, price, and rating.",
         "For each sell or buy, use the label Ownership change: and include priced at, average/L3 form, next major bye availability, and one short reason. Do not include projections, breakevens, or projection vs priced at for free users.",
+        "Use next major bye tags when they exist for a suggested player. Do not use Origin Chance or Relevant out context for free users.",
       ]
     const prompt = [
       "Fantasy Trade Suggestor dashboard request.",

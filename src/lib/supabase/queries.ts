@@ -239,7 +239,8 @@ async function fetchAllRows<T extends Record<string, unknown>>(
 }
 
 async function fetchPlayerStatsRowsForPlayerFromSupabase(
-  playerName: string
+  playerName: string,
+  years?: string[]
 ): Promise<Record<string, unknown>[]> {
   const supabase = createServerSupabaseClient();
   const allRows: Record<string, unknown>[] = [];
@@ -247,11 +248,21 @@ async function fetchPlayerStatsRowsForPlayerFromSupabase(
 
   while (true) {
     const end = start + PAGE_SIZE - 1;
-    const { data, error } = await supabase
+    let query = supabase
       .from("player_stats")
       .select("*")
-      .eq("player", playerName)
-      .range(start, end);
+      .eq("player", playerName);
+
+    if (years && years.length > 0) {
+      const sorted = [...years].sort();
+      const minYear = parseInt(sorted[0], 10);
+      const maxYear = parseInt(sorted[sorted.length - 1], 10);
+      query = query
+        .gte("match_date", `${minYear}-01-01`)
+        .lt("match_date", `${maxYear + 1}-01-01`);
+    }
+
+    const { data, error } = await query.range(start, end);
 
     if (error) throw new Error(`Supabase fetch player_stats for player ${playerName}: ${error.message}`);
     const rows = (data ?? []) as Record<string, unknown>[];
@@ -1175,26 +1186,30 @@ export async function fetchTeammateLookupRows(
 }
 
 async function fetchPlayerStatsForLocalNameAllYearsFromSupabase(
-  localPlayerName: string
+  localPlayerName: string,
+  years?: string[]
 ): Promise<PlayerStat[]> {
   const [rawPlayers, rawMatches] = await Promise.all([
-    fetchPlayerStatsRowsForPlayerFromSupabase(localPlayerName),
+    fetchPlayerStatsRowsForPlayerFromSupabase(localPlayerName, years),
     fetchAllRows<Record<string, unknown>>("matches", {
+      years,
       columns: "match_date,team,opponent_team,is_home",
     }),
   ]);
   return buildPlayerStatsRows(rawPlayers, rawMatches);
 }
 
-export async function fetchFantasyPlayerStatsAllYears(
-  fantasyName: string
+export async function fetchFantasyPlayerStatsForYears(
+  fantasyName: string,
+  years?: string[]
 ): Promise<PlayerStat[]> {
   if (!fantasyName.trim()) return [];
+  const normalizedYears = years?.filter(Boolean).sort();
   try {
     const serverCache = await readPlayerStatsServerCache();
 
     if (serverCache) {
-      const allRows = serverCache.rows;
+      const allRows = filterPlayerStatsRowsByYears(serverCache.rows, normalizedYears);
       if (allRows.length === 0) return [];
 
       const localNames = Array.from(new Set(allRows.map((row) => row.Name))).sort();
@@ -1205,17 +1220,23 @@ export async function fetchFantasyPlayerStatsAllYears(
       return allRows.filter((row) => normaliseNameForMatch(row.Name) === matchedNameKey);
     }
 
-    const teammateRows = await fetchTeammateLookupRows();
+    const teammateRows = await fetchTeammateLookupRows(normalizedYears);
     if (teammateRows.length === 0) return [];
     const localNames = Array.from(new Set(teammateRows.map((row) => row.Name))).sort();
     const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
     if (!matchedLocalName) return [];
 
-    return fetchPlayerStatsForLocalNameAllYearsFromSupabase(matchedLocalName);
+    return fetchPlayerStatsForLocalNameAllYearsFromSupabase(matchedLocalName, normalizedYears);
   } catch (error) {
-    console.warn("Unable to fetch fantasy player stats all years; returning empty set.", error);
+    console.warn("Unable to fetch fantasy player stats; returning empty set.", error);
     return [];
   }
+}
+
+export async function fetchFantasyPlayerStatsAllYears(
+  fantasyName: string
+): Promise<PlayerStat[]> {
+  return fetchFantasyPlayerStatsForYears(fantasyName);
 }
 
 // ---------------------------------------------------------------------------

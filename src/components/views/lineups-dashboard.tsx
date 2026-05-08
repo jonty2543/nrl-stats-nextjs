@@ -8,6 +8,7 @@ interface LineupsDashboardProps {
   teamLogos: Record<string, string>
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   canAccessNotableOuts: boolean
+  canAccessFantasyProjections: boolean
   casualtyWardOuts: Record<string, LineupCasualtyOut[]>
   playerAverages: Record<string, Record<AverageStatKey, number>>
 }
@@ -72,6 +73,10 @@ const DISPLAY_MODES: { key: DisplayMode; label: string; shortLabel: string }[] =
   { key: "Tackle Breaks", label: "Tackle Breaks Avg", shortLabel: "TB" },
   { key: "Offloads", label: "Offloads Avg", shortLabel: "OFF" },
 ]
+
+function displayModesForAccess(canAccessFantasyProjections: boolean) {
+  return canAccessFantasyProjections ? DISPLAY_MODES : DISPLAY_MODES.filter((mode) => mode.key !== "fantasy")
+}
 
 const DEPTH_X: Record<Slot, number> = {
   FB: 7,
@@ -229,18 +234,23 @@ function PlayerMetric({
   displayMode,
   tryscorerOdds,
   playerAverages,
+  canAccessFantasyProjections,
   compact,
 }: {
   player: LineupPlayer
   displayMode: DisplayMode
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
+  canAccessFantasyProjections: boolean
   compact: boolean
 }) {
   const playerKey = normaliseKey(player.player)
   const textClass = compact ? "text-[10px]" : "text-[11px]"
 
   if (displayMode === "fantasy") {
+    if (!canAccessFantasyProjections) {
+      return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    }
     return player.fantasyProjection != null ? (
       <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>{Math.round(player.fantasyProjection)} proj</div>
     ) : (
@@ -337,6 +347,7 @@ function PitchPlayer({
   displayMode,
   tryscorerOdds,
   playerAverages,
+  canAccessFantasyProjections,
 }: {
   player: LineupPlayer
   side: "home" | "away"
@@ -344,6 +355,7 @@ function PitchPlayer({
   displayMode: DisplayMode
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
+  canAccessFantasyProjections: boolean
 }) {
   const slot = playerSlot(player)
   if (!slot) return null
@@ -378,6 +390,7 @@ function PitchPlayer({
         displayMode={displayMode}
         tryscorerOdds={tryscorerOdds}
         playerAverages={playerAverages}
+        canAccessFantasyProjections={canAccessFantasyProjections}
         compact={compact}
       />
     </div>
@@ -417,6 +430,7 @@ function Pitch({
   orientation,
   displayMode,
   onDisplayModeChange,
+  canAccessFantasyProjections,
   tryscorerOdds,
   playerAverages,
 }: {
@@ -425,6 +439,7 @@ function Pitch({
   orientation: Orientation
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
+  canAccessFantasyProjections: boolean
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
 }) {
@@ -440,6 +455,7 @@ function Pitch({
         <DisplayModeControl
           displayMode={displayMode}
           onDisplayModeChange={onDisplayModeChange}
+          canAccessFantasyProjections={canAccessFantasyProjections}
           compact={orientation === "portrait"}
         />
       </div>
@@ -452,6 +468,7 @@ function Pitch({
           displayMode={displayMode}
           tryscorerOdds={tryscorerOdds}
           playerAverages={playerAverages}
+          canAccessFantasyProjections={canAccessFantasyProjections}
         />
       ))}
       {awayPlayers.map((player) => (
@@ -463,6 +480,7 @@ function Pitch({
           displayMode={displayMode}
           tryscorerOdds={tryscorerOdds}
           playerAverages={playerAverages}
+          canAccessFantasyProjections={canAccessFantasyProjections}
         />
       ))}
     </div>
@@ -575,12 +593,16 @@ function NotableOuts({
 function DisplayModeControl({
   displayMode,
   onDisplayModeChange,
+  canAccessFantasyProjections,
   compact = false,
 }: {
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
+  canAccessFantasyProjections: boolean
   compact?: boolean
 }) {
+  const displayModes = displayModesForAccess(canAccessFantasyProjections)
+
   return (
     <label className={compact ? "block w-24" : "block w-[174px] max-w-[44vw]"}>
       <span className="sr-only">Display</span>
@@ -589,7 +611,7 @@ function DisplayModeControl({
         onChange={(event) => onDisplayModeChange(event.target.value as DisplayMode)}
         className={`${compact ? "text-[10px]" : "text-[11px]"} w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent`}
       >
-        {DISPLAY_MODES.map((mode) => (
+        {displayModes.map((mode) => (
           <option key={mode.key} value={mode.key}>
             {compact ? mode.shortLabel : mode.label}
           </option>
@@ -607,6 +629,7 @@ function LineupCard({
   onDisplayModeChange,
   tryscorerOdds,
   canAccessNotableOuts,
+  canAccessFantasyProjections,
   casualtyWardOuts,
   playerAverages,
 }: {
@@ -617,6 +640,7 @@ function LineupCard({
   onDisplayModeChange: (mode: DisplayMode) => void
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   canAccessNotableOuts: boolean
+  canAccessFantasyProjections: boolean
   casualtyWardOuts: Record<string, LineupCasualtyOut[]>
   playerAverages: Record<string, Record<AverageStatKey, number>>
 }) {
@@ -651,6 +675,7 @@ function LineupCard({
           orientation="portrait"
           displayMode={displayMode}
           onDisplayModeChange={onDisplayModeChange}
+          canAccessFantasyProjections={canAccessFantasyProjections}
           tryscorerOdds={tryscorerOdds}
           playerAverages={playerAverages}
         />
@@ -660,6 +685,7 @@ function LineupCard({
           orientation="landscape"
           displayMode={displayMode}
           onDisplayModeChange={onDisplayModeChange}
+          canAccessFantasyProjections={canAccessFantasyProjections}
           tryscorerOdds={tryscorerOdds}
           playerAverages={playerAverages}
         />
@@ -680,8 +706,16 @@ function LineupCard({
   )
 }
 
-export function LineupsDashboard({ matches, teamLogos, tryscorerOdds, canAccessNotableOuts, casualtyWardOuts, playerAverages }: LineupsDashboardProps) {
-  const [displayMode, setDisplayMode] = useState<DisplayMode>("fantasy")
+export function LineupsDashboard({
+  matches,
+  teamLogos,
+  tryscorerOdds,
+  canAccessNotableOuts,
+  canAccessFantasyProjections,
+  casualtyWardOuts,
+  playerAverages,
+}: LineupsDashboardProps) {
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(canAccessFantasyProjections ? "fantasy" : "odds")
   const matchDateGroups = matches.reduce<Array<{ dateKey: string; matches: Array<{ match: LineupMatch; index: number }> }>>(
     (groups, match, index) => {
       const dateKey = matchDateKey(match)
@@ -715,6 +749,7 @@ export function LineupsDashboard({ matches, teamLogos, tryscorerOdds, canAccessN
                   onDisplayModeChange={setDisplayMode}
                   tryscorerOdds={tryscorerOdds}
                   canAccessNotableOuts={canAccessNotableOuts}
+                  canAccessFantasyProjections={canAccessFantasyProjections}
                   casualtyWardOuts={casualtyWardOuts}
                   playerAverages={playerAverages}
                 />

@@ -57,12 +57,12 @@ function buildPlayerAverages(rows: PlayerStat[]): Record<string, Record<AverageK
 
 export default async function LineupsPage() {
   const { userId } = await auth()
-  const canAccessNotableOuts = await getServerProPlotAccess(userId)
+  const hasProAccess = await getServerProPlotAccess(userId)
   const [matches, teamLogos, tryscorerOdds, casualtyWardOuts, playerStats2026] = await Promise.all([
-    fetchUpcomingLineups(),
+    fetchUpcomingLineups({ includeFantasyProjections: hasProAccess }),
     fetchTeamLogos(),
     fetchUpcomingTryscorerOdds(),
-    canAccessNotableOuts ? fetchCasualtyWardOuts() : Promise.resolve({}),
+    hasProAccess ? fetchCasualtyWardOuts() : Promise.resolve({}),
     fetchPlayerStats(["2026"]),
   ])
 
@@ -71,7 +71,8 @@ export default async function LineupsPage() {
       matches={matches}
       teamLogos={teamLogos}
       tryscorerOdds={tryscorerOdds}
-      canAccessNotableOuts={canAccessNotableOuts}
+      canAccessNotableOuts={hasProAccess}
+      canAccessFantasyProjections={hasProAccess}
       casualtyWardOuts={casualtyWardOuts}
       playerAverages={buildPlayerAverages(playerStats2026)}
     />

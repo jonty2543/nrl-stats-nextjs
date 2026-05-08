@@ -55,6 +55,30 @@ export interface LineupCasualtyOut {
 type RawRow = Record<string, unknown>
 
 const PAGE_SIZE = 1000
+const LINEUP_SELECT_BASE = [
+  "match_id",
+  "match_date",
+  "kickoff_utc",
+  "round",
+  "venue",
+  "match",
+  "match_url",
+  "team",
+  "team_name",
+  "team_type",
+  "number",
+  "position",
+  "player",
+  "player_id",
+  "is_captain",
+  "is_on_field",
+  "head_image",
+  "body_image",
+] as const
+
+interface FetchUpcomingLineupsOptions {
+  includeFantasyProjections?: boolean
+}
 const LINEUP_EXPIRY_MS = 2 * 60 * 60 * 1000
 
 function text(value: unknown): string {
@@ -141,16 +165,19 @@ function overrideKey(matchId: string, team: string, playerId: number | null, num
   return keys
 }
 
-async function fetchAllLineupRows(today: string): Promise<RawRow[]> {
+async function fetchAllLineupRows(today: string, includeFantasyProjections: boolean): Promise<RawRow[]> {
   const supabase = createServerSupabaseClient("nrl")
   const rows: RawRow[] = []
   let start = 0
+  const selectColumns = includeFantasyProjections
+    ? [...LINEUP_SELECT_BASE, "fantasy_projection"].join(",")
+    : LINEUP_SELECT_BASE.join(",")
 
   while (true) {
     const end = start + PAGE_SIZE - 1
     const { data, error } = await supabase
       .from("lineups")
-      .select("*")
+      .select(selectColumns)
       .gte("match_date", today)
       .order("match_date", { ascending: true })
       .order("kickoff_utc", { ascending: true })
@@ -160,7 +187,7 @@ async function fetchAllLineupRows(today: string): Promise<RawRow[]> {
       .range(start, end)
 
     if (error) throw new Error(`Supabase fetch nrl.lineups: ${error.message}`)
-    const page = (data ?? []) as RawRow[]
+    const page = (data ?? []) as unknown as RawRow[]
     rows.push(...page)
     if (page.length < PAGE_SIZE) break
     start += PAGE_SIZE
@@ -190,7 +217,7 @@ async function fetchSideOverrides(): Promise<Map<string, LineupSide>> {
   return overrides
 }
 
-function buildPlayer(row: RawRow, overrides: Map<string, LineupSide>): LineupPlayer {
+function buildPlayer(row: RawRow, overrides: Map<string, LineupSide>, includeFantasyProjection: boolean): LineupPlayer {
   const matchId = text(row.match_id)
   const team = text(row.team)
   const number = numberOrNull(row.number)
@@ -214,7 +241,7 @@ function buildPlayer(row: RawRow, overrides: Map<string, LineupSide>): LineupPla
     isOnField,
     headImage: nullableText(row.head_image),
     bodyImage: nullableText(row.body_image),
-    fantasyProjection: numberOrNull(row.fantasy_projection),
+    fantasyProjection: includeFantasyProjection ? numberOrNull(row.fantasy_projection) : null,
     side,
     sideSource: override ? "override" : side === "unknown" ? "unknown" : "nominal",
   }
@@ -230,11 +257,12 @@ function teamFromPlayers(players: LineupPlayer[], teamType: string): LineupTeam 
   }
 }
 
-export async function fetchUpcomingLineups(): Promise<LineupMatch[]> {
+export async function fetchUpcomingLineups(options: FetchUpcomingLineupsOptions = {}): Promise<LineupMatch[]> {
   try {
     const today = getTodayInBrisbane()
+    const includeFantasyProjections = options.includeFantasyProjections === true
     const [rows, overrides] = await Promise.all([
-      fetchAllLineupRows(today),
+      fetchAllLineupRows(today, includeFantasyProjections),
       fetchSideOverrides().catch(() => new Map<string, LineupSide>()),
     ])
 
@@ -243,7 +271,7 @@ export async function fetchUpcomingLineups(): Promise<LineupMatch[]> {
       const matchId = text(row.match_id)
       if (!matchId) continue
       const group = matches.get(matchId) ?? { base: row, players: [] }
-      group.players.push(buildPlayer(row, overrides))
+      group.players.push(buildPlayer(row, overrides, includeFantasyProjections))
       matches.set(matchId, group)
     }
 

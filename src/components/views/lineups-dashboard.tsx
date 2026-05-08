@@ -715,7 +715,7 @@ export function LineupsDashboard({
   casualtyWardOuts,
   playerAverages,
 }: LineupsDashboardProps) {
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(canAccessFantasyProjections ? "fantasy" : "odds")
+  const [displayMode, setDisplayMode] = useState<DisplayMode>("odds")
   const matchDateGroups = matches.reduce<Array<{ dateKey: string; matches: Array<{ match: LineupMatch; index: number }> }>>(
     (groups, match, index) => {
       const dateKey = matchDateKey(match)

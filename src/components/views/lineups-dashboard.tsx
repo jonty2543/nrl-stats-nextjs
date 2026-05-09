@@ -1009,6 +1009,8 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
 
 function playerSlot(player: LineupPlayer): Slot | null {
   const position = player.position.toLowerCase()
+  const isInterchange = position.includes("interchange") || position.includes("reserve")
+  if (isInterchange && !player.isOnField) return null
   if (player.number === 1 || position.includes("fullback")) return "FB"
   if (player.number === 6) return player.side === "right" ? "HLF" : "FE"
   if (player.number === 7) return player.side === "left" ? "FE" : "HLF"
@@ -1017,7 +1019,7 @@ function playerSlot(player: LineupPlayer): Slot | null {
   if (player.number === 11 || player.number === 12) return player.side === "right" ? "R2R" : "L2R"
   if (player.number === 13) return "LK"
   if (player.number != null && player.number >= 14) return null
-  if (position.includes("interchange") || position.includes("reserve")) return null
+  if (isInterchange) return null
   if (position.includes("five-eighth") || position.includes("five eighth")) return "FE"
   if (position.includes("halfback")) return "HLF"
   if (position.includes("hooker")) return "HK"
@@ -1042,27 +1044,38 @@ function replacementCandidateSlots(player: LineupPlayer): Slot[] {
   if (position.includes("centre") || position.includes("center")) return ["RC", "LC"]
   if (position.includes("five-eighth") || position.includes("five eighth")) return ["FE"]
   if (position.includes("halfback")) return ["HLF"]
+  if (position.includes("prop")) return ["PR"]
+  if (position.includes("hooker")) return ["HK"]
+  if (position.includes("row")) return player.side === "right" ? ["R2R", "L2R"] : ["L2R", "R2R"]
+  if (position.includes("lock")) return ["LK"]
   return []
+}
+
+function slotCapacity(slot: Slot): number {
+  return slot === "PR" ? 2 : 1
 }
 
 function buildTeamPitchSlotMap(players: LineupPlayer[]): Map<string, Slot> {
   const slots = new Map<string, Slot>()
-  const occupied = new Set<Slot>()
+  const slotCounts = new Map<Slot, number>()
+  const addSlot = (player: LineupPlayer, slot: Slot) => {
+    slots.set(pitchPlayerKey(player), slot)
+    slotCounts.set(slot, (slotCounts.get(slot) ?? 0) + 1)
+  }
+  const isAvailable = (slot: Slot) => (slotCounts.get(slot) ?? 0) < slotCapacity(slot)
 
   for (const player of players) {
     const slot = playerSlot(player)
     if (!slot) continue
-    slots.set(pitchPlayerKey(player), slot)
-    occupied.add(slot)
+    addSlot(player, slot)
   }
 
   for (const player of players) {
     const key = pitchPlayerKey(player)
     if (slots.has(key)) continue
-    const slot = replacementCandidateSlots(player).find((candidate) => !occupied.has(candidate))
+    const slot = replacementCandidateSlots(player).find(isAvailable)
     if (!slot) continue
-    slots.set(key, slot)
-    occupied.add(slot)
+    addSlot(player, slot)
   }
 
   return slots

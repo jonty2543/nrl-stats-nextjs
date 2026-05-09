@@ -1,9 +1,10 @@
 import { auth } from "@clerk/nextjs/server"
 import { LineupsDashboard } from "@/components/views/lineups-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { fetchCasualtyWardOuts, fetchUpcomingLineups, fetchUpcomingTryscorerOdds } from "@/lib/lineups/nrl-lineups"
+import { fetchCasualtyWardOuts, fetchLiveLineupData, fetchUpcomingLineups, fetchUpcomingSportsbetH2HOdds, fetchUpcomingTryscorerOdds } from "@/lib/lineups/nrl-lineups"
 import { fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
 import type { PlayerStat } from "@/lib/data/types"
+import type { LineupLiveMatch, LineupMatch } from "@/lib/lineups/nrl-lineups"
 
 export const dynamic = "force-dynamic"
 
@@ -22,6 +23,7 @@ const AVERAGE_KEYS = [
 ] as const
 
 type AverageKey = (typeof AVERAGE_KEYS)[number]
+type PositionBaselineKey = "FB" | "W" | "C" | "FE" | "HLF" | "HK" | "PR" | "2RF" | "LK"
 
 function normaliseName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
@@ -55,26 +57,97 @@ function buildPlayerAverages(rows: PlayerStat[]): Record<string, Record<AverageK
   )
 }
 
+function positionBaselineKey(position: string | null | undefined, number: string | number | null | undefined): PositionBaselineKey | null {
+  const rawNumber = Number(number)
+  if (rawNumber === 1) return "FB"
+  if (rawNumber === 2 || rawNumber === 5) return "W"
+  if (rawNumber === 3 || rawNumber === 4) return "C"
+  if (rawNumber === 6) return "FE"
+  if (rawNumber === 7) return "HLF"
+  if (rawNumber === 8 || rawNumber === 10) return "PR"
+  if (rawNumber === 9) return "HK"
+  if (rawNumber === 11 || rawNumber === 12) return "2RF"
+  if (rawNumber === 13) return "LK"
+
+  const key = String(position ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+  if (key.includes("fullback")) return "FB"
+  if (key.includes("wing")) return "W"
+  if (key.includes("centre") || key.includes("center")) return "C"
+  if (key.includes("five eighth")) return "FE"
+  if (key.includes("halfback")) return "HLF"
+  if (key.includes("hooker")) return "HK"
+  if (key.includes("prop")) return "PR"
+  if (key.includes("row")) return "2RF"
+  if (key.includes("lock")) return "LK"
+  return null
+}
+
+function buildPositionPpmBaselines(rows: PlayerStat[]): Record<string, number> {
+  const totals = new Map<PositionBaselineKey, { fantasy: number; minutes: number }>()
+
+  for (const row of rows) {
+    const key = positionBaselineKey(row.Position, row.Number)
+    const minutes = Number(row["Mins Played"] ?? 0)
+    const fantasy = Number(row.Fantasy ?? 0)
+    if (!key || !Number.isFinite(minutes) || minutes <= 0 || !Number.isFinite(fantasy)) continue
+
+    const bucket = totals.get(key) ?? { fantasy: 0, minutes: 0 }
+    bucket.fantasy += fantasy
+    bucket.minutes += minutes
+    totals.set(key, bucket)
+  }
+
+  return Object.fromEntries(
+    [...totals.entries()].map(([key, bucket]) => [key, bucket.minutes > 0 ? bucket.fantasy / bucket.minutes : 0])
+  )
+}
+
+function parseKickoff(value: string | null): Date | null {
+  if (!value) return null
+  const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(value)
+  const timestamp = Date.parse(hasTimezone ? value : `${value}Z`)
+  return Number.isFinite(timestamp) ? new Date(timestamp) : null
+}
+
+function isPastMatch(match: LineupMatch, now = new Date()): boolean {
+  const kickoff = parseKickoff(match.kickoffUtc)
+  return kickoff != null && kickoff.getTime() <= now.getTime()
+}
+
+function hasLiveData(liveMatch: LineupLiveMatch | null | undefined): boolean {
+  return Boolean(
+    liveMatch?.state ||
+    (liveMatch?.scoringEvents.length ?? 0) > 0 ||
+    Object.keys(liveMatch?.playerStates ?? {}).length > 0 ||
+    Object.keys(liveMatch?.playerStats ?? {}).length > 0
+  )
+}
+
 export default async function LineupsPage() {
   const { userId } = await auth()
   const hasProAccess = await getServerProPlotAccess(userId)
-  const [matches, teamLogos, tryscorerOdds, casualtyWardOuts, playerStats2026] = await Promise.all([
+  const [matches, teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStats2026] = await Promise.all([
     fetchUpcomingLineups({ includeFantasyProjections: hasProAccess }),
     fetchTeamLogos(),
     fetchUpcomingTryscorerOdds(),
-    hasProAccess ? fetchCasualtyWardOuts() : Promise.resolve({}),
+    fetchUpcomingSportsbetH2HOdds(),
+    fetchCasualtyWardOuts(),
     fetchPlayerStats(["2026"]),
   ])
+  const liveMatches = await fetchLiveLineupData(matches.map((match) => match.matchId))
+  const visibleMatches = matches.filter((match) => !isPastMatch(match) || hasLiveData(liveMatches[match.matchId]))
 
   return (
     <LineupsDashboard
-      matches={matches}
+      matches={visibleMatches}
+      liveMatches={liveMatches}
       teamLogos={teamLogos}
       tryscorerOdds={tryscorerOdds}
-      canAccessNotableOuts={hasProAccess}
+      sportsbetOdds={sportsbetOdds}
       canAccessFantasyProjections={hasProAccess}
       casualtyWardOuts={casualtyWardOuts}
       playerAverages={buildPlayerAverages(playerStats2026)}
+      positionPpmBaselines={buildPositionPpmBaselines(playerStats2026)}
     />
   )
 }

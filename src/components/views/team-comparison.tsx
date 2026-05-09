@@ -173,7 +173,7 @@ export function TeamComparison({
       setAllData([]);
       return;
     }
-    setLoading(true);
+    setLoading(allData.length === 0);
     try {
       const res = await fetch(`/api/team-stats?years=${unlockedYears.join(",")}`);
       if (res.ok) {
@@ -183,7 +183,7 @@ export function TeamComparison({
     } finally {
       setLoading(false);
     }
-  }, [unlockedYears]);
+  }, [allData.length, unlockedYears]);
 
   const handleYearsChange = useCallback(async (years: string[]) => {
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));

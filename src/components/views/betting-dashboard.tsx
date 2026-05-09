@@ -1849,20 +1849,26 @@ function BestBetsHero({
   canAccessPremium: boolean;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
-  const protectedValueClass = canAccessPremium ? "" : "blur-[4px] select-none";
-
   return (
     <section className="overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)]">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
-        <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-nrl-accent">
+        <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-nrl-text">
           Today&apos;s Best Bets
         </div>
         {bets[0] ? (
           <div className="text-right">
-            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-nrl-muted">Top Edge</div>
-            <div className={`text-2xl font-bold leading-none text-nrl-accent drop-shadow-[0_0_10px_rgba(0,245,138,0.28)] ${protectedValueClass}`}>
-              +{bets[0].edgePp.toFixed(2)}%
+            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-nrl-muted">
+              {canAccessPremium ? "Top Edge" : "1 Unlocked"}
             </div>
+            {canAccessPremium ? (
+              <div className="text-2xl font-bold leading-none text-nrl-accent drop-shadow-[0_0_8px_rgba(0,245,138,0.22)]">
+                +{bets[0].edgePp.toFixed(2)}%
+              </div>
+            ) : (
+              <div className="text-sm font-bold uppercase tracking-[0.18em] text-nrl-text">
+                Free Preview
+              </div>
+            )}
           </div>
         ) : null}
       </div>
@@ -1875,114 +1881,142 @@ function BestBetsHero({
         <div className="grid gap-2.5 p-3 md:grid-cols-2 xl:grid-cols-4">
           {bets.map((bet, index) => {
             const isPrimary = index === 0;
+            const isUnlocked = canAccessPremium || index === 0;
+            const isLocked = !isUnlocked;
             const cardClass = isPrimary
-              ? "md:col-span-2 border-nrl-accent/45 bg-[#14213b] shadow-[0_12px_30px_rgba(0,245,138,0.08)]"
+              ? "md:col-span-2 border-nrl-accent/30 bg-[#14213b] shadow-[0_12px_30px_rgba(0,245,138,0.05)]"
               : "border-nrl-border bg-nrl-panel/90";
+            const lockedContentClass = isLocked ? "pointer-events-none select-none blur-[7px]" : "";
 
             return (
               <article
                 key={bet.id}
-                className={`group rounded-lg border px-3 py-3 transition-colors hover:border-nrl-accent/60 sm:px-4 ${cardClass}`}
+                className={`group relative overflow-hidden rounded-lg border px-3 py-3 transition-colors hover:border-nrl-accent/40 sm:px-4 ${isLocked ? "border-white/10 bg-nrl-panel/78" : cardClass}`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {bet.tags.map((tag) => (
-                        <span
-                          key={`${bet.id}-${tag}`}
-                          className="text-[9px] font-bold uppercase tracking-[0.15em] text-nrl-accent"
-                        >
-                          {tag}
+                <div className={lockedContentClass}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {isLocked ? (
+                          <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-nrl-muted">
+                            Premium Pick
+                          </span>
+                        ) : (
+                          bet.tags.map((tag) => (
+                            <span
+                              key={`${bet.id}-${tag}`}
+                              className={`text-[9px] font-bold uppercase tracking-[0.15em] ${tag === "Top Rated Bet" ? "text-nrl-accent/85" : "text-nrl-muted"}`}
+                            >
+                              {tag}
+                            </span>
+                          ))
+                        )}
+                        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-nrl-muted">
+                          {isLocked ? "Locked" : bet.market}
                         </span>
-                      ))}
-                      <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-nrl-muted">
-                        {bet.market}
-                      </span>
+                      </div>
+                      <div className={`mt-2 font-semibold leading-tight text-white ${isPrimary ? "text-xl sm:text-2xl" : "text-base"}`}>
+                        {isLocked ? "Selection hidden" : bet.selectionLabel}
+                      </div>
+                      <div className="mt-1 truncate text-xs text-nrl-muted">
+                        {isLocked ? "Upgrade to view match and market" : bet.match}
+                      </div>
                     </div>
-                    <div className={`mt-2 font-semibold leading-tight text-white ${isPrimary ? "text-xl sm:text-2xl" : "text-base"}`}>
-                      {bet.selectionLabel}
-                    </div>
-                    <div className="mt-1 truncate text-xs text-nrl-muted">
-                      {bet.match}
-                    </div>
-                  </div>
                   <div className="shrink-0 text-right">
-                    <div className={`text-3xl font-bold leading-none text-nrl-accent drop-shadow-[0_0_12px_rgba(0,245,138,0.28)] ${isPrimary ? "sm:text-4xl" : ""} ${protectedValueClass}`}>
-                      +{bet.edgePp.toFixed(2)}%
+                    <div className={`text-3xl font-bold leading-none ${isLocked ? "text-nrl-muted" : "text-nrl-accent drop-shadow-[0_0_10px_rgba(0,245,138,0.22)]"} ${isPrimary ? "sm:text-4xl" : ""}`}>
+                      {isLocked ? "+EV" : `+${bet.edgePp.toFixed(2)}%`}
                     </div>
                     <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
-                      edge
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/8 pt-3 text-xs">
-                  <div>
-                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
-                    <div className="mt-0.5 flex items-center gap-2 text-white">
-                      <div className="flex items-center gap-1">
-                        {bet.bestBookies.slice(0, 3).map((bookie) => (
-                          <BookieLogo key={`${bet.id}-${bookie}`} bookie={bookie} compact />
-                        ))}
+                        edge
                       </div>
-                      <span className="text-base font-bold">{formatPrice(bet.odds)}</span>
-                      {bet.bestBookieCount > 3 ? (
-                        <span className="text-[10px] text-nrl-muted">+{bet.bestBookieCount - 3} books</span>
-                      ) : null}
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
-                    <div className="mt-0.5 font-semibold text-nrl-text">
-                      <span className={`text-white ${protectedValueClass}`}>{formatPct(bet.modelProbability * 100)}</span>
-                      <span className="mx-1.5 text-nrl-muted">vs</span>
-                      <span>{formatPct(bet.impliedProbability * 100)}</span>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/8 pt-3 text-xs">
+                    <div>
+                      <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
+                      <div className="mt-0.5 flex items-center gap-2 text-white">
+                        <div className="flex items-center gap-1">
+                          {isLocked ? (
+                            <>
+                              <span className="h-4 w-4 rounded-sm bg-white/14" />
+                              <span className="h-4 w-4 rounded-sm bg-white/10" />
+                            </>
+                          ) : (
+                            bet.bestBookies.slice(0, 3).map((bookie) => (
+                              <BookieLogo key={`${bet.id}-${bookie}`} bookie={bookie} compact />
+                            ))
+                          )}
+                        </div>
+                        <span className="text-base font-bold">{isLocked ? "--" : formatPrice(bet.odds)}</span>
+                        {!isLocked && bet.bestBookieCount > 3 ? (
+                          <span className="text-[10px] text-nrl-muted">+{bet.bestBookieCount - 3} books</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
+                      <div className="mt-0.5 font-semibold text-nrl-text">
+                        <span className="text-white">{isLocked ? "--" : formatPct(bet.modelProbability * 100)}</span>
+                        <span className="mx-1.5 text-nrl-muted">vs</span>
+                        <span>{isLocked ? "--" : formatPct(bet.impliedProbability * 100)}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Kelly</div>
+                      <div className="mt-0.5 text-base font-semibold text-white">
+                        {isLocked ? "--" : `$${bet.kellyStake}`}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Kelly</div>
-                    <div className={`mt-0.5 text-base font-semibold text-white ${protectedValueClass}`}>
-                      ${bet.kellyStake}
-                    </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
+                    {bet.marketEfficiencyPct != null && !isLocked ? (
+                      <span>
+                        Market {formatPct(bet.marketEfficiencyPct)}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3">
+                    {canAccessPremium ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void onAddBet({
+                            market: bet.market,
+                            matchDate: bet.date,
+                            matchName: bet.match,
+                            selection: bet.selection,
+                            lineValue: bet.lineValue,
+                            odds: bet.odds,
+                            stake: bet.kellyStake,
+                            modelProb: bet.modelProbability,
+                            impliedProb: bet.impliedProbability,
+                            edgePp: bet.edgePp,
+                          });
+                        }}
+                        className="w-full cursor-pointer rounded-md border border-white/12 bg-white/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-nrl-text transition-colors hover:border-nrl-accent/55 hover:bg-nrl-accent/10 hover:text-nrl-accent"
+                      >
+                        View Bet
+                      </button>
+                    ) : null}
                   </div>
                 </div>
-
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
-                  {bet.marketEfficiencyPct != null ? (
-                    <span>
-                      Market {formatPct(bet.marketEfficiencyPct)}
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="mt-3">
-                  {canAccessPremium ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void onAddBet({
-                          market: bet.market,
-                          matchDate: bet.date,
-                          matchName: bet.match,
-                          selection: bet.selection,
-                          lineValue: bet.lineValue,
-                          odds: bet.odds,
-                          stake: bet.kellyStake,
-                          modelProb: bet.modelProbability,
-                          impliedProb: bet.impliedProbability,
-                          edgePp: bet.edgePp,
-                        });
-                      }}
-                      className="w-full cursor-pointer rounded-md border border-nrl-accent/80 bg-nrl-accent/14 px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-nrl-accent transition-colors hover:bg-nrl-accent/24"
-                    >
-                      View Bet
-                    </button>
-                  ) : (
-                    <BillingPageLink className="block w-full rounded-md border border-nrl-accent/80 bg-nrl-accent/12 px-3 py-2 text-center text-xs font-bold uppercase tracking-[0.16em] text-nrl-accent transition-colors hover:bg-nrl-accent/22">
-                      See Why
+                {isLocked ? (
+                  <div className="absolute inset-0 z-10 grid place-items-center bg-[#080d1f]/35 px-4 backdrop-blur-[2px]">
+                    <BillingPageLink className="rounded-xl bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]">
+                      <div className="rounded-[calc(0.75rem-1px)] bg-slate-950/85 px-4 py-3 text-center">
+                        <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
+                          Sign Up To Pro
+                        </div>
+                        <div className="mt-1 text-xs text-slate-400">
+                          Unlock the full best bets board.
+                        </div>
+                      </div>
                     </BillingPageLink>
-                  )}
-                </div>
+                  </div>
+                ) : null}
               </article>
             );
           })}

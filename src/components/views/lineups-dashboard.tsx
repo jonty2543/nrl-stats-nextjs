@@ -256,7 +256,34 @@ function getLivePlayerState(liveMatch: LineupLiveMatch | null | undefined, playe
 }
 
 function getLivePlayerStats(liveMatch: LineupLiveMatch | null | undefined, player: LineupPlayer): LineupLivePlayerStats | null {
-  return liveMatch?.playerStats[livePlayerKey(player)] ?? null
+  return (
+    liveMatch?.playerStats[livePlayerKey(player)] ??
+    liveMatch?.playerStats[`${normaliseKey(player.team)}|${normaliseKey(player.player)}`] ??
+    null
+  )
+}
+
+function historicalLiveMatch(match: LineupMatch, stats: LineupMatchStats | null): LineupLiveMatch | null {
+  if (!stats || (stats.scoringEvents.length === 0 && Object.keys(stats.playerStats).length === 0)) return null
+  return {
+    state: {
+      matchId: match.matchId,
+      matchState: "Full Time",
+      matchMode: null,
+      gameSeconds: 80 * 60,
+      liveSeconds: 80 * 60,
+      homeTeamId: match.homeTeam?.teamId ?? null,
+      homeTeam: stats.homeTeam,
+      homeScore: match.homeScore ?? stats.home.score,
+      awayTeamId: match.awayTeam?.teamId ?? null,
+      awayTeam: stats.awayTeam,
+      awayScore: match.awayScore ?? stats.away.score,
+      updatedAt: null,
+    },
+    scoringEvents: stats.scoringEvents,
+    playerStates: {},
+    playerStats: stats.playerStats,
+  }
 }
 
 function formatGameClock(seconds: number | null | undefined): string | null {
@@ -322,6 +349,59 @@ function matchScore(match: LineupMatch, liveMatch: LineupLiveMatch | null | unde
     homeScore: score.homeScore ?? match.homeScore ?? null,
     awayScore: score.awayScore ?? match.awayScore ?? null,
   }
+}
+
+function completedPlayerStatsForPlayer(playerStats: Record<string, LineupLivePlayerStats>, player: LineupPlayer): LineupLivePlayerStats | null {
+  return playerStats[`${normaliseKey(player.team)}|${normaliseKey(player.player)}`] ?? null
+}
+
+function historicalSideForNumber(number: number | null): LineupPlayer["side"] {
+  if (number === 5 || number === 4 || number === 11 || number === 6) return "left"
+  if (number === 2 || number === 3 || number === 12 || number === 7) return "right"
+  if (number === 9 || number === 1) return "spine"
+  if (number === 8 || number === 10 || number === 13) return "middle"
+  return "unknown"
+}
+
+function applyCompletedPlayerStats(players: LineupPlayer[], matchStats: LineupMatchStats | null, team: LineupTeam | null): LineupPlayer[] {
+  if (!matchStats || !team) return players
+  const existingPlayerKeys = new Set(players.map((player) => normaliseKey(player.player)))
+  const adjustedPlayers = players.map((player) => {
+    const stats = completedPlayerStatsForPlayer(matchStats.playerStats, player)
+    if (!stats) return player
+    return {
+      ...player,
+      number: stats.number ?? player.number,
+      position: stats.position ?? player.position,
+      isOnField: stats.minutesPlayed != null ? stats.minutesPlayed > 0 : player.isOnField,
+    }
+  })
+
+  const teamKeys = new Set([team.team, team.teamName].flatMap(teamAliases))
+  const missingPlayers = Object.values(matchStats.playerStats)
+    .filter((stats) => stats.player && stats.team && teamKeys.has(normaliseKey(stats.team)))
+    .filter((stats) => !existingPlayerKeys.has(normaliseKey(stats.player)))
+    .filter((stats) => (stats.minutesPlayed ?? 0) > 0)
+    .map((stats): LineupPlayer => ({
+      matchId: matchStats.matchId,
+      team: team.team,
+      teamName: team.teamName,
+      teamId: team.teamId,
+      teamType: team.teamType,
+      number: stats.number,
+      position: stats.position ?? "Interchange",
+      player: stats.player ?? "Unknown",
+      playerId: null,
+      isCaptain: false,
+      isOnField: true,
+      headImage: null,
+      bodyImage: null,
+      fantasyProjection: null,
+      side: historicalSideForNumber(stats.number),
+      sideSource: "unknown",
+    }))
+
+  return [...adjustedPlayers, ...missingPlayers].sort((a, b) => (a.number ?? 99) - (b.number ?? 99))
 }
 
 function hasMatchStarted(liveMatch: LineupLiveMatch | null | undefined): boolean {
@@ -1213,7 +1293,7 @@ function PitchPlayer({
   const liveState = getLivePlayerState(liveMatch, player)
   const liveStats = getLivePlayerStats(liveMatch, player)
   const baseline = positionBaselineForPlayer(player, positionPpmBaselines)
-  const isOffFieldStarter = showLiveIndicators && liveState?.isOnField === false
+  const isOffFieldStarter = isMatchLive(liveMatch) && liveState?.isOnField === false
 
   return (
     <button
@@ -1406,6 +1486,7 @@ function TeamBench({
 }) {
   const pitchSlots = buildTeamPitchSlotMap(team?.players ?? [])
   const bench = team?.players.filter((player) => !pitchSlots.has(pitchPlayerKey(player))) ?? []
+  const showSubstitutionIndicators = isMatchLive(liveMatch)
   return (
     <div
       className="min-w-0 rounded-md border border-transparent p-2 shadow-[0_12px_28px_rgba(0,0,0,0.24)]"
@@ -1438,7 +1519,7 @@ function TeamBench({
                     />
                   ) : null}
                 </span>
-                {showLiveIndicators && liveState?.isOnField ? <LiveStatusIcon type="on" compact /> : null}
+                {showSubstitutionIndicators && liveState?.isOnField ? <LiveStatusIcon type="on" compact /> : null}
               </button>
             )
           })}
@@ -1695,23 +1776,27 @@ function LineupCard({
   playerAverages: Record<string, Record<AverageStatKey, number>>
   positionPpmBaselines: Record<string, number>
 }) {
-  const homePlayers = match.homeTeam?.players ?? []
-  const awayPlayers = match.awayTeam?.players ?? []
+  const historicalData = historicalLiveMatch(match, matchStats)
+  const displayLiveMatch = isLiveDataVisible(liveMatch) ? liveMatch : historicalData
+  const homePlayers = applyCompletedPlayerStats(match.homeTeam?.players ?? [], matchStats, match.homeTeam)
+  const awayPlayers = applyCompletedPlayerStats(match.awayTeam?.players ?? [], matchStats, match.awayTeam)
+  const homeTeamForDisplay = match.homeTeam ? { ...match.homeTeam, players: homePlayers } : null
+  const awayTeamForDisplay = match.awayTeam ? { ...match.awayTeam, players: awayPlayers } : null
   const hasLineupData = homePlayers.length > 0 || awayPlayers.length > 0
   const [selectedPlayer, setSelectedPlayer] = useState<LineupPlayer | null>(null)
   const [detailView, setDetailView] = useState<LineupDetailView>(hasLineupData ? "lineup" : "stats")
   const availableDetailViews: LineupDetailView[] = hasLineupData ? ["lineup", "stats"] : ["stats"]
-  const isLive = hasMatchStarted(liveMatch)
+  const isLive = hasMatchStarted(displayLiveMatch)
   const hasResultScore = match.homeScore != null || match.awayScore != null
   const showPregameContent = !isLive && !hasResultScore
-  const showLiveIndicators = isLiveDataVisible(liveMatch)
+  const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
   const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.homeTeam, sportsbetOdds) : null
   const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
   const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
     ? {
         player: selectedPlayer,
-        liveState: getLivePlayerState(liveMatch, selectedPlayer),
-        liveStats: getLivePlayerStats(liveMatch, selectedPlayer),
+        liveState: getLivePlayerState(displayLiveMatch, selectedPlayer),
+        liveStats: getLivePlayerStats(displayLiveMatch, selectedPlayer),
         baselinePpm: positionBaselineForPlayer(selectedPlayer, positionPpmBaselines).value,
         baselineLabel: positionBaselineForPlayer(selectedPlayer, positionPpmBaselines).label,
       }
@@ -1735,7 +1820,7 @@ function LineupCard({
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={match.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
-          <LiveScoreHeader match={match} liveMatch={liveMatch} />
+          <LiveScoreHeader match={match} liveMatch={displayLiveMatch} />
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={match.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
@@ -1755,7 +1840,7 @@ function LineupCard({
 
       <div className="relative px-2 pb-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,rgba(191,219,254,0.5),rgba(59,130,246,0.18),transparent)] sm:px-3">
         <div className="pt-5" />
-        <LiveTryScorersStrip match={match} liveMatch={liveMatch} />
+        <LiveTryScorersStrip match={match} liveMatch={displayLiveMatch} />
         <div className="mb-3 flex justify-center">
           <div className="inline-flex rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
             {availableDetailViews.map((view) => (
@@ -1774,7 +1859,7 @@ function LineupCard({
         </div>
 
         {detailView === "stats" ? (
-          <MatchStatsPanel match={match} liveMatch={liveMatch} stats={matchStats} />
+          <MatchStatsPanel match={match} liveMatch={displayLiveMatch} stats={matchStats} />
         ) : hasLineupData ? (
           <>
             {showPregameContent ? <MatchupInsightsPanel insights={insights} canAccessFullInsights={canAccessFantasyProjections} /> : null}
@@ -1787,7 +1872,7 @@ function LineupCard({
               canAccessFantasyProjections={canAccessFantasyProjections}
               tryscorerOdds={tryscorerOdds}
               playerAverages={playerAverages}
-              liveMatch={liveMatch}
+              liveMatch={displayLiveMatch}
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
               showPregameMetrics={showPregameContent}
@@ -1802,7 +1887,7 @@ function LineupCard({
               canAccessFantasyProjections={canAccessFantasyProjections}
               tryscorerOdds={tryscorerOdds}
               playerAverages={playerAverages}
-              liveMatch={liveMatch}
+              liveMatch={displayLiveMatch}
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
               showPregameMetrics={showPregameContent}
@@ -1811,23 +1896,23 @@ function LineupCard({
 
             <div className="mt-3 grid grid-cols-2 gap-2">
               <TeamBench
-                team={match.homeTeam}
-                liveMatch={liveMatch}
+                team={homeTeamForDisplay}
+                liveMatch={displayLiveMatch}
                 positionPpmBaselines={positionPpmBaselines}
                 showLiveIndicators={showLiveIndicators}
                 onPlayerSelect={setSelectedPlayer}
               />
               <TeamBench
-                team={match.awayTeam}
-                liveMatch={liveMatch}
+                team={awayTeamForDisplay}
+                liveMatch={displayLiveMatch}
                 positionPpmBaselines={positionPpmBaselines}
                 showLiveIndicators={showLiveIndicators}
                 onPlayerSelect={setSelectedPlayer}
               />
             </div>
             <NotableOuts
-              homeTeam={match.homeTeam}
-              awayTeam={match.awayTeam}
+              homeTeam={homeTeamForDisplay}
+              awayTeam={awayTeamForDisplay}
               casualtyWardOuts={casualtyWardOuts}
             />
           </>

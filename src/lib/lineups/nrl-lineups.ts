@@ -74,6 +74,8 @@ export interface LineupMatchStats {
   awayTeam: string
   home: LineupTeamMatchStats
   away: LineupTeamMatchStats
+  scoringEvents: LineupLiveScoringEvent[]
+  playerStats: Record<string, LineupLivePlayerStats>
 }
 
 export interface LineupRoundMatchesResult {
@@ -619,29 +621,136 @@ function teamStatsFromMatchRow(row: RawRow, fantasyPoints: number | null): Lineu
   }
 }
 
-async function fetchPlayerFantasyTotalsForRound(round: string, year: number): Promise<Map<string, number>> {
+interface HistoricalRoundPlayerStats {
+  fantasyTotals: Map<string, number>
+  playerStatsByMatchKey: Map<string, Record<string, LineupLivePlayerStats>>
+}
+
+async function fetchHistoricalPlayerStatsForRound(round: string, year: number): Promise<HistoricalRoundPlayerStats> {
   const supabase = createServerSupabaseClient("nrl")
   const { data, error } = await supabase
     .from("player_stats")
-    .select("match_date,match,round,team,total_points")
+    .select(
+      [
+        "match_date",
+        "match",
+        "round",
+        "team",
+        "player",
+        "number",
+        "position",
+        "mins_played",
+        "points",
+        "tries",
+        "try_assists",
+        "line_breaks",
+        "line_break_assists",
+        "tackle_breaks",
+        "all_runs",
+        "all_run_metres",
+        "post_contact_metres",
+        "tackles_made",
+        "missed_tackles",
+        "ineffective_tackles",
+        "offloads",
+        "errors",
+        "penalties",
+        "kicks",
+        "kicking_metres",
+        "receipts",
+        "passes",
+        "total_points",
+      ].join(",")
+    )
     .eq("round", round)
     .gte("match_date", `${year}-01-01`)
     .lt("match_date", `${year + 1}-01-01`)
 
-  if (error || !data) return new Map()
+  const empty = { fantasyTotals: new Map<string, number>(), playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>() }
+  if (error || !data) return empty
 
   const totals = new Map<string, number>()
+  const playerStatsByMatchKey = new Map<string, Record<string, LineupLivePlayerStats>>()
   for (const row of data as unknown as RawRow[]) {
     const matchDate = text(row.match_date)
     const matchName = text(row.match)
     const [homeTeam, awayTeam] = matchName.split(/\s+vs\s+/i).map((part) => part.trim())
     const team = text(row.team)
+    const player = text(row.player)
     const points = numberOrNull(row.total_points)
-    if (!matchDate || !homeTeam || !awayTeam || !team || points == null) continue
-    const key = `${matchMergeKey(matchDate, homeTeam, awayTeam)}|${normaliseKey(team)}`
-    totals.set(key, (totals.get(key) ?? 0) + points)
+    if (!matchDate || !homeTeam || !awayTeam || !team || !player) continue
+
+    const matchKey = matchMergeKey(matchDate, homeTeam, awayTeam)
+    if (points != null) {
+      const totalKey = `${matchKey}|${normaliseKey(team)}`
+      totals.set(totalKey, (totals.get(totalKey) ?? 0) + points)
+    }
+
+    const bucket = playerStatsByMatchKey.get(matchKey) ?? {}
+    const stats: LineupLivePlayerStats = {
+      matchId: matchKey,
+      teamId: null,
+      team,
+      playerId: null,
+      player,
+      number: numberOrNull(row.number),
+      position: nullableText(row.position),
+      stats: row,
+      minutesPlayed: numberOrNull(row.mins_played),
+      fantasyPointsTotal: points,
+      points: numberOrNull(row.points),
+      tries: numberOrNull(row.tries),
+      tryAssists: numberOrNull(row.try_assists),
+      lineBreaks: numberOrNull(row.line_breaks),
+      lineBreakAssists: numberOrNull(row.line_break_assists),
+      tackleBreaks: numberOrNull(row.tackle_breaks),
+      allRuns: numberOrNull(row.all_runs),
+      allRunMetres: numberOrNull(row.all_run_metres),
+      postContactMetres: numberOrNull(row.post_contact_metres),
+      tacklesMade: numberOrNull(row.tackles_made),
+      missedTackles: numberOrNull(row.missed_tackles),
+      ineffectiveTackles: numberOrNull(row.ineffective_tackles),
+      offloads: numberOrNull(row.offloads),
+      errors: numberOrNull(row.errors),
+      penalties: numberOrNull(row.penalties),
+      kicks: numberOrNull(row.kicks),
+      kickMetres: numberOrNull(row.kicking_metres),
+      receipts: numberOrNull(row.receipts),
+      passes: numberOrNull(row.passes),
+      updatedAt: null,
+    }
+    const playerKey = livePlayerKey(null, team, player)
+    if (playerKey) bucket[playerKey] = stats
+    playerStatsByMatchKey.set(matchKey, bucket)
   }
-  return totals
+  return { fantasyTotals: totals, playerStatsByMatchKey }
+}
+
+function historicalTryEvents(matchId: string, team: string, summary: string | null | undefined, prefix: string): LineupLiveScoringEvent[] {
+  return String(summary ?? "")
+    .split(/\n+/)
+    .map((line, index): LineupLiveScoringEvent | null => {
+      const match = line.trim().match(/^(.+?)\s+(\d+)'$/)
+      if (!match) return null
+      const player = match[1]?.trim()
+      const minute = numberOrNull(match[2])
+      if (!player || minute == null) return null
+      return {
+        matchId,
+        eventKey: `${matchId}|${prefix}|try|${index}|${player}|${minute}`,
+        timelineIndex: minute,
+        scoringType: "try",
+        teamId: null,
+        team,
+        playerId: null,
+        player,
+        gameSeconds: minute * 60,
+        matchMinute: minute,
+        homeScore: null,
+        awayScore: null,
+      }
+    })
+    .filter((event): event is LineupLiveScoringEvent => Boolean(event))
 }
 
 export async function fetchLineupsForRound({
@@ -655,7 +764,7 @@ export async function fetchLineupsForRound({
 }): Promise<LineupRoundMatchesResult> {
   try {
     const supabase = createServerSupabaseClient("nrl")
-    const [{ data, error }, lineupRows, overrides, fantasyTotals] = await Promise.all([
+    const [{ data, error }, lineupRows, overrides, historicalPlayerStats] = await Promise.all([
       supabase
         .from("matches")
         .select(
@@ -669,6 +778,8 @@ export async function fetchLineupsForRound({
             "is_home",
             "score",
             "opponent_score",
+            "tries_summary",
+            "opponent_tries_summary",
             "possession_pct",
             "opponent_possession_pct",
             "completion_rate",
@@ -699,7 +810,10 @@ export async function fetchLineupsForRound({
         .order("match_date", { ascending: true }),
       fetchLineupRowsForRound(round, year, includeFantasyProjections).catch(() => []),
       fetchSideOverrides().catch(() => new Map<string, LineupSide>()),
-      fetchPlayerFantasyTotalsForRound(round, year).catch(() => new Map<string, number>()),
+      fetchHistoricalPlayerStatsForRound(round, year).catch(() => ({
+        fantasyTotals: new Map<string, number>(),
+        playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
+      })),
     ])
 
     if (error) throw new Error(`Supabase fetch nrl.matches round ${round}: ${error.message}`)
@@ -727,8 +841,8 @@ export async function fetchLineupsForRound({
       const key = matchMergeKey(matchDate, homeTeam, awayTeam)
       const lineupMatch = lineupsByKey.get(key)
       const matchId = lineupMatch?.matchId ?? key
-      const homeFantasy = fantasyTotals.get(`${key}|${normaliseKey(homeTeam)}`) ?? null
-      const awayFantasy = fantasyTotals.get(`${key}|${normaliseKey(awayTeam)}`) ?? null
+      const homeFantasy = historicalPlayerStats.fantasyTotals.get(`${key}|${normaliseKey(homeTeam)}`) ?? null
+      const awayFantasy = historicalPlayerStats.fantasyTotals.get(`${key}|${normaliseKey(awayTeam)}`) ?? null
 
       matches.push({
         matchId,
@@ -748,6 +862,11 @@ export async function fetchLineupsForRound({
         matchId,
         homeTeam,
         awayTeam,
+        scoringEvents: [
+          ...historicalTryEvents(matchId, homeTeam, nullableText(row.tries_summary), "home"),
+          ...historicalTryEvents(matchId, awayTeam, nullableText(row.opponent_tries_summary), "away"),
+        ].sort((a, b) => (a.matchMinute ?? 9999) - (b.matchMinute ?? 9999)),
+        playerStats: historicalPlayerStats.playerStatsByMatchKey.get(key) ?? {},
         home: teamStatsFromMatchRow(row, homeFantasy),
         away: {
           ...teamStatsFromMatchRow(row, awayFantasy),

@@ -9,13 +9,14 @@ import {
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
   fetchLineupsProjectionsByPlayerId,
+  type LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchAvailableYears,
   fetchCasualtyWardForPlayer,
-  fetchFantasyPlayerStatsAllYears,
+  fetchFantasyPlayerStatsForYears,
   fetchOriginChances,
   fetchPlayerImages,
   fetchRelevantCasualtyWardOuts,
@@ -24,9 +25,43 @@ import {
 } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
+const PLAYER_PAGE_CONTEXT_TIMEOUT_MS = 1500
 
 function defaultRecentYears(years: string[], maxYears = 4): string[] {
   return years.slice(0, Math.min(maxYears, years.length))
+}
+
+function emptyLineupsProjectionSnapshot(): LineupsProjectionSnapshot {
+  return {
+    round: null,
+    source: "none",
+    lineupsAvailable: false,
+    projectionByPlayerId: new Map(),
+    projectionByPlayerName: new Map(),
+    roleByPlayerId: new Map(),
+    roleByPlayerName: new Map(),
+  }
+}
+
+async function withPlayerPageContextTimeout<T>(
+  label: string,
+  promise: Promise<T>,
+  fallback: T
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      promise.catch((error) => {
+        console.warn(`Unable to load ${label} for fantasy player page.`, error)
+        return fallback
+      }),
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), PLAYER_PAGE_CONTEXT_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
 }
 
 function normaliseLineupPlayerName(value: unknown): string {
@@ -51,13 +86,13 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot, originChances] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
-    fetchLineupsProjectionsByPlayerId(),
+    withPlayerPageContextTimeout("lineup projections", fetchLineupsProjectionsByPlayerId(), emptyLineupsProjectionSnapshot()),
     fetchAvailableYears(),
-    loadDraw2026Data(),
-    fetchPlayerImages(),
-    fetchTeamLogos(),
-    fetchLatestFantasyOwnershipBaselineSnapshot(),
-    fetchOriginChances(),
+    withPlayerPageContextTimeout("2026 draw", loadDraw2026Data(), null),
+    withPlayerPageContextTimeout("player images", fetchPlayerImages(), []),
+    withPlayerPageContextTimeout("team logos", fetchTeamLogos(), {}),
+    withPlayerPageContextTimeout("ownership baseline", fetchLatestFantasyOwnershipBaselineSnapshot(), null),
+    withPlayerPageContextTimeout("Origin chances", fetchOriginChances(), []),
   ])
 
   const selectedPlayer = fantasyPlayers.find(
@@ -74,22 +109,27 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
   )
+  const initialPlayerStatsYears = initialYears.includes("2026") ? ["2026"] : initialYears.slice(0, 1)
   const selectedLineupRole = lineupsProjections.roleByPlayerId.get(selectedPlayer.id) ?? null
   const shouldFetchRelevantOuts =
     lineupsProjections.source === "lineups" &&
     Boolean(selectedLineupRole?.isOnField && selectedLineupRole.team && selectedLineupRole.position)
 
   const [initialPlayerStats, casualtyWardRows, rawRelevantOuts, relevantOutCandidates] = await Promise.all([
-    fetchFantasyPlayerStatsAllYears(selectedPlayer.name),
-    fetchCasualtyWardForPlayer(selectedPlayer.name),
+    fetchFantasyPlayerStatsForYears(selectedPlayer.name, initialPlayerStatsYears),
+    withPlayerPageContextTimeout("casualty ward", fetchCasualtyWardForPlayer(selectedPlayer.name), []),
     shouldFetchRelevantOuts
-      ? fetchRelevantCasualtyWardOuts({
-        team: selectedLineupRole?.team,
-        position: selectedLineupRole?.position,
-        excludePlayer: selectedPlayer.name,
-      })
+      ? withPlayerPageContextTimeout(
+        "relevant casualty outs",
+        fetchRelevantCasualtyWardOuts({
+          team: selectedLineupRole?.team,
+          position: selectedLineupRole?.position,
+          excludePlayer: selectedPlayer.name,
+        }),
+        []
+      )
       : Promise.resolve([]),
-    fetchRelevantCasualtyWardOutCandidates(),
+    withPlayerPageContextTimeout("relevant casualty candidates", fetchRelevantCasualtyWardOutCandidates(), []),
   ])
   const relevantOuts = rawRelevantOuts.filter(
     (row) => !lineupsProjections.roleByPlayerName.has(normaliseLineupPlayerName(row.player))
@@ -106,11 +146,10 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
         fantasyCoachPlayers={fantasyCoachPlayers}
         lineupsProjections={lineupsProjections}
         availableYears={unlockedYears}
-        defaultYears={initialYears}
+        defaultYears={initialPlayerStatsYears}
         initialPlayerStats={initialPlayerStats}
         canAccessLoginSeason={canAccessLoginSeason}
         canBypassPlotGate={canBypassPlotGate}
-        preloadedPlayerAllYears
         draw2026Data={draw2026Data}
         playerImages={playerImages}
         teamLogos={teamLogos}

@@ -89,19 +89,19 @@ export function MultiSelect({
           <div className="flex items-center justify-between gap-1">
             <div className="flex flex-wrap gap-0.5">
               {selectedOptions.length === 0 ? (
-                <span className="text-[10px] text-nrl-muted">{placeholder}</span>
+                <span className="text-[10px] text-slate-100">{placeholder}</span>
               ) : (
                 <>
                   {previewOptions.map((opt) => (
                     <span
                       key={opt}
-                      className="rounded-sm px-1.5 py-[1px] text-[9px] font-semibold bg-nrl-accent/20 text-nrl-accent border border-nrl-accent/30"
+                      className="rounded-sm border border-nrl-accent/30 bg-nrl-accent/20 px-1.5 py-[1px] text-[9px] font-semibold text-slate-100"
                     >
                       {opt}
                     </span>
                   ))}
                   {hiddenSelectedCount > 0 ? (
-                    <span className="rounded-sm px-1.5 py-[1px] text-[9px] font-semibold border border-nrl-border bg-nrl-panel text-nrl-muted">
+                    <span className="rounded-sm border border-nrl-border bg-nrl-panel px-1.5 py-[1px] text-[9px] font-semibold text-slate-100">
                       +{hiddenSelectedCount} more
                     </span>
                   ) : null}
@@ -136,7 +136,7 @@ export function MultiSelect({
                       disabled
                         ? "cursor-not-allowed bg-nrl-panel-2 text-nrl-muted/45 border border-nrl-border/50"
                         : selected
-                        ? "bg-nrl-accent/20 text-nrl-accent border border-nrl-accent/30"
+                        ? "bg-nrl-accent/20 text-slate-100 border border-nrl-accent/30"
                         : "bg-nrl-panel-2 text-nrl-muted border border-nrl-border hover:text-nrl-text"
                     }`}
                   >

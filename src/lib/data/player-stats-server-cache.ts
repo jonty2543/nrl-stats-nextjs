@@ -75,13 +75,49 @@ function sortYearsDesc(years: string[]): string[] {
     .sort((a, b) => Number.parseInt(b, 10) - Number.parseInt(a, 10));
 }
 
+function roundToSort(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const match = String(value ?? "").match(/\d+/);
+  return match ? Number.parseInt(match[0], 10) : 0;
+}
+
+function roundToLabel(value: unknown): string {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  if (/^round\s+\d+/i.test(text)) return text;
+  const parsed = roundToSort(text);
+  return parsed > 0 ? `Round ${parsed}` : text;
+}
+
+function normalizeCacheRow(row: PlayerStat): PlayerStat {
+  const mutable = { ...row } as Record<string, unknown>;
+  const matchDate = String(mutable.match_date ?? "");
+
+  if (!mutable.Year && matchDate) {
+    const year = new Date(matchDate).getFullYear();
+    if (Number.isFinite(year)) mutable.Year = String(year);
+  }
+  if (!mutable.Fantasy && mutable["Total Points"] != null) {
+    mutable.Fantasy = mutable["Total Points"];
+  }
+  if (!mutable.Round && mutable.round != null) {
+    mutable.Round = roundToSort(mutable.round);
+  }
+  if (!mutable.Round_Label && mutable.round != null) {
+    mutable.Round_Label = roundToLabel(mutable.round);
+  }
+
+  return mutable as PlayerStat;
+}
+
 export function filterPlayerStatsRowsByYears(
   rows: PlayerStat[],
   years?: string[]
 ): PlayerStat[] {
-  if (!years || years.length === 0) return rows;
+  const normalizedRows = rows.map(normalizeCacheRow);
+  if (!years || years.length === 0) return normalizedRows;
   const allowed = new Set(years);
-  return rows.filter((row) => allowed.has(String(row.Year ?? "")));
+  return normalizedRows.filter((row) => allowed.has(String(row.Year ?? "")));
 }
 
 export function availableYearsFromPlayerStatsRows(rows: PlayerStat[]): string[] {
@@ -93,7 +129,7 @@ function normalizeCacheFile(
 ): PlayerStatsServerCacheFile | null {
   if (!parsed || !Array.isArray(parsed.rows)) return null;
 
-  const rows = parsed.rows as PlayerStat[];
+  const rows = (parsed.rows as PlayerStat[]).map(normalizeCacheRow);
   const years = Array.isArray(parsed.years)
     ? sortYearsDesc(parsed.years.filter((year): year is string => typeof year === "string"))
     : availableYearsFromPlayerStatsRows(rows);

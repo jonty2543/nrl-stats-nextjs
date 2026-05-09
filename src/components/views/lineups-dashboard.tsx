@@ -88,8 +88,8 @@ function resolveBookieLogo(bookie: string | null | undefined): string | null {
 }
 
 const DISPLAY_MODES: { key: DisplayMode; label: string; shortLabel: string }[] = [
-  { key: "fantasy", label: "Fantasy Projection", shortLabel: "Proj" },
   { key: "odds", label: "Best Odds", shortLabel: "Odds" },
+  { key: "fantasy", label: "Fantasy Projection", shortLabel: "Proj" },
   { key: "Tries", label: "Try Scoring Avg", shortLabel: "Tries" },
   { key: "Try Assists", label: "Try Assists Avg", shortLabel: "TA" },
   { key: "All Run Metres", label: "Run Metres Avg", shortLabel: "RM" },
@@ -630,7 +630,7 @@ function LiveTryScorersStrip({ match, liveMatch }: { match: LineupMatch; liveMat
   )
 
   return (
-    <div className="mb-3 rounded-md border border-nrl-border bg-nrl-panel/60 px-3 py-3">
+    <div className="mb-3 rounded-md border border-nrl-border bg-nrl-panel/60 px-3 py-3 shadow-[0_14px_32px_rgba(0,0,0,0.24)]">
       {tryEvents.length > 0 ? (
         <div className="mx-auto grid max-w-md grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-4 px-2 sm:gap-6">
           <TeamTryScorersList events={homeTries} showEmpty={started} align="right" />
@@ -727,7 +727,7 @@ function FantasyBaselineBar({
 
 function PlayerStatTile({ item }: { item: PlayerStatDisplayItem }) {
   return (
-    <div className="min-w-0 rounded-md bg-nrl-panel px-3 py-2">
+    <div className="min-w-0 rounded-md bg-nrl-panel px-3 py-2 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
       <div className="truncate text-[9px] font-bold uppercase tracking-wide text-nrl-muted">{item.label}</div>
       <div className="mt-0.5 text-sm font-bold tabular-nums text-nrl-text">{item.value}</div>
     </div>
@@ -736,7 +736,7 @@ function PlayerStatTile({ item }: { item: PlayerStatDisplayItem }) {
 
 function PlayerStatGroup({ group }: { group: PlayerStatDisplayGroup }) {
   return (
-    <section className="rounded-md border border-nrl-border bg-nrl-panel-2/70 p-2">
+    <section className="rounded-md border border-nrl-border bg-nrl-panel-2/70 p-2 shadow-[0_12px_28px_rgba(0,0,0,0.24)]">
       <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-nrl-muted">{group.title}</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {group.items.map((item) => (
@@ -984,7 +984,7 @@ function TeamBadge({
   const fullName = team?.teamName ?? team?.team ?? "TBC"
 
   return (
-    <div className="flex min-h-[9.25rem] w-[7.5rem] min-w-0 max-w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel px-2.5 py-4 text-center shadow-[0_10px_24px_rgba(0,0,0,0.18)] sm:min-h-[10rem] sm:w-[9rem] sm:px-3 sm:py-5">
+    <div className="flex min-h-[9.25rem] w-[7.5rem] min-w-0 max-w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel px-2.5 py-4 text-center shadow-[0_18px_40px_rgba(0,0,0,0.34)] sm:min-h-[10rem] sm:w-[9rem] sm:px-3 sm:py-5">
       {logo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={logo} alt="" className="h-12 w-12 object-contain sm:h-14 sm:w-14" loading="lazy" />
@@ -1224,7 +1224,7 @@ function TeamBench({
   const pitchSlots = buildTeamPitchSlotMap(team?.players ?? [])
   const bench = team?.players.filter((player) => !pitchSlots.has(pitchPlayerKey(player))) ?? []
   return (
-    <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel/70 p-2">
+    <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel/70 p-2 shadow-[0_12px_28px_rgba(0,0,0,0.24)]">
       <div className="mb-1 truncate text-[10px] font-bold uppercase tracking-wide text-nrl-muted">{team?.team ?? "Team"} bench</div>
       {bench.length > 0 ? (
         <div className="grid gap-1 text-[11px] text-nrl-text">
@@ -1275,7 +1275,7 @@ function getTeamOuts(team: LineupTeam | null, casualtyWardOuts: Record<string, L
 
 function TeamNotableOuts({ team, outs }: { team: LineupTeam | null; outs: LineupCasualtyOut[] }) {
   return (
-    <div className="min-w-0 rounded-md bg-nrl-panel/55 p-2">
+    <div className="min-w-0 rounded-md bg-nrl-panel/55 p-2 shadow-[0_8px_20px_rgba(0,0,0,0.18)]">
       <div className="truncate text-[10px] font-bold uppercase tracking-wide text-nrl-muted">{team?.team ?? "Team"}</div>
       {outs.length > 0 ? (
         <div className="mt-1.5 grid gap-1.5">
@@ -1319,7 +1319,7 @@ function NotableOuts({
   const totalOuts = homeOuts.length + awayOuts.length
 
   return (
-    <details className="group/notable mt-3 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel/70">
+    <details className="group/notable mt-3 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel/70 shadow-[0_16px_34px_rgba(0,0,0,0.26)]">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2 py-2 marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="flex min-w-0 items-center gap-2">
           <InjuryIcon />
@@ -1357,7 +1357,7 @@ function MatchupInsightsPanel({
   const lockedInsightCount = canAccessFullInsights ? 0 : Math.max(0, insights.length - visibleInsights.length)
 
   return (
-    <details className="group/insights mb-5 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel/75" open>
+    <details className="group/insights mb-5 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel/75 shadow-[0_16px_34px_rgba(0,0,0,0.26)]" open>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2.5 py-2 marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-nrl-accent">Matchup Insights</span>
         <span className="flex shrink-0 items-center gap-2">
@@ -1379,7 +1379,7 @@ function MatchupInsightsPanel({
             {visibleInsights.map((insight, insightIndex) => (
               <div
                 key={`${insight.category}-${insight.title}-${insightIndex}`}
-                className="min-w-0 rounded-md border border-white/10 bg-nrl-panel-2/65 px-2 py-2"
+                className="min-w-0 rounded-md border border-white/10 bg-nrl-panel-2/65 px-2 py-2 shadow-[0_8px_18px_rgba(0,0,0,0.18)]"
               >
                 <div className="flex min-w-0 items-start gap-1.5">
                   <span className={`${INSIGHT_CATEGORY_CLASSES[insight.category]} shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide`}>
@@ -1393,7 +1393,7 @@ function MatchupInsightsPanel({
               </div>
             ))}
             {lockedInsightCount > 0 ? (
-              <div className="relative min-h-24 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2/65">
+              <div className="relative min-h-24 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2/65 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
                 <div className="grid gap-2 p-2 blur-[3px] select-none">
                   {(lockedPreviewInsights.length > 0 ? lockedPreviewInsights : visibleInsights).map((insight, insightIndex) => (
                     <div
@@ -1428,7 +1428,7 @@ function MatchupInsightsPanel({
             ) : null}
           </div>
         ) : (
-          <div className="rounded-md border border-white/10 bg-nrl-panel-2/55 px-2 py-1.5 text-[10px] text-nrl-muted">
+          <div className="rounded-md border border-white/10 bg-nrl-panel-2/55 px-2 py-1.5 text-[10px] text-nrl-muted shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
             No strong matchup signals identified yet.
           </div>
         )}
@@ -1526,7 +1526,7 @@ function LineupCard({
       })
 
   return (
-    <details className="group rounded-lg border border-nrl-border bg-nrl-panel-2" open={index === 0}>
+    <details className="group rounded-lg border border-nrl-border bg-nrl-panel-2 shadow-[0_22px_52px_rgba(0,0,0,0.36)]" open={index === 0}>
       <summary className="relative cursor-pointer list-none px-3 py-5 marker:hidden sm:px-5 sm:py-7 [&::-webkit-details-marker]:hidden">
         <div className="mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(8.5rem,auto)_minmax(0,1fr)] items-center gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,auto)_minmax(0,1fr)] sm:gap-8">
           <div className="min-w-0 justify-self-center">
@@ -1537,7 +1537,7 @@ function LineupCard({
             <TeamBadge team={match.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
         </div>
-        <span className="absolute bottom-0 left-1/2 z-10 inline-grid h-9 w-9 -translate-x-1/2 translate-y-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted transition-colors group-hover:text-nrl-text">
+        <span className="absolute bottom-0 left-1/2 z-10 inline-grid h-9 w-9 -translate-x-1/2 translate-y-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text">
           <span className="sr-only">Toggle lineups</span>
           <svg
             viewBox="0 0 16 16"

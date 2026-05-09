@@ -13,9 +13,8 @@ import {
 } from "@/components/views/player-comparison"
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
-import { fetchApprovedArticles } from "@/lib/articles"
+import type { Article } from "@/lib/articles"
 import type { Draw2026Data } from "@/lib/draw/types"
-import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   applyFantasyBreakEvenOffset,
   applyFantasyProjectionOffset,
@@ -24,26 +23,19 @@ import {
   fetchFantasyPlayersSnapshot,
   getTopFantasyOwnershipRise,
   getFantasyCoachRoundMetrics,
-  fetchLatestFantasyOwnershipBaselineSnapshot,
   type FantasyCoachPlayerSnapshot,
   type FantasyPlayerSnapshot,
 } from "@/lib/fantasy/nrl"
-import {
-  fetchUpcomingLineups,
-  fetchUpcomingTryscorerOdds,
-  type LineupPlayer,
-  type LineupTeam,
-  type LineupTryscorerOdds,
+import type {
+  LineupMatch,
+  LineupPlayer,
+  LineupTeam,
+  LineupTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
 import type { PlayerStat } from "@/lib/data/types"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   fetchAvailableYears,
-  fetchBettingOddsSnapshot,
-  fetchPlayerStats,
-  fetchFantasyPlayerStatsAllYears,
-  fetchPlayerImages,
-  fetchTeamLogos,
 } from "@/lib/supabase/queries"
 
 export const revalidate = 120
@@ -609,27 +601,23 @@ function buildRecentFormRows(
   })
 }
 
-function buildPlayerLeaderEntries(
-  rows: PlayerStat[],
-  statKey: keyof PlayerStat | string,
+function buildFantasySnapshotLeaderEntries(
+  fantasyPlayers: FantasyPlayerSnapshot[],
+  metric: "totalPoints" | "avgPoints" | "ownedBy",
   playerImages: PlayerImageRecord[],
 ): LandingLeaderEntry[] {
-  const grouped = new Map<string, { name: string; team: string; value: number }>()
-
-  for (const row of rows) {
-    const key = `${row.Name}|${row.Team}`
-    const current = grouped.get(key) ?? { name: row.Name, team: row.Team, value: 0 }
-    current.value += toFiniteNumber(row[statKey]) ?? 0
-    grouped.set(key, current)
-  }
-
-  return [...grouped.values()]
-    .filter((entry) => entry.value > 0)
+  return fantasyPlayers
+    .map((player) => ({
+      name: player.name,
+      team: player.positionLabel,
+      value: player[metric],
+    }))
+    .filter((entry): entry is { name: string; team: string; value: number } => entry.value != null && entry.value > 0)
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name))
     .slice(0, 8)
     .map((entry) => ({
       ...entry,
-      imageSources: buildPlayerImageSources(entry.name, entry.team, playerImages),
+      imageSources: buildPlayerImageSources(entry.name, null, playerImages),
     }))
 }
 
@@ -959,36 +947,30 @@ export default async function Home() {
   const [
     fantasyPlayers,
     fantasyCoachPlayers,
-    ownershipBaselineSnapshot,
-    bettingSnapshot,
     availableYears,
-    playerImages,
-    draw2026Data,
-    lineups,
-    teamLogos,
-    tryscorerOdds,
-    approvedArticles,
   ] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
-    fetchLatestFantasyOwnershipBaselineSnapshot(),
-    fetchBettingOddsSnapshot(),
     fetchAvailableYears(),
-    fetchPlayerImages(),
-    loadDraw2026Data().catch(() => null),
-    fetchUpcomingLineups(),
-    fetchTeamLogos(),
-    fetchUpcomingTryscorerOdds(),
-    fetchApprovedArticles(),
   ])
+  const bettingSnapshot: BettingOddsSnapshot = {
+    h2h: [],
+    line: [],
+    total: [],
+    tryscorer: [],
+    generatedAt: "",
+  }
+  const playerImages: PlayerImageRecord[] = []
+  const approvedArticles: Article[] = []
+  const teamLogos: Record<string, string> = {}
+  const draw2026Data: Draw2026Data | null = null
+  const lineups: LineupMatch[] = []
+  const tryscorerOdds: Record<string, LineupTryscorerOdds> = {}
 
   const previewYears = [...availableYears].map(String).sort((a, b) => Number(b) - Number(a)).slice(0, 3)
   const plotYears = previewYears.filter((year) => year !== "2024")
-  const spotlightLocalRows = fantasyPlayers[0]?.name
-    ? await fetchFantasyPlayerStatsAllYears(fantasyPlayers[0].name)
-    : []
 
-  const ownershipDeltaByPlayerId = buildFantasyOwnershipDeltaByPlayerId(fantasyPlayers, ownershipBaselineSnapshot)
+  const ownershipDeltaByPlayerId = buildFantasyOwnershipDeltaByPlayerId(fantasyPlayers, null)
   const topOwnershipRise = getTopFantasyOwnershipRise(ownershipDeltaByPlayerId)
   const topOwnershipBuyTargets = fantasyPlayers
     .map((player) => ({
@@ -1010,11 +992,11 @@ export default async function Home() {
     : null
   const spotlightCoachMetrics = getFantasyCoachRoundMetrics(spotlightCoachPlayer)
   const fantasyRoundLabel = spotlightCoachMetrics.round != null ? `Round ${spotlightCoachMetrics.round}` : "Round X"
-  const spotlightRows = spotlightFantasyPlayer?.name === fantasyPlayers[0]?.name
-    ? spotlightLocalRows
-    : spotlightFantasyPlayer
-      ? await fetchFantasyPlayerStatsAllYears(spotlightFantasyPlayer.name)
-      : []
+  const statsPlayer1Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nathan Cleary"], 0)
+  const statsPlayer2Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nicholas Hynes", "Nicho Hynes"], 1)
+  const spotlightRows: PlayerStat[] = []
+  const statsPlayer1RowsRaw: PlayerStat[] = []
+  const statsPlayer2RowsRaw: PlayerStat[] = []
 
   const spotlightSortedRows = sortRowsByDateDesc(spotlightRows)
   const spotlightTeam = primaryTeamForRows(spotlightSortedRows)
@@ -1075,14 +1057,6 @@ export default async function Home() {
   const homeLineupPlayers = getLineupStartingPlayers(lineupsLandingMatch?.homeTeam ?? null)
   const awayLineupPlayers = getLineupStartingPlayers(lineupsLandingMatch?.awayTeam ?? null)
   const articlePreviewRows = approvedArticles.slice(0, 3)
-  const statsPlayer1Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nathan Cleary"], 0)
-  const statsPlayer2Name = pickPreferredFantasyPlayerName(fantasyPlayers, ["Nicholas Hynes", "Nicho Hynes"], 1)
-  const latestPreviewYear = previewYears[0] ?? ""
-  const [statsPlayer1RowsRaw, statsPlayer2RowsRaw, leaderSeasonRows] = await Promise.all([
-    statsPlayer1Name ? fetchFantasyPlayerStatsAllYears(statsPlayer1Name) : Promise.resolve([]),
-    statsPlayer2Name ? fetchFantasyPlayerStatsAllYears(statsPlayer2Name) : Promise.resolve([]),
-    latestPreviewYear ? fetchPlayerStats([latestPreviewYear]) : Promise.resolve([]),
-  ])
   const statsPlayer1Rows = sortRowsByDateDesc(statsPlayer1RowsRaw)
   const statsPlayer2Rows = sortRowsByDateDesc(statsPlayer2RowsRaw)
   const statsPlayers = [
@@ -1116,8 +1090,7 @@ export default async function Home() {
       }
     : null
   const statsPercentileRows = statsSummaryRows.map((row) => {
-    const playerPosition = row.position
-    const scopedRows = leaderSeasonRows.filter((entry) => entry.Position === playerPosition)
+    const scopedRows: PlayerStat[] = []
     const grouped = new Map<string, number[]>()
     for (const statRow of scopedRows) {
       const key = `${statRow.Name}|${statRow.Team}`
@@ -1135,20 +1108,22 @@ export default async function Home() {
     }
   })
   const statsLeaderCards = [
-    { key: "Points", label: "Points" },
-    { key: "Tries", label: "Tries" },
-    { key: "Conversions", label: "Conversions" },
+    { key: "totalPoints" as const, label: "Points" },
+    { key: "avgPoints" as const, label: "Average" },
+    { key: "ownedBy" as const, label: "Ownership %" },
   ].map((card) => ({
     ...card,
-    leaders: buildPlayerLeaderEntries(leaderSeasonRows, card.key, playerImages),
+    leaders: buildFantasySnapshotLeaderEntries(fantasyPlayers, card.key, playerImages),
   }))
 
   return (
     <div className="relative overflow-hidden text-nrl-text">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-        <AppHeader />
+      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 sm:px-6 lg:px-8">
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+          <AppHeader />
+        </div>
 
         <LandingHeroScrollShell>
           <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
@@ -1723,23 +1698,25 @@ export default async function Home() {
               {lineupsLandingMatch ? (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
-                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                      {[lineupsLandingMatch.homeTeam, lineupsLandingMatch.awayTeam].map((team, index) => {
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                      {([lineupsLandingMatch.homeTeam, lineupsLandingMatch.awayTeam] as const).map((team, index) => {
                         const logo = resolveLineupTeamLogo(team, teamLogos)
                         return (
                           <div key={`${team?.team ?? index}-lineup-team`} className="flex min-w-0 flex-col items-center text-center">
                             {logo ? (
                               <ImageWithFallback sources={[logo]} alt={team?.teamName ?? "Team logo"} className="h-10 w-10 object-contain" />
                             ) : null}
-                            <div className="mt-2 max-w-full truncate text-sm font-bold text-white">
+                            <div className="mt-2 max-w-full truncate text-xs font-bold text-white sm:text-sm">
                               {team?.teamName ?? team?.team ?? "TBC"}
                             </div>
                           </div>
                         )
-                      })}
-                      <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+                      }).flatMap((teamNode, index) => index === 0 ? [
+                        teamNode,
+                        <div key="lineups-preview-vs" className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
                         vs
-                      </div>
+                        </div>,
+                      ] : [teamNode])}
                     </div>
                     <div className="mt-3 text-center">
                       <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">{lineupsLandingMatch.round}</div>
@@ -1758,7 +1735,7 @@ export default async function Home() {
                         <span className="px-2 py-1 text-white/45">Tackles</span>
                       </div>
                     </div>
-                    <div className="relative h-[28rem] overflow-hidden rounded-xl border border-white/10 bg-[#07151e]/40 md:h-[24rem]">
+                    <div className="relative h-[22rem] overflow-hidden rounded-xl border border-white/10 bg-[#07151e]/40 md:h-[23rem]">
                       <div className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-emerald-200/45" />
                       {[12, 24, 36, 64, 76, 88].map((left) => (
                         <div key={`line-${left}`} className="absolute inset-y-0 w-px bg-emerald-200/18" style={{ left: `${left}%` }} />
@@ -1768,10 +1745,10 @@ export default async function Home() {
                         return (
                           <div
                             key={`home-field-${player.player}-${player.number ?? index}`}
-                            className="absolute z-[2] w-24 -translate-x-1/2 -translate-y-1/2 text-center"
+                            className="absolute z-[2] w-20 -translate-x-1/2 -translate-y-1/2 text-center sm:w-24"
                             style={{
-                              left: `${18 + (index % 2) * 21}%`,
-                              top: `${14 + Math.floor(index / 2) * 20}%`,
+                              left: `${20 + (index % 2) * 18}%`,
+                              top: `${18 + Math.floor(index / 2) * 22}%`,
                             }}
                           >
                             <div className="mx-auto grid h-11 w-11 place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-[#10172f] shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
@@ -1787,10 +1764,10 @@ export default async function Home() {
                         return (
                           <div
                             key={`away-field-${player.player}-${player.number ?? index}`}
-                            className="absolute z-[2] w-24 -translate-x-1/2 -translate-y-1/2 text-center"
+                            className="absolute z-[2] w-20 -translate-x-1/2 -translate-y-1/2 text-center sm:w-24"
                             style={{
-                              left: `${61 + (index % 2) * 21}%`,
-                              top: `${14 + Math.floor(index / 2) * 20}%`,
+                              left: `${62 + (index % 2) * 18}%`,
+                              top: `${18 + Math.floor(index / 2) * 22}%`,
                             }}
                           >
                             <div className="mx-auto grid h-11 w-11 place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-[#10172f] shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
@@ -2210,33 +2187,6 @@ export default async function Home() {
                     </div>
                   </div>
                 )}
-
-                {articlePreviewRows.length > 1 ? (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {articlePreviewRows.slice(1, 3).map((article) => (
-                      <Link
-                        key={article.id}
-                        href={`/dashboard/articles/${article.slug}`}
-                        className="group overflow-hidden rounded-xl border border-white/8 bg-[#1b2140] transition-colors hover:border-white/18"
-                      >
-                        <div className="grid grid-cols-[8rem_minmax(0,1fr)]">
-                          <div className="h-full min-h-32 bg-[#20274a]">
-                            {article.imageUrls[0] ? (
-                              <ImageWithFallback sources={[article.imageUrls[0]]} alt="" className="h-full w-full object-cover" />
-                            ) : null}
-                          </div>
-                          <div className="min-w-0 p-3">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">
-                              {article.displayName} · {formatArticleDate(article.approvedAt ?? article.createdAt)}
-                            </div>
-                            <div className="mt-2 line-clamp-2 text-sm font-bold leading-5 text-white group-hover:text-emerald-200">{article.title}</div>
-                            <div className="mt-2 line-clamp-2 text-xs leading-5 text-white/55">{articlePreviewText(article.body, 110)}</div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             </PreviewFrame>
           </FeatureSection>

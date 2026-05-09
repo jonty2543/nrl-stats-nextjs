@@ -1,5 +1,4 @@
 import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
 import { AiChatPage } from "@/components/views/ai-chat-page";
 import { getServerAiAccess } from "@/lib/ai/access";
 import {
@@ -23,10 +22,6 @@ interface AiPageProps {
 
 export default async function AiPage({ searchParams }: AiPageProps) {
   const { userId } = await auth();
-  if (!userId) {
-    redirect("/sign-in?redirect_url=%2Fdashboard%2Fai");
-  }
-
   const access = await getServerAiAccess(userId);
   const params = await searchParams;
   const requestedThreadId = typeof params.thread === "string" ? params.thread : null;

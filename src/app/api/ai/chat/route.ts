@@ -28,6 +28,7 @@ interface AiChatRequestBody {
   }>;
   toolName?: string;
   toolInput?: unknown;
+  persist?: boolean;
   imageAttachments?: Array<{
     name?: string;
     context?: string;
@@ -81,6 +82,7 @@ const AI_GUARDRAILS = [
 ];
 
 const AI_AUDIT_PREFIX = "[ai-audit]";
+const FIND_TRADES_PROMPT_PREFIX = "Fantasy Trade Suggestor dashboard request.";
 
 function truncateForAudit(text: string, maxLength = 160): string {
   const compact = text.replace(/\s+/g, " ").trim();
@@ -338,10 +340,6 @@ function buildQuotaMessage(
 
 function buildUsageTrackingMessage(): string {
   return "AI message usage tracking is not available right now, so plan-based message limits cannot be enforced safely.";
-}
-
-function buildPersistenceUnavailableMessage(): string {
-  return "AI chat storage is not available right now, so message limits cannot be enforced safely.";
 }
 
 function isTransientAiProviderError(message: string): boolean {
@@ -698,6 +696,13 @@ export async function POST(request: Request) {
   const requestHistory = toRequestHistory(body.history);
   const imageAttachments = toImageAttachments(body.imageAttachments);
   const toolName = typeof body.toolName === "string" ? body.toolName.trim() : "";
+  const shouldPersist = body.persist !== false;
+  const allowAnonymousFindTrades =
+    !userId &&
+    !shouldPersist &&
+    !toolName &&
+    imageAttachments.length > 0 &&
+    message.startsWith(FIND_TRADES_PROMPT_PREFIX);
 
   if (!message) {
     return NextResponse.json(
@@ -721,7 +726,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!userId) {
+  if (!userId && !allowAnonymousFindTrades) {
     return NextResponse.json(
       {
         status: "unauthorized",
@@ -839,34 +844,7 @@ export async function POST(request: Request) {
     }
 
     const persistedThreadId = await ensureAiThreadForUser(userId, requestedThreadId || null, message);
-    if (!persistedThreadId) {
-      logAiAuditEvent("ai_persistence_unavailable", {
-        userId,
-        plan: access.plan,
-        toolName,
-      }, "warn");
-      return NextResponse.json(
-        {
-          status: "usage_unavailable",
-          plan: access.plan,
-          chatLimit: access.chatLimit,
-          chatQuotaPeriodLabel: access.chatQuotaPeriodLabel,
-          chatsUsed: usage.usedInPeriod,
-          chatsRemaining: usage.remainingInPeriod,
-          usageTrackingAvailable: false,
-          submittedMessage: message,
-          assistantMessage: buildPersistenceUnavailableMessage(),
-          guardrails: AI_GUARDRAILS,
-          availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-          })),
-        },
-        { status: 503 }
-      );
-    }
-
-    const saved = await saveAiAssistantTurn({
+    await saveAiAssistantTurn({
       userId,
       threadId: persistedThreadId,
       threadTitle: message,
@@ -883,32 +861,6 @@ export async function POST(request: Request) {
       model: "direct_tool",
       usage: { inputTokens: null, outputTokens: null, totalTokens: null },
     });
-    if (!saved) {
-      logAiAuditEvent("ai_persistence_unavailable", {
-        userId,
-        plan: access.plan,
-        toolName,
-      }, "warn");
-      return NextResponse.json(
-        {
-          status: "usage_unavailable",
-          plan: access.plan,
-          chatLimit: access.chatLimit,
-          chatQuotaPeriodLabel: access.chatQuotaPeriodLabel,
-          chatsUsed: usage.usedInPeriod,
-          chatsRemaining: usage.remainingInPeriod,
-          usageTrackingAvailable: false,
-          submittedMessage: message,
-          assistantMessage: buildPersistenceUnavailableMessage(),
-          guardrails: AI_GUARDRAILS,
-          availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-          })),
-        },
-        { status: 503 }
-      );
-    }
 
     return NextResponse.json(sanitizeRuntimeMetadataForPlan({
       status: "tool_result",
@@ -1023,76 +975,29 @@ export async function POST(request: Request) {
 
     const choices = buildFollowUpChoices(message, modelResult.toolActivity);
     const continuationThreadId = existingThread?.threadId ?? (requestedThreadId || null);
-    const persistedThreadId = await ensureAiThreadForUser(
-      userId,
-      continuationThreadId,
-      message
-    );
-    if (!persistedThreadId) {
-      logAiAuditEvent("ai_persistence_unavailable", {
-        userId,
-        plan: access.plan,
-        threadId: continuationThreadId,
-      }, "warn");
-      return NextResponse.json(
-        {
-          status: "usage_unavailable",
-          plan: access.plan,
-          chatLimit: access.chatLimit,
-          chatQuotaPeriodLabel: access.chatQuotaPeriodLabel,
-          chatsUsed: usage.usedInPeriod,
-          chatsRemaining: usage.remainingInPeriod,
-          usageTrackingAvailable: false,
-          submittedMessage: message,
-          assistantMessage: buildPersistenceUnavailableMessage(),
-          guardrails: AI_GUARDRAILS,
-          availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-          })),
-        },
-        { status: 503 }
-      );
-    }
+    let persistedThreadId: string | null = null;
+    let threadTitle: string | null = null;
 
-    const threadTitle = await generateAiThreadSummary(history, message, modelResult.assistantMessage);
-    const saved = await saveAiAssistantTurn({
-      userId,
-      threadId: persistedThreadId,
-      threadTitle,
-      userMessage: message,
-      assistantMessage: modelResult.assistantMessage,
-      toolActivity: modelResult.toolActivity,
-      model: modelResult.model,
-      usage: modelResult.usage,
-      choices,
-      artifacts: modelResult.artifacts,
-    });
-    if (!saved) {
-      logAiAuditEvent("ai_persistence_unavailable", {
+    if (shouldPersist) {
+      persistedThreadId = await ensureAiThreadForUser(
         userId,
-        plan: access.plan,
-        threadId: persistedThreadId,
-      }, "warn");
-      return NextResponse.json(
-        {
-          status: "usage_unavailable",
-          plan: access.plan,
-          chatLimit: access.chatLimit,
-          chatQuotaPeriodLabel: access.chatQuotaPeriodLabel,
-          chatsUsed: usage.usedInPeriod,
-          chatsRemaining: usage.remainingInPeriod,
-          usageTrackingAvailable: false,
-          submittedMessage: message,
-          assistantMessage: buildPersistenceUnavailableMessage(),
-          guardrails: AI_GUARDRAILS,
-          availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-          })),
-        },
-        { status: 503 }
+        continuationThreadId,
+        message
       );
+      threadTitle = await generateAiThreadSummary(history, message, modelResult.assistantMessage);
+
+      await saveAiAssistantTurn({
+        userId,
+        threadId: persistedThreadId,
+        threadTitle,
+        userMessage: message,
+        assistantMessage: modelResult.assistantMessage,
+        toolActivity: modelResult.toolActivity,
+        model: modelResult.model,
+        usage: modelResult.usage,
+        choices,
+        artifacts: modelResult.artifacts,
+      });
     }
 
     return NextResponse.json(sanitizeRuntimeMetadataForPlan({

@@ -690,6 +690,88 @@ function formatOriginChanceContext(
   ].join("\n");
 }
 
+function formatFantasyPlayerTagContext({
+  visibleSnapshotResult,
+  buySnapshotResult,
+  valueSnapshotResult,
+  relevantOutCandidates,
+  originChances,
+  currentRound,
+  includeProTags,
+}: {
+  visibleSnapshotResult: AiToolExecutionResult | null | undefined;
+  buySnapshotResult: AiToolExecutionResult;
+  valueSnapshotResult: AiToolExecutionResult;
+  relevantOutCandidates: RelevantCasualtyWardRecord[];
+  originChances: OriginChanceRecord[];
+  currentRound: number | null;
+  includeProTags: boolean;
+}): string {
+  const players = uniqueFantasySnapshotPlayers([
+    ...getFantasySnapshotPlayers(visibleSnapshotResult),
+    ...getFantasySnapshotPlayers(buySnapshotResult),
+    ...getFantasySnapshotPlayers(valueSnapshotResult),
+  ]);
+  if (players.length === 0) return "";
+
+  const originPlayers = includeProTags
+    ? originChances.map((row) => row.player).filter(Boolean)
+    : [];
+  const relevantOuts = includeProTags
+    ? relevantOutCandidates.filter((row) =>
+      (row.averageFantasy ?? 0) >= 30 &&
+      (row.games ?? 0) >= 2 &&
+      Boolean(row.team && row.position && row.player)
+    )
+    : [];
+
+  const lines: string[] = [];
+  for (const player of players) {
+    const name = typeof player.name === "string" ? player.name : "";
+    if (!name) continue;
+
+    const team = typeof player.team === "string" ? player.team : null;
+    const position = typeof player.position === "string" ? player.position : null;
+    const tags: string[] = [];
+    const nextMajorByeRound = getFantasyNumber(player, "nextMajorByeRound");
+    const playsNextMajorByeRound =
+      typeof player.playsNextMajorByeRound === "boolean" ? player.playsNextMajorByeRound : null;
+
+    if (nextMajorByeRound != null && playsNextMajorByeRound !== null) {
+      tags.push(`${playsNextMajorByeRound ? "✓" : "✕"} Rd${nextMajorByeRound}`);
+    }
+
+    if (originPlayers.some((originName) => fantasyNamesMatch(originName, name))) {
+      tags.push("Origin Chance");
+    }
+
+    const relevantOut = relevantOuts.find((row) =>
+      !fantasyNamesMatch(row.player, name) &&
+      fantasyTeamsMatch(row.team, team) &&
+      fantasyPositionsOverlap(row.position, position)
+    );
+    if (relevantOut) {
+      const returnWindow = parseCasualtyWardReturnWindow(relevantOut.returnDate, currentRound);
+      tags.push(`Relevant out: ${relevantOut.player} ${returnWindow.label}`);
+    }
+
+    if (tags.length === 0) continue;
+    lines.push(`${name}${team || position ? ` (${[team, position].filter(Boolean).join(", ")})` : ""} - tags: ${tags.join("; ")}`);
+    if (lines.length >= 35) break;
+  }
+
+  if (lines.length === 0) return "";
+
+  return [
+    "Player tag context, using the same tag types shown on the fantasy dashboard and player pages:",
+    "Tag meanings: ✕ Rd12/15/18 is a negative major-bye availability tag, ✓ Rd12/15/18 is useful bye coverage, Origin Chance is an availability risk, and Relevant out names a same-team/same-position player whose return date may affect role security.",
+    includeProTags
+      ? "When a suggested player has Origin Chance or Relevant out, mention that tag's implication briefly in the player's reason. Treat Relevant out as secondary and not automatically negative."
+      : "Free-user tag context only includes major-bye availability. Do not mention Origin Chance or Relevant out without Pro data access.",
+    lines.map((line, index) => `${index + 1}. ${line}`).join("\n"),
+  ].join("\n");
+}
+
 function formatFantasySnapshotContext(
   result: AiToolExecutionResult,
   label = "trade-in",
@@ -4709,6 +4791,15 @@ export async function runAiModelChat(
       buySnapshotResult,
       valueSnapshotResult
     );
+    const playerTagContext = formatFantasyPlayerTagContext({
+      visibleSnapshotResult: visibleSnapshot?.result,
+      buySnapshotResult,
+      valueSnapshotResult,
+      relevantOutCandidates,
+      originChances,
+      currentRound: currentFantasyRound,
+      includeProTags: hasProjectionAccess,
+    });
     const proMetricInstruction = hasProjectionAccess
       ? [
         "- Use projections, breakevens, projection-vs-pricedAt, ownership change, price, L3 average, named-to-play status, casualty ward context, and next major bye availability.",
@@ -4745,6 +4836,8 @@ export async function runAiModelChat(
       secondaryCasualtyWardContext,
       "",
       originChanceContext,
+      "",
+      playerTagContext,
       "",
       fantasySnapshotContext,
       "",
@@ -4794,6 +4887,7 @@ export async function runAiModelChat(
       "- Do not invent trade-in names outside the snapshots. If fewer than five eligible non-owned trade-ins remain after excluding visible squad players, list fewer than five.",
       "- Include ownership delta only when it appears in the real fantasy snapshot above.",
       "- Include next major bye availability for every buy/sell when it appears in the real fantasy snapshot above.",
+      "- Use Player tag context for any suggested buy/sell when a tag is supplied: mention a next-major-bye miss or useful bye coverage, mention Origin Chance as an availability risk, and mention Relevant out with the return timing as a secondary role-security note.",
       "- Do not mention buying again, buying back, or re-buying an already owned player.",
       "- In Recommended Moves, treat keeping the user's remaining bank below about 100k as a real constraint when the visible bank and player prices make that possible.",
       "- Do not recommend only an expensive sell to a much cheaper trade-in if that leaves hundreds of thousands unused. If a cheap replacement is the best value, pair it with a second move that upgrades a cheap owned player to a more expensive target using the freed salary. If you cannot identify a good second upgrade, prefer a one-trade move from the expensive sell to a more expensive trade-in that keeps bank under about 100k.",

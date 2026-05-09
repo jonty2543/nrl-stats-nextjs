@@ -586,8 +586,8 @@ export async function saveAiAssistantTurn({
   usage,
   choices = [],
   artifacts = [],
-}: SaveAiAssistantMessageArgs): Promise<boolean> {
-  if (!userId || !threadId) return false;
+}: SaveAiAssistantMessageArgs): Promise<void> {
+  if (!userId || !threadId) return;
 
   try {
     const supabase = getAiSupabaseClient();
@@ -625,23 +625,16 @@ export async function saveAiAssistantTurn({
       .eq("clerk_user_id", userId);
 
     if (updateError) {
-      if (isKnownPersistenceError(updateError.message)) {
-        console.warn("AI thread metadata update unavailable.", updateError.message);
-        revalidateTag(`ai-usage-${userId}`, "max");
-        return true;
-      }
-
       throw new Error(updateError.message);
     }
 
     // Bust the per-user usage cache so the next page load reflects the new message.
     revalidateTag(`ai-usage-${userId}`, "max");
-    return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (isKnownPersistenceError(message)) {
       console.warn("AI message persistence unavailable.", message);
-      return false;
+      return;
     }
 
     throw error;

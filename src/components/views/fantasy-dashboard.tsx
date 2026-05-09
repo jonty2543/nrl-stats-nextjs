@@ -1742,19 +1742,13 @@ export function FantasyDashboard({
   const [tradeSuggestorError, setTradeSuggestorError] = useState<string | null>(null)
   const [isTradeSuggestorUploading, setIsTradeSuggestorUploading] = useState<TradeScreenshotSlot | null>(null)
   const [isTradeSuggestorSubmitting, setIsTradeSuggestorSubmitting] = useState(false)
-  const [hasHydrated, setHasHydrated] = useState(false)
   const [hasRequestedAllPlayersStats, setHasRequestedAllPlayersStats] = useState(false)
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
   const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata)
-  const isTradeSuggestorAuthBlocked = isAuthLoaded && !userId
   const analysisLocked = !hasFantasyPlotAccess
   const playerDetailsRef = useRef<HTMLElement | null>(null)
   const cardTagsPreferenceUserIdRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    setHasHydrated(true)
-  }, [])
 
   useEffect(() => {
     if (!isAuthLoaded) return
@@ -1811,11 +1805,6 @@ export function FantasyDashboard({
   }
 
   const handleRunTradeSuggestor = async () => {
-    if (isTradeSuggestorAuthBlocked) {
-      setTradeSuggestorError("Sign in to use Find Trades.")
-      return
-    }
-
     if (!tradeSuggestorReady) {
       setTradeSuggestorError("Upload starters, bench, and trade screen screenshots first.")
       return
@@ -1836,6 +1825,7 @@ export function FantasyDashboard({
         "Do not say recent form has slipped when L3 average is above priced at.",
         "In each sell/watch player title, include the player name, position, price, and projection, but no rating. In each trade-in title, include the player name, position, price, projection, and rating.",
         "For each sell or buy, use the label Ownership change: and include BE, priced at, L3 average, projection vs priced at, next major bye availability, and one short reason.",
+        "Use supplied player tags when they exist for a suggested player: next major bye tags, Origin Chance as an availability risk, and Relevant out with return timing as a secondary role-security note.",
       ]
       : [
         "For free users, do not use projections, breakevens, projection vs priced at, casualty ward context, or Origin context as trade reasons.",
@@ -1845,6 +1835,7 @@ export function FantasyDashboard({
         "If a player is -1.0% or worse in ownership delta but L3 is sound, bye coverage is useful, and there is no availability issue, frame them as Hold / Possible sell rather than a hard sell.",
         "In each sell/watch player title, include the player name, position, and price, but no rating. In each trade-in title, include the player name, position, price, and rating.",
         "For each sell or buy, use the label Ownership change: and include priced at, average/L3 form, next major bye availability, and one short reason. Do not include projections, breakevens, or projection vs priced at for free users.",
+        "Use next major bye tags when they exist for a suggested player. Do not use Origin Chance or Relevant out context for free users.",
       ]
     const prompt = [
       "Fantasy Trade Suggestor dashboard request.",
@@ -1898,6 +1889,7 @@ export function FantasyDashboard({
         },
         body: JSON.stringify({
           message: prompt,
+          persist: false,
           imageAttachments: attachments.map((screenshot) => {
             const slotLabel = TRADE_SCREENSHOT_SLOTS.find((slot) => slot.key === screenshot.slot)?.label ?? screenshot.slot
             return {
@@ -3893,14 +3885,10 @@ export function FantasyDashboard({
             </div>
           </div>
           <div className={`${allPlayersView === "cards" ? "grid" : "hidden"} max-h-[760px] grid-cols-1 gap-2 overflow-y-auto p-2.5`}>
-	            {!hasHydrated ? (
-	              <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
-	                Loading player cards...
-	              </div>
-	            ) : sortedAllPlayersTableRows.length === 0 ? (
-	              <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
-	                No {ALL_PLAYERS_STATS_YEAR} player stats available.
-	              </div>
+            {sortedAllPlayersTableRows.length === 0 ? (
+              <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
+                No {ALL_PLAYERS_STATS_YEAR} player stats available.
+              </div>
             ) : (
               sortedAllPlayersTableRows.map((row) => {
                 const thumbnailUrl = getPlayerThumbnailUrl(row.imageRow)
@@ -4109,17 +4097,8 @@ export function FantasyDashboard({
                 </tr>
               </thead>
               <tbody>
-	                {!hasHydrated ? (
-	                  <tr>
-	                    <td
-	                      colSpan={ALL_PLAYERS_BASE_COLUMNS.length + 1}
-	                      className="px-3 py-6 text-center text-xs text-nrl-muted"
-	                    >
-	                      Loading player table...
-	                    </td>
-	                  </tr>
-	                ) : sortedAllPlayersTableRows.length === 0 ? (
-	                  <tr>
+                {sortedAllPlayersTableRows.length === 0 ? (
+                  <tr>
                     <td
                       colSpan={ALL_PLAYERS_BASE_COLUMNS.length + 1}
                       className="px-3 py-6 text-center text-xs text-nrl-muted"
@@ -5198,22 +5177,14 @@ export function FantasyDashboard({
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-[10px] text-nrl-muted">
-                  {isTradeSuggestorAuthBlocked
-                    ? "Sign in to use Find Trades"
-                    : tradeSuggestorReady ? "Ready" : "Waiting for screenshots"}
+                  {tradeSuggestorReady ? "Ready" : "Waiting for screenshots"}
                 </div>
                 <button
                   type="button"
                   onClick={() => {
                     void handleRunTradeSuggestor()
                   }}
-                  disabled={
-                    !isAuthLoaded ||
-                    isTradeSuggestorAuthBlocked ||
-                    !tradeSuggestorReady ||
-                    isTradeSuggestorSubmitting ||
-                    Boolean(isTradeSuggestorUploading)
-                  }
+                  disabled={!tradeSuggestorReady || isTradeSuggestorSubmitting || Boolean(isTradeSuggestorUploading)}
                   className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-full border border-violet-300/50 bg-[linear-gradient(135deg,#7c3aed,#00f58a)] px-4 py-2 text-sm font-bold text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <SparkAiIcon className="h-5 w-5" />

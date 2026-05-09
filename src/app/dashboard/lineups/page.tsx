@@ -1,10 +1,17 @@
 import { auth } from "@clerk/nextjs/server"
 import { LineupsDashboard } from "@/components/views/lineups-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { fetchCasualtyWardOuts, fetchLiveLineupData, fetchUpcomingLineups, fetchUpcomingSportsbetH2HOdds, fetchUpcomingTryscorerOdds } from "@/lib/lineups/nrl-lineups"
+import {
+  fetchCasualtyWardOuts,
+  fetchLineupRoundOptions,
+  fetchLineupsForRound,
+  fetchLiveLineupData,
+  fetchUpcomingSportsbetH2HOdds,
+  fetchUpcomingTryscorerOdds,
+} from "@/lib/lineups/nrl-lineups"
 import { fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
 import type { PlayerStat } from "@/lib/data/types"
-import type { LineupLiveMatch, LineupMatch } from "@/lib/lineups/nrl-lineups"
+import type { LineupLiveMatch, LineupMatch, LineupRoundOption } from "@/lib/lineups/nrl-lineups"
 
 export const dynamic = "force-dynamic"
 
@@ -123,24 +130,65 @@ function hasLiveData(liveMatch: LineupLiveMatch | null | undefined): boolean {
   )
 }
 
-export default async function LineupsPage() {
+interface LineupsPageProps {
+  searchParams: Promise<{
+    round?: string
+  }>
+}
+
+function currentYearInBrisbane(): number {
+  const year = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+  }).format(new Date())
+  return Number(year)
+}
+
+function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | null {
+  if (options.length === 0) return null
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date())
+  return (
+    options.find((option) => today >= option.startDate && today <= option.endDate) ??
+    options.findLast((option) => option.startDate <= today) ??
+    options.at(0) ??
+    null
+  )
+}
+
+export default async function LineupsPage({ searchParams }: LineupsPageProps) {
+  const params = await searchParams
   const { userId } = await auth()
   const hasProAccess = await getServerProPlotAccess(userId)
-  const [matches, teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStats2026] = await Promise.all([
-    fetchUpcomingLineups({ includeFantasyProjections: hasProAccess }),
+  const year = currentYearInBrisbane()
+  const [roundOptions, teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStats2026] = await Promise.all([
+    fetchLineupRoundOptions(year),
     fetchTeamLogos(),
     fetchUpcomingTryscorerOdds(),
     fetchUpcomingSportsbetH2HOdds(),
     fetchCasualtyWardOuts(),
-    fetchPlayerStats(["2026"]),
+    fetchPlayerStats([String(year)]),
   ])
+  const selectedRound = roundOptions.find((option) => option.value === params.round)?.value ?? currentRoundOption(roundOptions)?.value ?? "Round 1"
+  const { matches, matchStats } = await fetchLineupsForRound({
+    round: selectedRound,
+    year,
+    includeFantasyProjections: hasProAccess,
+  })
   const liveMatches = await fetchLiveLineupData(matches.map((match) => match.matchId))
-  const visibleMatches = matches.filter((match) => !isPastMatch(match) || hasLiveData(liveMatches[match.matchId]))
+  const visibleMatches = matches.filter((match) => match.homeTeam?.players.length || match.awayTeam?.players.length || matchStats[match.matchId] || !isPastMatch(match) || hasLiveData(liveMatches[match.matchId]))
 
   return (
     <LineupsDashboard
       matches={visibleMatches}
       liveMatches={liveMatches}
+      matchStats={matchStats}
+      roundOptions={roundOptions}
+      selectedRound={selectedRound}
       teamLogos={teamLogos}
       tryscorerOdds={tryscorerOdds}
       sportsbetOdds={sportsbetOdds}

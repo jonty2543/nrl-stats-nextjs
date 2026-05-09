@@ -39,6 +39,46 @@ export interface LineupMatch {
   matchUrl: string | null
   homeTeam: LineupTeam | null
   awayTeam: LineupTeam | null
+  homeScore?: number | null
+  awayScore?: number | null
+}
+
+export interface LineupRoundOption {
+  value: string
+  label: string
+  roundNumber: number
+  startDate: string
+  endDate: string
+}
+
+export interface LineupTeamMatchStats {
+  team: string
+  score: number | null
+  possessionPct: number | null
+  completionRate: number | null
+  fantasyPoints: number | null
+  tries: number | null
+  allRunMetres: number | null
+  postContactMetres: number | null
+  lineBreaks: number | null
+  tackleBreaks: number | null
+  tacklesMade: number | null
+  missedTackles: number | null
+  errors: number | null
+  offloads: number | null
+}
+
+export interface LineupMatchStats {
+  matchId: string
+  homeTeam: string
+  awayTeam: string
+  home: LineupTeamMatchStats
+  away: LineupTeamMatchStats
+}
+
+export interface LineupRoundMatchesResult {
+  matches: LineupMatch[]
+  matchStats: Record<string, LineupMatchStats>
 }
 
 export interface LineupTryscorerOdds {
@@ -192,6 +232,7 @@ function numberOrNull(value: unknown): number | null {
 
 function booleanValue(value: unknown): boolean {
   if (typeof value === "boolean") return value
+  if (typeof value === "number") return value === 1
   if (typeof value === "string") return value.toLowerCase() === "true"
   return false
 }
@@ -269,6 +310,23 @@ function getTodayInBrisbane(): string {
   return `${year}-${month}-${day}`
 }
 
+function getCurrentYearInBrisbane(): number {
+  const year = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+  }).format(new Date())
+  return Number(year)
+}
+
+function roundSort(value: string | null | undefined): number {
+  const parsed = Number(String(value ?? "").match(/\d+/)?.[0] ?? 0)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function matchMergeKey(matchDate: string, homeTeam: string, awayTeam: string): string {
+  return [matchDate.slice(0, 10), normaliseKey(homeTeam), normaliseKey(awayTeam)].join("|")
+}
+
 function getBrisbaneWeekdayIndex(): number {
   const weekday = new Intl.DateTimeFormat("en-US", {
     timeZone: "Australia/Brisbane",
@@ -331,6 +389,39 @@ async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: b
       .range(start, end)
 
     if (error) throw new Error(`Supabase fetch nrl.lineups: ${error.message}`)
+    const page = (data ?? []) as unknown as RawRow[]
+    rows.push(...page)
+    if (page.length < PAGE_SIZE) break
+    start += PAGE_SIZE
+  }
+
+  return rows
+}
+
+async function fetchLineupRowsForRound(round: string, year: number, includeFantasyProjections: boolean): Promise<RawRow[]> {
+  const supabase = createServerSupabaseClient("nrl")
+  const rows: RawRow[] = []
+  const selectColumns = includeFantasyProjections
+    ? [...LINEUP_SELECT_BASE, "fantasy_projection"].join(",")
+    : LINEUP_SELECT_BASE.join(",")
+  let start = 0
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1
+    const { data, error } = await supabase
+      .from("lineups")
+      .select(selectColumns)
+      .eq("round", round)
+      .gte("match_date", `${year}-01-01`)
+      .lt("match_date", `${year + 1}-01-01`)
+      .order("match_date", { ascending: true })
+      .order("kickoff_utc", { ascending: true })
+      .order("match_id", { ascending: true })
+      .order("team_type", { ascending: true })
+      .order("number", { ascending: true })
+      .range(start, end)
+
+    if (error) throw new Error(`Supabase fetch nrl.lineups round ${round}: ${error.message}`)
     const page = (data ?? []) as unknown as RawRow[]
     rows.push(...page)
     if (page.length < PAGE_SIZE) break
@@ -403,6 +494,43 @@ function teamFromPlayers(players: LineupPlayer[], teamType: string): LineupTeam 
   }
 }
 
+function emptyTeam(team: string, teamType: "Home" | "Away"): LineupTeam {
+  return {
+    team,
+    teamName: team,
+    teamId: null,
+    teamType,
+    players: [],
+  }
+}
+
+function buildMatchesFromLineupRows(rows: RawRow[], overrides: Map<string, LineupSide>, includeFantasyProjections: boolean): LineupMatch[] {
+  const matches = new Map<string, { base: RawRow; players: LineupPlayer[] }>()
+  for (const row of rows) {
+    const matchId = text(row.match_id)
+    if (!matchId) continue
+    const group = matches.get(matchId) ?? { base: row, players: [] }
+    group.players.push(buildPlayer(row, overrides, includeFantasyProjections))
+    matches.set(matchId, group)
+  }
+
+  return [...matches.values()].map(({ base, players }) => {
+    const homePlayers = players.filter((player) => player.teamType.toLowerCase() === "home")
+    const awayPlayers = players.filter((player) => player.teamType.toLowerCase() === "away")
+    return {
+      matchId: text(base.match_id),
+      matchDate: text(base.match_date),
+      kickoffUtc: nullableText(base.kickoff_utc),
+      round: text(base.round),
+      venue: nullableText(base.venue),
+      match: text(base.match),
+      matchUrl: nullableText(base.match_url),
+      homeTeam: teamFromPlayers(homePlayers, "Home"),
+      awayTeam: teamFromPlayers(awayPlayers, "Away"),
+    }
+  })
+}
+
 function livePlayerKey(playerId: number | null, team: string | null, player: string | null): string | null {
   if (playerId != null) return String(playerId)
   const teamKey = normaliseKey(team)
@@ -419,33 +547,240 @@ export async function fetchUpcomingLineups(options: FetchUpcomingLineupsOptions 
       fetchSideOverrides().catch(() => new Map<string, LineupSide>()),
     ])
 
-    const matches = new Map<string, { base: RawRow; players: LineupPlayer[] }>()
-    for (const row of rows) {
-      const matchId = text(row.match_id)
-      if (!matchId) continue
-      const group = matches.get(matchId) ?? { base: row, players: [] }
-      group.players.push(buildPlayer(row, overrides, includeFantasyProjections))
-      matches.set(matchId, group)
-    }
-
-    return [...matches.values()].map(({ base, players }) => {
-      const homePlayers = players.filter((player) => player.teamType.toLowerCase() === "home")
-      const awayPlayers = players.filter((player) => player.teamType.toLowerCase() === "away")
-      return {
-        matchId: text(base.match_id),
-        matchDate: text(base.match_date),
-        kickoffUtc: nullableText(base.kickoff_utc),
-        round: text(base.round),
-        venue: nullableText(base.venue),
-        match: text(base.match),
-        matchUrl: nullableText(base.match_url),
-        homeTeam: teamFromPlayers(homePlayers, "Home"),
-        awayTeam: teamFromPlayers(awayPlayers, "Away"),
-      }
-    })
+    return buildMatchesFromLineupRows(rows, overrides, includeFantasyProjections)
   } catch (error) {
     console.warn("Unable to fetch upcoming lineups; using empty lineups list.", error)
     return []
+  }
+}
+
+export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane()): Promise<LineupRoundOption[]> {
+  try {
+    const supabase = createServerSupabaseClient("nrl")
+    const { data, error } = await supabase
+      .from("matches")
+      .select("round,round_number,match_date")
+      .gte("match_date", `${year}-01-01`)
+      .lt("match_date", `${year + 1}-01-01`)
+      .order("match_date", { ascending: true })
+
+    if (error || !data) return []
+
+    const options = new Map<string, LineupRoundOption>()
+    for (const row of data as unknown as RawRow[]) {
+      const round = text(row.round)
+      const matchDate = text(row.match_date).slice(0, 10)
+      if (!round || !matchDate) continue
+      const roundNumber = numberOrNull(row.round_number) ?? roundSort(round)
+      const existing = options.get(round)
+      options.set(
+        round,
+        existing
+          ? {
+              ...existing,
+              startDate: matchDate < existing.startDate ? matchDate : existing.startDate,
+              endDate: matchDate > existing.endDate ? matchDate : existing.endDate,
+            }
+          : {
+              value: round,
+              label: round,
+              roundNumber,
+              startDate: matchDate,
+              endDate: matchDate,
+            }
+      )
+    }
+
+    return [...options.values()].sort((a, b) => a.roundNumber - b.roundNumber || a.label.localeCompare(b.label))
+  } catch (error) {
+    console.warn("Unable to fetch lineup round options.", error)
+    return []
+  }
+}
+
+function teamStatsFromMatchRow(row: RawRow, fantasyPoints: number | null): LineupTeamMatchStats {
+  return {
+    team: text(row.team),
+    score: numberOrNull(row.score),
+    possessionPct: numberOrNull(row.possession_pct),
+    completionRate: numberOrNull(row.completion_rate),
+    fantasyPoints,
+    tries: numberOrNull(row.tries),
+    allRunMetres: numberOrNull(row.all_run_metres),
+    postContactMetres: numberOrNull(row.post_contact_metres),
+    lineBreaks: numberOrNull(row.line_breaks),
+    tackleBreaks: numberOrNull(row.tackle_breaks),
+    tacklesMade: numberOrNull(row.tackles_made),
+    missedTackles: numberOrNull(row.missed_tackles),
+    errors: numberOrNull(row.errors),
+    offloads: numberOrNull(row.offloads),
+  }
+}
+
+async function fetchPlayerFantasyTotalsForRound(round: string, year: number): Promise<Map<string, number>> {
+  const supabase = createServerSupabaseClient("nrl")
+  const { data, error } = await supabase
+    .from("player_stats")
+    .select("match_date,match,round,team,total_points")
+    .eq("round", round)
+    .gte("match_date", `${year}-01-01`)
+    .lt("match_date", `${year + 1}-01-01`)
+
+  if (error || !data) return new Map()
+
+  const totals = new Map<string, number>()
+  for (const row of data as unknown as RawRow[]) {
+    const matchDate = text(row.match_date)
+    const matchName = text(row.match)
+    const [homeTeam, awayTeam] = matchName.split(/\s+vs\s+/i).map((part) => part.trim())
+    const team = text(row.team)
+    const points = numberOrNull(row.total_points)
+    if (!matchDate || !homeTeam || !awayTeam || !team || points == null) continue
+    const key = `${matchMergeKey(matchDate, homeTeam, awayTeam)}|${normaliseKey(team)}`
+    totals.set(key, (totals.get(key) ?? 0) + points)
+  }
+  return totals
+}
+
+export async function fetchLineupsForRound({
+  round,
+  year = getCurrentYearInBrisbane(),
+  includeFantasyProjections = false,
+}: {
+  round: string
+  year?: number
+  includeFantasyProjections?: boolean
+}): Promise<LineupRoundMatchesResult> {
+  try {
+    const supabase = createServerSupabaseClient("nrl")
+    const [{ data, error }, lineupRows, overrides, fantasyTotals] = await Promise.all([
+      supabase
+        .from("matches")
+        .select(
+          [
+            "url",
+            "match_date",
+            "round",
+            "round_number",
+            "team",
+            "opponent_team",
+            "is_home",
+            "score",
+            "opponent_score",
+            "possession_pct",
+            "opponent_possession_pct",
+            "completion_rate",
+            "opponent_completion_rate",
+            "tries",
+            "opponent_tries",
+            "all_run_metres",
+            "opponent_all_run_metres",
+            "post_contact_metres",
+            "opponent_post_contact_metres",
+            "line_breaks",
+            "opponent_line_breaks",
+            "tackle_breaks",
+            "opponent_tackle_breaks",
+            "tackles_made",
+            "opponent_tackles_made",
+            "missed_tackles",
+            "opponent_missed_tackles",
+            "errors",
+            "opponent_errors",
+            "offloads",
+            "opponent_offloads",
+          ].join(",")
+        )
+        .eq("round", round)
+        .gte("match_date", `${year}-01-01`)
+        .lt("match_date", `${year + 1}-01-01`)
+        .order("match_date", { ascending: true }),
+      fetchLineupRowsForRound(round, year, includeFantasyProjections).catch(() => []),
+      fetchSideOverrides().catch(() => new Map<string, LineupSide>()),
+      fetchPlayerFantasyTotalsForRound(round, year).catch(() => new Map<string, number>()),
+    ])
+
+    if (error) throw new Error(`Supabase fetch nrl.matches round ${round}: ${error.message}`)
+
+    const lineupMatches = buildMatchesFromLineupRows(lineupRows, overrides, includeFantasyProjections)
+    const lineupsByKey = new Map<string, LineupMatch>()
+    for (const match of lineupMatches) {
+      const home = match.homeTeam?.team ?? match.match.split(/\s+vs\s+/i)[0]?.trim()
+      const away = match.awayTeam?.team ?? match.match.split(/\s+vs\s+/i)[1]?.trim()
+      if (!home || !away) continue
+      lineupsByKey.set(matchMergeKey(match.matchDate, home, away), match)
+    }
+
+    const matches: LineupMatch[] = []
+    const statsById: Record<string, LineupMatchStats> = {}
+    const seenKeys = new Set<string>()
+
+    for (const row of (data ?? []) as unknown as RawRow[]) {
+      if (!booleanValue(row.is_home)) continue
+      const matchDate = text(row.match_date)
+      const homeTeam = text(row.team)
+      const awayTeam = text(row.opponent_team)
+      if (!matchDate || !homeTeam || !awayTeam) continue
+
+      const key = matchMergeKey(matchDate, homeTeam, awayTeam)
+      const lineupMatch = lineupsByKey.get(key)
+      const matchId = lineupMatch?.matchId ?? key
+      const homeFantasy = fantasyTotals.get(`${key}|${normaliseKey(homeTeam)}`) ?? null
+      const awayFantasy = fantasyTotals.get(`${key}|${normaliseKey(awayTeam)}`) ?? null
+
+      matches.push({
+        matchId,
+        matchDate,
+        kickoffUtc: lineupMatch?.kickoffUtc ?? null,
+        round: text(row.round) || round,
+        venue: lineupMatch?.venue ?? null,
+        match: `${homeTeam} vs ${awayTeam}`,
+        matchUrl: nullableText(row.url) ?? lineupMatch?.matchUrl ?? null,
+        homeTeam: lineupMatch?.homeTeam ?? emptyTeam(homeTeam, "Home"),
+        awayTeam: lineupMatch?.awayTeam ?? emptyTeam(awayTeam, "Away"),
+        homeScore: numberOrNull(row.score),
+        awayScore: numberOrNull(row.opponent_score),
+      })
+
+      statsById[matchId] = {
+        matchId,
+        homeTeam,
+        awayTeam,
+        home: teamStatsFromMatchRow(row, homeFantasy),
+        away: {
+          ...teamStatsFromMatchRow(row, awayFantasy),
+          team: awayTeam,
+          score: numberOrNull(row.opponent_score),
+          possessionPct: numberOrNull(row.opponent_possession_pct),
+          completionRate: numberOrNull(row.opponent_completion_rate),
+          fantasyPoints: awayFantasy,
+          tries: numberOrNull(row.opponent_tries),
+          allRunMetres: numberOrNull(row.opponent_all_run_metres),
+          postContactMetres: numberOrNull(row.opponent_post_contact_metres),
+          lineBreaks: numberOrNull(row.opponent_line_breaks),
+          tackleBreaks: numberOrNull(row.opponent_tackle_breaks),
+          tacklesMade: numberOrNull(row.opponent_tackles_made),
+          missedTackles: numberOrNull(row.opponent_missed_tackles),
+          errors: numberOrNull(row.opponent_errors),
+          offloads: numberOrNull(row.opponent_offloads),
+        },
+      }
+      seenKeys.add(key)
+    }
+
+    for (const lineupMatch of lineupMatches) {
+      const home = lineupMatch.homeTeam?.team ?? lineupMatch.match.split(/\s+vs\s+/i)[0]?.trim()
+      const away = lineupMatch.awayTeam?.team ?? lineupMatch.match.split(/\s+vs\s+/i)[1]?.trim()
+      if (!home || !away) continue
+      const key = matchMergeKey(lineupMatch.matchDate, home, away)
+      if (!seenKeys.has(key)) matches.push(lineupMatch)
+    }
+
+    matches.sort((a, b) => a.matchDate.localeCompare(b.matchDate) || (a.kickoffUtc ?? "").localeCompare(b.kickoffUtc ?? ""))
+    return { matches, matchStats: statsById }
+  } catch (error) {
+    console.warn(`Unable to fetch lineups for ${round}; using empty result.`, error)
+    return { matches: [], matchStats: {} }
   }
 }
 

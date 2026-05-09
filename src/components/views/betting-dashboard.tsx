@@ -1938,6 +1938,11 @@ function BestBetsHero({
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [bestBetSlip, setBestBetSlip] = useState<{
+    bet: BestBetCandidate;
+    odds: number;
+    stake: number;
+  } | null>(null);
   const queueViewportRef = useRef<HTMLDivElement | null>(null);
   const queuePauseUntilRef = useRef(0);
   const isArbitrage = category === "arbitrage";
@@ -1964,6 +1969,14 @@ function BestBetsHero({
         activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.06)]",
         metric: "text-nrl-accent drop-shadow-[0_0_10px_rgba(0,245,138,0.22)]",
       };
+  const bestBetSlipImplied = bestBetSlip ? impliedProbability(bestBetSlip.odds) : null;
+  const bestBetSlipEdgePp = bestBetSlip && bestBetSlipImplied != null
+    ? (bestBetSlip.bet.modelProbability - bestBetSlipImplied) * 100
+    : null;
+  const canConfirmBestBetSlip = bestBetSlip != null
+    && bestBetSlip.odds > 1
+    && Number.isFinite(bestBetSlip.stake)
+    && bestBetSlip.stake > 0;
 
   const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
     setCategory(nextCategory);
@@ -1980,7 +1993,7 @@ function BestBetsHero({
 
   useEffect(() => {
     const viewport = queueViewportRef.current;
-    if (!viewport || !shouldAnimateQueue || !canAccessPremium) return undefined;
+    if (!viewport || !shouldAnimateQueue) return undefined;
 
     let frameId = 0;
     let lastFrameMs = performance.now();
@@ -2002,7 +2015,7 @@ function BestBetsHero({
 
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [boundedFocusedIndex, canAccessPremium, category, shouldAnimateQueue]);
+  }, [boundedFocusedIndex, category, shouldAnimateQueue]);
 
   return (
     <section className="overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)]">
@@ -2158,22 +2171,15 @@ function BestBetsHero({
                       type="button"
                       onClick={() => {
                         const bet = featuredItem as BestBetCandidate;
-                        void onAddBet({
-                          market: bet.market,
-                          matchDate: bet.date,
-                          matchName: bet.match,
-                          selection: bet.selection,
-                          lineValue: bet.lineValue,
+                        setBestBetSlip({
+                          bet,
                           odds: bet.odds,
                           stake: bet.kellyStake,
-                          modelProb: bet.modelProbability,
-                          impliedProb: bet.impliedProbability,
-                          edgePp: bet.edgePp,
                         });
                       }}
                       className="w-full cursor-pointer rounded-md border border-white/12 bg-white/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-nrl-text transition-colors hover:border-nrl-accent/55 hover:bg-nrl-accent/10 hover:text-nrl-accent"
                     >
-                      View Bet
+                      Add To Bet Tracker
                     </button>
                   </div>
                 ) : null}
@@ -2183,9 +2189,6 @@ function BestBetsHero({
 
           {queueItems.length > 0 ? (
             <div>
-              <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-muted">
-                Next Opportunities
-              </div>
               <div className="relative rounded-lg border border-white/8 bg-[#0f1732]/70">
                 <div
                   ref={queueViewportRef}
@@ -2288,6 +2291,115 @@ function BestBetsHero({
               </div>
             </div>
           ) : null}
+        </div>
+      ) : null}
+      {bestBetSlip ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 px-4 py-6">
+          <div className="w-full max-w-md rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-accent">
+                  Add To Bet Tracker
+                </div>
+                <div className="mt-1 truncate text-base font-semibold text-nrl-text">
+                  {bestBetSlip.bet.selectionLabel}
+                </div>
+                <div className="mt-0.5 truncate text-xs text-nrl-muted">{bestBetSlip.bet.match}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBestBetSlip(null)}
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                aria-label="Close bet slip"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Odds</span>
+                <input
+                  type="number"
+                  min={1.01}
+                  step={0.01}
+                  value={Number.isFinite(bestBetSlip.odds) ? bestBetSlip.odds : ""}
+                  onChange={(event) => {
+                    const nextOdds = Number(event.target.value);
+                    setBestBetSlip((current) => current ? {
+                      ...current,
+                      odds: Number.isFinite(nextOdds) ? nextOdds : 0,
+                    } : current);
+                  }}
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Stake</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={Number.isFinite(bestBetSlip.stake) ? bestBetSlip.stake : 0}
+                  onChange={(event) => {
+                    const nextStake = Math.max(0, Number(event.target.value) || 0);
+                    setBestBetSlip((current) => current ? { ...current, stake: nextStake } : current);
+                  }}
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                />
+              </label>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
+                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Implied</div>
+                <div className="mt-0.5 font-semibold text-nrl-text">{formatPct(bestBetSlipImplied == null ? null : bestBetSlipImplied * 100)}</div>
+              </div>
+              <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
+                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
+                <div className="mt-0.5 font-semibold text-nrl-accent">
+                  {bestBetSlipEdgePp == null ? "-" : `${bestBetSlipEdgePp >= 0 ? "+" : ""}${bestBetSlipEdgePp.toFixed(2)}`}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setBestBetSlip(null)}
+                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!canConfirmBestBetSlip}
+                onClick={() => {
+                  if (!bestBetSlip || !canConfirmBestBetSlip) return;
+                  void onAddBet({
+                    market: bestBetSlip.bet.market,
+                    matchDate: bestBetSlip.bet.date,
+                    matchName: bestBetSlip.bet.match,
+                    selection: bestBetSlip.bet.selection,
+                    lineValue: bestBetSlip.bet.lineValue,
+                    odds: bestBetSlip.odds,
+                    stake: bestBetSlip.stake,
+                    modelProb: bestBetSlip.bet.modelProbability,
+                    impliedProb: bestBetSlipImplied,
+                    edgePp: bestBetSlipEdgePp,
+                  });
+                  setBestBetSlip(null);
+                }}
+                className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                  canConfirmBestBetSlip
+                    ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                    : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
+                }`}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </section>
@@ -2581,7 +2693,7 @@ function MarketSection({
                           )}
                         </div>
 
-                        <div className={`mt-2 grid ${showModelColumns ? "grid-cols-9" : "grid-cols-7"} items-center gap-x-1 gap-y-0 text-[9px]`}>
+                        <div className={`mt-3 grid ${showModelColumns ? "grid-cols-9" : "grid-cols-7"} items-center gap-x-1 gap-y-0 text-[9px]`}>
                           {visibleBookieColumns.map((bookie) => {
                             const offer = row.bookieOffers[bookie];
                             return (

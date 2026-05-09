@@ -9,15 +9,21 @@ import type {
   LineupLivePlayerState,
   LineupLivePlayerStats,
   LineupMatch,
+  LineupMatchStats,
   LineupPlayer,
+  LineupRoundOption,
   LineupSportsbetOdds,
   LineupTeam,
+  LineupTeamMatchStats,
   LineupTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
 
 interface LineupsDashboardProps {
   matches: LineupMatch[]
   liveMatches: Record<string, LineupLiveMatch>
+  matchStats: Record<string, LineupMatchStats>
+  roundOptions: LineupRoundOption[]
+  selectedRound: string
   teamLogos: Record<string, string>
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   sportsbetOdds: Record<string, LineupSportsbetOdds>
@@ -30,6 +36,7 @@ interface LineupsDashboardProps {
 type Slot = "FB" | "LW" | "LC" | "RW" | "RC" | "FE" | "HLF" | "LK" | "L2R" | "R2R" | "HK" | "PR"
 type Orientation = "landscape" | "portrait"
 type DisplayMode = "fantasy" | "odds" | AverageStatKey
+type LineupDetailView = "lineup" | "stats"
 type PlayerStatsSelection = {
   player: LineupPlayer
   liveState: LineupLivePlayerState | null
@@ -44,6 +51,11 @@ type PlayerStatDisplayItem = {
 type PlayerStatDisplayGroup = {
   title: string
   items: PlayerStatDisplayItem[]
+}
+type PlayerMetricRange = {
+  min: number
+  max: number
+  lowerIsBetter: boolean
 }
 type AverageStatKey =
   | "Tries"
@@ -114,6 +126,10 @@ function isProDisplayMode(mode: DisplayMode): boolean {
 
 function displayModeShortLabel(mode: DisplayMode): string {
   return DISPLAY_MODES.find((displayMode) => displayMode.key === mode)?.shortLabel ?? String(mode)
+}
+
+function lowerMetricIsBetter(mode: DisplayMode): boolean {
+  return mode === "odds" || mode === "Missed Tackles" || mode === "Errors"
 }
 
 const INSIGHT_CATEGORY_CLASSES: Record<MatchupInsight["category"], string> = {
@@ -305,6 +321,14 @@ function liveScore(liveMatch: LineupLiveMatch | null | undefined): { homeScore: 
   }
 }
 
+function matchScore(match: LineupMatch, liveMatch: LineupLiveMatch | null | undefined): { homeScore: number | null; awayScore: number | null } {
+  const score = liveScore(liveMatch)
+  return {
+    homeScore: score.homeScore ?? match.homeScore ?? null,
+    awayScore: score.awayScore ?? match.awayScore ?? null,
+  }
+}
+
 function hasMatchStarted(liveMatch: LineupLiveMatch | null | undefined): boolean {
   const state = liveMatch?.state
   if (!state) return (liveMatch?.scoringEvents.length ?? 0) > 0
@@ -396,7 +420,6 @@ function sportsbetOddsForTeam(
   const candidates = teamKeys.flatMap((teamKey) => [
     `${dateKey}|${matchKey}|${teamKey}`,
     `${dateKey}|${teamKey}`,
-    teamKey,
   ])
 
   for (const candidate of candidates) {
@@ -421,6 +444,19 @@ function formatKickoff(value: string | null): string {
     minute: "2-digit",
     timeZone: "Australia/Brisbane",
   }).format(new Date(value))
+}
+
+function formatMatchDateTime(match: LineupMatch): string {
+  if (match.kickoffUtc) return formatKickoff(match.kickoffUtc)
+  if (!match.matchDate) return "TBC"
+  const date = new Date(`${match.matchDate.slice(0, 10)}T00:00:00+10:00`)
+  if (Number.isNaN(date.getTime())) return match.matchDate
+  return new Intl.DateTimeFormat("en-AU", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "Australia/Brisbane",
+  }).format(date)
 }
 
 function matchDateKey(match: LineupMatch): string {
@@ -484,12 +520,53 @@ function formatAverage(value: number | null | undefined, mode: AverageStatKey): 
   return value.toFixed(1)
 }
 
+function playerMetricValue({
+  player,
+  displayMode,
+  tryscorerOdds,
+  playerAverages,
+  canAccessFantasyProjections,
+}: {
+  player: LineupPlayer
+  displayMode: DisplayMode
+  tryscorerOdds: Record<string, LineupTryscorerOdds>
+  playerAverages: Record<string, Record<AverageStatKey, number>>
+  canAccessFantasyProjections: boolean
+}): number | null {
+  const playerKey = normaliseKey(player.player)
+  if (displayMode === "fantasy") return canAccessFantasyProjections ? player.fantasyProjection : null
+  if (displayMode === "odds") return tryscorerOdds[playerKey]?.bestPrice ?? null
+  return playerAverages[playerKey]?.[displayMode] ?? null
+}
+
+function metricBarScore(value: number | null, range: PlayerMetricRange | null): number | null {
+  if (value == null || !range) return null
+  if (range.max === range.min) return 0.5
+  const raw = (value - range.min) / (range.max - range.min)
+  const score = range.lowerIsBetter ? 1 - raw : raw
+  return Math.min(1, Math.max(0, score))
+}
+
+function PlayerMetricBar({ score, compact }: { score: number | null; compact: boolean }) {
+  if (score == null) return null
+  return (
+    <div className={`${compact ? "mt-0.5 h-1.5 w-12" : "mt-1 h-1.5 w-14"} relative mx-auto rounded-full border border-white/20 bg-[linear-gradient(90deg,#ef4444,#facc15_50%,#22c55e)] shadow-[0_0_8px_rgba(0,0,0,0.28)]`}>
+      <span
+        className="absolute top-1/2 h-2.5 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_5px_rgba(0,0,0,0.55)]"
+        style={{ left: `${score * 100}%` }}
+      />
+    </div>
+  )
+}
+
 function PlayerMetric({
   player,
   displayMode,
   tryscorerOdds,
   playerAverages,
   canAccessFantasyProjections,
+  showStatBars,
+  metricRange,
   compact,
 }: {
   player: LineupPlayer
@@ -497,17 +574,24 @@ function PlayerMetric({
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   canAccessFantasyProjections: boolean
+  showStatBars: boolean
+  metricRange: PlayerMetricRange | null
   compact: boolean
 }) {
   const playerKey = normaliseKey(player.player)
   const textClass = compact ? "text-[10px]" : "text-[11px]"
+  const metricValue = playerMetricValue({ player, displayMode, tryscorerOdds, playerAverages, canAccessFantasyProjections })
+  const barScore = showStatBars ? metricBarScore(metricValue, metricRange) : null
 
   if (displayMode === "fantasy") {
     if (!canAccessFantasyProjections) {
       return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
     }
     return player.fantasyProjection != null ? (
-      <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>{Math.round(player.fantasyProjection)} proj</div>
+      <>
+        <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>{Math.round(player.fantasyProjection)} proj</div>
+        <PlayerMetricBar score={barScore} compact={compact} />
+      </>
     ) : (
       <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
     )
@@ -517,22 +601,28 @@ function PlayerMetric({
     const odds = tryscorerOdds[playerKey]
     const logo = resolveBookieLogo(odds?.bestBookie)
     return odds?.bestPrice != null ? (
-      <div className={`mt-0.5 flex items-center justify-center gap-1 ${textClass} font-semibold leading-tight text-emerald-100/90`}>
-        {logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logo} alt={odds.bestBookie ?? ""} className={`${compact ? "h-2.5" : "h-3"} w-auto object-contain`} loading="lazy" />
-        ) : null}
-        <span>{odds.bestPrice.toFixed(2)}</span>
-      </div>
+      <>
+        <div className={`mt-0.5 flex items-center justify-center gap-1 ${textClass} font-semibold leading-tight text-emerald-100/90`}>
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logo} alt={odds.bestBookie ?? ""} className={`${compact ? "h-2.5" : "h-3"} w-auto object-contain`} loading="lazy" />
+          ) : null}
+          <span>{odds.bestPrice.toFixed(2)}</span>
+        </div>
+        <PlayerMetricBar score={barScore} compact={compact} />
+      </>
     ) : (
       <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
     )
   }
 
   return (
-    <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>
-      {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} avg {displayModeShortLabel(displayMode)}
-    </div>
+    <>
+      <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>
+        {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} avg {displayModeShortLabel(displayMode)}
+      </div>
+      <PlayerMetricBar score={barScore} compact={compact} />
+    </>
   )
 }
 
@@ -562,9 +652,13 @@ function LiveStatusIcon({ type, compact = false }: { type: "off" | "on"; compact
 function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: LineupLiveMatch | null }) {
   const state = liveMatch?.state
   const clock = formatGameClock(state?.gameSeconds ?? state?.liveSeconds)
-  const score = liveScore(liveMatch)
+  const score = matchScore(match, liveMatch)
   const showLiveBadge = isMatchLive(liveMatch)
-  const matchStateLabel = isStaleUnfinishedMatch(liveMatch) ? "Full time" : formatMatchState(state?.matchState)
+  const matchStateLabel = state
+    ? isStaleUnfinishedMatch(liveMatch)
+      ? "Full time"
+      : formatMatchState(state.matchState)
+    : "Full time"
 
   const hasScore = score.homeScore != null || score.awayScore != null
 
@@ -592,7 +686,7 @@ function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: 
       )}
       <div className="mt-5 text-[9px] font-bold uppercase tracking-wide text-nrl-accent sm:text-[10px]">{match.round}</div>
       <div className="mx-auto mt-1 max-w-[40vw] truncate text-[10px] text-nrl-muted sm:max-w-[360px] sm:text-[11px]">
-        {formatKickoff(match.kickoffUtc)}{match.venue ? ` · ${match.venue}` : ""}
+        {formatMatchDateTime(match)}{match.venue ? ` · ${match.venue}` : ""}
       </div>
     </div>
   )
@@ -665,6 +759,129 @@ function LiveTryScorersStrip({ match, liveMatch }: { match: LineupMatch; liveMat
 function formatStatValue(value: number | null | undefined, decimals = 0): string {
   if (value == null || !Number.isFinite(value)) return "-"
   return value.toFixed(decimals)
+}
+
+function formatCompactStat(value: number | null | undefined, suffix = ""): string {
+  if (value == null || !Number.isFinite(value)) return "-"
+  const rounded = Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(value % 1 === 0 ? 0 : 1)
+  return `${rounded}${suffix}`
+}
+
+function sumLiveStats(
+  liveMatch: LineupLiveMatch | null,
+  team: LineupTeam | null,
+  fallback: LineupTeamMatchStats | null | undefined
+): LineupTeamMatchStats | null {
+  if (!team) return fallback ?? null
+  const teamKey = normaliseKey(team.team)
+  const stats = Object.values(liveMatch?.playerStats ?? {}).filter((player) => normaliseKey(player.team) === teamKey)
+  if (stats.length === 0) return fallback ?? null
+
+  const sum = (selector: (row: LineupLivePlayerStats) => number | null) =>
+    stats.reduce((total, row) => total + (selector(row) ?? 0), 0)
+
+  return {
+    team: team.team,
+    score: fallback?.score ?? null,
+    possessionPct: fallback?.possessionPct ?? null,
+    completionRate: fallback?.completionRate ?? null,
+    fantasyPoints: sum((row) => row.fantasyPointsTotal),
+    tries: sum((row) => row.tries),
+    allRunMetres: sum((row) => row.allRunMetres),
+    postContactMetres: sum((row) => row.postContactMetres),
+    lineBreaks: sum((row) => row.lineBreaks),
+    tackleBreaks: sum((row) => row.tackleBreaks),
+    tacklesMade: sum((row) => row.tacklesMade),
+    missedTackles: sum((row) => row.missedTackles),
+    errors: sum((row) => row.errors),
+    offloads: sum((row) => row.offloads),
+  }
+}
+
+function MatchStatCompare({
+  label,
+  home,
+  away,
+  suffix = "",
+  bar = false,
+}: {
+  label: string
+  home: number | null | undefined
+  away: number | null | undefined
+  suffix?: string
+  bar?: boolean
+}) {
+  const hasValues = home != null || away != null
+  if (!hasValues) return null
+  const homeValue = home ?? 0
+  const awayValue = away ?? 0
+  const total = Math.max(homeValue + awayValue, 1)
+  const homePct = Math.min(100, Math.max(0, (homeValue / total) * 100))
+
+  return (
+    <div className="rounded-md border border-white/8 bg-nrl-panel-2/55 px-3 py-2">
+      <div className="mb-1 flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
+        <span>{formatCompactStat(home, suffix)}</span>
+        <span>{label}</span>
+        <span>{formatCompactStat(away, suffix)}</span>
+      </div>
+      {bar ? (
+        <div className="flex h-2 overflow-hidden rounded-full bg-white/10">
+          <div className="bg-nrl-accent" style={{ width: `${homePct}%` }} />
+          <div className="bg-sky-400" style={{ width: `${100 - homePct}%` }} />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function MatchStatsPanel({
+  match,
+  liveMatch,
+  stats,
+}: {
+  match: LineupMatch
+  liveMatch: LineupLiveMatch | null
+  stats: LineupMatchStats | null
+}) {
+  const score = matchScore(match, liveMatch)
+  const baseHome = stats?.home
+  const baseAway = stats?.away
+  const home = sumLiveStats(liveMatch, match.homeTeam, baseHome)
+  const away = sumLiveStats(liveMatch, match.awayTeam, baseAway)
+
+  if (!home || !away) {
+    return (
+      <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
+        No match stats available for this game yet.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
+        <div className="truncate text-sm font-black text-nrl-text">{home.team}</div>
+        <div className="text-xl font-black tabular-nums text-nrl-text">
+          {score.homeScore ?? home.score ?? "-"} - {score.awayScore ?? away.score ?? "-"}
+        </div>
+        <div className="truncate text-sm font-black text-nrl-text">{away.team}</div>
+      </div>
+      <MatchStatCompare label="Possession" home={home.possessionPct} away={away.possessionPct} suffix="%" bar />
+      <div className="grid gap-2 sm:grid-cols-2">
+        <MatchStatCompare label="Fantasy" home={home.fantasyPoints} away={away.fantasyPoints} />
+        <MatchStatCompare label="Completion" home={home.completionRate} away={away.completionRate} suffix="%" bar />
+        <MatchStatCompare label="Run metres" home={home.allRunMetres} away={away.allRunMetres} />
+        <MatchStatCompare label="Post contact" home={home.postContactMetres} away={away.postContactMetres} />
+        <MatchStatCompare label="Line breaks" home={home.lineBreaks} away={away.lineBreaks} />
+        <MatchStatCompare label="Tackle breaks" home={home.tackleBreaks} away={away.tackleBreaks} />
+        <MatchStatCompare label="Tackles" home={home.tacklesMade} away={away.tacklesMade} />
+        <MatchStatCompare label="Missed tackles" home={home.missedTackles} away={away.missedTackles} />
+        <MatchStatCompare label="Errors" home={home.errors} away={away.errors} />
+        <MatchStatCompare label="Offloads" home={home.offloads} away={away.offloads} />
+      </div>
+    </div>
+  )
 }
 
 const FANTASY_BASELINE_RATIO_MAX = 2
@@ -910,6 +1127,31 @@ function buildTeamPitchSlotMap(players: LineupPlayer[]): Map<string, Slot> {
   return slots
 }
 
+function buildPlayerMetricRange({
+  players,
+  displayMode,
+  tryscorerOdds,
+  playerAverages,
+  canAccessFantasyProjections,
+}: {
+  players: LineupPlayer[]
+  displayMode: DisplayMode
+  tryscorerOdds: Record<string, LineupTryscorerOdds>
+  playerAverages: Record<string, Record<AverageStatKey, number>>
+  canAccessFantasyProjections: boolean
+}): PlayerMetricRange | null {
+  const values = players
+    .map((player) => playerMetricValue({ player, displayMode, tryscorerOdds, playerAverages, canAccessFantasyProjections }))
+    .filter((value): value is number => value != null && Number.isFinite(value))
+
+  if (values.length === 0) return null
+  return {
+    min: Math.min(...values),
+    max: Math.max(...values),
+    lowerIsBetter: lowerMetricIsBetter(displayMode),
+  }
+}
+
 function positionBaselineKeyForPlayer(player: LineupPlayer): string | null {
   if (player.number === 1) return "FB"
   if (player.number === 2 || player.number === 5) return "W"
@@ -1016,6 +1258,8 @@ function PitchPlayer({
   tryscorerOdds,
   playerAverages,
   canAccessFantasyProjections,
+  showStatBars,
+  metricRange,
   showPlayerMetric,
   showLiveIndicators,
   liveMatch,
@@ -1030,6 +1274,8 @@ function PitchPlayer({
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   canAccessFantasyProjections: boolean
+  showStatBars: boolean
+  metricRange: PlayerMetricRange | null
   showPlayerMetric: boolean
   showLiveIndicators: boolean
   liveMatch: LineupLiveMatch | null
@@ -1080,6 +1326,8 @@ function PitchPlayer({
           tryscorerOdds={tryscorerOdds}
           playerAverages={playerAverages}
           canAccessFantasyProjections={canAccessFantasyProjections}
+          showStatBars={showStatBars}
+          metricRange={metricRange}
           compact={compact}
         />
       ) : null}
@@ -1127,6 +1375,8 @@ function Pitch({
   orientation,
   displayMode,
   onDisplayModeChange,
+  showStatBars,
+  onShowStatBarsChange,
   canAccessFantasyProjections,
   tryscorerOdds,
   playerAverages,
@@ -1140,6 +1390,8 @@ function Pitch({
   orientation: Orientation
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
+  showStatBars: boolean
+  onShowStatBarsChange: (show: boolean) => void
   canAccessFantasyProjections: boolean
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
@@ -1155,6 +1407,17 @@ function Pitch({
   const isLive = hasMatchStarted(liveMatch)
   const homePitchSlots = buildTeamPitchSlotMap(homePlayers)
   const awayPitchSlots = buildTeamPitchSlotMap(awayPlayers)
+  const pitchPlayers = [...homePlayers, ...awayPlayers].filter((player) => {
+    const key = pitchPlayerKey(player)
+    return homePitchSlots.has(key) || awayPitchSlots.has(key)
+  })
+  const metricRange = buildPlayerMetricRange({
+    players: pitchPlayers,
+    displayMode,
+    tryscorerOdds,
+    playerAverages,
+    canAccessFantasyProjections,
+  })
 
   return (
     <div className={`${sizeClass} relative overflow-hidden rounded-lg border-2 border-emerald-300/45 bg-[radial-gradient(circle_at_50%_50%,rgba(0,245,138,0.16),transparent_30%),linear-gradient(90deg,rgba(8,26,33,0.98),rgba(15,112,73,0.92)_50%,rgba(8,26,33,0.98))]`}>
@@ -1164,6 +1427,8 @@ function Pitch({
           <DisplayModeControl
             displayMode={displayMode}
             onDisplayModeChange={onDisplayModeChange}
+            showStatBars={showStatBars}
+            onShowStatBarsChange={onShowStatBarsChange}
             canAccessFantasyProjections={canAccessFantasyProjections}
             compact={orientation === "portrait"}
           />
@@ -1183,6 +1448,8 @@ function Pitch({
             tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
             canAccessFantasyProjections={canAccessFantasyProjections}
+            showStatBars={showStatBars}
+            metricRange={metricRange}
             showPlayerMetric={!isLive}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
@@ -1205,6 +1472,8 @@ function Pitch({
             tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
             canAccessFantasyProjections={canAccessFantasyProjections}
+            showStatBars={showStatBars}
+            metricRange={metricRange}
             showPlayerMetric={!isLive}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
@@ -1459,45 +1728,63 @@ function MatchupInsightsPanel({
 function DisplayModeControl({
   displayMode,
   onDisplayModeChange,
+  showStatBars,
+  onShowStatBarsChange,
   canAccessFantasyProjections,
   compact = false,
 }: {
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
+  showStatBars: boolean
+  onShowStatBarsChange: (show: boolean) => void
   canAccessFantasyProjections: boolean
   compact?: boolean
 }) {
   return (
-    <label className={compact ? "block w-24" : "block w-[174px] max-w-[44vw]"}>
-      <span className="sr-only">Display</span>
-      <select
-        value={displayMode}
-        onChange={(event) => {
-          const nextMode = event.target.value as DisplayMode
-          if (!canAccessFantasyProjections && isProDisplayMode(nextMode)) return
-          onDisplayModeChange(nextMode)
-        }}
-        className={`${compact ? "text-[10px]" : "text-[11px]"} w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent`}
+    <div className="flex items-center gap-1.5">
+      <label className={compact ? "block w-24" : "block w-[174px] max-w-[44vw]"}>
+        <span className="sr-only">Display</span>
+        <select
+          value={displayMode}
+          onChange={(event) => {
+            const nextMode = event.target.value as DisplayMode
+            if (!canAccessFantasyProjections && isProDisplayMode(nextMode)) return
+            onDisplayModeChange(nextMode)
+          }}
+          className={`${compact ? "text-[10px]" : "text-[11px]"} w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent`}
       >
-        {DISPLAY_MODES.map((mode) => {
-          const isLocked = !canAccessFantasyProjections && isProDisplayMode(mode.key)
-          return (
-            <option key={mode.key} value={mode.key} disabled={isLocked}>
-              {compact ? `${mode.shortLabel}${isLocked ? " Pro" : ""}` : `${mode.label}${isLocked ? " (Pro)" : ""}`}
-            </option>
-          )
-        })}
-      </select>
-    </label>
+          {DISPLAY_MODES.map((mode) => {
+            const isLocked = !canAccessFantasyProjections && isProDisplayMode(mode.key)
+            return (
+              <option key={mode.key} value={mode.key} disabled={isLocked}>
+                {compact ? `${mode.shortLabel}${isLocked ? " Pro" : ""}` : `${mode.label}${isLocked ? " (Pro)" : ""}`}
+              </option>
+            )
+          })}
+        </select>
+      </label>
+      <button
+        type="button"
+        aria-pressed={showStatBars}
+        title={showStatBars ? "Hide stat bars" : "Show stat bars"}
+        onClick={() => onShowStatBarsChange(!showStatBars)}
+        className={`${compact ? "h-8 w-8 text-[9px]" : "h-8 w-9 text-[10px]"} rounded-md border border-emerald-300/35 bg-nrl-panel/90 font-black uppercase tracking-wide text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] transition-colors hover:border-nrl-accent/50 ${showStatBars ? "text-nrl-accent" : "text-nrl-muted"}`}
+      >
+        Bars
+      </button>
+    </div>
   )
 }
 
 function LineupCard({
   match,
   liveMatch,
+  matchStats,
   teamLogos,
   displayMode,
   onDisplayModeChange,
+  showStatBars,
+  onShowStatBarsChange,
   tryscorerOdds,
   sportsbetOdds,
   canAccessFantasyProjections,
@@ -1507,9 +1794,12 @@ function LineupCard({
 }: {
   match: LineupMatch
   liveMatch: LineupLiveMatch | null
+  matchStats: LineupMatchStats | null
   teamLogos: Record<string, string>
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
+  showStatBars: boolean
+  onShowStatBarsChange: (show: boolean) => void
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   sportsbetOdds: Record<string, LineupSportsbetOdds>
   canAccessFantasyProjections: boolean
@@ -1517,13 +1807,18 @@ function LineupCard({
   playerAverages: Record<string, Record<AverageStatKey, number>>
   positionPpmBaselines: Record<string, number>
 }) {
-  const [selectedPlayer, setSelectedPlayer] = useState<LineupPlayer | null>(null)
   const homePlayers = match.homeTeam?.players ?? []
   const awayPlayers = match.awayTeam?.players ?? []
+  const hasLineupData = homePlayers.length > 0 || awayPlayers.length > 0
+  const [selectedPlayer, setSelectedPlayer] = useState<LineupPlayer | null>(null)
+  const [detailView, setDetailView] = useState<LineupDetailView>(hasLineupData ? "lineup" : "stats")
+  const availableDetailViews: LineupDetailView[] = hasLineupData ? ["lineup", "stats"] : ["stats"]
   const isLive = hasMatchStarted(liveMatch)
+  const hasResultScore = match.homeScore != null || match.awayScore != null
   const showLiveIndicators = isMatchLive(liveMatch)
-  const homeSportsbetOdds = isLive ? null : sportsbetOddsForTeam(match, match.homeTeam, sportsbetOdds)
-  const awaySportsbetOdds = isLive ? null : sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds)
+  const showPreMatchOdds = !isLive && !hasResultScore
+  const homeSportsbetOdds = showPreMatchOdds ? sportsbetOddsForTeam(match, match.homeTeam, sportsbetOdds) : null
+  const awaySportsbetOdds = showPreMatchOdds ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
   const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
     ? {
         player: selectedPlayer,
@@ -1573,66 +1868,131 @@ function LineupCard({
       <div className="relative px-2 pb-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,rgba(191,219,254,0.5),rgba(59,130,246,0.18),transparent)] sm:px-3">
         <div className="pt-5" />
         <LiveTryScorersStrip match={match} liveMatch={liveMatch} />
-        {!isLive ? <MatchupInsightsPanel insights={insights} canAccessFullInsights={canAccessFantasyProjections} /> : null}
-        <Pitch
-          homePlayers={homePlayers}
-          awayPlayers={awayPlayers}
-          orientation="portrait"
-          displayMode={displayMode}
-          onDisplayModeChange={onDisplayModeChange}
-          canAccessFantasyProjections={canAccessFantasyProjections}
-          tryscorerOdds={tryscorerOdds}
-          playerAverages={playerAverages}
-          liveMatch={liveMatch}
-          positionPpmBaselines={positionPpmBaselines}
-          showLiveIndicators={showLiveIndicators}
-          onPlayerSelect={setSelectedPlayer}
-        />
-        <Pitch
-          homePlayers={homePlayers}
-          awayPlayers={awayPlayers}
-          orientation="landscape"
-          displayMode={displayMode}
-          onDisplayModeChange={onDisplayModeChange}
-          canAccessFantasyProjections={canAccessFantasyProjections}
-          tryscorerOdds={tryscorerOdds}
-          playerAverages={playerAverages}
-          liveMatch={liveMatch}
-          positionPpmBaselines={positionPpmBaselines}
-          showLiveIndicators={showLiveIndicators}
-          onPlayerSelect={setSelectedPlayer}
-        />
-
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <TeamBench
-            team={match.homeTeam}
-            liveMatch={liveMatch}
-            positionPpmBaselines={positionPpmBaselines}
-            showLiveIndicators={showLiveIndicators}
-            onPlayerSelect={setSelectedPlayer}
-          />
-          <TeamBench
-            team={match.awayTeam}
-            liveMatch={liveMatch}
-            positionPpmBaselines={positionPpmBaselines}
-            showLiveIndicators={showLiveIndicators}
-            onPlayerSelect={setSelectedPlayer}
-          />
+        <div className="mb-3 flex justify-center">
+          <div className="inline-flex rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
+            {availableDetailViews.map((view) => (
+              <button
+                key={view}
+                type="button"
+                onClick={() => setDetailView(view)}
+                className={`rounded-md px-3 py-1.5 transition-colors ${
+                  detailView === view ? "bg-nrl-accent text-nrl-bg" : "hover:text-nrl-text"
+                }`}
+              >
+                {view === "lineup" ? "Lineup" : "Match stats"}
+              </button>
+            ))}
+          </div>
         </div>
-        <NotableOuts
-          homeTeam={match.homeTeam}
-          awayTeam={match.awayTeam}
-          casualtyWardOuts={casualtyWardOuts}
-        />
+
+        {detailView === "stats" ? (
+          <MatchStatsPanel match={match} liveMatch={liveMatch} stats={matchStats} />
+        ) : hasLineupData ? (
+          <>
+            {!isLive ? <MatchupInsightsPanel insights={insights} canAccessFullInsights={canAccessFantasyProjections} /> : null}
+            <Pitch
+              homePlayers={homePlayers}
+              awayPlayers={awayPlayers}
+              orientation="portrait"
+              displayMode={displayMode}
+              onDisplayModeChange={onDisplayModeChange}
+              showStatBars={showStatBars}
+              onShowStatBarsChange={onShowStatBarsChange}
+              canAccessFantasyProjections={canAccessFantasyProjections}
+              tryscorerOdds={tryscorerOdds}
+              playerAverages={playerAverages}
+              liveMatch={liveMatch}
+              positionPpmBaselines={positionPpmBaselines}
+              showLiveIndicators={showLiveIndicators}
+              onPlayerSelect={setSelectedPlayer}
+            />
+            <Pitch
+              homePlayers={homePlayers}
+              awayPlayers={awayPlayers}
+              orientation="landscape"
+              displayMode={displayMode}
+              onDisplayModeChange={onDisplayModeChange}
+              showStatBars={showStatBars}
+              onShowStatBarsChange={onShowStatBarsChange}
+              canAccessFantasyProjections={canAccessFantasyProjections}
+              tryscorerOdds={tryscorerOdds}
+              playerAverages={playerAverages}
+              liveMatch={liveMatch}
+              positionPpmBaselines={positionPpmBaselines}
+              showLiveIndicators={showLiveIndicators}
+              onPlayerSelect={setSelectedPlayer}
+            />
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <TeamBench
+                team={match.homeTeam}
+                liveMatch={liveMatch}
+                positionPpmBaselines={positionPpmBaselines}
+                showLiveIndicators={showLiveIndicators}
+                onPlayerSelect={setSelectedPlayer}
+              />
+              <TeamBench
+                team={match.awayTeam}
+                liveMatch={liveMatch}
+                positionPpmBaselines={positionPpmBaselines}
+                showLiveIndicators={showLiveIndicators}
+                onPlayerSelect={setSelectedPlayer}
+              />
+            </div>
+            <NotableOuts
+              homeTeam={match.homeTeam}
+              awayTeam={match.awayTeam}
+              casualtyWardOuts={casualtyWardOuts}
+            />
+          </>
+        ) : (
+          <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
+            No lineup data available for this game.
+          </div>
+        )}
       </div>
       <PlayerStatsDialog selection={selectedPlayerStats} onClose={() => setSelectedPlayer(null)} />
     </details>
   )
 }
 
+function RoundSelector({
+  roundOptions,
+  selectedRound,
+}: {
+  roundOptions: LineupRoundOption[]
+  selectedRound: string
+}) {
+  if (roundOptions.length === 0) return null
+
+  return (
+    <div className="flex justify-end">
+      <label className="block w-40 sm:w-48">
+        <span className="sr-only">Select round</span>
+        <select
+          value={selectedRound}
+          onChange={(event) => {
+            window.location.href = `/dashboard/lineups?round=${encodeURIComponent(event.target.value)}`
+          }}
+          className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
+        >
+          {roundOptions.map((round) => (
+            <option key={round.value} value={round.value}>
+              {round.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  )
+}
+
 export function LineupsDashboard({
   matches,
   liveMatches,
+  matchStats,
+  roundOptions,
+  selectedRound,
   teamLogos,
   tryscorerOdds,
   sportsbetOdds,
@@ -1642,6 +2002,7 @@ export function LineupsDashboard({
   positionPpmBaselines,
 }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("odds")
+  const [showStatBars, setShowStatBars] = useState(true)
   const matchDateGroups = matches.reduce<Array<{ dateKey: string; matches: LineupMatch[] }>>(
     (groups, match) => {
       const dateKey = matchDateKey(match)
@@ -1658,6 +2019,7 @@ export function LineupsDashboard({
 
   return (
     <div className="space-y-3">
+      <RoundSelector roundOptions={roundOptions} selectedRound={selectedRound} />
       {matches.length > 0 ? (
         <div className="space-y-11">
           {matchDateGroups.map((group) => (
@@ -1670,9 +2032,12 @@ export function LineupsDashboard({
                   key={match.matchId}
                   match={match}
                   liveMatch={liveMatches[match.matchId] ?? null}
+                  matchStats={matchStats[match.matchId] ?? null}
                   teamLogos={teamLogos}
                   displayMode={displayMode}
                   onDisplayModeChange={setDisplayMode}
+                  showStatBars={showStatBars}
+                  onShowStatBarsChange={setShowStatBars}
                   tryscorerOdds={tryscorerOdds}
                   sportsbetOdds={sportsbetOdds}
                   canAccessFantasyProjections={canAccessFantasyProjections}

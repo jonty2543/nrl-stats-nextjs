@@ -1415,13 +1415,15 @@ function TeamBench({
                 <span className="w-5 shrink-0 font-semibold text-nrl-muted">{player.number ?? "-"}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{player.player}</span>
-                  <FantasyBaselineBar
-                    stats={liveStats}
-                    baselinePpm={baseline.value}
-                    baselineLabel={baseline.label}
-                    compact
-                    className="mt-1"
-                  />
+                  {showLiveIndicators ? (
+                    <FantasyBaselineBar
+                      stats={liveStats}
+                      baselinePpm={baseline.value}
+                      baselineLabel={baseline.label}
+                      compact
+                      className="mt-1"
+                    />
+                  ) : null}
                 </span>
                 {showLiveIndicators && liveState?.isOnField ? <LiveStatusIcon type="on" compact /> : null}
               </button>
@@ -1873,7 +1875,6 @@ export function LineupsDashboard({
   positionPpmBaselines,
 }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("odds")
-  const [showStatBars, setShowStatBars] = useState(true)
   const matchDateGroups = matches.reduce<Array<{ dateKey: string; matches: LineupMatch[] }>>(
     (groups, match) => {
       const dateKey = matchDateKey(match)

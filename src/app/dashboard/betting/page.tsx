@@ -22,6 +22,7 @@ function normaliseTeamKey(value: string): string {
   const aliases: Record<string, string> = {
     broncos: "brisbane broncos",
     bulldogs: "canterbury bankstown bulldogs",
+    "canterbury bulldogs": "canterbury bankstown bulldogs",
     raiders: "canberra raiders",
     sharks: "cronulla sutherland sharks",
     titans: "gold coast titans",

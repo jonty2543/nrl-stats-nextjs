@@ -153,6 +153,18 @@ interface BetDraft {
   edgePp: number | null;
 }
 
+interface MobileBetSlip {
+  key: string;
+  date: string;
+  match: string;
+  market: BettingMarket;
+  selection: string;
+  lineValue: number | null;
+  odds: number;
+  stake: number;
+  modelProb: number | null;
+}
+
 const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Total"];
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
@@ -242,6 +254,7 @@ function normaliseTeamMatchKey(value: string): string {
   const aliases: Record<string, string> = {
     broncos: "brisbane broncos",
     bulldogs: "canterbury bankstown bulldogs",
+    "canterbury bulldogs": "canterbury bankstown bulldogs",
     raiders: "canberra raiders",
     sharks: "cronulla sutherland sharks",
     titans: "gold coast titans",
@@ -2267,6 +2280,7 @@ function MarketSection({
 }) {
   const [tryscorerValueByGroup, setTryscorerValueByGroup] = useState<Record<string, number>>({});
   const [collapsedTryscorerGroups, setCollapsedTryscorerGroups] = useState<Record<string, boolean>>({});
+  const [mobileBetSlip, setMobileBetSlip] = useState<MobileBetSlip | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -2279,7 +2293,10 @@ function MarketSection({
       if (group.market !== "Tryscorer") return true;
       const kickoffKey = buildMatchKickoffKey(group.date, group.match);
       const kickoff = kickoffKey ? tryscorerKickoffsByMatch[kickoffKey] : null;
-      if (!kickoff) return true;
+      if (!kickoff) {
+        const groupDateMs = Date.parse(`${group.date}T23:59:59`);
+        return !Number.isFinite(groupDateMs) || nowMs <= groupDateMs;
+      }
       const kickoffMs = Date.parse(kickoff);
       return !Number.isFinite(kickoffMs) || nowMs < kickoffMs + 5 * 60 * 1000;
     })
@@ -2304,6 +2321,14 @@ function MarketSection({
     acc.set(group.date, [group]);
     return acc;
   }, new Map<string, EventGroup[]>());
+  const mobileSlipImplied = mobileBetSlip ? impliedProbability(mobileBetSlip.odds) : null;
+  const mobileSlipEdgePp = mobileBetSlip?.modelProb != null && mobileSlipImplied != null
+    ? (mobileBetSlip.modelProb - mobileSlipImplied) * 100
+    : null;
+  const canConfirmMobileSlip = mobileBetSlip != null
+    && mobileBetSlip.odds > 1
+    && Number.isFinite(mobileBetSlip.stake)
+    && mobileBetSlip.stake > 0;
 
   return (
     <div className="space-y-6">
@@ -2439,13 +2464,9 @@ function MarketSection({
                             : "text-nrl-accent";
                     const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                     const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
-                    const canPlaceBet = canAccessPremium
-                      && (!showModelColumns || modelProbability != null)
-                      && implied != null
-                      && oddsValue != null
+                    const canOpenMobileBet = oddsValue != null
                       && oddsValue > 1
-                      && Number.isFinite(stakeValue)
-                      && stakeValue > 0;
+                      && (!showModelColumns || modelProbability != null);
                     const tryscorerForm = group.market === "Tryscorer"
                       ? tryscorerFormByPlayer[normaliseLookupKey(row.result)] ?? null
                       : null;
@@ -2456,53 +2477,79 @@ function MarketSection({
 
                     return (
                       <div key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`} className="rounded-lg border border-nrl-border/80 bg-nrl-panel-2 px-2.5 py-2.5">
-                        <div className="flex items-start gap-1.5">
-                          {teamLogoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={teamLogoUrl}
-                              alt=""
-                              className="mt-0.5 h-4 w-4 shrink-0 object-contain"
-                              loading="lazy"
-                            />
-                          ) : null}
-                          <div className="min-w-0">
-                            <div className="truncate text-xs font-semibold text-nrl-text">{row.result}</div>
-                            <TryscorerForm form={tryscorerForm} />
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 items-start gap-1.5">
+                            {teamLogoUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={teamLogoUrl}
+                                alt=""
+                                className="mt-0.5 h-4 w-4 shrink-0 object-contain"
+                                loading="lazy"
+                              />
+                            ) : null}
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-semibold text-nrl-text">{row.result}</div>
+                              <TryscorerForm form={tryscorerForm} />
+                            </div>
                           </div>
+                          {canAccessPremium ? (
+                            <button
+                              type="button"
+                              disabled={!canOpenMobileBet}
+                              onClick={() => {
+                                if (!canOpenMobileBet || oddsValue == null) return;
+                                setMobileBetSlip({
+                                  key: betRowKey,
+                                  date: group.date,
+                                  match: group.match,
+                                  market: group.market,
+                                  selection: row.result,
+                                  lineValue: row.bestValueComputed,
+                                  odds: oddsValue,
+                                  stake: stakeValue,
+                                  modelProb: modelProbability,
+                                });
+                              }}
+                              className={`shrink-0 rounded border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${
+                                canOpenMobileBet
+                                  ? "cursor-pointer border-nrl-accent/60 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/20"
+                                  : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
+                              }`}
+                            >
+                              Add
+                            </button>
+                          ) : (
+                            <BillingPageLink className="shrink-0 rounded border border-nrl-border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted opacity-75 transition-colors hover:border-nrl-accent hover:text-nrl-text">
+                              Locked
+                            </BillingPageLink>
+                          )}
                         </div>
 
-                        <div className="mt-2 grid grid-cols-5 gap-1">
+                        <div className={`mt-2 grid ${showModelColumns ? "grid-cols-9" : "grid-cols-7"} items-center gap-x-1 gap-y-0 text-[9px]`}>
                           {visibleBookieColumns.map((bookie) => {
                             const offer = row.bookieOffers[bookie];
-                            const isBest = offer != null
-                              && row.bestBookiesComputed.includes(bookie)
-                              && row.bestPriceComputed === offer.price
-                              && row.bestValueComputed === offer.value;
                             return (
                               <div
                                 key={`${group.key}-mobile-${row.result}-${bookie}`}
-                                className={`min-w-0 rounded border px-1 py-1 ${isBest ? "border-nrl-accent/45 bg-nrl-accent/8" : "border-white/8 bg-white/[0.03]"}`}
+                                className="min-w-0"
                               >
-                                <div className="flex h-3.5 items-center">
+                                <div className="flex h-3 items-center opacity-90">
                                   <BookieLogo bookie={bookie} compact />
                                 </div>
-                                <div className={`mt-0.5 text-[11px] font-semibold leading-tight ${isBest ? "text-nrl-accent" : "text-nrl-text"}`}>
+                                <div className="mt-px truncate font-semibold leading-tight text-nrl-text">
                                   {offer == null ? "-" : formatPrice(offer.price)}
                                 </div>
                                 {offer != null && (group.market === "Line" || group.market === "Total") && offer.value != null ? (
-                                  <div className="text-[9px] leading-tight text-nrl-muted">{formatLineValue(offer.value)}</div>
+                                  <div className="text-[8px] leading-tight text-nrl-muted">{formatLineValue(offer.value)}</div>
                                 ) : null}
                               </div>
                             );
                           })}
-                        </div>
-
-                        <div className={`mt-2 grid ${showModelColumns ? "grid-cols-4" : "grid-cols-2"} gap-1 text-[10px]`}>
-                          <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
-                            <div className="truncate text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted">Best</div>
-                            <div className="mt-0.5 flex min-w-0 items-center gap-0.5 text-nrl-text">
-                              <div className="shrink-0 font-semibold leading-tight">{formatPrice(row.bestPriceComputed)}</div>
+                          <div className="min-w-0 border-l border-white/10 pl-1">
+                            <div className="truncate text-[6px] font-bold uppercase tracking-[0.06em] text-nrl-muted">Best</div>
+                            <div className="mt-px flex min-w-0 items-center gap-0.5 text-nrl-accent">
+                              <div className="shrink-0 font-bold leading-tight">{formatPrice(row.bestPriceComputed)}</div>
                               {row.bestBookiesComputed.length > 0 ? (
                                 <div className="flex min-w-0 items-center gap-0.5 overflow-hidden">
                                   {row.bestBookiesComputed.slice(0, 1).map((bookie) => (
@@ -2518,27 +2565,24 @@ function MarketSection({
                                 </div>
                               ) : null}
                             </div>
-                            {(group.market === "Line" || group.market === "Total") && row.bestValueComputed != null ? (
-                              <div className="truncate text-[8px] leading-tight text-nrl-muted">{formatLineValue(row.bestValueComputed)}</div>
-                            ) : null}
                           </div>
-                          <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
-                            <div className="truncate text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted">Imp</div>
-                            <div className="mt-0.5 truncate font-semibold leading-tight text-nrl-text">{formatPct(implied == null ? null : implied * 100)}</div>
+                          <div className="min-w-0">
+                            <div className="truncate text-[7px] font-bold uppercase tracking-[0.06em] text-nrl-muted">Imp</div>
+                            <div className="mt-px truncate font-semibold leading-tight text-nrl-text">{formatPct(implied == null ? null : implied * 100)}</div>
                           </div>
                           {showModelColumns ? (
                             <>
-                              <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                              <div className="min-w-0">
                                 <div className="truncate text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted">Model</div>
-                                <div className="mt-0.5 truncate font-semibold leading-tight text-nrl-text">
+                                <div className="mt-px truncate font-semibold leading-tight text-nrl-text">
                                   <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
                                     {formatPct(modelProbability == null ? null : modelProbability * 100)}
                                   </span>
                                 </div>
                               </div>
-                              <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                              <div className="min-w-0">
                                 <div className="truncate text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted">Edge</div>
-                                <div className={`mt-0.5 truncate font-semibold leading-tight ${edgeClass}`}>
+                                <div className={`mt-px truncate font-semibold leading-tight ${edgeClass}`}>
                                   <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
                                     {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
                                   </span>
@@ -2548,70 +2592,6 @@ function MarketSection({
                           ) : null}
                         </div>
 
-                        <div className="mt-2 grid grid-cols-2 gap-1.5">
-                          <label className="block">
-                            <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Odds</span>
-                            <input
-                              type="number"
-                              min={1.01}
-                              step={0.01}
-                              value={oddsValue == null || !Number.isFinite(oddsValue) ? "" : oddsValue}
-                              onChange={(event) => onOddsOverride(betRowKey, Number(event.target.value))}
-                              onBlur={(event) => {
-                                const nextOdds = Number(event.target.value);
-                                if (Number.isFinite(nextOdds) && nextOdds > 1) return;
-                                onOddsOverride(betRowKey, row.bestPriceComputed ?? 0);
-                              }}
-                              className="mt-0.5 w-full rounded border border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs text-nrl-text outline-none focus:border-nrl-accent"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Stake</span>
-                            <input
-                              type="number"
-                              min={0}
-                              step={1}
-                              value={Number.isFinite(stakeValue) ? stakeValue : 0}
-                              onChange={(event) => onStakeOverride(betRowKey, Math.max(0, Number(event.target.value) || 0))}
-                              className="mt-0.5 w-full rounded border border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs text-nrl-text outline-none focus:border-nrl-accent"
-                            />
-                          </label>
-                        </div>
-
-                        <div className="mt-2">
-                          {canAccessPremium ? (
-                            <button
-                              type="button"
-                              disabled={!canPlaceBet}
-                              onClick={() => {
-                                if (!canPlaceBet || oddsValue == null) return;
-                                void onAddBet({
-                                  market: group.market,
-                                  matchDate: group.date,
-                                  matchName: group.match,
-                                  selection: row.result,
-                                  lineValue: row.bestValueComputed,
-                                  odds: oddsValue,
-                                  stake: stakeValue,
-                                  modelProb: modelProbability,
-                                  impliedProb: implied,
-                                  edgePp,
-                                });
-                              }}
-                              className={`w-full rounded-md border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide ${
-                                canPlaceBet
-                                  ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
-                                  : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
-                              }`}
-                            >
-                              Bet
-                            </button>
-                          ) : (
-                            <BillingPageLink className="flex w-full justify-center rounded-md border border-nrl-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted opacity-75 transition-colors hover:border-nrl-accent hover:text-nrl-text">
-                              Locked
-                            </BillingPageLink>
-                          )}
-                        </div>
                       </div>
                     );
                   })}
@@ -2877,6 +2857,117 @@ function MarketSection({
           })}
         </div>
       ))}
+      {mobileBetSlip ? (
+        <div className="fixed inset-0 z-50 grid place-items-end bg-black/55 px-3 py-4 md:hidden">
+          <div className="w-full rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-accent">
+                  Add To Bets
+                </div>
+                <div className="mt-1 truncate text-base font-semibold text-nrl-text">
+                  {formatBestBetSelection(mobileBetSlip.market, mobileBetSlip.selection, mobileBetSlip.lineValue)}
+                </div>
+                <div className="mt-0.5 truncate text-xs text-nrl-muted">{mobileBetSlip.match}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileBetSlip(null)}
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                aria-label="Close bet slip"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Odds</span>
+                <input
+                  type="number"
+                  min={1.01}
+                  step={0.01}
+                  value={Number.isFinite(mobileBetSlip.odds) ? mobileBetSlip.odds : ""}
+                  onChange={(event) => {
+                    const nextOdds = Number(event.target.value);
+                    setMobileBetSlip((current) => current ? {
+                      ...current,
+                      odds: Number.isFinite(nextOdds) ? nextOdds : 0,
+                    } : current);
+                  }}
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Stake</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={Number.isFinite(mobileBetSlip.stake) ? mobileBetSlip.stake : 0}
+                  onChange={(event) => {
+                    const nextStake = Math.max(0, Number(event.target.value) || 0);
+                    setMobileBetSlip((current) => current ? { ...current, stake: nextStake } : current);
+                  }}
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                />
+              </label>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
+                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Implied</div>
+                <div className="mt-0.5 font-semibold text-nrl-text">{formatPct(mobileSlipImplied == null ? null : mobileSlipImplied * 100)}</div>
+              </div>
+              <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
+                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
+                <div className="mt-0.5 font-semibold text-nrl-accent">
+                  {mobileSlipEdgePp == null ? "-" : `${mobileSlipEdgePp >= 0 ? "+" : ""}${mobileSlipEdgePp.toFixed(2)}`}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileBetSlip(null)}
+                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!canConfirmMobileSlip}
+                onClick={() => {
+                  if (!mobileBetSlip || !canConfirmMobileSlip) return;
+                  onOddsOverride(mobileBetSlip.key, mobileBetSlip.odds);
+                  onStakeOverride(mobileBetSlip.key, mobileBetSlip.stake);
+                  void onAddBet({
+                    market: mobileBetSlip.market,
+                    matchDate: mobileBetSlip.date,
+                    matchName: mobileBetSlip.match,
+                    selection: mobileBetSlip.selection,
+                    lineValue: mobileBetSlip.lineValue,
+                    odds: mobileBetSlip.odds,
+                    stake: mobileBetSlip.stake,
+                    modelProb: mobileBetSlip.modelProb,
+                    impliedProb: mobileSlipImplied,
+                    edgePp: mobileSlipEdgePp,
+                  });
+                  setMobileBetSlip(null);
+                }}
+                className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                  canConfirmMobileSlip
+                    ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                    : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
+                }`}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -52,11 +52,6 @@ type PlayerStatDisplayGroup = {
   title: string
   items: PlayerStatDisplayItem[]
 }
-type PlayerMetricRange = {
-  min: number
-  max: number
-  lowerIsBetter: boolean
-}
 type AverageStatKey =
   | "Tries"
   | "Try Assists"
@@ -130,33 +125,6 @@ function displayModeShortLabel(mode: DisplayMode): string {
 
 function statPerGameLabel(mode: AverageStatKey): string {
   return `${displayModeShortLabel(mode)}/g`
-}
-
-function lowerMetricIsBetter(mode: DisplayMode): boolean {
-  return mode === "odds" || mode === "Missed Tackles" || mode === "Errors"
-}
-
-const GLOBAL_PLAYER_METRIC_RANGES: Record<DisplayMode, Omit<PlayerMetricRange, "lowerIsBetter">> = {
-  odds: { min: 1, max: 15 },
-  fantasy: { min: 10, max: 75 },
-  Tries: { min: 0, max: 1.4 },
-  "Try Assists": { min: 0, max: 1 },
-  "All Run Metres": { min: 30, max: 240 },
-  "Tackles Made": { min: 5, max: 60 },
-  "Line Breaks": { min: 0, max: 1.3 },
-  "Line Break Assists": { min: 0, max: 1 },
-  Errors: { min: 0, max: 2.2 },
-  "Missed Tackles": { min: 0, max: 7 },
-  Receipts: { min: 5, max: 80 },
-  "Tackle Breaks": { min: 0, max: 8 },
-  Offloads: { min: 0, max: 3.5 },
-}
-
-function globalMetricRange(mode: DisplayMode): PlayerMetricRange {
-  return {
-    ...GLOBAL_PLAYER_METRIC_RANGES[mode],
-    lowerIsBetter: lowerMetricIsBetter(mode),
-  }
 }
 
 const INSIGHT_CATEGORY_CLASSES: Record<MatchupInsight["category"], string> = {
@@ -547,59 +515,12 @@ function formatAverage(value: number | null | undefined, mode: AverageStatKey): 
   return value.toFixed(1)
 }
 
-function playerMetricValue({
-  player,
-  displayMode,
-  tryscorerOdds,
-  playerAverages,
-  canAccessFantasyProjections,
-}: {
-  player: LineupPlayer
-  displayMode: DisplayMode
-  tryscorerOdds: Record<string, LineupTryscorerOdds>
-  playerAverages: Record<string, Record<AverageStatKey, number>>
-  canAccessFantasyProjections: boolean
-}): number | null {
-  const playerKey = normaliseKey(player.player)
-  if (displayMode === "fantasy") return canAccessFantasyProjections ? player.fantasyProjection : null
-  if (displayMode === "odds") return tryscorerOdds[playerKey]?.bestPrice ?? null
-  return playerAverages[playerKey]?.[displayMode] ?? null
-}
-
-function metricBarScore(value: number | null, range: PlayerMetricRange | null): number | null {
-  if (value == null || !range) return null
-  if (range.max === range.min) return 0.5
-  const raw = (value - range.min) / (range.max - range.min)
-  const score = range.lowerIsBetter ? 1 - raw : raw
-  return Math.min(1, Math.max(0, score))
-}
-
-function PlayerMetricBar({ score, compact }: { score: number | null; compact: boolean }) {
-  if (score == null) return null
-  const fillRatio = score * FANTASY_BASELINE_RATIO_MAX
-  return (
-    <div className={`${compact ? "mt-0.5 h-2 w-11" : "mt-1 h-2.5 w-16"} mx-auto`}>
-      <div className="h-full overflow-hidden rounded-full border border-white/20 bg-white/12 shadow-inner">
-        <div
-          className="h-full rounded-full transition-[width,background-color]"
-          style={{
-            width: `${score * 100}%`,
-            backgroundColor: fantasyBaselineFillColor(fillRatio),
-          }}
-        />
-      </div>
-    </div>
-  )
-}
-
 function PlayerMetric({
   player,
   displayMode,
   tryscorerOdds,
   playerAverages,
   canAccessFantasyProjections,
-  showStatBars,
-  metricRange,
   compact,
 }: {
   player: LineupPlayer
@@ -607,24 +528,17 @@ function PlayerMetric({
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   canAccessFantasyProjections: boolean
-  showStatBars: boolean
-  metricRange: PlayerMetricRange | null
   compact: boolean
 }) {
   const playerKey = normaliseKey(player.player)
   const textClass = compact ? "text-[10px]" : "text-[11px]"
-  const metricValue = playerMetricValue({ player, displayMode, tryscorerOdds, playerAverages, canAccessFantasyProjections })
-  const barScore = showStatBars ? metricBarScore(metricValue, metricRange) : null
 
   if (displayMode === "fantasy") {
     if (!canAccessFantasyProjections) {
       return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
     }
     return player.fantasyProjection != null ? (
-      <>
-        <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>{Math.round(player.fantasyProjection)} proj</div>
-        <PlayerMetricBar score={barScore} compact={compact} />
-      </>
+      <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>{Math.round(player.fantasyProjection)} proj</div>
     ) : (
       <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
     )
@@ -634,28 +548,22 @@ function PlayerMetric({
     const odds = tryscorerOdds[playerKey]
     const logo = resolveBookieLogo(odds?.bestBookie)
     return odds?.bestPrice != null ? (
-      <>
-        <div className={`mt-0.5 flex items-center justify-center gap-1 ${textClass} font-semibold leading-tight text-emerald-100/90`}>
-          {logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt={odds.bestBookie ?? ""} className={`${compact ? "h-2.5" : "h-3"} w-auto object-contain`} loading="lazy" />
-          ) : null}
-          <span>{odds.bestPrice.toFixed(2)}</span>
-        </div>
-        <PlayerMetricBar score={barScore} compact={compact} />
-      </>
+      <div className={`mt-0.5 flex items-center justify-center gap-1 ${textClass} font-semibold leading-tight text-emerald-100/90`}>
+        {logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={odds.bestBookie ?? ""} className={`${compact ? "h-2.5" : "h-3"} w-auto object-contain`} loading="lazy" />
+        ) : null}
+        <span>{odds.bestPrice.toFixed(2)}</span>
+      </div>
     ) : (
       <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
     )
   }
 
   return (
-    <>
-      <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>
-        {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} {statPerGameLabel(displayMode)}
-      </div>
-      <PlayerMetricBar score={barScore} compact={compact} />
-    </>
+    <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>
+      {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} {statPerGameLabel(displayMode)}
+    </div>
   )
 }
 
@@ -1266,8 +1174,6 @@ function PitchPlayer({
   tryscorerOdds,
   playerAverages,
   canAccessFantasyProjections,
-  showStatBars,
-  metricRange,
   showPlayerMetric,
   showLiveIndicators,
   liveMatch,
@@ -1282,8 +1188,6 @@ function PitchPlayer({
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   canAccessFantasyProjections: boolean
-  showStatBars: boolean
-  metricRange: PlayerMetricRange | null
   showPlayerMetric: boolean
   showLiveIndicators: boolean
   liveMatch: LineupLiveMatch | null
@@ -1334,18 +1238,18 @@ function PitchPlayer({
           tryscorerOdds={tryscorerOdds}
           playerAverages={playerAverages}
           canAccessFantasyProjections={canAccessFantasyProjections}
-          showStatBars={showStatBars}
-          metricRange={metricRange}
           compact={compact}
         />
       ) : null}
-      <FantasyBaselineBar
-        stats={liveStats}
-        baselinePpm={baseline.value}
-        baselineLabel={baseline.label}
-        compact={compact}
-        className="mx-auto mt-1"
-      />
+      {showLiveIndicators ? (
+        <FantasyBaselineBar
+          stats={liveStats}
+          baselinePpm={baseline.value}
+          baselineLabel={baseline.label}
+          compact={compact}
+          className="mx-auto mt-1"
+        />
+      ) : null}
     </button>
   )
 }
@@ -1383,8 +1287,6 @@ function Pitch({
   orientation,
   displayMode,
   onDisplayModeChange,
-  showStatBars,
-  onShowStatBarsChange,
   canAccessFantasyProjections,
   tryscorerOdds,
   playerAverages,
@@ -1399,8 +1301,6 @@ function Pitch({
   orientation: Orientation
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
-  showStatBars: boolean
-  onShowStatBarsChange: (show: boolean) => void
   canAccessFantasyProjections: boolean
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
@@ -1416,7 +1316,6 @@ function Pitch({
       : "hidden h-[520px] w-full md:block"
   const homePitchSlots = buildTeamPitchSlotMap(homePlayers)
   const awayPitchSlots = buildTeamPitchSlotMap(awayPlayers)
-  const metricRange = globalMetricRange(displayMode)
 
   return (
     <div className={`${sizeClass} relative overflow-hidden rounded-lg border-2 border-emerald-300/45 bg-[radial-gradient(circle_at_50%_50%,rgba(0,245,138,0.16),transparent_30%),linear-gradient(90deg,rgba(8,26,33,0.98),rgba(15,112,73,0.92)_50%,rgba(8,26,33,0.98))]`}>
@@ -1426,8 +1325,6 @@ function Pitch({
           <DisplayModeControl
             displayMode={displayMode}
             onDisplayModeChange={onDisplayModeChange}
-            showStatBars={showStatBars}
-            onShowStatBarsChange={onShowStatBarsChange}
             canAccessFantasyProjections={canAccessFantasyProjections}
             compact={orientation === "portrait"}
           />
@@ -1447,8 +1344,6 @@ function Pitch({
             tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
             canAccessFantasyProjections={canAccessFantasyProjections}
-            showStatBars={showStatBars}
-            metricRange={metricRange}
             showPlayerMetric={showPregameMetrics}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
@@ -1471,8 +1366,6 @@ function Pitch({
             tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
             canAccessFantasyProjections={canAccessFantasyProjections}
-            showStatBars={showStatBars}
-            metricRange={metricRange}
             showPlayerMetric={showPregameMetrics}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
@@ -1727,51 +1620,36 @@ function MatchupInsightsPanel({
 function DisplayModeControl({
   displayMode,
   onDisplayModeChange,
-  showStatBars,
-  onShowStatBarsChange,
   canAccessFantasyProjections,
   compact = false,
 }: {
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
-  showStatBars: boolean
-  onShowStatBarsChange: (show: boolean) => void
   canAccessFantasyProjections: boolean
   compact?: boolean
 }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <label className={compact ? "block w-24" : "block w-[174px] max-w-[44vw]"}>
-        <span className="sr-only">Display</span>
-        <select
-          value={displayMode}
-          onChange={(event) => {
-            const nextMode = event.target.value as DisplayMode
-            if (!canAccessFantasyProjections && isProDisplayMode(nextMode)) return
-            onDisplayModeChange(nextMode)
-          }}
-          className={`${compact ? "text-[10px]" : "text-[11px]"} w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent`}
+    <label className={compact ? "block w-24" : "block w-[174px] max-w-[44vw]"}>
+      <span className="sr-only">Display</span>
+      <select
+        value={displayMode}
+        onChange={(event) => {
+          const nextMode = event.target.value as DisplayMode
+          if (!canAccessFantasyProjections && isProDisplayMode(nextMode)) return
+          onDisplayModeChange(nextMode)
+        }}
+        className={`${compact ? "text-[10px]" : "text-[11px]"} w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent`}
       >
-          {DISPLAY_MODES.map((mode) => {
-            const isLocked = !canAccessFantasyProjections && isProDisplayMode(mode.key)
-            return (
-              <option key={mode.key} value={mode.key} disabled={isLocked}>
-                {compact ? `${mode.shortLabel}${isLocked ? " Pro" : ""}` : `${mode.label}${isLocked ? " (Pro)" : ""}`}
-              </option>
-            )
-          })}
-        </select>
-      </label>
-      <button
-        type="button"
-        aria-pressed={showStatBars}
-        title={showStatBars ? "Hide stat bars" : "Show stat bars"}
-        onClick={() => onShowStatBarsChange(!showStatBars)}
-        className={`${compact ? "h-8 w-8 text-[9px]" : "h-8 w-9 text-[10px]"} rounded-md border border-emerald-300/35 bg-nrl-panel/90 font-black uppercase tracking-wide text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] transition-colors hover:border-nrl-accent/50 ${showStatBars ? "text-nrl-accent" : "text-nrl-muted"}`}
-      >
-        Bars
-      </button>
-    </div>
+        {DISPLAY_MODES.map((mode) => {
+          const isLocked = !canAccessFantasyProjections && isProDisplayMode(mode.key)
+          return (
+            <option key={mode.key} value={mode.key} disabled={isLocked}>
+              {compact ? `${mode.shortLabel}${isLocked ? " Pro" : ""}` : `${mode.label}${isLocked ? " (Pro)" : ""}`}
+            </option>
+          )
+        })}
+      </select>
+    </label>
   )
 }
 
@@ -1782,8 +1660,6 @@ function LineupCard({
   teamLogos,
   displayMode,
   onDisplayModeChange,
-  showStatBars,
-  onShowStatBarsChange,
   tryscorerOdds,
   sportsbetOdds,
   canAccessFantasyProjections,
@@ -1797,8 +1673,6 @@ function LineupCard({
   teamLogos: Record<string, string>
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
-  showStatBars: boolean
-  onShowStatBarsChange: (show: boolean) => void
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   sportsbetOdds: Record<string, LineupSportsbetOdds>
   canAccessFantasyProjections: boolean
@@ -1815,10 +1689,10 @@ function LineupCard({
   const isLive = hasMatchStarted(liveMatch)
   const hasResultScore = match.homeScore != null || match.awayScore != null
   const showPregameContent = !isLive && !hasResultScore
-  const showLiveIndicators = isMatchLive(liveMatch)
+  const showLiveIndicators = !hasResultScore && isMatchLive(liveMatch)
   const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.homeTeam, sportsbetOdds) : null
   const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
-  const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
+  const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer && !hasResultScore
     ? {
         player: selectedPlayer,
         liveState: getLivePlayerState(liveMatch, selectedPlayer),
@@ -1866,7 +1740,7 @@ function LineupCard({
 
       <div className="relative px-2 pb-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,rgba(191,219,254,0.5),rgba(59,130,246,0.18),transparent)] sm:px-3">
         <div className="pt-5" />
-        <LiveTryScorersStrip match={match} liveMatch={liveMatch} />
+        {!hasResultScore ? <LiveTryScorersStrip match={match} liveMatch={liveMatch} /> : null}
         <div className="mb-3 flex justify-center">
           <div className="inline-flex rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
             {availableDetailViews.map((view) => (
@@ -1895,8 +1769,6 @@ function LineupCard({
               orientation="portrait"
               displayMode={displayMode}
               onDisplayModeChange={onDisplayModeChange}
-              showStatBars={showStatBars}
-              onShowStatBarsChange={onShowStatBarsChange}
               canAccessFantasyProjections={canAccessFantasyProjections}
               tryscorerOdds={tryscorerOdds}
               playerAverages={playerAverages}
@@ -1912,8 +1784,6 @@ function LineupCard({
               orientation="landscape"
               displayMode={displayMode}
               onDisplayModeChange={onDisplayModeChange}
-              showStatBars={showStatBars}
-              onShowStatBarsChange={onShowStatBarsChange}
               canAccessFantasyProjections={canAccessFantasyProjections}
               tryscorerOdds={tryscorerOdds}
               playerAverages={playerAverages}
@@ -2037,8 +1907,6 @@ export function LineupsDashboard({
                   teamLogos={teamLogos}
                   displayMode={displayMode}
                   onDisplayModeChange={setDisplayMode}
-                  showStatBars={showStatBars}
-                  onShowStatBarsChange={setShowStatBars}
                   tryscorerOdds={tryscorerOdds}
                   sportsbetOdds={sportsbetOdds}
                   canAccessFantasyProjections={canAccessFantasyProjections}

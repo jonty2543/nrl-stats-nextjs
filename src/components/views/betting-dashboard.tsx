@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import Image from "next/image";
 import Link from "next/link";
@@ -96,6 +96,28 @@ interface BestBetCandidate {
   tags: string[];
 }
 
+interface ArbitrageStake {
+  selection: string;
+  selectionLabel: string;
+  bookies: BettingBookie[];
+  odds: number;
+  stake: number;
+}
+
+interface ArbitrageCandidate {
+  id: string;
+  date: string;
+  match: string;
+  market: BettingMarket;
+  marketBookPct: number;
+  returnPct: number;
+  totalStake: number;
+  targetPayout: number;
+  profit: number;
+  score: number;
+  stakes: ArbitrageStake[];
+}
+
 type StakingMode = "percentage" | "targetProfit" | "kelly";
 type TrackedBetStatus = "pending" | "won" | "lost" | "push";
 
@@ -138,9 +160,11 @@ const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const IMPLIED_LINE_SIGMA = 16.85;
 const IMPLIED_TOTAL_SIGMA = 16.85;
 const BEST_BETS_CONFIG = {
-  maxCards: 3,
+  maxCards: 6,
+  maxArbitrageCards: 5,
   minEdgePp: 0.75,
   minBookies: 2,
+  minArbitragePct: 0.05,
   weights: {
     edge: 0.56,
     liquidity: 0.2,
@@ -349,6 +373,10 @@ function formatPct(value: number | null): string {
 function formatMoney(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}$${value.toFixed(2)}`;
+}
+
+function formatStakeMoney(value: number): string {
+  return `$${value >= 100 ? value.toFixed(0) : value.toFixed(2)}`;
 }
 
 function parseLineValueFromSelection(selection: string): number | null {
@@ -766,6 +794,67 @@ function buildBestBets({
   });
 }
 
+function buildArbitrageBets({
+  groups,
+  bankroll,
+  todayIso,
+}: {
+  groups: EventGroup[];
+  bankroll: number;
+  todayIso: string;
+}): ArbitrageCandidate[] {
+  const targetTotalStake = Math.max(20, Math.round((Number.isFinite(bankroll) ? bankroll : 1000) * 0.1));
+  const candidates: ArbitrageCandidate[] = [];
+
+  for (const group of groups) {
+    if (group.date < todayIso || group.market !== "H2H" || group.marketPctFromBest == null) continue;
+    const bookDecimal = group.marketPctFromBest / 100;
+    const returnPct = ((1 / bookDecimal) - 1) * 100;
+    if (bookDecimal <= 0 || returnPct < BEST_BETS_CONFIG.minArbitragePct) continue;
+
+    const rows = group.outcomes
+      .filter((row) => row.bestPriceComputed != null && row.bestPriceComputed > 1 && row.bestBookiesComputed.length > 0);
+    if (rows.length < 2) continue;
+
+    const inverseSum = rows.reduce((sum, row) => sum + (row.bestPriceComputed == null ? 0 : 1 / row.bestPriceComputed), 0);
+    if (inverseSum <= 0 || inverseSum >= 1) continue;
+
+    const targetPayout = targetTotalStake / inverseSum;
+    const stakes = rows.map<ArbitrageStake>((row) => {
+      const odds = row.bestPriceComputed ?? 0;
+      return {
+        selection: row.result,
+        selectionLabel: formatBestBetSelection(group.market, row.result, row.bestValueComputed),
+        bookies: row.bestBookiesComputed,
+        odds,
+        stake: targetPayout / odds,
+      };
+    });
+    const profit = targetPayout - targetTotalStake;
+
+    candidates.push({
+      id: `${group.key}|arbitrage`,
+      date: group.date,
+      match: group.match,
+      market: group.market,
+      marketBookPct: inverseSum * 100,
+      returnPct,
+      totalStake: targetTotalStake,
+      targetPayout,
+      profit,
+      score: returnPct,
+      stakes,
+    });
+  }
+
+  return candidates
+    .sort((a, b) => {
+      if (Math.abs(a.returnPct - b.returnPct) > 1e-9) return b.returnPct - a.returnPct;
+      return a.marketBookPct - b.marketBookPct;
+    })
+    .slice(0, BEST_BETS_CONFIG.maxArbitrageCards);
+}
+
 function BookieLogo({
   bookie,
   compact = false,
@@ -885,6 +974,14 @@ export function BettingDashboard({
       todayIso,
     }),
     [bankroll, h2hGroups, kellyScale, lineGroups, todayIso, totalGroups, tryscorerGroups]
+  );
+  const arbitrageBets = useMemo(
+    () => buildArbitrageBets({
+      groups: h2hGroups,
+      bankroll,
+      todayIso,
+    }),
+    [bankroll, h2hGroups, todayIso]
   );
 
   const handleMarketChange = (value: string) => {
@@ -1321,7 +1418,8 @@ export function BettingDashboard({
   return (
     <div className="space-y-6">
       <BestBetsHero
-        bets={bestBets}
+        modelBets={bestBets}
+        arbitrageBets={arbitrageBets}
         canAccessPremium={hasPremiumBettingAccess}
         onAddBet={handleAddBet}
       />
@@ -1841,148 +1939,275 @@ export function BettingDashboard({
 }
 
 function BestBetsHero({
-  bets,
+  modelBets,
+  arbitrageBets,
   canAccessPremium,
   onAddBet,
 }: {
-  bets: BestBetCandidate[];
+  modelBets: BestBetCandidate[];
+  arbitrageBets: ArbitrageCandidate[];
   canAccessPremium: boolean;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
+  const [category, setCategory] = useState<"model" | "arbitrage">("model");
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Array<HTMLElement | null>>([]);
+  const isArbitrage = category === "arbitrage";
+  const activeItems = isArbitrage ? arbitrageBets : modelBets;
+  const boundedFocusedIndex = Math.min(focusedIndex, Math.max(activeItems.length - 1, 0));
+  const activeTheme = isArbitrage
+    ? {
+        label: "Arbitrage",
+        pill: "border-violet-400/40 bg-violet-500/10 text-violet-200",
+        activeBorder: "border-violet-400/45",
+        activeShadow: "shadow-[0_14px_30px_rgba(139,92,246,0.08)]",
+        metric: "text-violet-300 drop-shadow-[0_0_10px_rgba(139,92,246,0.24)]",
+        hover: "hover:border-violet-400/45",
+      }
+    : {
+        label: "Model Value",
+        pill: "border-nrl-accent/35 bg-nrl-accent/8 text-nrl-accent",
+        activeBorder: "border-nrl-accent/35",
+        activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.06)]",
+        metric: "text-nrl-accent drop-shadow-[0_0_10px_rgba(0,245,138,0.22)]",
+        hover: "hover:border-nrl-accent/45",
+      };
+
+  const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
+    setCategory(nextCategory);
+    setFocusedIndex(0);
+    itemRefs.current = [];
+    window.requestAnimationFrame(() => panelRef.current?.scrollTo({ top: 0 }));
+  };
+
+  const handlePanelScroll = () => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const panelTop = panel.getBoundingClientRect().top + 12;
+    let nextIndex = 0;
+    let nextDistance = Number.POSITIVE_INFINITY;
+    itemRefs.current.slice(0, activeItems.length).forEach((item, index) => {
+      if (!item) return;
+      const distance = Math.abs(item.getBoundingClientRect().top - panelTop);
+      if (distance < nextDistance) {
+        nextIndex = index;
+        nextDistance = distance;
+      }
+    });
+    setFocusedIndex((current) => (current === nextIndex ? current : nextIndex));
+  };
+
   return (
     <section className="overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3 sm:px-5">
         <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-nrl-text">
           Today&apos;s Best Bets
         </div>
-        {bets[0] ? (
-          <div className="text-right">
-            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-nrl-muted">
-              {canAccessPremium ? "Top Edge" : "1 Unlocked"}
-            </div>
-            {canAccessPremium ? (
-              <div className="text-2xl font-bold leading-none text-nrl-accent drop-shadow-[0_0_8px_rgba(0,245,138,0.22)]">
-                +{bets[0].edgePp.toFixed(2)}%
-              </div>
-            ) : (
-              <div className="text-sm font-bold uppercase tracking-[0.18em] text-nrl-text">
-                Free Preview
-              </div>
-            )}
-          </div>
-        ) : null}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => handleCategoryChange("model")}
+            className={`rounded-md border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
+              category === "model"
+                ? "border-nrl-accent/55 bg-nrl-accent/10 text-nrl-accent"
+                : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-nrl-accent/35 hover:text-nrl-text"
+            }`}
+          >
+            Model Value <span className="ml-1 text-nrl-muted">{modelBets.length}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleCategoryChange("arbitrage")}
+            className={`rounded-md border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
+              category === "arbitrage"
+                ? "border-violet-400/60 bg-violet-500/12 text-violet-200"
+                : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-violet-400/35 hover:text-nrl-text"
+            }`}
+          >
+            Arbitrage <span className="ml-1 text-nrl-muted">{arbitrageBets.length}</span>
+          </button>
+        </div>
       </div>
 
-      {bets.length === 0 ? (
+      {activeItems.length === 0 ? (
         <div className="border-t border-white/8 px-4 py-2.5 text-sm text-nrl-muted sm:px-5">
-          No strong edges currently identified.
+          {isArbitrage ? "No arbitrage markets currently identified." : "No strong model value currently identified."}
         </div>
       ) : (
-        <div className="grid gap-2.5 p-3 md:grid-cols-2 xl:grid-cols-4">
-          {bets.map((bet, index) => {
-            const isPrimary = index === 0;
+        <div
+          ref={panelRef}
+          onScroll={handlePanelScroll}
+          className="max-h-[560px] space-y-2 overflow-y-auto overscroll-contain p-3 pr-2 [scrollbar-color:rgba(148,163,184,0.3)_transparent]"
+        >
+          {activeItems.map((item, index) => {
+            const isFocused = index === boundedFocusedIndex;
             const isUnlocked = canAccessPremium || index === 0;
             const isLocked = !isUnlocked;
-            const cardClass = isPrimary
-              ? "md:col-span-2 border-nrl-accent/30 bg-[#14213b] shadow-[0_12px_30px_rgba(0,245,138,0.05)]"
-              : "border-nrl-border bg-nrl-panel/90";
             const lockedContentClass = isLocked ? "pointer-events-none select-none blur-[7px]" : "";
+            const cardHeightClass = isFocused ? "min-h-[244px]" : "min-h-[92px]";
+            const cardToneClass = isFocused
+              ? `${activeTheme.activeBorder} bg-[#14213b] ${activeTheme.activeShadow}`
+              : "border-white/10 bg-nrl-panel/82";
 
             return (
               <article
-                key={bet.id}
-                className={`group relative overflow-hidden rounded-lg border px-3 py-3 transition-colors hover:border-nrl-accent/40 sm:px-4 ${isLocked ? "border-white/10 bg-nrl-panel/78" : cardClass}`}
+                key={item.id}
+                ref={(node) => {
+                  itemRefs.current[index] = node;
+                }}
+                tabIndex={0}
+                onFocus={() => setFocusedIndex(index)}
+                onClick={() => setFocusedIndex(index)}
+                className={`group relative overflow-hidden rounded-lg border px-3 py-3 outline-none transition-[min-height,border-color,background-color,box-shadow] duration-300 sm:px-4 ${cardHeightClass} ${cardToneClass} ${activeTheme.hover}`}
               >
                 <div className={lockedContentClass}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        {isLocked ? (
-                          <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-nrl-muted">
-                            Premium Pick
-                          </span>
-                        ) : (
-                          bet.tags.map((tag) => (
-                            <span
-                              key={`${bet.id}-${tag}`}
-                              className={`text-[9px] font-bold uppercase tracking-[0.15em] ${tag === "Top Rated Bet" ? "text-nrl-accent/85" : "text-nrl-muted"}`}
-                            >
-                              {tag}
-                            </span>
-                          ))
-                        )}
-                        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-nrl-muted">
-                          {isLocked ? "Locked" : bet.market}
+                        <span className={`rounded-sm border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${activeTheme.pill}`}>
+                          {isLocked ? "Premium" : activeTheme.label}
+                        </span>
+                        <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                          {isArbitrage ? "H2H" : isLocked ? "Locked" : (item as BestBetCandidate).market}
                         </span>
                       </div>
-                      <div className={`mt-2 font-semibold leading-tight text-white ${isPrimary ? "text-xl sm:text-2xl" : "text-base"}`}>
-                        {isLocked ? "Selection hidden" : bet.selectionLabel}
+                      <div className={`mt-2 font-semibold leading-tight text-white ${isFocused ? "text-xl sm:text-2xl" : "text-base"}`}>
+                        {isLocked
+                          ? "Selection hidden"
+                          : isArbitrage
+                            ? (item as ArbitrageCandidate).match
+                            : (item as BestBetCandidate).selectionLabel}
                       </div>
                       <div className="mt-1 truncate text-xs text-nrl-muted">
-                        {isLocked ? "Upgrade to view match and market" : bet.match}
+                        {isLocked
+                          ? "Upgrade to view match and market"
+                          : isArbitrage
+                            ? `Market book ${formatPct((item as ArbitrageCandidate).marketBookPct)}`
+                            : (item as BestBetCandidate).match}
                       </div>
                     </div>
-                  <div className="shrink-0 text-right">
-                    <div className={`text-3xl font-bold leading-none ${isLocked ? "text-nrl-muted" : "text-nrl-accent drop-shadow-[0_0_10px_rgba(0,245,138,0.22)]"} ${isPrimary ? "sm:text-4xl" : ""}`}>
-                      {isLocked ? "+EV" : `+${bet.edgePp.toFixed(2)}%`}
-                    </div>
-                    <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
-                        edge
+                    <div className="shrink-0 text-right">
+                      <div className={`text-3xl font-bold leading-none ${isLocked ? "text-nrl-muted" : activeTheme.metric} ${isFocused ? "sm:text-4xl" : ""}`}>
+                        {isLocked
+                          ? isArbitrage ? "ARB" : "+EV"
+                          : isArbitrage
+                            ? `+${(item as ArbitrageCandidate).returnPct.toFixed(2)}%`
+                            : `+${(item as BestBetCandidate).edgePp.toFixed(2)}%`}
+                      </div>
+                      <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                        {isArbitrage ? "return" : "edge"}
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/8 pt-3 text-xs">
-                    <div>
-                      <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
-                      <div className="mt-0.5 flex items-center gap-2 text-white">
-                        <div className="flex items-center gap-1">
-                          {isLocked ? (
-                            <>
-                              <span className="h-4 w-4 rounded-sm bg-white/14" />
-                              <span className="h-4 w-4 rounded-sm bg-white/10" />
-                            </>
-                          ) : (
-                            bet.bestBookies.slice(0, 3).map((bookie) => (
-                              <BookieLogo key={`${bet.id}-${bookie}`} bookie={bookie} compact />
-                            ))
-                          )}
+                  {isFocused ? (
+                    isArbitrage ? (
+                      <div className="mt-3 border-t border-white/8 pt-3">
+                        <div className="grid gap-3 text-xs sm:grid-cols-3">
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Total stake</div>
+                            <div className="mt-0.5 text-base font-semibold text-white">
+                              {isLocked ? "--" : formatStakeMoney((item as ArbitrageCandidate).totalStake)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Matched payout</div>
+                            <div className="mt-0.5 text-base font-semibold text-white">
+                              {isLocked ? "--" : formatStakeMoney((item as ArbitrageCandidate).targetPayout)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Locked profit</div>
+                            <div className="mt-0.5 text-base font-semibold text-violet-200">
+                              {isLocked ? "--" : formatMoney((item as ArbitrageCandidate).profit)}
+                            </div>
+                          </div>
                         </div>
-                        <span className="text-base font-bold">{isLocked ? "--" : formatPrice(bet.odds)}</span>
-                        {!isLocked && bet.bestBookieCount > 3 ? (
-                          <span className="text-[10px] text-nrl-muted">+{bet.bestBookieCount - 3} books</span>
-                        ) : null}
+                        <div className="mt-3 space-y-1.5">
+                          {(item as ArbitrageCandidate).stakes.map((stake) => (
+                            <div
+                              key={`${(item as ArbitrageCandidate).id}-${stake.selection}`}
+                              className="flex items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-2.5 py-2 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate font-semibold text-white">{isLocked ? "Selection hidden" : stake.selectionLabel}</div>
+                                <div className="mt-0.5 flex items-center gap-1 text-nrl-muted">
+                                  {isLocked ? (
+                                    <span className="h-4 w-8 rounded-sm bg-white/10" />
+                                  ) : (
+                                    stake.bookies.slice(0, 2).map((bookie) => (
+                                      <BookieLogo key={`${stake.selection}-${bookie}`} bookie={bookie} compact />
+                                    ))
+                                  )}
+                                  <span>{isLocked ? "--" : formatPrice(stake.odds)}</span>
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Stake</div>
+                                <div className="font-semibold text-white">{isLocked ? "--" : formatStakeMoney(stake.stake)}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
-                      <div className="mt-0.5 font-semibold text-nrl-text">
-                        <span className="text-white">{isLocked ? "--" : formatPct(bet.modelProbability * 100)}</span>
-                        <span className="mx-1.5 text-nrl-muted">vs</span>
-                        <span>{isLocked ? "--" : formatPct(bet.impliedProbability * 100)}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Kelly</div>
-                      <div className="mt-0.5 text-base font-semibold text-white">
-                        {isLocked ? "--" : `$${bet.kellyStake}`}
-                      </div>
-                    </div>
-                  </div>
+                    ) : (
+                      <div className="mt-3">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/8 pt-3 text-xs">
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
+                            <div className="mt-0.5 flex items-center gap-2 text-white">
+                              <div className="flex items-center gap-1">
+                                {isLocked ? (
+                                  <>
+                                    <span className="h-4 w-4 rounded-sm bg-white/14" />
+                                    <span className="h-4 w-4 rounded-sm bg-white/10" />
+                                  </>
+                                ) : (
+                                  (item as BestBetCandidate).bestBookies.slice(0, 3).map((bookie) => (
+                                    <BookieLogo key={`${(item as BestBetCandidate).id}-${bookie}`} bookie={bookie} compact />
+                                  ))
+                                )}
+                              </div>
+                              <span className="text-base font-bold">{isLocked ? "--" : formatPrice((item as BestBetCandidate).odds)}</span>
+                              {!isLocked && (item as BestBetCandidate).bestBookieCount > 3 ? (
+                                <span className="text-[10px] text-nrl-muted">+{(item as BestBetCandidate).bestBookieCount - 3} books</span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
+                            <div className="mt-0.5 font-semibold text-nrl-text">
+                              <span className="text-white">{isLocked ? "--" : formatPct((item as BestBetCandidate).modelProbability * 100)}</span>
+                              <span className="mx-1.5 text-nrl-muted">vs</span>
+                              <span>{isLocked ? "--" : formatPct((item as BestBetCandidate).impliedProbability * 100)}</span>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Kelly</div>
+                            <div className="mt-0.5 text-base font-semibold text-white">
+                              {isLocked ? "--" : `$${(item as BestBetCandidate).kellyStake}`}
+                            </div>
+                          </div>
+                        </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
-                    {bet.marketEfficiencyPct != null && !isLocked ? (
-                      <span>
-                        Market {formatPct(bet.marketEfficiencyPct)}
-                      </span>
-                    ) : null}
-                  </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
+                          {(item as BestBetCandidate).marketEfficiencyPct != null && !isLocked ? (
+                            <span>
+                              Market {formatPct((item as BestBetCandidate).marketEfficiencyPct)}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  ) : null}
 
-                  <div className="mt-3">
-                    {canAccessPremium ? (
+                  {canAccessPremium && !isArbitrage && isFocused ? (
+                    <div className="mt-3">
                       <button
                         type="button"
                         onClick={() => {
+                          const bet = item as BestBetCandidate;
                           void onAddBet({
                             market: bet.market,
                             matchDate: bet.date,
@@ -2000,15 +2225,15 @@ function BestBetsHero({
                       >
                         View Bet
                       </button>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
                 {isLocked ? (
                   <div className="absolute inset-0 z-10 grid place-items-center bg-[#080d1f]/35 px-4 backdrop-blur-[2px]">
                     <BillingPageLink className="rounded-xl bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]">
                       <div className="rounded-[calc(0.75rem-1px)] bg-slate-950/85 px-4 py-3 text-center">
                         <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
-                          Sign Up To Pro
+                          Sign Up To Premium
                         </div>
                         <div className="mt-1 text-xs text-slate-400">
                           Unlock the full best bets board.

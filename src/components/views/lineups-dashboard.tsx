@@ -1691,10 +1691,10 @@ function LineupCard({
   const isLive = hasMatchStarted(liveMatch)
   const hasResultScore = match.homeScore != null || match.awayScore != null
   const showPregameContent = !isLive && !hasResultScore
-  const showLiveIndicators = !hasResultScore && isMatchLive(liveMatch)
+  const showLiveIndicators = isLiveDataVisible(liveMatch)
   const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.homeTeam, sportsbetOdds) : null
   const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
-  const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer && !hasResultScore
+  const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
     ? {
         player: selectedPlayer,
         liveState: getLivePlayerState(liveMatch, selectedPlayer),
@@ -1742,7 +1742,7 @@ function LineupCard({
 
       <div className="relative px-2 pb-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,rgba(191,219,254,0.5),rgba(59,130,246,0.18),transparent)] sm:px-3">
         <div className="pt-5" />
-        {!hasResultScore ? <LiveTryScorersStrip match={match} liveMatch={liveMatch} /> : null}
+        <LiveTryScorersStrip match={match} liveMatch={liveMatch} />
         <div className="mb-3 flex justify-center">
           <div className="inline-flex rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
             {availableDetailViews.map((view) => (

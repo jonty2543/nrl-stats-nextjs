@@ -74,6 +74,50 @@ interface EventGroup {
   marketPctFromBest: number | null;
 }
 
+interface BestBetCandidate {
+  id: string;
+  date: string;
+  match: string;
+  market: BettingMarket;
+  selection: string;
+  selectionLabel: string;
+  lineValue: number | null;
+  bestBookie: BettingBookie;
+  bestBookies: BettingBookie[];
+  bestBookieCount: number;
+  odds: number;
+  modelProbability: number;
+  impliedProbability: number;
+  edgePp: number;
+  kellyStake: number;
+  score: number;
+  marketDisagreementPct: number | null;
+  marketEfficiencyPct: number | null;
+  tags: string[];
+}
+
+interface ArbitrageStake {
+  selection: string;
+  selectionLabel: string;
+  bookies: BettingBookie[];
+  odds: number;
+  stake: number;
+}
+
+interface ArbitrageCandidate {
+  id: string;
+  date: string;
+  match: string;
+  market: BettingMarket;
+  marketBookPct: number;
+  returnPct: number;
+  totalStake: number;
+  targetPayout: number;
+  profit: number;
+  score: number;
+  stakes: ArbitrageStake[];
+}
+
 type StakingMode = "percentage" | "targetProfit" | "kelly";
 type TrackedBetStatus = "pending" | "won" | "lost" | "push";
 
@@ -109,12 +153,24 @@ interface BetDraft {
   edgePp: number | null;
 }
 
-const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
-const PREMIUM_ONLY_MARKETS = new Set<BettingMarket>(["Line", "Total", "Tryscorer"]);
+const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Total"];
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const IMPLIED_LINE_SIGMA = 16.85;
 const IMPLIED_TOTAL_SIGMA = 16.85;
+const BEST_BETS_CONFIG = {
+  maxCards: 6,
+  maxArbitrageCards: 5,
+  minEdgePp: 0.75,
+  minBookies: 2,
+  minArbitragePct: 0.05,
+  weights: {
+    edge: 0.56,
+    liquidity: 0.2,
+    efficiency: 0.14,
+    disagreement: 0.1,
+  },
+};
 const STAKING_OPTIONS: Array<{
   mode: StakingMode;
   label: string;
@@ -151,6 +207,36 @@ function normaliseLookupKey(value: string | null | undefined): string {
     .trim();
 }
 
+function areLookupTokensClose(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+
+  let edits = 0;
+  let left = 0;
+  let right = 0;
+
+  while (left < a.length && right < b.length) {
+    if (a[left] === b[right]) {
+      left += 1;
+      right += 1;
+      continue;
+    }
+
+    edits += 1;
+    if (edits > 1) return false;
+    if (a.length === b.length) {
+      left += 1;
+      right += 1;
+    } else if (a.length < b.length) {
+      right += 1;
+    } else {
+      left += 1;
+    }
+  }
+
+  return edits + Number(left < a.length || right < b.length) <= 1;
+}
+
 function normaliseTeamMatchKey(value: string): string {
   const key = normaliseLookupKey(value);
   const aliases: Record<string, string> = {
@@ -163,6 +249,8 @@ function normaliseTeamMatchKey(value: string): string {
     storm: "melbourne storm",
     knights: "newcastle knights",
     cowboys: "north queensland cowboys",
+    "nth queensland cowboys": "north queensland cowboys",
+    "north qld cowboys": "north queensland cowboys",
     eels: "parramatta eels",
     panthers: "penrith panthers",
     rabbitohs: "south sydney rabbitohs",
@@ -180,6 +268,27 @@ function buildMatchKickoffKey(date: string, match: string): string | null {
   if (!home || !away) return null;
   const teamsKey = [normaliseTeamMatchKey(home), normaliseTeamMatchKey(away)].sort().join("|");
   return `${date}|${teamsKey}`;
+}
+
+function kickoffSortMs(group: Pick<EventGroup, "date" | "match">, kickoffsByMatch: Record<string, string>): number {
+  const kickoffKey = buildMatchKickoffKey(group.date, group.match);
+  const kickoff = kickoffKey ? kickoffsByMatch[kickoffKey] : null;
+  const parsedKickoff = kickoff ? Date.parse(kickoff) : NaN;
+  if (Number.isFinite(parsedKickoff)) return parsedKickoff;
+
+  const parsedDate = Date.parse(group.date);
+  return Number.isFinite(parsedDate) ? parsedDate + 24 * 60 * 60 * 1000 - 1 : Number.POSITIVE_INFINITY;
+}
+
+function compareGroupsByKickoff(
+  a: EventGroup,
+  b: EventGroup,
+  kickoffsByMatch: Record<string, string>
+): number {
+  const kickoffDiff = kickoffSortMs(a, kickoffsByMatch) - kickoffSortMs(b, kickoffsByMatch);
+  if (kickoffDiff !== 0) return kickoffDiff;
+  if (a.date !== b.date) return a.date.localeCompare(b.date);
+  return a.match.localeCompare(b.match);
 }
 
 function resolveTeamLogoUrl(teamName: string | null | undefined, teamLogos: Record<string, string>): string | null {
@@ -247,6 +356,14 @@ function formatLineValue(value: number): string {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
+function formatBestBetSelection(market: BettingMarket, selection: string, lineValue: number | null): string {
+  if (market === "Tryscorer" && lineValue != null) return `${selection} ${lineValue}+`;
+  if ((market === "Line" || market === "Total") && lineValue != null) {
+    return `${selection} ${formatLineValue(lineValue)}`;
+  }
+  return selection;
+}
+
 function formatPct(value: number | null): string {
   if (value == null) return "-";
   return `${value.toFixed(2)}%`;
@@ -255,6 +372,10 @@ function formatPct(value: number | null): string {
 function formatMoney(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}$${value.toFixed(2)}`;
+}
+
+function formatStakeMoney(value: number): string {
+  return `$${value >= 100 ? value.toFixed(0) : value.toFixed(2)}`;
 }
 
 function parseLineValueFromSelection(selection: string): number | null {
@@ -283,7 +404,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function parseMatch(match: string): { home: string; away: string } {
-  const parts = match.split(/\s+v\s+/i).map((part) => part.trim()).filter(Boolean);
+  const parts = match.split(/\s+v(?:s|\.)?\s+/i).map((part) => part.trim()).filter(Boolean);
   if (parts.length >= 2) {
     return { home: parts[0], away: parts.slice(1).join(" v ") };
   }
@@ -562,6 +683,177 @@ function modelPercentToProbability(value: number | null): number | null {
   return clamp(value / 100, 0.01, 0.99);
 }
 
+function buildBestBets({
+  groups,
+  bankroll,
+  kellyScale,
+  todayIso,
+}: {
+  groups: EventGroup[];
+  bankroll: number;
+  kellyScale: number;
+  todayIso: string;
+}): BestBetCandidate[] {
+  const candidates: Array<Omit<BestBetCandidate, "tags">> = [];
+
+  for (const group of groups) {
+    if (group.date < todayIso) continue;
+
+    for (const row of group.outcomes) {
+      const odds = row.bestPriceComputed;
+      const modelProbability = modelPercentToProbability(row.bestModelComputed);
+      const implied = impliedProbability(odds);
+      const bestBookies = row.bestBookiesComputed.length > 0
+        ? row.bestBookiesComputed
+        : row.bestOfferComputed
+          ? [row.bestOfferComputed.bookie]
+          : [];
+      const bestBookie = bestBookies[0] ?? null;
+      if (
+        odds == null ||
+        modelProbability == null ||
+        implied == null ||
+        bestBookie == null ||
+        odds <= 1
+      ) {
+        continue;
+      }
+
+      const edgePp = (modelProbability - implied) * 100;
+      if (edgePp < BEST_BETS_CONFIG.minEdgePp) continue;
+
+      const offers = BETTING_BOOKIE_COLUMNS
+        .map((bookie) => row.bookieOffers[bookie])
+        .filter((offer): offer is BookieOffer => offer != null);
+      if (offers.length < BEST_BETS_CONFIG.minBookies) continue;
+
+      const prices = offers.map((offer) => offer.price);
+      const minPrice = Math.min(...prices);
+      const maxPrice = Math.max(...prices);
+      const marketDisagreementPct = minPrice > 0 && maxPrice > minPrice
+        ? ((maxPrice / minPrice) - 1) * 100
+        : null;
+      const liquidityScore = clamp(offers.length / BETTING_BOOKIE_COLUMNS.length, 0, 1);
+      const marketEfficiencyPct = group.marketPctFromBest;
+      const efficiencyScore = marketEfficiencyPct != null
+        ? clamp(1 - Math.max(0, marketEfficiencyPct - 100) / 14, 0, 1)
+        : clamp(0.5 + liquidityScore * 0.35, 0, 1);
+      const disagreementScore = clamp((marketDisagreementPct ?? 0) / 14, 0, 1);
+      const edgeScore = clamp(edgePp / 8, 0, 1);
+      const score =
+        (edgeScore * BEST_BETS_CONFIG.weights.edge) +
+        (liquidityScore * BEST_BETS_CONFIG.weights.liquidity) +
+        (efficiencyScore * BEST_BETS_CONFIG.weights.efficiency) +
+        (disagreementScore * BEST_BETS_CONFIG.weights.disagreement);
+      const fullKelly = kellyFraction(modelProbability, odds);
+      const rawKellyStake = Math.max(0, bankroll * fullKelly * kellyScale);
+      const kellyStake = rawKellyStake > 0 && rawKellyStake < 1 ? 1 : Math.round(rawKellyStake);
+
+      candidates.push({
+        id: `${group.key}|${row.result}|${row.bestValueComputed ?? ""}`,
+        date: group.date,
+        match: group.match,
+        market: group.market,
+        selection: row.result,
+        selectionLabel: formatBestBetSelection(group.market, row.result, row.bestValueComputed),
+        lineValue: row.bestValueComputed,
+        bestBookie,
+        bestBookies,
+        bestBookieCount: bestBookies.length,
+        odds,
+        modelProbability,
+        impliedProbability: implied,
+        edgePp,
+        kellyStake,
+        score,
+        marketDisagreementPct,
+        marketEfficiencyPct,
+      });
+    }
+  }
+
+  const sorted = candidates.sort((a, b) => {
+    if (Math.abs(a.score - b.score) > 1e-9) return b.score - a.score;
+    return b.edgePp - a.edgePp;
+  });
+  const biggestEdgeId = [...candidates].sort((a, b) => b.edgePp - a.edgePp)[0]?.id;
+
+  return sorted.slice(0, BEST_BETS_CONFIG.maxCards).map((candidate, index) => {
+    const tags: string[] = [];
+    if (index === 0) tags.push("Top Rated Bet");
+    if (candidate.id === biggestEdgeId) tags.push("Highest Edge");
+    if ((candidate.marketDisagreementPct ?? 0) >= 5) tags.push("Best Value");
+    if (candidate.modelProbability >= 0.55 && candidate.market !== "Tryscorer") tags.push("Model Favourite");
+    if (tags.length === 0) tags.push("Sharp Value");
+
+    return {
+      ...candidate,
+      tags: [...new Set(tags)].slice(0, 2),
+    };
+  });
+}
+
+function buildArbitrageBets({
+  groups,
+  bankroll,
+  todayIso,
+}: {
+  groups: EventGroup[];
+  bankroll: number;
+  todayIso: string;
+}): ArbitrageCandidate[] {
+  const targetTotalStake = Math.max(20, Math.round((Number.isFinite(bankroll) ? bankroll : 1000) * 0.1));
+  const candidates: ArbitrageCandidate[] = [];
+
+  for (const group of groups) {
+    if (group.date < todayIso || group.market !== "H2H" || group.marketPctFromBest == null) continue;
+    const bookDecimal = group.marketPctFromBest / 100;
+    const returnPct = ((1 / bookDecimal) - 1) * 100;
+    if (bookDecimal <= 0 || returnPct < BEST_BETS_CONFIG.minArbitragePct) continue;
+
+    const rows = group.outcomes
+      .filter((row) => row.bestPriceComputed != null && row.bestPriceComputed > 1 && row.bestBookiesComputed.length > 0);
+    if (rows.length < 2) continue;
+
+    const inverseSum = rows.reduce((sum, row) => sum + (row.bestPriceComputed == null ? 0 : 1 / row.bestPriceComputed), 0);
+    if (inverseSum <= 0 || inverseSum >= 1) continue;
+
+    const targetPayout = targetTotalStake / inverseSum;
+    const stakes = rows.map<ArbitrageStake>((row) => {
+      const odds = row.bestPriceComputed ?? 0;
+      return {
+        selection: row.result,
+        selectionLabel: formatBestBetSelection(group.market, row.result, row.bestValueComputed),
+        bookies: row.bestBookiesComputed,
+        odds,
+        stake: targetPayout / odds,
+      };
+    });
+    const profit = targetPayout - targetTotalStake;
+
+    candidates.push({
+      id: `${group.key}|arbitrage`,
+      date: group.date,
+      match: group.match,
+      market: group.market,
+      marketBookPct: inverseSum * 100,
+      returnPct,
+      totalStake: targetTotalStake,
+      targetPayout,
+      profit,
+      score: returnPct,
+      stakes,
+    });
+  }
+
+  return candidates
+    .sort((a, b) => {
+      if (Math.abs(a.returnPct - b.returnPct) > 1e-9) return b.returnPct - a.returnPct;
+      return a.marketBookPct - b.marketBookPct;
+    })
+    .slice(0, BEST_BETS_CONFIG.maxArbitrageCards);
+}
+
 function BookieLogo({
   bookie,
   compact = false,
@@ -607,7 +899,7 @@ export function BettingDashboard({
   const [targetProfitPct, setTargetProfitPct] = useState(2);
   const [kellyScale, setKellyScale] = useState(0.5);
   const [maxEdge, setMaxEdge] = useState(0.06);
-  const [selectedMarket, setSelectedMarket] = useState<BettingMarket>("H2H");
+  const [selectedMarket, setSelectedMarket] = useState<BettingMarket>("Tryscorer");
   const [stakeOverrides, setStakeOverrides] = useState<Record<string, number>>({});
   const [oddsOverrides, setOddsOverrides] = useState<Record<string, number>>({});
   const [trackerOpen, setTrackerOpen] = useState(false);
@@ -651,7 +943,9 @@ export function BettingDashboard({
         const candidateTokens = candidateKey.split(" ");
         const candidateFirst = candidateTokens[0] ?? "";
         const candidateLast = candidateTokens[candidateTokens.length - 1] ?? "";
-        return candidateLast === last && candidateFirst.startsWith(first[0] ?? "");
+        if (!candidateFirst || !candidateLast) return false;
+        if (candidateLast === last && candidateFirst.startsWith(first[0] ?? "")) return true;
+        return candidateFirst === first && areLookupTokensClose(candidateLast, last);
       });
       return matched?.[1].player || result;
     };
@@ -671,11 +965,25 @@ export function BettingDashboard({
       : selectedMarket === "Total"
         ? totalGroups
         : tryscorerGroups;
+  const bestBets = useMemo(
+    () => buildBestBets({
+      groups: [...h2hGroups, ...lineGroups, ...totalGroups, ...tryscorerGroups],
+      bankroll,
+      kellyScale,
+      todayIso,
+    }),
+    [bankroll, h2hGroups, kellyScale, lineGroups, todayIso, totalGroups, tryscorerGroups]
+  );
+  const arbitrageBets = useMemo(
+    () => buildArbitrageBets({
+      groups: h2hGroups,
+      bankroll,
+      todayIso,
+    }),
+    [bankroll, h2hGroups, todayIso]
+  );
 
   const handleMarketChange = (value: string) => {
-    if (!hasPremiumBettingAccess && (value === "Line" || value === "Total")) {
-      return;
-    }
     if (value === "H2H" || value === "Line" || value === "Total" || value === "Tryscorer") {
       setSelectedMarket(value);
     }
@@ -687,12 +995,6 @@ export function BettingDashboard({
     }
     setStakingMode(mode);
   };
-
-  useEffect(() => {
-    if (!hasPremiumBettingAccess && PREMIUM_ONLY_MARKETS.has(selectedMarket)) {
-      setSelectedMarket("H2H");
-    }
-  }, [hasPremiumBettingAccess, selectedMarket]);
 
   useEffect(() => {
     if (!hasPremiumBettingAccess && stakingMode === "kelly") {
@@ -1105,33 +1407,42 @@ export function BettingDashboard({
 
   return (
     <div className="space-y-6">
+      <BestBetsHero
+        modelBets={bestBets}
+        arbitrageBets={arbitrageBets}
+        canAccessPremium={hasPremiumBettingAccess}
+        onAddBet={handleAddBet}
+      />
+
       {marginModelArticle ? (
         <Link
           href={`/dashboard/articles/${marginModelArticle.slug}`}
-          className="group block overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70"
+          aria-label={`Read ${marginModelArticle.title}`}
+          className="group relative flex min-h-[58px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.22)] bg-[#20284a]/80 text-white shadow-[0_8px_18px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/55"
         >
-          <div className={`relative grid h-28 ${marginModelArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-            <span className="absolute left-2 top-2 z-10 rounded-md border border-white/15 bg-[#0e1330]/85 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-white shadow-sm backdrop-blur">
-              Article
-            </span>
+          <div className={`absolute inset-0 grid ${marginModelArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
             {marginModelArticle.imageUrls.slice(0, 2).map((url, index) => (
-              <div key={url} className="min-w-0 overflow-hidden">
+              <div key={`${url}-${index}`} className="min-w-0 overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={url}
-                  alt={`${marginModelArticle.title} header ${index + 1}`}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                  alt=""
+                  className="h-full w-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-[1.03]"
                 />
               </div>
             ))}
           </div>
-          <div className="flex items-center justify-between gap-3 px-3 py-2">
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.92),rgba(14,19,48,0.78),rgba(14,19,48,0.56))]" />
+          <div className="relative flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-2">
             <div className="min-w-0">
-              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-white">
+              <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent/80">
+                Article
+              </div>
+              <div className="mt-0.5 overflow-hidden text-[10px] font-bold uppercase leading-tight tracking-[0.08em] text-white/85 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
                 {marginModelArticle.title}
               </div>
             </div>
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/10 bg-nrl-panel-2 text-base text-nrl-text">
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel-2/60 text-sm text-nrl-text/80">
               →
             </span>
           </div>
@@ -1556,22 +1867,6 @@ export function BettingDashboard({
         <div className="flex flex-wrap gap-2">
           {MARKET_TABS.map((tab) => {
             const active = tab === selectedMarket;
-            const locked = !hasPremiumBettingAccess && PREMIUM_ONLY_MARKETS.has(tab);
-            if (locked) {
-              return (
-                <BillingPageLink
-                  key={tab}
-                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-4 py-2 text-xs font-bold uppercase tracking-wide text-nrl-muted opacity-65 transition-colors hover:border-nrl-accent hover:text-nrl-text"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <span>{tab}</span>
-                    <span className="rounded border border-nrl-border px-1.5 py-0.5 text-[9px] text-nrl-muted">
-                      Premium
-                    </span>
-                  </span>
-                </BillingPageLink>
-              );
-            }
             return (
               <button
                 key={tab}
@@ -1614,6 +1909,320 @@ export function BettingDashboard({
         </section>
       </div>
     </div>
+  );
+}
+
+function BestBetsHero({
+  modelBets,
+  arbitrageBets,
+  canAccessPremium,
+  onAddBet,
+}: {
+  modelBets: BestBetCandidate[];
+  arbitrageBets: ArbitrageCandidate[];
+  canAccessPremium: boolean;
+  onAddBet: (draft: BetDraft) => void | Promise<void>;
+}) {
+  const [category, setCategory] = useState<"model" | "arbitrage">("model");
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const isArbitrage = category === "arbitrage";
+  const activeItems = isArbitrage ? arbitrageBets : modelBets;
+  const boundedFocusedIndex = Math.min(focusedIndex, Math.max(activeItems.length - 1, 0));
+  const featuredItem = activeItems[boundedFocusedIndex] ?? null;
+  const queueItems = activeItems
+    .map((item, index) => ({ item, index }))
+    .filter(({ index }) => index !== boundedFocusedIndex);
+  const queueCycleItems = queueItems.length > 1 ? [...queueItems, ...queueItems] : queueItems;
+  const shouldAnimateQueue = queueItems.length > 2;
+  const activeTheme = isArbitrage
+    ? {
+        label: "Arbitrage",
+        pill: "border-violet-400/40 bg-violet-500/10 text-violet-200",
+        activeBorder: "border-violet-400/45",
+        activeShadow: "shadow-[0_14px_30px_rgba(139,92,246,0.08)]",
+        metric: "text-violet-300 drop-shadow-[0_0_10px_rgba(139,92,246,0.24)]",
+      }
+    : {
+        label: "Model Value",
+        pill: "border-nrl-accent/35 bg-nrl-accent/8 text-nrl-accent",
+        activeBorder: "border-nrl-accent/35",
+        activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.06)]",
+        metric: "text-nrl-accent drop-shadow-[0_0_10px_rgba(0,245,138,0.22)]",
+      };
+
+  const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
+    setCategory(nextCategory);
+    setFocusedIndex(0);
+  };
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3 sm:px-5">
+        <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-nrl-text">
+          Today&apos;s Best Bets
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => handleCategoryChange("model")}
+            className={`rounded-md border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
+              category === "model"
+                ? "border-nrl-accent/55 bg-nrl-accent/10 text-nrl-accent"
+                : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-nrl-accent/35 hover:text-nrl-text"
+            }`}
+          >
+            Model Value <span className="ml-1 text-nrl-muted">{modelBets.length}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleCategoryChange("arbitrage")}
+            className={`rounded-md border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
+              category === "arbitrage"
+                ? "border-violet-400/60 bg-violet-500/12 text-violet-200"
+                : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-violet-400/35 hover:text-nrl-text"
+            }`}
+          >
+            Arbitrage <span className="ml-1 text-nrl-muted">{arbitrageBets.length}</span>
+          </button>
+        </div>
+      </div>
+
+      {activeItems.length === 0 ? (
+        <div className="border-t border-white/8 px-4 py-2.5 text-sm text-nrl-muted sm:px-5">
+          {isArbitrage ? "No arbitrage markets currently identified." : "No strong model value currently identified."}
+        </div>
+      ) : featuredItem ? (
+        <div className="space-y-3 p-3">
+          <article className={`rounded-lg border bg-[#14213b] px-3 py-3 sm:px-4 ${activeTheme.activeBorder} ${activeTheme.activeShadow}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-sm border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${activeTheme.pill}`}>
+                    {activeTheme.label}
+                  </span>
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                    {isArbitrage ? "H2H" : (featuredItem as BestBetCandidate).market}
+                  </span>
+                </div>
+                <div className="mt-2 text-xl font-semibold leading-tight text-white sm:text-2xl">
+                  {isArbitrage ? (featuredItem as ArbitrageCandidate).match : (featuredItem as BestBetCandidate).selectionLabel}
+                </div>
+                <div className="mt-1 truncate text-xs text-nrl-muted">
+                  {isArbitrage
+                    ? `Market book ${formatPct((featuredItem as ArbitrageCandidate).marketBookPct)}`
+                    : (featuredItem as BestBetCandidate).match}
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className={`text-3xl font-bold leading-none sm:text-4xl ${activeTheme.metric}`}>
+                  {isArbitrage
+                    ? `+${(featuredItem as ArbitrageCandidate).returnPct.toFixed(2)}%`
+                    : `+${(featuredItem as BestBetCandidate).edgePp.toFixed(2)}%`}
+                </div>
+                <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                  {isArbitrage ? "return" : "edge"}
+                </div>
+              </div>
+            </div>
+
+            {isArbitrage ? (
+              <div className="mt-3 border-t border-white/8 pt-3">
+                <div className="grid gap-3 text-xs sm:grid-cols-3">
+                  <div>
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Total stake</div>
+                    <div className="mt-0.5 text-base font-semibold text-white">
+                      {formatStakeMoney((featuredItem as ArbitrageCandidate).totalStake)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Matched payout</div>
+                    <div className="mt-0.5 text-base font-semibold text-white">
+                      {formatStakeMoney((featuredItem as ArbitrageCandidate).targetPayout)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Locked profit</div>
+                    <div className="mt-0.5 text-base font-semibold text-violet-200">
+                      {formatMoney((featuredItem as ArbitrageCandidate).profit)}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 space-y-1.5">
+                  {(featuredItem as ArbitrageCandidate).stakes.map((stake) => (
+                    <div
+                      key={`${(featuredItem as ArbitrageCandidate).id}-${stake.selection}`}
+                      className="flex items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-2.5 py-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-white">{stake.selectionLabel}</div>
+                        <div className="mt-0.5 flex items-center gap-1 text-nrl-muted">
+                          {stake.bookies.slice(0, 2).map((bookie) => (
+                            <BookieLogo key={`${stake.selection}-${bookie}`} bookie={bookie} compact />
+                          ))}
+                          <span>{formatPrice(stake.odds)}</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Stake</div>
+                        <div className="font-semibold text-white">{formatStakeMoney(stake.stake)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/8 pt-3 text-xs">
+                  <div>
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
+                    <div className="mt-0.5 flex items-center gap-2 text-white">
+                      <div className="flex items-center gap-1">
+                        {(featuredItem as BestBetCandidate).bestBookies.slice(0, 3).map((bookie) => (
+                          <BookieLogo key={`${(featuredItem as BestBetCandidate).id}-${bookie}`} bookie={bookie} compact />
+                        ))}
+                      </div>
+                      <span className="text-base font-bold">{formatPrice((featuredItem as BestBetCandidate).odds)}</span>
+                      {(featuredItem as BestBetCandidate).bestBookieCount > 3 ? (
+                        <span className="text-[10px] text-nrl-muted">+{(featuredItem as BestBetCandidate).bestBookieCount - 3} books</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
+                    <div className="mt-0.5 font-semibold text-nrl-text">
+                      <span className="text-white">{formatPct((featuredItem as BestBetCandidate).modelProbability * 100)}</span>
+                      <span className="mx-1.5 text-nrl-muted">vs</span>
+                      <span>{formatPct((featuredItem as BestBetCandidate).impliedProbability * 100)}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Kelly</div>
+                    <div className="mt-0.5 text-base font-semibold text-white">
+                      ${(featuredItem as BestBetCandidate).kellyStake}
+                    </div>
+                  </div>
+                </div>
+
+                {(featuredItem as BestBetCandidate).marketEfficiencyPct != null ? (
+                  <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
+                    Market {formatPct((featuredItem as BestBetCandidate).marketEfficiencyPct)}
+                  </div>
+                ) : null}
+
+                {canAccessPremium ? (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const bet = featuredItem as BestBetCandidate;
+                        void onAddBet({
+                          market: bet.market,
+                          matchDate: bet.date,
+                          matchName: bet.match,
+                          selection: bet.selection,
+                          lineValue: bet.lineValue,
+                          odds: bet.odds,
+                          stake: bet.kellyStake,
+                          modelProb: bet.modelProbability,
+                          impliedProb: bet.impliedProbability,
+                          edgePp: bet.edgePp,
+                        });
+                      }}
+                      className="w-full cursor-pointer rounded-md border border-white/12 bg-white/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-nrl-text transition-colors hover:border-nrl-accent/55 hover:bg-nrl-accent/10 hover:text-nrl-accent"
+                    >
+                      View Bet
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </article>
+
+          {queueItems.length > 0 ? (
+            <div>
+              <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-muted">
+                Next Opportunities
+              </div>
+              <div className="relative max-h-[154px] overflow-hidden rounded-lg border border-white/8 bg-[#0f1732]/70">
+                <div
+                  className={`space-y-1.5 p-2 ${!canAccessPremium ? "pointer-events-none select-none blur-[5px]" : ""}`}
+                  style={shouldAnimateQueue ? { animation: "best-bets-queue-scroll 28s linear infinite" } : undefined}
+                >
+                {queueCycleItems.map(({ item, index }, cycleIndex) => {
+                  const isLocked = !canAccessPremium;
+                  const rowContent = (
+                    <div className={`flex min-h-[38px] items-center justify-between gap-3 rounded-md border border-white/8 bg-nrl-panel/72 px-2.5 py-1.5 text-left transition-colors ${canAccessPremium ? "hover:border-white/20" : ""}`}>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-sm border px-1 py-0.5 text-[7px] font-bold uppercase tracking-[0.14em] ${activeTheme.pill}`}>
+                            {isLocked ? "Premium" : activeTheme.label}
+                          </span>
+                          <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                            {isArbitrage ? "H2H" : isLocked ? "Locked" : (item as BestBetCandidate).market}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 truncate text-xs font-semibold text-white">
+                          {isLocked
+                            ? "Selection hidden"
+                            : isArbitrage
+                              ? (item as ArbitrageCandidate).match
+                              : (item as BestBetCandidate).selectionLabel}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className={`text-base font-bold leading-none ${isLocked ? "text-nrl-muted" : activeTheme.metric}`}>
+                          {isLocked
+                            ? isArbitrage ? "ARB" : "+EV"
+                            : isArbitrage
+                              ? `+${(item as ArbitrageCandidate).returnPct.toFixed(2)}%`
+                              : `+${(item as BestBetCandidate).edgePp.toFixed(2)}%`}
+                        </div>
+                        <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                          {isArbitrage ? "return" : "edge"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+
+                  return isLocked ? (
+                    <div key={`${item.id}-${cycleIndex}`} className="relative overflow-hidden rounded-md">
+                      {rowContent}
+                    </div>
+                  ) : (
+                    <button
+                      key={`${item.id}-${cycleIndex}`}
+                      type="button"
+                      onClick={() => setFocusedIndex(index)}
+                      className="block w-full cursor-pointer"
+                    >
+                      {rowContent}
+                    </button>
+                  );
+                })}
+                </div>
+                {!canAccessPremium ? (
+                  <div className="absolute inset-0 z-10 grid place-items-center bg-[#080d1f]/30 px-3 backdrop-blur-[1px]">
+                    <BillingPageLink className="rounded-xl bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]">
+                      <div className="rounded-[calc(0.75rem-1px)] bg-slate-950/85 px-4 py-2 text-center">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-100">
+                          Sign Up To Premium
+                        </div>
+                      </div>
+                    </BillingPageLink>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <style>{`
+        @keyframes best-bets-queue-scroll {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(-50%); }
+        }
+      `}</style>
+    </section>
   );
 }
 
@@ -1665,14 +2274,16 @@ function MarketSection({
     return () => window.clearInterval(intervalId);
   }, []);
 
-  const activeGroups = groups.filter((group) => {
-    if (group.market !== "Tryscorer") return true;
-    const kickoffKey = buildMatchKickoffKey(group.date, group.match);
-    const kickoff = kickoffKey ? tryscorerKickoffsByMatch[kickoffKey] : null;
-    if (!kickoff) return true;
-    const kickoffMs = Date.parse(kickoff);
-    return !Number.isFinite(kickoffMs) || nowMs < kickoffMs + 5 * 60 * 1000;
-  });
+  const activeGroups = groups
+    .filter((group) => {
+      if (group.market !== "Tryscorer") return true;
+      const kickoffKey = buildMatchKickoffKey(group.date, group.match);
+      const kickoff = kickoffKey ? tryscorerKickoffsByMatch[kickoffKey] : null;
+      if (!kickoff) return true;
+      const kickoffMs = Date.parse(kickoff);
+      return !Number.isFinite(kickoffMs) || nowMs < kickoffMs + 5 * 60 * 1000;
+    })
+    .sort((a, b) => compareGroupsByKickoff(a, b, tryscorerKickoffsByMatch));
 
   if (activeGroups.length === 0) {
     return (
@@ -1767,7 +2378,245 @@ function MarketSection({
                 ) : null}
 
                 {collapsed ? null : (
-                <div className="overflow-x-auto">
+                  <>
+                    <div className="space-y-3 md:hidden">
+                  {visibleOutcomes.length === 0 ? (
+                    <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-4 text-sm text-nrl-muted">
+                      No odds found for {selectedTryscorerValue}+.
+                    </div>
+                  ) : visibleOutcomes.map((row) => {
+                    const betRowKey = `${group.date}|${group.match}|${group.market}|${row.result}|${row.bestValueComputed ?? ""}`;
+                    const oddsValue = oddsOverrides[betRowKey] ?? row.bestPriceComputed;
+                    const implied = impliedProbability(oddsValue);
+                    const modelProbability = showModelColumns
+                      ? modelPercentToProbability(row.bestModelComputed)
+                      : null;
+                    const edgeDecimal = modelProbability != null && implied != null
+                      ? modelProbability - implied
+                      : null;
+                    const edgePp = edgeDecimal == null ? null : edgeDecimal * 100;
+                    const hasPositiveEdge = edgeDecimal != null && edgeDecimal > 0;
+                    const overEdgeCliff = edgeDecimal != null && edgeDecimal > (maxEdge ?? 0.06);
+                    const bankrollValue = bankroll ?? 0;
+                    const percentageStakeDecimal = clamp((percentageStakePct ?? 0) / 100, 0, 1);
+                    const targetProfitDecimal = clamp((targetProfitPct ?? 0) / 100, 0, 1);
+                    const fullKelly = modelProbability != null && oddsValue != null
+                      ? kellyFraction(modelProbability, oddsValue)
+                      : null;
+                    let scaledStake: number | null = null;
+                    if (!canAccessPremium && oddsValue != null && oddsValue > 1) {
+                      if (stakingMode === "percentage") {
+                        scaledStake = bankrollValue * percentageStakeDecimal;
+                      } else if (stakingMode === "targetProfit") {
+                        scaledStake = (bankrollValue * targetProfitDecimal) / (oddsValue - 1);
+                      }
+                    } else if (!showModelColumns && oddsValue != null && oddsValue > 1) {
+                      if (stakingMode === "percentage") {
+                        scaledStake = bankrollValue * percentageStakeDecimal;
+                      } else if (stakingMode === "targetProfit") {
+                        scaledStake = (bankrollValue * targetProfitDecimal) / (oddsValue - 1);
+                      }
+                    } else if (modelProbability != null && oddsValue != null && oddsValue > 1) {
+                      if (!hasPositiveEdge || overEdgeCliff) {
+                        scaledStake = 0;
+                      } else if (stakingMode === "percentage") {
+                        scaledStake = bankrollValue * percentageStakeDecimal;
+                      } else if (stakingMode === "targetProfit") {
+                        scaledStake = (bankrollValue * targetProfitDecimal) / (oddsValue - 1);
+                      } else if (fullKelly != null) {
+                        scaledStake = bankrollValue * fullKelly * (kellyScale ?? 0);
+                      }
+                    }
+                    const edgeClass =
+                      !canAccessPremium
+                        ? "text-nrl-text"
+                        : edgePp == null
+                        ? "text-nrl-text"
+                        : edgePp < 0
+                          ? "text-red-500"
+                          : overEdgeCliff
+                            ? "text-orange-500"
+                            : "text-nrl-accent";
+                    const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
+                    const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
+                    const canPlaceBet = canAccessPremium
+                      && (!showModelColumns || modelProbability != null)
+                      && implied != null
+                      && oddsValue != null
+                      && oddsValue > 1
+                      && Number.isFinite(stakeValue)
+                      && stakeValue > 0;
+                    const tryscorerForm = group.market === "Tryscorer"
+                      ? tryscorerFormByPlayer[normaliseLookupKey(row.result)] ?? null
+                      : null;
+                    const playerTeam = group.market === "Tryscorer"
+                      ? tryscorerForm?.team ?? playerTeamsByName.get(normaliseLookupKey(row.result)) ?? null
+                      : null;
+                    const teamLogoUrl = resolveTeamLogoUrl(playerTeam, teamLogos);
+
+                    return (
+                      <div key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`} className="rounded-lg border border-nrl-border/80 bg-nrl-panel-2 px-2.5 py-2.5">
+                        <div className="flex items-start gap-1.5">
+                          {teamLogoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={teamLogoUrl}
+                              alt=""
+                              className="mt-0.5 h-4 w-4 shrink-0 object-contain"
+                              loading="lazy"
+                            />
+                          ) : null}
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-semibold text-nrl-text">{row.result}</div>
+                            <TryscorerForm form={tryscorerForm} />
+                          </div>
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-5 gap-1">
+                          {visibleBookieColumns.map((bookie) => {
+                            const offer = row.bookieOffers[bookie];
+                            const isBest = offer != null
+                              && row.bestBookiesComputed.includes(bookie)
+                              && row.bestPriceComputed === offer.price
+                              && row.bestValueComputed === offer.value;
+                            return (
+                              <div
+                                key={`${group.key}-mobile-${row.result}-${bookie}`}
+                                className={`min-w-0 rounded border px-1 py-1 ${isBest ? "border-nrl-accent/45 bg-nrl-accent/8" : "border-white/8 bg-white/[0.03]"}`}
+                              >
+                                <div className="flex h-3.5 items-center">
+                                  <BookieLogo bookie={bookie} compact />
+                                </div>
+                                <div className={`mt-0.5 text-[11px] font-semibold leading-tight ${isBest ? "text-nrl-accent" : "text-nrl-text"}`}>
+                                  {offer == null ? "-" : formatPrice(offer.price)}
+                                </div>
+                                {offer != null && (group.market === "Line" || group.market === "Total") && offer.value != null ? (
+                                  <div className="text-[9px] leading-tight text-nrl-muted">{formatLineValue(offer.value)}</div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className={`mt-2 grid ${showModelColumns ? "grid-cols-4" : "grid-cols-2"} gap-1 text-[10px]`}>
+                          <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                            <div className="truncate text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted">Best</div>
+                            <div className="mt-0.5 flex min-w-0 items-center gap-0.5 text-nrl-text">
+                              <div className="shrink-0 font-semibold leading-tight">{formatPrice(row.bestPriceComputed)}</div>
+                              {row.bestBookiesComputed.length > 0 ? (
+                                <div className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+                                  {row.bestBookiesComputed.slice(0, 1).map((bookie) => (
+                                    <BookieLogo
+                                      key={`${group.key}-mobile-${row.result}-best-${bookie}`}
+                                      bookie={bookie}
+                                      compact
+                                    />
+                                  ))}
+                                  {row.bestBookiesComputed.length > 1 ? (
+                                    <span className="text-[8px] leading-none text-nrl-muted">+{row.bestBookiesComputed.length - 1}</span>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                            {(group.market === "Line" || group.market === "Total") && row.bestValueComputed != null ? (
+                              <div className="truncate text-[8px] leading-tight text-nrl-muted">{formatLineValue(row.bestValueComputed)}</div>
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                            <div className="truncate text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted">Imp</div>
+                            <div className="mt-0.5 truncate font-semibold leading-tight text-nrl-text">{formatPct(implied == null ? null : implied * 100)}</div>
+                          </div>
+                          {showModelColumns ? (
+                            <>
+                              <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                                <div className="truncate text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted">Model</div>
+                                <div className="mt-0.5 truncate font-semibold leading-tight text-nrl-text">
+                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
+                                    {formatPct(modelProbability == null ? null : modelProbability * 100)}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="min-w-0 rounded border border-white/8 bg-white/[0.03] px-1 py-1">
+                                <div className="truncate text-[7px] font-bold uppercase tracking-[0.08em] text-nrl-muted">Edge</div>
+                                <div className={`mt-0.5 truncate font-semibold leading-tight ${edgeClass}`}>
+                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
+                                    {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
+                                  </span>
+                                </div>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-2 gap-1.5">
+                          <label className="block">
+                            <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Odds</span>
+                            <input
+                              type="number"
+                              min={1.01}
+                              step={0.01}
+                              value={oddsValue == null || !Number.isFinite(oddsValue) ? "" : oddsValue}
+                              onChange={(event) => onOddsOverride(betRowKey, Number(event.target.value))}
+                              onBlur={(event) => {
+                                const nextOdds = Number(event.target.value);
+                                if (Number.isFinite(nextOdds) && nextOdds > 1) return;
+                                onOddsOverride(betRowKey, row.bestPriceComputed ?? 0);
+                              }}
+                              className="mt-0.5 w-full rounded border border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs text-nrl-text outline-none focus:border-nrl-accent"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Stake</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={Number.isFinite(stakeValue) ? stakeValue : 0}
+                              onChange={(event) => onStakeOverride(betRowKey, Math.max(0, Number(event.target.value) || 0))}
+                              className="mt-0.5 w-full rounded border border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs text-nrl-text outline-none focus:border-nrl-accent"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="mt-2">
+                          {canAccessPremium ? (
+                            <button
+                              type="button"
+                              disabled={!canPlaceBet}
+                              onClick={() => {
+                                if (!canPlaceBet || oddsValue == null) return;
+                                void onAddBet({
+                                  market: group.market,
+                                  matchDate: group.date,
+                                  matchName: group.match,
+                                  selection: row.result,
+                                  lineValue: row.bestValueComputed,
+                                  odds: oddsValue,
+                                  stake: stakeValue,
+                                  modelProb: modelProbability,
+                                  impliedProb: implied,
+                                  edgePp,
+                                });
+                              }}
+                              className={`w-full rounded-md border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide ${
+                                canPlaceBet
+                                  ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                                  : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
+                              }`}
+                            >
+                              Bet
+                            </button>
+                          ) : (
+                            <BillingPageLink className="flex w-full justify-center rounded-md border border-nrl-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted opacity-75 transition-colors hover:border-nrl-accent hover:text-nrl-text">
+                              Locked
+                            </BillingPageLink>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                    </div>
+                    <div className="hidden overflow-x-auto md:block">
                   <table className={`${group.market === "Tryscorer" ? "w-auto min-w-max lg:w-full lg:min-w-[1100px]" : "w-full min-w-[1000px]"} border-collapse text-xs`}>
                     <thead>
                       <tr className="border-b border-nrl-border text-left text-nrl-muted">
@@ -2020,7 +2869,8 @@ function MarketSection({
                       })}
                     </tbody>
                   </table>
-                </div>
+                    </div>
+                  </>
                 )}
               </article>
             );

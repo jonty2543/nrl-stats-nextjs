@@ -89,6 +89,23 @@ function normaliseTeamKey(value: unknown): string {
     .trim();
 }
 
+function normalisePlayerAliasKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function casualtyWardPlayerSearchNames(name: string): string[] {
+  const names = new Set([name]);
+  const key = normalisePlayerAliasKey(name);
+  if (key === "apisai koroisau" || key === "api koroisau") {
+    names.add("Apisai Koroisau");
+    names.add("Api Koroisau");
+  }
+  return Array.from(names);
+}
+
 function relevantOutsTeamGroup(value: string | null | undefined): string | null {
   const key = normaliseTeamKey(value);
   if (!key) return null;
@@ -1330,22 +1347,64 @@ async function fetchBettingOddsTableFromSupabase(table: BettingOddsTable): Promi
     });
 }
 
-async function fetchPredictionModelRowsFromSupabase(): Promise<PredictionModelRow[]> {
-  const rawRows = await fetchAllRowsFromSchema<Record<string, unknown>>("nrl", "nrl_predictions");
-  return rawRows as PredictionModelRow[];
+async function fetchBettingOddsTableOrEmpty(table: BettingOddsTable): Promise<BettingOddsRow[]> {
+  try {
+    return await fetchBettingOddsTableFromSupabase(table);
+  } catch (error) {
+    console.warn(`Unable to fetch ${table}; rendering that betting market empty.`, error);
+    return [];
+  }
+}
+
+function bettingOddsDateRange(rows: BettingOddsRow[]): { minDate: string; maxDate: string } | null {
+  const dates = rows
+    .map((row) => row.date)
+    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+    .sort();
+  const minDate = dates[0];
+  const maxDate = dates[dates.length - 1];
+  return minDate && maxDate ? { minDate, maxDate } : null;
+}
+
+async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Promise<PredictionModelRow[]> {
+  const dateRange = bettingOddsDateRange(rows);
+  if (!dateRange) return [];
+
+  const supabase = createServerSupabaseClient("nrl");
+  const allRows: PredictionModelRow[] = [];
+  let start = 0;
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("nrl_predictions")
+      .select("match_date,match,team,win_prob,pred_margin,updated_at")
+      .gte("match_date", dateRange.minDate)
+      .lte("match_date", dateRange.maxDate)
+      .range(start, end);
+
+    if (error) throw new Error(`Supabase fetch nrl.nrl_predictions: ${error.message}`);
+    const pageRows = (data ?? []) as unknown as PredictionModelRow[];
+    if (pageRows.length === 0) break;
+    allRows.push(...pageRows);
+    if (pageRows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  return allRows;
 }
 
 export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
-  const [h2hRaw, lineRaw, total, tryscorer, predictionRows] = await Promise.all([
-    fetchBettingOddsTableFromSupabase("NRL Odds"),
-    fetchBettingOddsTableFromSupabase("NRL Line Odds"),
-    fetchBettingOddsTableFromSupabase("NRL Total Odds"),
-    fetchBettingOddsTableFromSupabase("NRL Tryscorers"),
-    fetchPredictionModelRowsFromSupabase().catch((error) => {
-      console.warn("Unable to fetch betting prediction rows; rendering odds without model values.", error);
-      return [];
-    }),
+  const [h2hRaw, lineRaw, total, tryscorer] = await Promise.all([
+    fetchBettingOddsTableOrEmpty("NRL Odds"),
+    fetchBettingOddsTableOrEmpty("NRL Line Odds"),
+    fetchBettingOddsTableOrEmpty("NRL Total Odds"),
+    fetchBettingOddsTableOrEmpty("NRL Tryscorers"),
   ]);
+  const predictionRows = await fetchPredictionModelRowsFromSupabase([...h2hRaw, ...lineRaw]).catch((error) => {
+    console.warn("Unable to fetch betting prediction rows; rendering odds without model values.", error);
+    return [];
+  });
   const predictionLookup = buildPredictionLookup(predictionRows);
   const h2h = h2hRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
   const line = lineRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
@@ -1386,12 +1445,13 @@ export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
 export async function fetchCasualtyWardForPlayer(playerName: string): Promise<CasualtyWardRecord[]> {
   const name = playerName.trim();
   if (!name) return [];
+  const searchNames = casualtyWardPlayerSearchNames(name);
 
   const supabase = createServerSupabaseClient("nrl");
   const { data, error } = await supabase
     .from("casualty_ward")
     .select("player, team, injury, return_date, source_url, scraped_at")
-    .ilike("player", name)
+    .in("player", searchNames)
     .order("scraped_at", { ascending: false })
     .limit(5);
 

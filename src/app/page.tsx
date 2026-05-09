@@ -1120,8 +1120,10 @@ export default async function Home() {
     <div className="relative overflow-hidden text-nrl-text">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-        <AppHeader />
+      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 sm:px-6 lg:px-8">
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+          <AppHeader />
+        </div>
 
         <LandingHeroScrollShell>
           <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
@@ -1696,23 +1698,25 @@ export default async function Home() {
               {lineupsLandingMatch ? (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
-                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                      {[lineupsLandingMatch.homeTeam, lineupsLandingMatch.awayTeam].map((team, index) => {
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                      {([lineupsLandingMatch.homeTeam, lineupsLandingMatch.awayTeam] as const).map((team, index) => {
                         const logo = resolveLineupTeamLogo(team, teamLogos)
                         return (
                           <div key={`${team?.team ?? index}-lineup-team`} className="flex min-w-0 flex-col items-center text-center">
                             {logo ? (
                               <ImageWithFallback sources={[logo]} alt={team?.teamName ?? "Team logo"} className="h-10 w-10 object-contain" />
                             ) : null}
-                            <div className="mt-2 max-w-full truncate text-sm font-bold text-white">
+                            <div className="mt-2 max-w-full truncate text-xs font-bold text-white sm:text-sm">
                               {team?.teamName ?? team?.team ?? "TBC"}
                             </div>
                           </div>
                         )
-                      })}
-                      <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+                      }).flatMap((teamNode, index) => index === 0 ? [
+                        teamNode,
+                        <div key="lineups-preview-vs" className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
                         vs
-                      </div>
+                        </div>,
+                      ] : [teamNode])}
                     </div>
                     <div className="mt-3 text-center">
                       <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">{lineupsLandingMatch.round}</div>
@@ -1731,7 +1735,7 @@ export default async function Home() {
                         <span className="px-2 py-1 text-white/45">Tackles</span>
                       </div>
                     </div>
-                    <div className="relative h-[28rem] overflow-hidden rounded-xl border border-white/10 bg-[#07151e]/40 md:h-[24rem]">
+                    <div className="relative h-[22rem] overflow-hidden rounded-xl border border-white/10 bg-[#07151e]/40 md:h-[23rem]">
                       <div className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-emerald-200/45" />
                       {[12, 24, 36, 64, 76, 88].map((left) => (
                         <div key={`line-${left}`} className="absolute inset-y-0 w-px bg-emerald-200/18" style={{ left: `${left}%` }} />
@@ -1741,10 +1745,10 @@ export default async function Home() {
                         return (
                           <div
                             key={`home-field-${player.player}-${player.number ?? index}`}
-                            className="absolute z-[2] w-24 -translate-x-1/2 -translate-y-1/2 text-center"
+                            className="absolute z-[2] w-20 -translate-x-1/2 -translate-y-1/2 text-center sm:w-24"
                             style={{
-                              left: `${18 + (index % 2) * 21}%`,
-                              top: `${14 + Math.floor(index / 2) * 20}%`,
+                              left: `${20 + (index % 2) * 18}%`,
+                              top: `${18 + Math.floor(index / 2) * 22}%`,
                             }}
                           >
                             <div className="mx-auto grid h-11 w-11 place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-[#10172f] shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
@@ -1760,10 +1764,10 @@ export default async function Home() {
                         return (
                           <div
                             key={`away-field-${player.player}-${player.number ?? index}`}
-                            className="absolute z-[2] w-24 -translate-x-1/2 -translate-y-1/2 text-center"
+                            className="absolute z-[2] w-20 -translate-x-1/2 -translate-y-1/2 text-center sm:w-24"
                             style={{
-                              left: `${61 + (index % 2) * 21}%`,
-                              top: `${14 + Math.floor(index / 2) * 20}%`,
+                              left: `${62 + (index % 2) * 18}%`,
+                              top: `${18 + Math.floor(index / 2) * 22}%`,
                             }}
                           >
                             <div className="mx-auto grid h-11 w-11 place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-[#10172f] shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
@@ -2183,33 +2187,6 @@ export default async function Home() {
                     </div>
                   </div>
                 )}
-
-                {articlePreviewRows.length > 1 ? (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {articlePreviewRows.slice(1, 3).map((article) => (
-                      <Link
-                        key={article.id}
-                        href={`/dashboard/articles/${article.slug}`}
-                        className="group overflow-hidden rounded-xl border border-white/8 bg-[#1b2140] transition-colors hover:border-white/18"
-                      >
-                        <div className="grid grid-cols-[8rem_minmax(0,1fr)]">
-                          <div className="h-full min-h-32 bg-[#20274a]">
-                            {article.imageUrls[0] ? (
-                              <ImageWithFallback sources={[article.imageUrls[0]]} alt="" className="h-full w-full object-cover" />
-                            ) : null}
-                          </div>
-                          <div className="min-w-0 p-3">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/38">
-                              {article.displayName} · {formatArticleDate(article.approvedAt ?? article.createdAt)}
-                            </div>
-                            <div className="mt-2 line-clamp-2 text-sm font-bold leading-5 text-white group-hover:text-emerald-200">{article.title}</div>
-                            <div className="mt-2 line-clamp-2 text-xs leading-5 text-white/55">{articlePreviewText(article.body, 110)}</div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             </PreviewFrame>
           </FeatureSection>

@@ -106,8 +106,8 @@ export function hasProPlotAccess(
   userId: string | null | undefined,
   metadata?: unknown
 ): boolean {
-  if (hasPreviewFeatureUnlock()) return true;
   if (!userId) return false;
+  if (hasPreviewFeatureUnlock()) return true;
   const allowlistedUserIds = getProPlotAllowlist();
   if (allowlistedUserIds.has(userId)) return true;
   if (getPremiumAllowlist().has(userId)) return true;
@@ -118,8 +118,8 @@ export function hasPremiumAccess(
   userId: string | null | undefined,
   metadata?: unknown
 ): boolean {
-  if (hasPreviewFeatureUnlock()) return true;
   if (!userId) return false;
+  if (hasPreviewFeatureUnlock()) return true;
   const allowlistedUserIds = getPremiumAllowlist();
   if (allowlistedUserIds.has(userId)) return true;
   if (getProPlotAllowlist().has(userId)) return true;

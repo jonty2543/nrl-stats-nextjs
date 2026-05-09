@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type CSSProperties } from "react"
+import { useState } from "react"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { generateMatchupInsights, type MatchupInsight } from "@/lib/lineups/matchup-insights"
 import type {
@@ -67,13 +67,6 @@ const BOOKIE_LOGOS: Record<string, string> = {
   Betr: "/logos/betr.png",
   Deluxebet: "/logos/deluxebet.png",
   Surgebet: "/logos/surgebet.png",
-}
-
-const SILVER_GRADIENT_BORDER_STYLE: CSSProperties = {
-  background:
-    "linear-gradient(180deg, rgba(28,35,62,0.98), rgba(28,35,62,0.98)) padding-box, linear-gradient(135deg, rgba(255,255,255,0.46), rgba(148,163,184,0.12) 34%, rgba(255,255,255,0.32) 52%, rgba(71,85,105,0.16) 74%, rgba(255,255,255,0.24)) border-box, linear-gradient(180deg, rgba(203,213,225,0.22), rgba(100,116,139,0.14)) border-box",
-  backgroundRepeat: "no-repeat",
-  backgroundSize: "auto, 100% 8rem, auto",
 }
 
 function normaliseBookieKey(value: string): string {
@@ -1237,10 +1230,7 @@ function TeamBench({
   const pitchSlots = buildTeamPitchSlotMap(team?.players ?? [])
   const bench = team?.players.filter((player) => !pitchSlots.has(pitchPlayerKey(player))) ?? []
   return (
-    <div
-      className="min-w-0 rounded-md border border-transparent p-2 shadow-[0_12px_28px_rgba(0,0,0,0.24)]"
-      style={SILVER_GRADIENT_BORDER_STYLE}
-    >
+    <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel/70 p-2 shadow-[0_12px_28px_rgba(0,0,0,0.24)]">
       <div className="mb-1 truncate text-[10px] font-bold uppercase tracking-wide text-nrl-muted">{team?.team ?? "Team"} bench</div>
       {bench.length > 0 ? (
         <div className="grid gap-1 text-[11px] text-nrl-text">
@@ -1335,10 +1325,7 @@ function NotableOuts({
   const totalOuts = homeOuts.length + awayOuts.length
 
   return (
-    <details
-      className="group/notable mt-3 overflow-hidden rounded-md border border-transparent shadow-[0_16px_34px_rgba(0,0,0,0.26)]"
-      style={SILVER_GRADIENT_BORDER_STYLE}
-    >
+    <details className="group/notable mt-3 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel/70 shadow-[0_16px_34px_rgba(0,0,0,0.26)]">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2 py-2 marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="flex min-w-0 items-center gap-2">
           <InjuryIcon />
@@ -1376,11 +1363,7 @@ function MatchupInsightsPanel({
   const lockedInsightCount = canAccessFullInsights ? 0 : Math.max(0, insights.length - visibleInsights.length)
 
   return (
-    <details
-      className="group/insights mb-5 overflow-hidden rounded-md border border-transparent shadow-[0_16px_34px_rgba(0,0,0,0.26)]"
-      style={SILVER_GRADIENT_BORDER_STYLE}
-      open
-    >
+    <details className="group/insights mb-5 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel/75 shadow-[0_16px_34px_rgba(0,0,0,0.26)]" open>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2.5 py-2 marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-nrl-accent">Matchup Insights</span>
         <span className="flex shrink-0 items-center gap-2">
@@ -1547,10 +1530,7 @@ function LineupCard({
       })
 
   return (
-    <details
-      className="group rounded-lg border border-transparent shadow-[0_22px_52px_rgba(0,0,0,0.36)]"
-      style={SILVER_GRADIENT_BORDER_STYLE}
-    >
+    <details className="group rounded-lg border border-nrl-border bg-nrl-panel-2 shadow-[0_22px_52px_rgba(0,0,0,0.36)]">
       <summary className="relative cursor-pointer list-none px-3 py-3 marker:hidden sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
         <div className="mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.5rem,auto)_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_minmax(0,1fr)] sm:gap-6">
           <div className="min-w-0 justify-self-center">
@@ -1574,7 +1554,7 @@ function LineupCard({
         </span>
       </summary>
 
-      <div className="relative px-2 pb-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.42),rgba(148,163,184,0.16),transparent)] sm:px-3">
+      <div className="border-t border-nrl-border px-2 pb-3 sm:px-3">
         <div className="pt-5" />
         <LiveTryScorersStrip match={match} liveMatch={liveMatch} />
         {!isLive ? <MatchupInsightsPanel insights={insights} canAccessFullInsights={canAccessFantasyProjections} /> : null}

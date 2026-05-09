@@ -112,6 +112,10 @@ function isProDisplayMode(mode: DisplayMode): boolean {
   return mode !== "odds"
 }
 
+function displayModeShortLabel(mode: DisplayMode): string {
+  return DISPLAY_MODES.find((displayMode) => displayMode.key === mode)?.shortLabel ?? String(mode)
+}
+
 const INSIGHT_CATEGORY_CLASSES: Record<MatchupInsight["category"], string> = {
   Matchup: "border-nrl-accent/20 bg-nrl-accent/10 text-nrl-accent",
   Fantasy: "border-sky-300/25 bg-sky-400/10 text-sky-100",
@@ -527,7 +531,7 @@ function PlayerMetric({
 
   return (
     <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>
-      {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} avg
+      {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} avg {displayModeShortLabel(displayMode)}
     </div>
   )
 }

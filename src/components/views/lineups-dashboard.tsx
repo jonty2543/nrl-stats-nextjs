@@ -128,8 +128,35 @@ function displayModeShortLabel(mode: DisplayMode): string {
   return DISPLAY_MODES.find((displayMode) => displayMode.key === mode)?.shortLabel ?? String(mode)
 }
 
+function statPerGameLabel(mode: AverageStatKey): string {
+  return `${displayModeShortLabel(mode)}/g`
+}
+
 function lowerMetricIsBetter(mode: DisplayMode): boolean {
   return mode === "odds" || mode === "Missed Tackles" || mode === "Errors"
+}
+
+const GLOBAL_PLAYER_METRIC_RANGES: Record<DisplayMode, Omit<PlayerMetricRange, "lowerIsBetter">> = {
+  odds: { min: 1, max: 15 },
+  fantasy: { min: 10, max: 75 },
+  Tries: { min: 0, max: 1.4 },
+  "Try Assists": { min: 0, max: 1 },
+  "All Run Metres": { min: 30, max: 240 },
+  "Tackles Made": { min: 5, max: 60 },
+  "Line Breaks": { min: 0, max: 1.3 },
+  "Line Break Assists": { min: 0, max: 1 },
+  Errors: { min: 0, max: 2.2 },
+  "Missed Tackles": { min: 0, max: 7 },
+  Receipts: { min: 5, max: 80 },
+  "Tackle Breaks": { min: 0, max: 8 },
+  Offloads: { min: 0, max: 3.5 },
+}
+
+function globalMetricRange(mode: DisplayMode): PlayerMetricRange {
+  return {
+    ...GLOBAL_PLAYER_METRIC_RANGES[mode],
+    lowerIsBetter: lowerMetricIsBetter(mode),
+  }
 }
 
 const INSIGHT_CATEGORY_CLASSES: Record<MatchupInsight["category"], string> = {
@@ -549,12 +576,18 @@ function metricBarScore(value: number | null, range: PlayerMetricRange | null): 
 
 function PlayerMetricBar({ score, compact }: { score: number | null; compact: boolean }) {
   if (score == null) return null
+  const fillRatio = score * FANTASY_BASELINE_RATIO_MAX
   return (
-    <div className={`${compact ? "mt-0.5 h-1.5 w-12" : "mt-1 h-1.5 w-14"} relative mx-auto rounded-full border border-white/20 bg-[linear-gradient(90deg,#ef4444,#facc15_50%,#22c55e)] shadow-[0_0_8px_rgba(0,0,0,0.28)]`}>
-      <span
-        className="absolute top-1/2 h-2.5 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_5px_rgba(0,0,0,0.55)]"
-        style={{ left: `${score * 100}%` }}
-      />
+    <div className={`${compact ? "mt-0.5 h-2 w-11" : "mt-1 h-2.5 w-16"} mx-auto`}>
+      <div className="h-full overflow-hidden rounded-full border border-white/20 bg-white/12 shadow-inner">
+        <div
+          className="h-full rounded-full transition-[width,background-color]"
+          style={{
+            width: `${score * 100}%`,
+            backgroundColor: fantasyBaselineFillColor(fillRatio),
+          }}
+        />
+      </div>
     </div>
   )
 }
@@ -619,7 +652,7 @@ function PlayerMetric({
   return (
     <>
       <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>
-        {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} avg {displayModeShortLabel(displayMode)}
+        {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} {statPerGameLabel(displayMode)}
       </div>
       <PlayerMetricBar score={barScore} compact={compact} />
     </>
@@ -1127,31 +1160,6 @@ function buildTeamPitchSlotMap(players: LineupPlayer[]): Map<string, Slot> {
   return slots
 }
 
-function buildPlayerMetricRange({
-  players,
-  displayMode,
-  tryscorerOdds,
-  playerAverages,
-  canAccessFantasyProjections,
-}: {
-  players: LineupPlayer[]
-  displayMode: DisplayMode
-  tryscorerOdds: Record<string, LineupTryscorerOdds>
-  playerAverages: Record<string, Record<AverageStatKey, number>>
-  canAccessFantasyProjections: boolean
-}): PlayerMetricRange | null {
-  const values = players
-    .map((player) => playerMetricValue({ player, displayMode, tryscorerOdds, playerAverages, canAccessFantasyProjections }))
-    .filter((value): value is number => value != null && Number.isFinite(value))
-
-  if (values.length === 0) return null
-  return {
-    min: Math.min(...values),
-    max: Math.max(...values),
-    lowerIsBetter: lowerMetricIsBetter(displayMode),
-  }
-}
-
 function positionBaselineKeyForPlayer(player: LineupPlayer): string | null {
   if (player.number === 1) return "FB"
   if (player.number === 2 || player.number === 5) return "W"
@@ -1383,6 +1391,7 @@ function Pitch({
   liveMatch,
   positionPpmBaselines,
   showLiveIndicators,
+  showPregameMetrics,
   onPlayerSelect,
 }: {
   homePlayers: LineupPlayer[]
@@ -1398,31 +1407,21 @@ function Pitch({
   liveMatch: LineupLiveMatch | null
   positionPpmBaselines: Record<string, number>
   showLiveIndicators: boolean
+  showPregameMetrics: boolean
   onPlayerSelect: (player: LineupPlayer) => void
 }) {
   const sizeClass =
     orientation === "portrait"
       ? "mx-auto h-[840px] w-full max-w-[460px] md:hidden"
       : "hidden h-[520px] w-full md:block"
-  const isLive = hasMatchStarted(liveMatch)
   const homePitchSlots = buildTeamPitchSlotMap(homePlayers)
   const awayPitchSlots = buildTeamPitchSlotMap(awayPlayers)
-  const pitchPlayers = [...homePlayers, ...awayPlayers].filter((player) => {
-    const key = pitchPlayerKey(player)
-    return homePitchSlots.has(key) || awayPitchSlots.has(key)
-  })
-  const metricRange = buildPlayerMetricRange({
-    players: pitchPlayers,
-    displayMode,
-    tryscorerOdds,
-    playerAverages,
-    canAccessFantasyProjections,
-  })
+  const metricRange = globalMetricRange(displayMode)
 
   return (
     <div className={`${sizeClass} relative overflow-hidden rounded-lg border-2 border-emerald-300/45 bg-[radial-gradient(circle_at_50%_50%,rgba(0,245,138,0.16),transparent_30%),linear-gradient(90deg,rgba(8,26,33,0.98),rgba(15,112,73,0.92)_50%,rgba(8,26,33,0.98))]`}>
       <FieldLines orientation={orientation} />
-      {!isLive ? (
+      {showPregameMetrics ? (
         <div className={orientation === "portrait" ? "absolute left-2 top-2 z-[4]" : "absolute left-1/2 top-3 z-[4] -translate-x-1/2"}>
           <DisplayModeControl
             displayMode={displayMode}
@@ -1450,7 +1449,7 @@ function Pitch({
             canAccessFantasyProjections={canAccessFantasyProjections}
             showStatBars={showStatBars}
             metricRange={metricRange}
-            showPlayerMetric={!isLive}
+            showPlayerMetric={showPregameMetrics}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
             positionPpmBaselines={positionPpmBaselines}
@@ -1474,7 +1473,7 @@ function Pitch({
             canAccessFantasyProjections={canAccessFantasyProjections}
             showStatBars={showStatBars}
             metricRange={metricRange}
-            showPlayerMetric={!isLive}
+            showPlayerMetric={showPregameMetrics}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
             positionPpmBaselines={positionPpmBaselines}
@@ -1815,10 +1814,10 @@ function LineupCard({
   const availableDetailViews: LineupDetailView[] = hasLineupData ? ["lineup", "stats"] : ["stats"]
   const isLive = hasMatchStarted(liveMatch)
   const hasResultScore = match.homeScore != null || match.awayScore != null
+  const showPregameContent = !isLive && !hasResultScore
   const showLiveIndicators = isMatchLive(liveMatch)
-  const showPreMatchOdds = !isLive && !hasResultScore
-  const homeSportsbetOdds = showPreMatchOdds ? sportsbetOddsForTeam(match, match.homeTeam, sportsbetOdds) : null
-  const awaySportsbetOdds = showPreMatchOdds ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
+  const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.homeTeam, sportsbetOdds) : null
+  const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
   const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
     ? {
         player: selectedPlayer,
@@ -1889,7 +1888,7 @@ function LineupCard({
           <MatchStatsPanel match={match} liveMatch={liveMatch} stats={matchStats} />
         ) : hasLineupData ? (
           <>
-            {!isLive ? <MatchupInsightsPanel insights={insights} canAccessFullInsights={canAccessFantasyProjections} /> : null}
+            {showPregameContent ? <MatchupInsightsPanel insights={insights} canAccessFullInsights={canAccessFantasyProjections} /> : null}
             <Pitch
               homePlayers={homePlayers}
               awayPlayers={awayPlayers}
@@ -1904,6 +1903,7 @@ function LineupCard({
               liveMatch={liveMatch}
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
+              showPregameMetrics={showPregameContent}
               onPlayerSelect={setSelectedPlayer}
             />
             <Pitch
@@ -1920,6 +1920,7 @@ function LineupCard({
               liveMatch={liveMatch}
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
+              showPregameMetrics={showPregameContent}
               onPlayerSelect={setSelectedPlayer}
             />
 

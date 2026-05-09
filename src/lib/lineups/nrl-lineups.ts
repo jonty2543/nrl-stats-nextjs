@@ -372,7 +372,7 @@ async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: b
   const rows: RawRow[] = []
   let start = 0
   const selectColumns = includeFantasyProjections
-    ? [...LINEUP_SELECT_BASE, "fantasy_projection"].join(",")
+    ? [...LINEUP_SELECT_BASE, "fantasy_projection", "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
 
   while (true) {
@@ -402,7 +402,7 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
   const supabase = createServerSupabaseClient("nrl")
   const rows: RawRow[] = []
   const selectColumns = includeFantasyProjections
-    ? [...LINEUP_SELECT_BASE, "fantasy_projection"].join(",")
+    ? [...LINEUP_SELECT_BASE, "fantasy_projection", "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
   let start = 0
 
@@ -477,7 +477,9 @@ function buildPlayer(row: RawRow, overrides: Map<string, LineupSide>, includeFan
     isOnField,
     headImage: nullableText(row.head_image),
     bodyImage: nullableText(row.body_image),
-    fantasyProjection: includeFantasyProjection ? numberOrNull(row.fantasy_projection) : null,
+    fantasyProjection: includeFantasyProjection
+      ? numberOrNull(row.fantasy_projection) ?? numberOrNull(row.model_projection)
+      : null,
     side,
     sideSource: override ? "override" : side === "unknown" ? "unknown" : "nominal",
   }

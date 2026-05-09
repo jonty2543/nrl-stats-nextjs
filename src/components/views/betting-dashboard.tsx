@@ -2108,12 +2108,6 @@ function BestBetsHero({
                       <span>{formatPct((featuredItem as BestBetCandidate).impliedProbability * 100)}</span>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Kelly</div>
-                    <div className="mt-0.5 text-base font-semibold text-white">
-                      ${(featuredItem as BestBetCandidate).kellyStake}
-                    </div>
-                  </div>
                 </div>
 
                 {(featuredItem as BestBetCandidate).marketEfficiencyPct != null ? (

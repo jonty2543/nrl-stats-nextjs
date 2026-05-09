@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
@@ -22,7 +22,6 @@ interface ToolNavProps {
 
 export function ToolNav({ className }: ToolNavProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { isLoaded, userId } = useAuth();
   const [pendingArticleCount, setPendingArticleCount] = useState(0);
 
@@ -32,12 +31,6 @@ export function ToolNav({ className }: ToolNavProps) {
     pathname.startsWith("/dashboard/teams") ||
     pathname.startsWith("/dashboard/leaders");
   const displayedPendingArticleCount = isLoaded && userId ? pendingArticleCount : 0;
-
-  useEffect(() => {
-    tools.forEach((tool) => {
-      router.prefetch(tool.href);
-    });
-  }, [router]);
 
   useEffect(() => {
     if (!isLoaded || !userId) {
@@ -86,7 +79,7 @@ export function ToolNav({ className }: ToolNavProps) {
               <Link
                 key={tool.href}
                 href={tool.href}
-                prefetch
+                prefetch={false}
                 aria-current={active ? "page" : undefined}
                 className={`relative whitespace-nowrap rounded-full px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors sm:flex-none sm:px-4 sm:text-xs sm:tracking-[0.18em] ${
                   active

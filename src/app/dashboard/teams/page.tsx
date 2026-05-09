@@ -24,7 +24,7 @@ export default async function TeamsPage() {
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
   );
-  const initialData = unlockedYears.length > 0 ? await fetchTeamStats(unlockedYears) : [];
+  const initialData = initialYears.length > 0 ? await fetchTeamStats(initialYears) : [];
 
   return (
     <TeamComparison

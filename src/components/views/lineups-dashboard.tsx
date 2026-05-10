@@ -81,7 +81,7 @@ const BOOKIE_LOGOS: Record<string, string> = {
 
 const BLUE_GRADIENT_BORDER_STYLE: CSSProperties = {
   background:
-    "linear-gradient(180deg, rgba(28,35,62,0.98), rgba(28,35,62,0.98)) padding-box, linear-gradient(90deg, rgba(147,197,253,0.46), rgba(59,130,246,0.2) 18%, rgba(191,219,254,0.34) 50%, rgba(59,130,246,0.2) 82%, rgba(147,197,253,0.46)) border-box",
+    "linear-gradient(180deg, rgba(28,35,62,0.98), rgba(28,35,62,0.98)) padding-box, linear-gradient(90deg, rgba(147,197,253,0.68), rgba(59,130,246,0.34) 18%, rgba(226,239,255,0.58) 50%, rgba(59,130,246,0.34) 82%, rgba(147,197,253,0.68)) border-box",
 }
 
 function normaliseBookieKey(value: string): string {

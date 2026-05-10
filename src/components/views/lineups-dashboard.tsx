@@ -955,7 +955,7 @@ function TeamLogoMark({ team, teamLogos }: { team: string; teamLogos: Record<str
 
 function RecentFormPills({ team, results, compact = false }: { team: string; results: LineupRecentResult[]; compact?: boolean }) {
   return (
-    <div className={`flex items-center justify-center gap-1.5 ${compact ? "min-h-0 flex-1 flex-col justify-evenly sm:flex-row" : ""}`}>
+    <div className={`flex items-center justify-center gap-1.5 ${compact ? "min-h-0 flex-1 flex-col justify-evenly" : ""}`}>
       {results.length > 0 ? (
         results.map((result, index) => {
           const outcome = resultOutcomeForTeam(result, team)

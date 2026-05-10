@@ -912,7 +912,7 @@ export function BettingDashboard({
   const [targetProfitPct, setTargetProfitPct] = useState(2);
   const [kellyScale, setKellyScale] = useState(0.5);
   const [maxEdge, setMaxEdge] = useState(0.06);
-  const [selectedMarket, setSelectedMarket] = useState<BettingMarket>("Tryscorer");
+  const [selectedMarket, setSelectedMarket] = useState<BettingMarket>("H2H");
   const [stakeOverrides, setStakeOverrides] = useState<Record<string, number>>({});
   const [oddsOverrides, setOddsOverrides] = useState<Record<string, number>>({});
   const [trackerOpen, setTrackerOpen] = useState(false);

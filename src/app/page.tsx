@@ -13,8 +13,8 @@ import {
 } from "@/components/views/player-comparison"
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
-import type { Article } from "@/lib/articles"
-import type { Draw2026Data } from "@/lib/draw/types"
+import { fetchApprovedArticles } from "@/lib/articles"
+import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   applyFantasyBreakEvenOffset,
   applyFantasyProjectionOffset,
@@ -26,16 +26,19 @@ import {
   type FantasyCoachPlayerSnapshot,
   type FantasyPlayerSnapshot,
 } from "@/lib/fantasy/nrl"
-import type {
-  LineupMatch,
-  LineupPlayer,
-  LineupTeam,
-  LineupTryscorerOdds,
+import {
+  fetchUpcomingLineups,
+  fetchUpcomingTryscorerOdds,
+  type LineupPlayer,
+  type LineupTeam,
+  type LineupTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
 import type { PlayerStat } from "@/lib/data/types"
-import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   fetchAvailableYears,
+  fetchBettingOddsSnapshot,
+  fetchPlayerImages,
+  fetchTeamLogos,
 } from "@/lib/supabase/queries"
 
 export const revalidate = 120
@@ -948,24 +951,31 @@ export default async function Home() {
     fantasyPlayers,
     fantasyCoachPlayers,
     availableYears,
+    bettingSnapshot,
+    playerImages,
+    approvedArticles,
+    teamLogos,
+    draw2026Data,
+    lineups,
+    tryscorerOdds,
   ] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchAvailableYears(),
+    fetchBettingOddsSnapshot().catch((): BettingOddsSnapshot => ({
+      h2h: [],
+      line: [],
+      total: [],
+      tryscorer: [],
+      generatedAt: "",
+    })),
+    fetchPlayerImages().catch(() => []),
+    fetchApprovedArticles().catch(() => []),
+    fetchTeamLogos().catch(() => ({})),
+    loadDraw2026Data().catch(() => null),
+    fetchUpcomingLineups({ includeFantasyProjections: true }).catch(() => []),
+    fetchUpcomingTryscorerOdds().catch(() => ({})),
   ])
-  const bettingSnapshot: BettingOddsSnapshot = {
-    h2h: [],
-    line: [],
-    total: [],
-    tryscorer: [],
-    generatedAt: "",
-  }
-  const playerImages: PlayerImageRecord[] = []
-  const approvedArticles: Article[] = []
-  const teamLogos: Record<string, string> = {}
-  const draw2026Data: Draw2026Data | null = null
-  const lineups: LineupMatch[] = []
-  const tryscorerOdds: Record<string, LineupTryscorerOdds> = {}
 
   const previewYears = [...availableYears].map(String).sort((a, b) => Number(b) - Number(a)).slice(0, 3)
   const plotYears = previewYears.filter((year) => year !== "2024")
@@ -1120,8 +1130,10 @@ export default async function Home() {
     <div className="relative overflow-hidden text-nrl-text">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 pt-6 sm:px-6 lg:px-8">
-        <AppHeader />
+      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 sm:px-6 lg:px-8">
+        <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+          <AppHeader sticky showBillingNav showStatsTabs />
+        </div>
 
         <LandingHeroScrollShell>
           <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
@@ -1815,8 +1827,8 @@ export default async function Home() {
               ) : (
                 <div className="grid min-h-[420px] place-items-center rounded-2xl border border-dashed border-white/10 bg-[#1b2140] p-8 text-center">
                   <div>
-                    <div className="text-lg font-bold text-white">Team lists are loading</div>
-                    <div className="mt-2 text-sm text-white/55">The Lineups page will populate after upcoming NRL teams are available.</div>
+                    <div className="text-lg font-bold text-white">No upcoming team lists yet</div>
+                    <div className="mt-2 text-sm text-white/55">The Lineups preview will populate when upcoming NRL teams are available.</div>
                   </div>
                 </div>
               )}
@@ -2005,7 +2017,7 @@ export default async function Home() {
                       </div>
                     )) : (
                       <div className="rounded-2xl border border-dashed border-white/10 bg-[#1b2140] p-8 text-center text-sm text-white/55">
-                        Live odds are loading.
+                        No current odds are available.
                       </div>
                     )}
                   </div>

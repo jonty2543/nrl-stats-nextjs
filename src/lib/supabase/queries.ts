@@ -509,12 +509,19 @@ function normalCdf(z: number): number {
 }
 
 interface PredictionModelRow extends Record<string, unknown> {
+  url?: unknown;
   match_date?: unknown;
   match?: unknown;
   team?: unknown;
   win_prob?: unknown;
   pred_margin?: unknown;
+  pred_margin_pre_manual?: unknown;
   updated_at?: unknown;
+}
+
+interface MarginOverrideRow extends Record<string, unknown> {
+  url?: unknown;
+  margin_override_points?: unknown;
 }
 
 interface PredictionLookupEntry {
@@ -526,6 +533,13 @@ interface PredictionLookupEntry {
 interface PredictionLookupMaps {
   byDateTeam: Map<string, PredictionLookupEntry>;
   byDateMatchTeam: Map<string, PredictionLookupEntry>;
+}
+
+function predictionHomeTeam(raw: PredictionModelRow): string | null {
+  const match = typeof raw.match === "string" ? raw.match : "";
+  const parts = match.split(/\s+v(?:s)?\.?\s+/i);
+  if (parts.length !== 2) return null;
+  return teamJoinKey(parts[0]);
 }
 
 function toUpdatedAtMs(value: unknown): number {
@@ -546,18 +560,49 @@ function choosePredictionEntry(
   return nextCompleteness >= existingCompleteness ? next : existing;
 }
 
-function buildPredictionLookup(rows: PredictionModelRow[]): PredictionLookupMaps {
+function buildOverrideLookup(rows: MarginOverrideRow[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const raw of rows) {
+    const url = typeof raw.url === "string" ? raw.url.trim() : "";
+    if (!url) continue;
+    const adjustment = toNullableFinite(raw.margin_override_points);
+    out.set(url, adjustment ?? 0);
+  }
+  return out;
+}
+
+function effectivePredictionMargin(raw: PredictionModelRow, overrides: Map<string, number>): number | null {
+  const predMargin = toNullableFinite(raw.pred_margin);
+  const preManual = toNullableFinite(raw.pred_margin_pre_manual);
+  const url = typeof raw.url === "string" ? raw.url.trim() : "";
+  const override = url ? overrides.get(url) : undefined;
+
+  if (preManual == null || override == null || Math.abs(override) < 1e-9) {
+    return predMargin;
+  }
+
+  const teamKey = teamJoinKey(raw.team);
+  const homeKey = predictionHomeTeam(raw);
+  if (!teamKey || !homeKey) return predMargin;
+
+  const signedOverride = teamKey === homeKey ? override : -override;
+  return preManual + signedOverride;
+}
+
+function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginOverrideRow[] = []): PredictionLookupMaps {
   const byDateTeam = new Map<string, PredictionLookupEntry>();
   const byDateMatchTeam = new Map<string, PredictionLookupEntry>();
+  const overrides = buildOverrideLookup(overrideRows);
 
   for (const raw of rows) {
     const date = toIsoDate(raw.match_date);
     const teamKey = teamJoinKey(raw.team);
     if (!date || !teamKey) continue;
 
+    const predMargin = effectivePredictionMargin(raw, overrides);
     const entry: PredictionLookupEntry = {
-      winProb: toNullableProbability(raw.win_prob),
-      predMargin: toNullableFinite(raw.pred_margin),
+      winProb: predMargin == null ? toNullableProbability(raw.win_prob) : normalCdf(predMargin / LINE_MARGIN_SIGMA),
+      predMargin,
       updatedAtMs: toUpdatedAtMs(raw.updated_at),
     };
 
@@ -1373,17 +1418,27 @@ async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Pro
   const supabase = createServerSupabaseClient("nrl");
   const allRows: PredictionModelRow[] = [];
   let start = 0;
+  let select = "url,match_date,match,team,win_prob,pred_margin,pred_margin_pre_manual,updated_at";
 
   while (true) {
     const end = start + PAGE_SIZE - 1;
     const { data, error } = await supabase
       .from("nrl_predictions")
-      .select("match_date,match,team,win_prob,pred_margin,updated_at")
+      .select(select)
       .gte("match_date", dateRange.minDate)
       .lte("match_date", dateRange.maxDate)
       .range(start, end);
 
-    if (error) throw new Error(`Supabase fetch nrl.nrl_predictions: ${error.message}`);
+    if (error) {
+      const message = error.message.toLowerCase();
+      if (select.includes("pred_margin_pre_manual") && (message.includes("column") || message.includes("schema cache"))) {
+        select = "url,match_date,match,team,win_prob,pred_margin,updated_at";
+        start = 0;
+        allRows.length = 0;
+        continue;
+      }
+      throw new Error(`Supabase fetch nrl.nrl_predictions: ${error.message}`);
+    }
     const pageRows = (data ?? []) as unknown as PredictionModelRow[];
     if (pageRows.length === 0) break;
     allRows.push(...pageRows);
@@ -1391,6 +1446,36 @@ async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Pro
     start += PAGE_SIZE;
   }
 
+  return allRows;
+}
+
+async function fetchMarginOverrideRowsFromSupabase(rows: PredictionModelRow[]): Promise<MarginOverrideRow[]> {
+  const urls = Array.from(
+    new Set(
+      rows
+        .map((row) => (typeof row.url === "string" ? row.url.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+  if (urls.length === 0) return [];
+
+  const supabase = createServerSupabaseClient("nrl");
+  const allRows: MarginOverrideRow[] = [];
+  for (let start = 0; start < urls.length; start += PAGE_SIZE) {
+    const chunk = urls.slice(start, start + PAGE_SIZE);
+    const { data, error } = await supabase
+      .from("result_margin_overrides")
+      .select("url,margin_override_points")
+      .in("url", chunk);
+    if (error) {
+      const message = error.message.toLowerCase();
+      if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+        return [];
+      }
+      throw new Error(`Supabase fetch nrl.result_margin_overrides: ${error.message}`);
+    }
+    allRows.push(...((data ?? []) as unknown as MarginOverrideRow[]));
+  }
   return allRows;
 }
 
@@ -1405,7 +1490,11 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
     console.warn("Unable to fetch betting prediction rows; rendering odds without model values.", error);
     return [];
   });
-  const predictionLookup = buildPredictionLookup(predictionRows);
+  const marginOverrideRows = await fetchMarginOverrideRowsFromSupabase(predictionRows).catch((error) => {
+    console.warn("Unable to fetch betting margin overrides; using saved prediction margins.", error);
+    return [];
+  });
+  const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
   const h2h = h2hRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
   const line = lineRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
 
@@ -1418,18 +1507,9 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
   };
 }
 
-const fetchBettingOddsSnapshotCached = unstable_cache(
-  async (): Promise<BettingOddsSnapshot> => fetchBettingOddsSnapshotFromSupabase(),
-  ["betting-odds-v3"],
-  { revalidate: 120 }
-);
-
 export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
   try {
-    if (process.env.NODE_ENV !== "production") {
-      return await fetchBettingOddsSnapshotFromSupabase();
-    }
-    return await fetchBettingOddsSnapshotCached();
+    return await fetchBettingOddsSnapshotFromSupabase();
   } catch (error) {
     console.warn("Unable to fetch betting odds snapshot; using empty odds lists.", error);
     return {

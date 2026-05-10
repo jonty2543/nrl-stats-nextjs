@@ -41,6 +41,18 @@ export interface LineupMatch {
   awayTeam: LineupTeam | null
   homeScore?: number | null
   awayScore?: number | null
+  recentHeadToHead?: LineupRecentResult[]
+  homeRecentResults?: LineupRecentResult[]
+  awayRecentResults?: LineupRecentResult[]
+}
+
+export interface LineupRecentResult {
+  matchDate: string
+  round: string | null
+  homeTeam: string
+  awayTeam: string
+  homeScore: number
+  awayScore: number
 }
 
 export interface LineupRoundOption {
@@ -338,6 +350,35 @@ function matchMergeKey(matchDate: string, homeTeam: string, awayTeam: string): s
   return [matchDate.slice(0, 10), canonicalTeamKey(homeTeam), canonicalTeamKey(awayTeam)].join("|")
 }
 
+function resultIncludesTeam(result: LineupRecentResult, team: string): boolean {
+  const teamKeys = new Set(teamAliases(team))
+  return teamKeys.has(canonicalTeamKey(result.homeTeam)) || teamKeys.has(canonicalTeamKey(result.awayTeam))
+}
+
+function resultIncludesMatchup(result: LineupRecentResult, homeTeam: string, awayTeam: string): boolean {
+  return resultIncludesTeam(result, homeTeam) && resultIncludesTeam(result, awayTeam)
+}
+
+function resultBeforeMatch(result: LineupRecentResult, matchDate: string): boolean {
+  const resultDate = result.matchDate.slice(0, 10)
+  const currentDate = matchDate.slice(0, 10)
+  return Boolean(resultDate && currentDate && resultDate < currentDate)
+}
+
+function addRecentResults(match: LineupMatch, results: LineupRecentResult[]): LineupMatch {
+  const homeTeam = match.homeTeam?.team ?? match.match.split(/\s+vs\s+/i)[0]?.trim()
+  const awayTeam = match.awayTeam?.team ?? match.match.split(/\s+vs\s+/i)[1]?.trim()
+  if (!homeTeam || !awayTeam) return match
+
+  const previousResults = results.filter((result) => resultBeforeMatch(result, match.matchDate))
+  return {
+    ...match,
+    recentHeadToHead: previousResults.filter((result) => resultIncludesMatchup(result, homeTeam, awayTeam)).slice(0, 5),
+    homeRecentResults: previousResults.filter((result) => resultIncludesTeam(result, homeTeam)).slice(0, 5),
+    awayRecentResults: previousResults.filter((result) => resultIncludesTeam(result, awayTeam)).slice(0, 5),
+  }
+}
+
 function getBrisbaneWeekdayIndex(): number {
   const weekday = new Intl.DateTimeFormat("en-US", {
     timeZone: "Australia/Brisbane",
@@ -630,6 +671,45 @@ function teamStatsFromMatchRow(row: RawRow, fantasyPoints: number | null): Lineu
   }
 }
 
+function recentResultFromRow(row: RawRow): LineupRecentResult | null {
+  const matchDate = text(row.match_date)
+  const homeTeam = text(row.team)
+  const awayTeam = text(row.opponent_team)
+  const homeScore = numberOrNull(row.score)
+  const awayScore = numberOrNull(row.opponent_score)
+  if (!matchDate || !homeTeam || !awayTeam || homeScore == null || awayScore == null) return null
+  return {
+    matchDate,
+    round: nullableText(row.round),
+    homeTeam,
+    awayTeam,
+    homeScore,
+    awayScore,
+  }
+}
+
+async function fetchRecentMatchResults(year: number): Promise<LineupRecentResult[]> {
+  try {
+    const supabase = createServerSupabaseClient("nrl")
+    const { data, error } = await supabase
+      .from("matches")
+      .select("match_date,round,team,opponent_team,score,opponent_score,is_home")
+      .eq("is_home", true)
+      .lt("match_date", `${year + 1}-01-01`)
+      .not("score", "is", null)
+      .not("opponent_score", "is", null)
+      .order("match_date", { ascending: false })
+      .limit(2000)
+
+    if (error || !data) return []
+    return (data as unknown as RawRow[])
+      .map(recentResultFromRow)
+      .filter((result): result is LineupRecentResult => Boolean(result))
+  } catch {
+    return []
+  }
+}
+
 interface HistoricalRoundPlayerStats {
   fantasyTotals: Map<string, number>
   playerStatsByMatchKey: Map<string, Record<string, LineupLivePlayerStats>>
@@ -773,7 +853,7 @@ export async function fetchLineupsForRound({
 }): Promise<LineupRoundMatchesResult> {
   try {
     const supabase = createServerSupabaseClient("nrl")
-    const [{ data, error }, lineupRows, overrides, historicalPlayerStats] = await Promise.all([
+    const [{ data, error }, lineupRows, overrides, historicalPlayerStats, recentResults] = await Promise.all([
       supabase
         .from("matches")
         .select(
@@ -823,6 +903,7 @@ export async function fetchLineupsForRound({
         fantasyTotals: new Map<string, number>(),
         playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
       })),
+      fetchRecentMatchResults(year).catch(() => []),
     ])
 
     if (error) throw new Error(`Supabase fetch nrl.matches round ${round}: ${error.message}`)
@@ -907,7 +988,7 @@ export async function fetchLineupsForRound({
     }
 
     matches.sort((a, b) => a.matchDate.localeCompare(b.matchDate) || (a.kickoffUtc ?? "").localeCompare(b.kickoffUtc ?? ""))
-    return { matches, matchStats: statsById }
+    return { matches: matches.map((match) => addRecentResults(match, recentResults)), matchStats: statsById }
   } catch (error) {
     console.warn(`Unable to fetch lineups for ${round}; using empty result.`, error)
     return { matches: [], matchStats: {} }

@@ -11,6 +11,7 @@ import type {
   LineupMatch,
   LineupMatchStats,
   LineupPlayer,
+  LineupRecentResult,
   LineupRoundOption,
   LineupSportsbetOdds,
   LineupTeam,
@@ -526,14 +527,19 @@ function scoringEventMatchesTeam(event: LineupLiveMatch["scoringEvents"][number]
   return new Set([team.team, team.teamName].flatMap(teamAliases)).has(normaliseKey(event.team))
 }
 
-function resolveLogo(team: LineupTeam | null, teamLogos: Record<string, string>): string | null {
-  if (!team) return null
-  const candidates = [team.team, team.teamName, team.teamName.replace(/^North Queensland /, ""), team.teamName.replace(/^Gold Coast /, "")]
+function resolveTeamLogo(teamName: string | null | undefined, teamLogos: Record<string, string>): string | null {
+  if (!teamName) return null
+  const candidates = [teamName, teamName.replace(/^North Queensland /, ""), teamName.replace(/^Gold Coast /, "")]
   for (const candidate of candidates) {
     const logo = teamLogos[normaliseKey(candidate)]
     if (logo) return logo
   }
   return null
+}
+
+function resolveLogo(team: LineupTeam | null, teamLogos: Record<string, string>): string | null {
+  if (!team) return null
+  return resolveTeamLogo(team.team, teamLogos) ?? resolveTeamLogo(team.teamName, teamLogos)
 }
 
 function sportsbetOddsForTeam(
@@ -912,22 +918,145 @@ function MatchStatCompare({
   )
 }
 
+function formatResultDate(value: string): string {
+  const date = new Date(`${value.slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10)
+  return date.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit" })
+}
+
+function resultSideForTeam(result: LineupRecentResult, team: string): "home" | "away" | null {
+  const keys = new Set(teamAliases(team))
+  if (keys.has(normaliseKey(result.homeTeam))) return "home"
+  if (keys.has(normaliseKey(result.awayTeam))) return "away"
+  return null
+}
+
+function resultOutcomeForTeam(result: LineupRecentResult, team: string): "W" | "L" | "D" {
+  const side = resultSideForTeam(result, team)
+  if (!side) return "D"
+  const scored = side === "home" ? result.homeScore : result.awayScore
+  const conceded = side === "home" ? result.awayScore : result.homeScore
+  if (scored > conceded) return "W"
+  if (scored < conceded) return "L"
+  return "D"
+}
+
+function TeamLogoMark({ team, teamLogos }: { team: string; teamLogos: Record<string, string> }) {
+  const logo = resolveTeamLogo(team, teamLogos)
+  return logo ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={logo} alt="" className="h-6 w-6 object-contain" loading="lazy" />
+  ) : (
+    <span className="grid h-6 w-6 place-items-center rounded bg-white/8 text-[9px] font-black text-nrl-muted">
+      {team.slice(0, 1)}
+    </span>
+  )
+}
+
+function RecentFormPills({ team, results }: { team: string; results: LineupRecentResult[] }) {
+  return (
+    <div className="flex items-center justify-center gap-1.5">
+      {results.length > 0 ? (
+        results.map((result) => {
+          const outcome = resultOutcomeForTeam(result, team)
+          const className =
+            outcome === "W"
+              ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-100"
+              : outcome === "L"
+                ? "border-red-300/30 bg-red-400/15 text-red-100"
+                : "border-white/15 bg-white/8 text-nrl-muted"
+          return (
+            <span key={`${team}-${result.matchDate}-${result.homeTeam}-${result.awayTeam}`} className={`rounded border px-2 py-1 text-[10px] font-black ${className}`}>
+              {outcome}
+            </span>
+          )
+        })
+      ) : (
+        <span className="text-xs font-semibold text-nrl-muted">No recent form</span>
+      )}
+    </div>
+  )
+}
+
+function HeadToHeadResults({ results, teamLogos }: { results: LineupRecentResult[]; teamLogos: Record<string, string> }) {
+  return (
+    <div className="rounded-lg border border-white/8 bg-nrl-panel-2/55 p-3">
+      <div className="mb-2 text-center text-[10px] font-black uppercase tracking-[0.18em] text-nrl-muted">Last 5 head to head</div>
+      <div className="space-y-2">
+        {results.length > 0 ? (
+          results.map((result) => (
+            <div
+              key={`${result.matchDate}-${result.homeTeam}-${result.awayTeam}`}
+              className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-md border border-white/8 bg-nrl-panel/60 px-2 py-2"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <TeamLogoMark team={result.homeTeam} teamLogos={teamLogos} />
+                <span className="truncate text-xs font-bold text-nrl-text">{result.homeTeam}</span>
+              </div>
+              <div className="text-center">
+                <div className="text-sm font-black tabular-nums text-nrl-text">{result.homeScore} - {result.awayScore}</div>
+                <div className="text-[10px] font-semibold text-nrl-muted">{formatResultDate(result.matchDate)}</div>
+              </div>
+              <div className="flex min-w-0 items-center justify-end gap-2">
+                <span className="truncate text-right text-xs font-bold text-nrl-text">{result.awayTeam}</span>
+                <TeamLogoMark team={result.awayTeam} teamLogos={teamLogos} />
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="rounded-md border border-white/8 bg-nrl-panel/60 px-3 py-4 text-center text-sm text-nrl-muted">
+            No recent head-to-head results.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PregameMatchStatsPreview({ match, teamLogos }: { match: LineupMatch; teamLogos: Record<string, string> }) {
+  const homeTeam = match.homeTeam?.team ?? match.match.split(/\s+vs\s+/i)[0]?.trim() ?? "Home"
+  const awayTeam = match.awayTeam?.team ?? match.match.split(/\s+vs\s+/i)[1]?.trim() ?? "Away"
+  const homeResults = match.homeRecentResults ?? []
+  const awayResults = match.awayRecentResults ?? []
+  const headToHead = match.recentHeadToHead ?? []
+
+  return (
+    <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.6fr)_minmax(0,0.8fr)]">
+        <div className="rounded-lg border border-white/8 bg-nrl-panel-2/55 p-3 text-center">
+          <div className="mb-2 truncate text-xs font-black text-nrl-text">{homeTeam}</div>
+          <RecentFormPills team={homeTeam} results={homeResults} />
+        </div>
+        <HeadToHeadResults results={headToHead} teamLogos={teamLogos} />
+        <div className="rounded-lg border border-white/8 bg-nrl-panel-2/55 p-3 text-center">
+          <div className="mb-2 truncate text-xs font-black text-nrl-text">{awayTeam}</div>
+          <RecentFormPills team={awayTeam} results={awayResults} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MatchStatsPanel({
   match,
   liveMatch,
   stats,
+  teamLogos,
 }: {
   match: LineupMatch
   liveMatch: LineupLiveMatch | null
   stats: LineupMatchStats | null
+  teamLogos: Record<string, string>
 }) {
   const score = matchScore(match, liveMatch)
   const baseHome = stats?.home
   const baseAway = stats?.away
   const home = sumLiveStats(liveMatch, match.homeTeam, baseHome)
   const away = sumLiveStats(liveMatch, match.awayTeam, baseAway)
+  const isPregame = !hasMatchStarted(liveMatch) && match.homeScore == null && match.awayScore == null
 
   if (!home || !away) {
+    if (isPregame) return <PregameMatchStatsPreview match={match} teamLogos={teamLogos} />
     return (
       <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
         No match stats available for this game yet.
@@ -1877,7 +2006,7 @@ function LineupCard({
       className="group rounded-lg border border-transparent shadow-[0_22px_52px_rgba(0,0,0,0.36)]"
       style={BLUE_GRADIENT_BORDER_STYLE}
     >
-      <summary className="relative cursor-pointer list-none px-3 py-4 marker:hidden sm:px-5 sm:py-5 [&::-webkit-details-marker]:hidden">
+      <summary className="relative cursor-pointer list-none px-3 py-3 marker:hidden sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
         <div className="mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.5rem,auto)_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_minmax(0,1fr)] sm:gap-6">
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={match.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
@@ -1921,7 +2050,7 @@ function LineupCard({
         </div>
 
         {detailView === "stats" ? (
-          <MatchStatsPanel match={match} liveMatch={displayLiveMatch} stats={matchStats} />
+          <MatchStatsPanel match={match} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />
         ) : hasLineupData ? (
           <>
             {showPregameContent ? <MatchupInsightsPanel insights={insights} canAccessFullInsights={canAccessFantasyProjections} /> : null}

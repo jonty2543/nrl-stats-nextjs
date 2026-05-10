@@ -165,7 +165,7 @@ interface MobileBetSlip {
   modelProb: number | null;
 }
 
-const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Total"];
+const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const IMPLIED_LINE_SIGMA = 16.85;

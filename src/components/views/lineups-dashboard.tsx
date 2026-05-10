@@ -2025,7 +2025,7 @@ function LineupCard({
           </div>
         </div>
         <span className="absolute bottom-0 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 translate-y-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text">
-          <span className="sr-only">Toggle lineups</span>
+          <span className="sr-only">Toggle match details</span>
           <svg
             viewBox="0 0 16 16"
             className="h-4 w-4 transition-transform group-open:rotate-180"
@@ -2040,22 +2040,24 @@ function LineupCard({
       <div className="relative px-2 pb-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,rgba(191,219,254,0.5),rgba(59,130,246,0.18),transparent)] sm:px-3">
         <div className="pt-5" />
         <LiveTryScorersStrip match={match} liveMatch={displayLiveMatch} />
-        <div className="mb-3 flex justify-center">
-          <div className="inline-flex rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
-            {availableDetailViews.map((view) => (
-              <button
-                key={view}
-                type="button"
-                onClick={() => setDetailView(view)}
-                className={`rounded-md px-3 py-1.5 transition-colors ${
-                  detailView === view ? "bg-nrl-accent text-nrl-bg" : "hover:text-nrl-text"
-                }`}
-              >
-                {view === "lineup" ? "Lineup" : "Match stats"}
-              </button>
-            ))}
+        {availableDetailViews.length > 1 ? (
+          <div className="mb-3 flex justify-center">
+            <div className="inline-flex rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
+              {availableDetailViews.map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => setDetailView(view)}
+                  className={`rounded-md px-3 py-1.5 transition-colors ${
+                    detailView === view ? "bg-nrl-accent text-nrl-bg" : "hover:text-nrl-text"
+                  }`}
+                >
+                  {view === "lineup" ? "Lineup" : "Match stats"}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {detailView === "stats" ? (
           <MatchStatsPanel match={match} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />

@@ -1,4 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/client"
+import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
+import type { Draw2026Row } from "@/lib/draw/types"
 
 export type LineupSide = "left" | "right" | "middle" | "spine" | "bench" | "unknown"
 
@@ -379,6 +381,54 @@ function addRecentResults(match: LineupMatch, results: LineupRecentResult[]): Li
   }
 }
 
+function drawRowsForRound(rows: Draw2026Row[], round: string): Draw2026Row[] {
+  const roundNumber = roundSort(round)
+  if (!roundNumber) return []
+  return rows.filter((row) => row.round === roundNumber)
+}
+
+function drawMatchId(row: Draw2026Row): string {
+  return `draw-2026-${row.round}-${canonicalTeamKey(row.home)}-${canonicalTeamKey(row.away)}`
+}
+
+function matchFromDrawRow(row: Draw2026Row): LineupMatch {
+  const matchDate = row.kickoff.slice(0, 10)
+  return {
+    matchId: drawMatchId(row),
+    matchDate,
+    kickoffUtc: row.kickoff || null,
+    round: `Round ${row.round}`,
+    venue: null,
+    match: `${row.home} vs ${row.away}`,
+    matchUrl: row.matchCentreUrl || null,
+    homeTeam: emptyTeam(row.home, "Home"),
+    awayTeam: emptyTeam(row.away, "Away"),
+    homeScore: null,
+    awayScore: null,
+  }
+}
+
+function addRoundOption(options: Map<string, LineupRoundOption>, round: string, roundNumber: number, matchDate: string) {
+  if (!round || !matchDate) return
+  const existing = options.get(round)
+  options.set(
+    round,
+    existing
+      ? {
+          ...existing,
+          startDate: matchDate < existing.startDate ? matchDate : existing.startDate,
+          endDate: matchDate > existing.endDate ? matchDate : existing.endDate,
+        }
+      : {
+          value: round,
+          label: round,
+          roundNumber,
+          startDate: matchDate,
+          endDate: matchDate,
+        }
+  )
+}
+
 function getBrisbaneWeekdayIndex(): number {
   const weekday = new Intl.DateTimeFormat("en-US", {
     timeZone: "Australia/Brisbane",
@@ -611,12 +661,15 @@ export async function fetchUpcomingLineups(options: FetchUpcomingLineupsOptions 
 export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane()): Promise<LineupRoundOption[]> {
   try {
     const supabase = createServerSupabaseClient("nrl")
-    const { data, error } = await supabase
-      .from("matches")
-      .select("round,round_number,match_date")
-      .gte("match_date", `${year}-01-01`)
-      .lt("match_date", `${year + 1}-01-01`)
-      .order("match_date", { ascending: true })
+    const [{ data, error }, draw2026Data] = await Promise.all([
+      supabase
+        .from("matches")
+        .select("round,round_number,match_date")
+        .gte("match_date", `${year}-01-01`)
+        .lt("match_date", `${year + 1}-01-01`)
+        .order("match_date", { ascending: true }),
+      year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} }),
+    ])
 
     if (error || !data) return []
 
@@ -626,23 +679,11 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane())
       const matchDate = text(row.match_date).slice(0, 10)
       if (!round || !matchDate) continue
       const roundNumber = numberOrNull(row.round_number) ?? roundSort(round)
-      const existing = options.get(round)
-      options.set(
-        round,
-        existing
-          ? {
-              ...existing,
-              startDate: matchDate < existing.startDate ? matchDate : existing.startDate,
-              endDate: matchDate > existing.endDate ? matchDate : existing.endDate,
-            }
-          : {
-              value: round,
-              label: round,
-              roundNumber,
-              startDate: matchDate,
-              endDate: matchDate,
-            }
-      )
+      addRoundOption(options, round, roundNumber, matchDate)
+    }
+
+    for (const row of draw2026Data.rows) {
+      addRoundOption(options, `Round ${row.round}`, row.round, row.kickoff.slice(0, 10))
     }
 
     return [...options.values()].sort((a, b) => a.roundNumber - b.roundNumber || a.label.localeCompare(b.label))
@@ -872,7 +913,7 @@ export async function fetchLineupsForRound({
 }): Promise<LineupRoundMatchesResult> {
   try {
     const supabase = createServerSupabaseClient("nrl")
-    const [{ data, error }, lineupRows, overrides, historicalPlayerStats, recentResults] = await Promise.all([
+    const [{ data, error }, lineupRows, overrides, historicalPlayerStats, recentResults, draw2026Data] = await Promise.all([
       supabase
         .from("matches")
         .select(
@@ -923,6 +964,7 @@ export async function fetchLineupsForRound({
         playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
       })),
       fetchRecentMatchResults(year).catch(() => []),
+      year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} }),
     ])
 
     if (error) throw new Error(`Supabase fetch nrl.matches round ${round}: ${error.message}`)
@@ -1004,6 +1046,14 @@ export async function fetchLineupsForRound({
       if (!home || !away) continue
       const key = matchMergeKey(lineupMatch.matchDate, home, away)
       if (!seenKeys.has(key)) matches.push(lineupMatch)
+    }
+
+    for (const drawRow of drawRowsForRound(draw2026Data.rows, round)) {
+      const key = matchMergeKey(drawRow.kickoff, drawRow.home, drawRow.away)
+      if (!seenKeys.has(key)) {
+        matches.push(matchFromDrawRow(drawRow))
+        seenKeys.add(key)
+      }
     }
 
     matches.sort((a, b) => a.matchDate.localeCompare(b.matchDate) || (a.kickoffUtc ?? "").localeCompare(b.kickoffUtc ?? ""))

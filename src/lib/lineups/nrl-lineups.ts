@@ -673,11 +673,16 @@ function teamStatsFromMatchRow(row: RawRow, fantasyPoints: number | null): Lineu
 
 function recentResultFromRow(row: RawRow): LineupRecentResult | null {
   const matchDate = text(row.match_date)
-  const homeTeam = text(row.team)
-  const awayTeam = text(row.opponent_team)
-  const homeScore = numberOrNull(row.score)
-  const awayScore = numberOrNull(row.opponent_score)
-  if (!matchDate || !homeTeam || !awayTeam || homeScore == null || awayScore == null) return null
+  const team = text(row.team)
+  const opponentTeam = text(row.opponent_team)
+  const score = numberOrNull(row.score)
+  const opponentScore = numberOrNull(row.opponent_score)
+  if (!matchDate || !team || !opponentTeam || score == null || opponentScore == null) return null
+  const isHome = booleanValue(row.is_home)
+  const homeTeam = isHome ? team : opponentTeam
+  const awayTeam = isHome ? opponentTeam : team
+  const homeScore = isHome ? score : opponentScore
+  const awayScore = isHome ? opponentScore : score
   return {
     matchDate,
     round: nullableText(row.round),
@@ -688,23 +693,37 @@ function recentResultFromRow(row: RawRow): LineupRecentResult | null {
   }
 }
 
+function recentResultKey(result: LineupRecentResult): string {
+  const teams = [canonicalTeamKey(result.homeTeam), canonicalTeamKey(result.awayTeam)].sort()
+  return [result.matchDate.slice(0, 10), ...teams].join("|")
+}
+
 async function fetchRecentMatchResults(year: number): Promise<LineupRecentResult[]> {
   try {
     const supabase = createServerSupabaseClient("nrl")
-    const { data, error } = await supabase
-      .from("matches")
-      .select("match_date,round,team,opponent_team,score,opponent_score,is_home")
-      .eq("is_home", true)
-      .lt("match_date", `${year + 1}-01-01`)
-      .not("score", "is", null)
-      .not("opponent_score", "is", null)
-      .order("match_date", { ascending: false })
-      .limit(2000)
+    const rows: RawRow[] = []
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from("matches")
+        .select("match_date,round,team,opponent_team,score,opponent_score,is_home")
+        .lt("match_date", `${year + 1}-01-01`)
+        .not("score", "is", null)
+        .not("opponent_score", "is", null)
+        .order("match_date", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1)
 
-    if (error || !data) return []
-    return (data as unknown as RawRow[])
-      .map(recentResultFromRow)
-      .filter((result): result is LineupRecentResult => Boolean(result))
+      if (error || !data) return []
+      rows.push(...((data as unknown as RawRow[]) ?? []))
+      if (data.length < PAGE_SIZE) break
+    }
+
+    const results = new Map<string, LineupRecentResult>()
+    for (const row of rows) {
+      const result = recentResultFromRow(row)
+      if (!result) continue
+      results.set(recentResultKey(result), result)
+    }
+    return [...results.values()]
   } catch {
     return []
   }

@@ -953,20 +953,30 @@ function TeamLogoMark({ team, teamLogos }: { team: string; teamLogos: Record<str
   )
 }
 
-function RecentFormPills({ team, results }: { team: string; results: LineupRecentResult[] }) {
+function RecentFormPills({ team, results, compact = false }: { team: string; results: LineupRecentResult[]; compact?: boolean }) {
   return (
-    <div className="flex items-center justify-center gap-1.5">
+    <div className={`flex items-center justify-center gap-1.5 ${compact ? "min-h-0 flex-1 flex-col justify-evenly sm:flex-row" : ""}`}>
       {results.length > 0 ? (
-        results.map((result) => {
+        results.map((result, index) => {
           const outcome = resultOutcomeForTeam(result, team)
           const className =
             outcome === "W"
-              ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-100"
+              ? "bg-emerald-500/15 text-emerald-300"
               : outcome === "L"
-                ? "border-red-300/30 bg-red-400/15 text-red-100"
-                : "border-white/15 bg-white/8 text-nrl-muted"
+                ? "bg-red-500/12 text-red-300"
+                : "bg-white/8 text-nrl-muted"
+          const latestClass = index === 0
+            ? outcome === "W"
+              ? "border-emerald-300"
+              : outcome === "L"
+                ? "border-red-300"
+                : "border-white/40"
+            : ""
           return (
-            <span key={`${team}-${result.matchDate}-${result.homeTeam}-${result.awayTeam}`} className={`rounded border px-2 py-1 text-[10px] font-black ${className}`}>
+            <span
+              key={`${team}-${result.matchDate}-${result.homeTeam}-${result.awayTeam}`}
+              className={`inline-flex h-5 min-w-7 items-center justify-center rounded-md px-2 text-[10px] font-semibold ${className} ${latestClass || "border border-transparent"}`}
+            >
               {outcome}
             </span>
           )
@@ -980,7 +990,7 @@ function RecentFormPills({ team, results }: { team: string; results: LineupRecen
 
 function HeadToHeadResults({ results, teamLogos }: { results: LineupRecentResult[]; teamLogos: Record<string, string> }) {
   return (
-    <div className="rounded-lg border border-white/8 bg-nrl-panel-2/55 p-3">
+    <div className="h-full rounded-lg border border-white/8 bg-nrl-panel-2/55 p-3">
       <div className="mb-2 text-center text-[10px] font-black uppercase tracking-[0.18em] text-nrl-muted">Last 5 head to head</div>
       <div className="space-y-2">
         {results.length > 0 ? (
@@ -989,16 +999,14 @@ function HeadToHeadResults({ results, teamLogos }: { results: LineupRecentResult
               key={`${result.matchDate}-${result.homeTeam}-${result.awayTeam}`}
               className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-md border border-white/8 bg-nrl-panel/60 px-2 py-2"
             >
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 items-center justify-center">
                 <TeamLogoMark team={result.homeTeam} teamLogos={teamLogos} />
-                <span className="truncate text-xs font-bold text-nrl-text">{result.homeTeam}</span>
               </div>
               <div className="text-center">
                 <div className="text-sm font-black tabular-nums text-nrl-text">{result.homeScore} - {result.awayScore}</div>
                 <div className="text-[10px] font-semibold text-nrl-muted">{formatResultDate(result.matchDate)}</div>
               </div>
-              <div className="flex min-w-0 items-center justify-end gap-2">
-                <span className="truncate text-right text-xs font-bold text-nrl-text">{result.awayTeam}</span>
+              <div className="flex min-w-0 items-center justify-center">
                 <TeamLogoMark team={result.awayTeam} teamLogos={teamLogos} />
               </div>
             </div>
@@ -1022,15 +1030,15 @@ function PregameMatchStatsPreview({ match, teamLogos }: { match: LineupMatch; te
 
   return (
     <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
-      <div className="grid gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.6fr)_minmax(0,0.8fr)]">
-        <div className="rounded-lg border border-white/8 bg-nrl-panel-2/55 p-3 text-center">
-          <div className="mb-2 truncate text-xs font-black text-nrl-text">{homeTeam}</div>
-          <RecentFormPills team={homeTeam} results={homeResults} />
+      <div className="grid grid-cols-[minmax(3.2rem,0.42fr)_minmax(0,1.7fr)_minmax(3.2rem,0.42fr)] gap-2 sm:gap-3">
+        <div className="flex h-full flex-col rounded-lg border border-white/8 bg-nrl-panel-2/55 p-2 text-center sm:p-3">
+          <div className="mb-2 truncate text-[10px] font-black text-nrl-text sm:text-xs">{homeTeam}</div>
+          <RecentFormPills team={homeTeam} results={homeResults} compact />
         </div>
         <HeadToHeadResults results={headToHead} teamLogos={teamLogos} />
-        <div className="rounded-lg border border-white/8 bg-nrl-panel-2/55 p-3 text-center">
-          <div className="mb-2 truncate text-xs font-black text-nrl-text">{awayTeam}</div>
-          <RecentFormPills team={awayTeam} results={awayResults} />
+        <div className="flex h-full flex-col rounded-lg border border-white/8 bg-nrl-panel-2/55 p-2 text-center sm:p-3">
+          <div className="mb-2 truncate text-[10px] font-black text-nrl-text sm:text-xs">{awayTeam}</div>
+          <RecentFormPills team={awayTeam} results={awayResults} compact />
         </div>
       </div>
     </div>
@@ -1405,10 +1413,10 @@ function slotPosition(
 
 function SportsbetOddsPill({ odds }: { odds: LineupSportsbetOdds }) {
   return (
-    <div className="mt-1.5 flex justify-center">
-      <span className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-nrl-panel/75 px-2 py-1 text-[11px] font-bold tabular-nums text-nrl-text sm:text-xs">
+    <div className="mt-0.5 flex justify-center">
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-nrl-panel/75 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-nrl-text sm:text-[11px]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={BOOKIE_LOGOS.Sportsbet} alt="Sportsbet" className="h-3 w-auto object-contain sm:h-3.5" loading="lazy" />
+        <img src={BOOKIE_LOGOS.Sportsbet} alt="Sportsbet" className="h-3 w-auto object-contain" loading="lazy" />
         <span>{odds.price.toFixed(2)}</span>
       </span>
     </div>
@@ -1429,7 +1437,7 @@ function TeamBadge({
   const fullName = team?.teamName ?? team?.team ?? "TBC"
 
   return (
-    <div className="flex min-h-[7.5rem] w-[6.5rem] min-w-0 max-w-full flex-col items-center justify-center gap-1.5 px-2 py-3 text-center sm:min-h-[8.5rem] sm:w-[7.5rem] sm:px-2.5 sm:py-3">
+    <div className="flex min-h-[7.5rem] w-[6.5rem] min-w-0 max-w-full flex-col items-center justify-center gap-1 px-2 py-1.5 text-center sm:min-h-[8.5rem] sm:w-[7.5rem] sm:px-2.5">
       {logo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={logo} alt="" className="h-16 w-16 object-contain sm:h-20 sm:w-20" loading="lazy" />

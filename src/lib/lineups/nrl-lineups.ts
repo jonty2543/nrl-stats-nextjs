@@ -293,6 +293,15 @@ function teamAliases(value: string | null | undefined): string[] {
   return [...aliases]
 }
 
+function canonicalTeamKey(value: string | null | undefined): string {
+  const key = normaliseKey(value)
+  if (!key) return ""
+  for (const group of TEAM_ALIAS_GROUPS) {
+    if (group.includes(key)) return group[0]
+  }
+  return key
+}
+
 function rowDateKey(value: unknown): string {
   const raw = text(value)
   return raw ? raw.slice(0, 10) : ""
@@ -326,7 +335,7 @@ function roundSort(value: string | null | undefined): number {
 }
 
 function matchMergeKey(matchDate: string, homeTeam: string, awayTeam: string): string {
-  return [matchDate.slice(0, 10), normaliseKey(homeTeam), normaliseKey(awayTeam)].join("|")
+  return [matchDate.slice(0, 10), canonicalTeamKey(homeTeam), canonicalTeamKey(awayTeam)].join("|")
 }
 
 function getBrisbaneWeekdayIndex(): number {

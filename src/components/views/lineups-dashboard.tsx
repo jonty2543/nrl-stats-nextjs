@@ -56,7 +56,9 @@ type AverageStatKey =
   | "Tries"
   | "Try Assists"
   | "All Run Metres"
+  | "Post Contact Metres"
   | "Tackles Made"
+  | "Tackle Efficiency"
   | "Line Breaks"
   | "Line Break Assists"
   | "Errors"
@@ -105,7 +107,9 @@ const DISPLAY_MODES: { key: DisplayMode; label: string; shortLabel: string }[] =
   { key: "Tries", label: "Try Scoring Avg", shortLabel: "Tries" },
   { key: "Try Assists", label: "Try Assists Avg", shortLabel: "TA" },
   { key: "All Run Metres", label: "Run Metres Avg", shortLabel: "RM" },
+  { key: "Post Contact Metres", label: "Post Contact Metres Avg", shortLabel: "PCM" },
   { key: "Tackles Made", label: "Tackles Avg", shortLabel: "TK" },
+  { key: "Tackle Efficiency", label: "Tackle Efficiency", shortLabel: "TK%" },
   { key: "Line Breaks", label: "Linebreaks Avg", shortLabel: "LB" },
   { key: "Line Break Assists", label: "Linebreak Assists Avg", shortLabel: "LBA" },
   { key: "Errors", label: "Errors Avg", shortLabel: "ERR" },
@@ -124,6 +128,7 @@ function displayModeShortLabel(mode: DisplayMode): string {
 }
 
 function statPerGameLabel(mode: AverageStatKey): string {
+  if (mode === "Tackle Efficiency") return ""
   return `${displayModeShortLabel(mode)}/g`
 }
 
@@ -404,6 +409,54 @@ function applyCompletedPlayerStats(players: LineupPlayer[], matchStats: LineupMa
   return [...adjustedPlayers, ...missingPlayers].sort((a, b) => (a.number ?? 99) - (b.number ?? 99))
 }
 
+function historicalPlayersFromStats(
+  matchStats: LineupMatchStats | null,
+  teamStats: LineupTeamMatchStats | null | undefined,
+  teamType: "Home" | "Away"
+): LineupPlayer[] {
+  if (!matchStats || !teamStats?.team) return []
+
+  const teamKeys = new Set(teamAliases(teamStats.team))
+  return Object.values(matchStats.playerStats)
+    .filter((stats) => stats.player && stats.team && teamKeys.has(normaliseKey(stats.team)))
+    .filter((stats) => (stats.minutesPlayed ?? 0) > 0)
+    .map((stats): LineupPlayer => ({
+      matchId: matchStats.matchId,
+      team: teamStats.team,
+      teamName: teamStats.team,
+      teamId: null,
+      teamType,
+      number: stats.number,
+      position: stats.position ?? "Interchange",
+      player: stats.player ?? "Unknown",
+      playerId: null,
+      isCaptain: false,
+      isOnField: true,
+      headImage: null,
+      bodyImage: null,
+      fantasyProjection: null,
+      side: historicalSideForNumber(stats.number),
+      sideSource: "unknown",
+    }))
+    .sort((a, b) => (a.number ?? 99) - (b.number ?? 99))
+}
+
+function historicalTeamFromStats(
+  matchStats: LineupMatchStats | null,
+  teamStats: LineupTeamMatchStats | null | undefined,
+  teamType: "Home" | "Away",
+  players: LineupPlayer[]
+): LineupTeam | null {
+  if (!matchStats || !teamStats?.team || players.length === 0) return null
+  return {
+    team: teamStats.team,
+    teamName: teamStats.team,
+    teamId: null,
+    teamType,
+    players,
+  }
+}
+
 function hasMatchStarted(liveMatch: LineupLiveMatch | null | undefined): boolean {
   const state = liveMatch?.state
   if (!state) return (liveMatch?.scoringEvents.length ?? 0) > 0
@@ -591,7 +644,8 @@ function displayName(player: LineupPlayer): string {
 
 function formatAverage(value: number | null | undefined, mode: AverageStatKey): string {
   if (value == null) return "-"
-  if (mode === "All Run Metres" || mode === "Receipts") return value.toFixed(0)
+  if (mode === "All Run Metres" || mode === "Post Contact Metres" || mode === "Receipts") return value.toFixed(0)
+  if (mode === "Tackle Efficiency") return `${value.toFixed(1)}%`
   return value.toFixed(1)
 }
 
@@ -640,9 +694,11 @@ function PlayerMetric({
     )
   }
 
+  const statLabel = statPerGameLabel(displayMode)
   return (
     <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>
-      {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)} {statPerGameLabel(displayMode)}
+      {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)}
+      {statLabel ? ` ${statLabel}` : ""}
     </div>
   )
 }
@@ -891,7 +947,7 @@ function MatchStatsPanel({
       <MatchStatCompare label="Possession" home={home.possessionPct} away={away.possessionPct} suffix="%" bar />
       <div className="grid gap-2 sm:grid-cols-2">
         <MatchStatCompare label="Fantasy" home={home.fantasyPoints} away={away.fantasyPoints} />
-        <MatchStatCompare label="Completion" home={home.completionRate} away={away.completionRate} suffix="%" bar />
+        <MatchStatCompare label="Completion" home={home.completionRate} away={away.completionRate} suffix="%" />
         <MatchStatCompare label="Run metres" home={home.allRunMetres} away={away.allRunMetres} />
         <MatchStatCompare label="Post contact" home={home.postContactMetres} away={away.postContactMetres} />
         <MatchStatCompare label="Line breaks" home={home.lineBreaks} away={away.lineBreaks} />
@@ -1778,10 +1834,16 @@ function LineupCard({
 }) {
   const historicalData = historicalLiveMatch(match, matchStats)
   const displayLiveMatch = isLiveDataVisible(liveMatch) ? liveMatch : historicalData
-  const homePlayers = applyCompletedPlayerStats(match.homeTeam?.players ?? [], matchStats, match.homeTeam)
-  const awayPlayers = applyCompletedPlayerStats(match.awayTeam?.players ?? [], matchStats, match.awayTeam)
-  const homeTeamForDisplay = match.homeTeam ? { ...match.homeTeam, players: homePlayers } : null
-  const awayTeamForDisplay = match.awayTeam ? { ...match.awayTeam, players: awayPlayers } : null
+  const completedHomePlayers = applyCompletedPlayerStats(match.homeTeam?.players ?? [], matchStats, match.homeTeam)
+  const completedAwayPlayers = applyCompletedPlayerStats(match.awayTeam?.players ?? [], matchStats, match.awayTeam)
+  const homePlayers =
+    completedHomePlayers.length > 0 ? completedHomePlayers : historicalPlayersFromStats(matchStats, matchStats?.home, "Home")
+  const awayPlayers =
+    completedAwayPlayers.length > 0 ? completedAwayPlayers : historicalPlayersFromStats(matchStats, matchStats?.away, "Away")
+  const homeTeamForDisplay =
+    match.homeTeam ? { ...match.homeTeam, players: homePlayers } : historicalTeamFromStats(matchStats, matchStats?.home, "Home", homePlayers)
+  const awayTeamForDisplay =
+    match.awayTeam ? { ...match.awayTeam, players: awayPlayers } : historicalTeamFromStats(matchStats, matchStats?.away, "Away", awayPlayers)
   const hasLineupData = homePlayers.length > 0 || awayPlayers.length > 0
   const [selectedPlayer, setSelectedPlayer] = useState<LineupPlayer | null>(null)
   const [detailView, setDetailView] = useState<LineupDetailView>(hasLineupData ? "lineup" : "stats")

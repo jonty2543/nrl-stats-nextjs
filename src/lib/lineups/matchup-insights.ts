@@ -15,7 +15,9 @@ export type LineupAverageStatKey =
   | "Tries"
   | "Try Assists"
   | "All Run Metres"
+  | "Post Contact Metres"
   | "Tackles Made"
+  | "Tackle Efficiency"
   | "Line Breaks"
   | "Line Break Assists"
   | "Errors"
@@ -249,15 +251,6 @@ function namedPlayers(team: LineupTeam | null): LineupPlayer[] {
   return team?.players.filter((player) => insightSlot(player)) ?? []
 }
 
-function squadPlayers(team: LineupTeam | null): LineupPlayer[] {
-  return team?.players.filter((player) => {
-    const position = player.position.toLowerCase()
-    if (position.includes("reserve") || position.includes("replacement")) return false
-    if (player.number != null) return player.number <= 17
-    return Boolean(insightSlot(player)) || position.includes("interchange")
-  }) ?? []
-}
-
 function teamLabel(team: LineupTeam | null): string {
   return team?.team || team?.teamName || "Team"
 }
@@ -341,7 +334,8 @@ function averageValue(playerAverages: PlayerAverages | undefined, player: Lineup
 }
 
 function formatStatValue(key: LineupAverageStatKey, value: number): string {
-  if (key === "All Run Metres" || key === "Receipts") return value.toFixed(0)
+  if (key === "All Run Metres" || key === "Post Contact Metres" || key === "Receipts") return value.toFixed(0)
+  if (key === "Tackle Efficiency") return `${value.toFixed(1)}%`
   return value.toFixed(1)
 }
 
@@ -459,29 +453,6 @@ function addStatAverageInsights(
       }
     }
   }
-}
-
-function addGameEnvironmentInsight(insights: CandidateInsight[], match: LineupMatch) {
-  const projections = [match.homeTeam, match.awayTeam]
-    .flatMap((team) => squadPlayers(team))
-    .map(projection)
-    .filter((value): value is number => value != null)
-
-  if (projections.length < 20) return
-  const average = projections.reduce((total, value) => total + value, 0) / projections.length
-  if (average < 39.5) return
-
-  addInsight(
-    insights,
-    {
-      category: "Fantasy",
-      severity: average >= 42 ? "high" : "medium",
-      title: "This game projects as a fantasy-friendly environment.",
-      description: `Named players average ${average.toFixed(1)} projected fantasy points.`,
-      confidence: average >= 42 ? 0.78 : 0.7,
-    },
-    Math.round(average)
-  )
 }
 
 function addPositionGroupInsight(insights: CandidateInsight[], match: LineupMatch) {
@@ -622,6 +593,38 @@ function addMissedTackleTargetInsight(
   )
 }
 
+function addAerialErrorTargetInsight(
+  insights: CandidateInsight[],
+  match: LineupMatch,
+  playerAverages?: PlayerAverages
+) {
+  if (!playerAverages) return
+
+  const candidates = [match.homeTeam, match.awayTeam]
+    .flatMap((team) => playersForSlots(team, ["LW", "RW"]).map((player) => ({ player, team })))
+    .map((entry) => ({ ...entry, errors: averageValue(playerAverages, entry.player, "Errors") }))
+    .filter((entry): entry is { player: LineupPlayer; team: LineupTeam | null; errors: number } => {
+      return entry.errors != null && entry.errors >= 2
+    })
+    .sort((a, b) => b.errors - a.errors)
+
+  const target = candidates[0]
+  if (!target) return
+
+  const attackingTeam = target.team === match.homeTeam ? match.awayTeam : match.homeTeam
+  addInsight(
+    insights,
+    {
+      category: "Stats",
+      severity: target.errors >= 2.5 ? "high" : "medium",
+      title: `${teamLabel(attackingTeam)} could target ${playerLabel(target.player)} aerially.`,
+      description: `${playerLabel(target.player)} on the wing averages ${target.errors.toFixed(1)} errors per game.`,
+      confidence: target.errors >= 2.5 ? 0.76 : 0.68,
+    },
+    Math.round(target.errors * 18)
+  )
+}
+
 function addSideTryscorerInsight(
   insights: CandidateInsight[],
   match: LineupMatch,
@@ -707,10 +710,10 @@ export function generateMatchupInsights({
 }: GenerateMatchupInsightsInput): MatchupInsight[] {
   const insights: CandidateInsight[] = []
 
-  addGameEnvironmentInsight(insights, match)
   addPositionGroupInsight(insights, match)
   addElevatedPlayerInsight(insights, match)
   addTeamNewsInsight(insights, match, casualtyWardOuts)
+  addAerialErrorTargetInsight(insights, match, playerAverages)
   addMissedTackleTargetInsight(insights, match, playerAverages)
   addSideTryscorerInsight(insights, match, tryscorerOdds)
   addTryscorerInsight(insights, match, tryscorerOdds)

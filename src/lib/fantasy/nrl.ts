@@ -183,6 +183,7 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
   const positionLabel = positionLabels.join("/") || "N/A"
 
   const priceHistory = extractPriceHistory(raw.stats?.prices)
+  const scoreHistory = extractScoreHistory(raw.stats?.scores)
   const cost = toInt(raw.cost)
   const latestPrice = getLatestPrice(cost, priceHistory)
   const be =
@@ -212,8 +213,8 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
     pricedAt: latestPrice !== null ? latestPrice / 12725 : null,
     isBye: toBool(raw.is_bye),
     locked: toBool(raw.locked),
-    priceHistory: {},
-    scoreHistory: {},
+    priceHistory,
+    scoreHistory,
   }
 }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
@@ -80,6 +80,7 @@ interface FantasyDashboardProps {
   availableYears: string[]
   defaultYears: string[]
   initialPlayerStats: PlayerStat[]
+  initialAllPlayerStats?: PlayerStat[]
   playerImages?: PlayerImageRecord[]
   teamLogos?: Record<string, string>
   preloadedPlayerAllYears?: boolean
@@ -1682,6 +1683,7 @@ export function FantasyDashboard({
   availableYears,
   defaultYears,
   initialPlayerStats,
+  initialAllPlayerStats = [],
   playerImages = [],
   teamLogos = {},
   preloadedPlayerAllYears = false,
@@ -1708,6 +1710,7 @@ export function FantasyDashboard({
   )
   const [selectedYears, setSelectedYears] = useState<string[]>(initialSelectedYears)
   const [allData, setAllData] = useState<PlayerStat[]>(initialPlayerStats)
+  const [allPlayersStatsData, setAllPlayersStatsData] = useState<PlayerStat[]>(initialAllPlayerStats)
   const [teammateLookupRows, setTeammateLookupRows] = useState<TeammateLookupRow[]>([])
   const [isLoadingStats, setIsLoadingStats] = useState(false)
   const [selectedFantasyName, setSelectedFantasyName] = useState(
@@ -1755,6 +1758,8 @@ export function FantasyDashboard({
   const [globalStatVsFantasyPan, setGlobalStatVsFantasyPan] = useState({ x: 0.5, y: 0.5 })
   const [globalStatVsFantasyDrag, setGlobalStatVsFantasyDrag] = useState<FantasyAnalyticsDragState | null>(null)
   const [selectedGlobalStatVsFantasyPoint, setSelectedGlobalStatVsFantasyPoint] = useState<GlobalStatVsFantasyPoint | null>(null)
+  const globalStatVsFantasyZoomTimeoutRef = useRef<number | null>(null)
+  const globalStatVsFantasySuppressClickRef = useRef(false)
   const [fantasyTemplateMode, setFantasyTemplateMode] = useState<FantasyTemplateMode>("change")
   const [isFantasyAnalyticsPending, setIsFantasyAnalyticsPending] = useState(false)
   const [isFantasyDraftPending, setIsFantasyDraftPending] = useState(false)
@@ -1770,12 +1775,37 @@ export function FantasyDashboard({
   const [isTradeSuggestorUploading, setIsTradeSuggestorUploading] = useState<TradeScreenshotSlot | null>(null)
   const [isTradeSuggestorSubmitting, setIsTradeSuggestorSubmitting] = useState(false)
   const [hasRequestedAllPlayersStats, setHasRequestedAllPlayersStats] = useState(false)
+  const [allPlayersStatsLoadFailed, setAllPlayersStatsLoadFailed] = useState(false)
+  const allPlayersStatsSourceData = useMemo(
+    () => hasAllPlayerStatsForYear(allData, ALL_PLAYERS_STATS_YEAR) ? allData : allPlayersStatsData,
+    [allData, allPlayersStatsData]
+  )
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
   const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata)
   const analysisLocked = !hasFantasyPlotAccess
   const playerDetailsRef = useRef<HTMLElement | null>(null)
   const cardTagsPreferenceUserIdRef = useRef<string | null>(null)
+
+  const commitGlobalStatVsFantasyZoom = useCallback((value: number, delayMs = 80) => {
+    if (globalStatVsFantasyZoomTimeoutRef.current !== null) {
+      window.clearTimeout(globalStatVsFantasyZoomTimeoutRef.current)
+    }
+    const nextZoom = Math.max(FANTASY_ANALYTICS_MIN_ZOOM, Math.min(FANTASY_ANALYTICS_MAX_ZOOM, value))
+    globalStatVsFantasyZoomTimeoutRef.current = window.setTimeout(() => {
+      setGlobalStatVsFantasyZoom(nextZoom)
+      setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
+      globalStatVsFantasyZoomTimeoutRef.current = null
+    }, delayMs)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (globalStatVsFantasyZoomTimeoutRef.current !== null) {
+        window.clearTimeout(globalStatVsFantasyZoomTimeoutRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!isAuthLoaded) return
@@ -2133,10 +2163,23 @@ export function FantasyDashboard({
   }, [hasLoginAccess, loadTeammateLookupRows, preloadedPlayerAllYears, selectedYears, showPlayerDetails])
 
   useEffect(() => {
+    setHasRequestedAllPlayersStats(false)
+  }, [])
+
+  useEffect(() => {
+    if (hasAllPlayerStatsForYear(initialAllPlayerStats, ALL_PLAYERS_STATS_YEAR)) {
+      setAllPlayersStatsData(initialAllPlayerStats)
+      setHasRequestedAllPlayersStats(false)
+      setAllPlayersStatsLoadFailed(false)
+    }
+  }, [initialAllPlayerStats])
+
+  useEffect(() => {
     if (
       !showOwnedCards ||
+      allPlayersStatsLoadFailed ||
       hasRequestedAllPlayersStats ||
-      hasAllPlayerStatsForYear(allData, ALL_PLAYERS_STATS_YEAR)
+      hasAllPlayerStatsForYear(allPlayersStatsSourceData, ALL_PLAYERS_STATS_YEAR)
     ) return
 
     let cancelled = false
@@ -2144,13 +2187,23 @@ export function FantasyDashboard({
     const loadAllPlayersYear = async () => {
       try {
         const res = await fetch(`/api/player-stats?years=${ALL_PLAYERS_STATS_YEAR}`)
-        if (!res.ok) return
+        if (!res.ok) {
+          if (!cancelled) setAllPlayersStatsLoadFailed(true)
+          return
+        }
         const data = (await res.json()) as PlayerStat[]
         if (!cancelled && Array.isArray(data)) {
-          setAllData(data)
+          if (hasAllPlayerStatsForYear(data, ALL_PLAYERS_STATS_YEAR)) {
+            setAllPlayersStatsData(data)
+          } else {
+            setAllPlayersStatsLoadFailed(true)
+          }
         }
       } catch (error) {
+        if (!cancelled) setAllPlayersStatsLoadFailed(true)
         console.error("Failed to load all fantasy player stats", error)
+      } finally {
+        if (!cancelled) setHasRequestedAllPlayersStats(false)
       }
     }
 
@@ -2158,7 +2211,7 @@ export function FantasyDashboard({
     return () => {
       cancelled = true
     }
-  }, [allData, hasRequestedAllPlayersStats, showOwnedCards])
+  }, [allPlayersStatsLoadFailed, allPlayersStatsSourceData, hasRequestedAllPlayersStats, showOwnedCards])
 
   useEffect(() => {
     if (hasLoginAccess) return
@@ -2436,7 +2489,7 @@ export function FantasyDashboard({
   )
 
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
-    const rows2026 = allData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
+    const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
     const localNames = Array.from(new Set(rows2026.map(playerStatName).filter(Boolean))).sort()
     const rowsByName = new Map<string, PlayerStat[]>()
     const namedLineupPlayers = new Set(lineupsProjections?.roleByPlayerName.keys() ?? [])
@@ -2527,7 +2580,7 @@ export function FantasyDashboard({
         gamesPlayed: playerRows.length || player.gamesPlayed || 0,
       }
     })
-  }, [allData, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
+  }, [allPlayersStatsSourceData, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
 
   const selectedAllPlayersTableRow = useMemo(
     () => selectedFantasyPlayer
@@ -2580,13 +2633,15 @@ export function FantasyDashboard({
     [selectedGlobalStatVsFantasyLabel]
   )
   const globalStatVsFantasyPoints = useMemo<GlobalStatVsFantasyPoint[]>(() => {
-    const rows2026 = allData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
+    const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
     const rowsByName = new Map<string, PlayerStat[]>()
 
     for (const row of rows2026) {
-      const rows = rowsByName.get(row.Name) ?? []
+      const name = playerStatName(row)
+      if (!name) continue
+      const rows = rowsByName.get(name) ?? []
       rows.push(row)
-      rowsByName.set(row.Name, rows)
+      rowsByName.set(name, rows)
     }
 
     return allPlayersTableRows.flatMap((row) => {
@@ -2611,7 +2666,7 @@ export function FantasyDashboard({
         fantasyAvg: row.avg2026,
       }]
     })
-  }, [allData, allPlayersTableRows, selectedGlobalStatVsFantasyOption.key, selectedGlobalStatVsFantasyOption.rawKey])
+  }, [allPlayersStatsSourceData, allPlayersTableRows, selectedGlobalStatVsFantasyOption.key, selectedGlobalStatVsFantasyOption.rawKey])
   const filteredGlobalStatVsFantasyPoints = useMemo(
     () =>
       globalStatVsFantasyPoints.filter(
@@ -3520,10 +3575,13 @@ export function FantasyDashboard({
                       min={FANTASY_ANALYTICS_MIN_ZOOM}
                       max={FANTASY_ANALYTICS_MAX_ZOOM}
                       step={FANTASY_ANALYTICS_ZOOM_STEP}
-                      value={globalStatVsFantasyZoom}
+                      key={`${globalStatVsFantasyPositionFilter}-${selectedGlobalStatVsFantasyLabel}`}
+                      defaultValue={globalStatVsFantasyZoom}
                       onChange={(event) => {
-                        setGlobalStatVsFantasyZoom(Number(event.target.value))
-                        setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
+                        commitGlobalStatVsFantasyZoom(Number(event.currentTarget.value))
+                      }}
+                      onPointerUp={(event) => {
+                        commitGlobalStatVsFantasyZoom(Number(event.currentTarget.value), 0)
                       }}
                       className="w-full accent-nrl-accent"
                       aria-label="Fantasy vs stat plot zoom"
@@ -3553,6 +3611,33 @@ export function FantasyDashboard({
                     const trendEndY = globalStatVsFantasyTrendline
                       ? globalStatVsFantasyTrendline.m * xDomain.max + globalStatVsFantasyTrendline.b
                       : null
+                    const chartPoints = filteredGlobalStatVsFantasyPoints.map((point) => ({
+                      point,
+                      x: scaleChartValue(point.statValue, xDomain.min, xDomain.max, left, width - right),
+                      y: scaleChartValue(point.fantasyAvg, yDomain.min, yDomain.max, height - bottom, top),
+                    }))
+                    const selectNearestPoint = (event: PointerEvent<SVGSVGElement> | MouseEvent<SVGSVGElement>) => {
+                      const rect = event.currentTarget.getBoundingClientRect()
+                      if (rect.width <= 0 || rect.height <= 0) return
+                      const x = ((event.clientX - rect.left) / rect.width) * width
+                      const y = ((event.clientY - rect.top) / rect.height) * height
+                      if (x < left || x > width - right || y < top || y > height - bottom) return
+
+                      let closest: GlobalStatVsFantasyPoint | null = null
+                      let closestDistance = Infinity
+                      for (const chartPoint of chartPoints) {
+                        const dx = chartPoint.x - x
+                        const dy = chartPoint.y - y
+                        const distance = dx * dx + dy * dy
+                        if (distance < closestDistance) {
+                          closestDistance = distance
+                          closest = chartPoint.point
+                        }
+                      }
+                      if (closest && closestDistance <= 20 * 20) {
+                        setSelectedGlobalStatVsFantasyPoint(closest)
+                      }
+                    }
 
                     return (
                       <div className="space-y-2">
@@ -3573,7 +3658,10 @@ export function FantasyDashboard({
                             })
                           }}
                           onPointerMove={(event) => {
-                            if (!globalStatVsFantasyDrag || globalStatVsFantasyDrag.pointerId !== event.pointerId || globalStatVsFantasyZoom <= 1) return
+                            if (!globalStatVsFantasyDrag || globalStatVsFantasyDrag.pointerId !== event.pointerId || globalStatVsFantasyZoom <= 1) {
+                              if (event.pointerType === "mouse") selectNearestPoint(event)
+                              return
+                            }
                             const deltaX = event.clientX - globalStatVsFantasyDrag.startX
                             const deltaY = event.clientY - globalStatVsFantasyDrag.startY
                             const dragScale = globalStatVsFantasyZoom / (globalStatVsFantasyZoom - 1)
@@ -3583,10 +3671,27 @@ export function FantasyDashboard({
                             })
                           }}
                           onPointerUp={(event) => {
-                            if (globalStatVsFantasyDrag?.pointerId === event.pointerId) setGlobalStatVsFantasyDrag(null)
+                            if (globalStatVsFantasyDrag?.pointerId === event.pointerId) {
+                              const moved =
+                                Math.abs(event.clientX - globalStatVsFantasyDrag.startX) +
+                                Math.abs(event.clientY - globalStatVsFantasyDrag.startY)
+                              if (moved < 8) {
+                                selectNearestPoint(event)
+                              } else {
+                                globalStatVsFantasySuppressClickRef.current = true
+                              }
+                              setGlobalStatVsFantasyDrag(null)
+                            }
                           }}
                           onPointerCancel={(event) => {
                             if (globalStatVsFantasyDrag?.pointerId === event.pointerId) setGlobalStatVsFantasyDrag(null)
+                          }}
+                          onClick={(event) => {
+                            if (globalStatVsFantasySuppressClickRef.current) {
+                              globalStatVsFantasySuppressClickRef.current = false
+                              return
+                            }
+                            selectNearestPoint(event)
                           }}
                         >
                           <defs>
@@ -3637,25 +3742,10 @@ export function FantasyDashboard({
                                 strokeDasharray="6 5"
                               />
                             ) : null}
-                            {filteredGlobalStatVsFantasyPoints.map((point) => {
-                              const x = scaleChartValue(point.statValue, xDomain.min, xDomain.max, left, width - right)
-                              const y = scaleChartValue(point.fantasyAvg, yDomain.min, yDomain.max, height - bottom, top)
+                            {chartPoints.map(({ point, x, y }) => {
                               const selected = selectedGlobalStatVsFantasyPoint?.name === point.name
                               return (
                                 <g key={`${point.name}-${point.position}-global-stat`}>
-                                  <circle
-                                    cx={x}
-                                    cy={y}
-                                    r="11"
-                                    fill="transparent"
-                                    className="cursor-pointer"
-                                    onMouseEnter={() => setSelectedGlobalStatVsFantasyPoint(point)}
-                                    onFocus={() => setSelectedGlobalStatVsFantasyPoint(point)}
-                                    onClick={() => setSelectedGlobalStatVsFantasyPoint(point)}
-                                    tabIndex={0}
-                                  >
-                                    <title>{`${point.name}\n${selectedGlobalStatVsFantasyOption.label}: ${formatTableNumber(point.statValue, 1)}\nFantasy Avg: ${formatTableNumber(point.fantasyAvg, 1)}`}</title>
-                                  </circle>
                                   <circle
                                     cx={x}
                                     cy={y}
@@ -3668,7 +3758,9 @@ export function FantasyDashboard({
                                     stroke={selected ? "#f8fafc" : "#07131f"}
                                     strokeWidth={selected ? "2" : "1"}
                                     pointerEvents="none"
-                                  />
+                                  >
+                                    <title>{`${point.name}\n${selectedGlobalStatVsFantasyOption.label}: ${formatTableNumber(point.statValue, 1)}\nFantasy Avg: ${formatTableNumber(point.fantasyAvg, 1)}`}</title>
+                                  </circle>
                                 </g>
                               )
                             })}

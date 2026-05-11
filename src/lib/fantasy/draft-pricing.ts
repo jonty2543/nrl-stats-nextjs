@@ -515,6 +515,14 @@ function buildFantasyPlayerDirectory(points: FantasyPlayerSnapshot[], fantasyPla
   return { byId, byName }
 }
 
+function actualScoreForRound(
+  projectionPoint: ProjectionPoint | undefined | null,
+  fantasyPlayer: FantasyPlayerDirectoryPoint | undefined | null,
+  round: number | null,
+): number | null {
+  return projectionPoint?.actualScore ?? (round != null ? fantasyPlayer?.scoreHistory?.[String(round)] ?? null : null)
+}
+
 function parseRosterSlotPlayers(
   row: Record<string, unknown>,
   projections: ReturnType<typeof buildProjectionLookups>,
@@ -544,7 +552,7 @@ function parseRosterSlotPlayers(
       id,
       name: fantasyPlayer?.name ?? projectionPoint?.name ?? `Player ${id}`,
       projection: projectionPoint?.projection ?? 0,
-      actualScore: projectionPoint?.actualScore ?? null,
+      actualScore: actualScoreForRound(projectionPoint, fantasyPlayer, round),
       standardDeviation: projectionPoint?.standardDeviation ?? 8,
       slotLabel: slotKey,
       isBench,
@@ -613,6 +621,14 @@ function parseRosterSlotPlayers(
   return [...optimisedStarters, ...remainingBench, ...demotedByeStarters]
 }
 
+function effectiveDraftPlayerScore(player: DraftPricingPlayer): number {
+  return player.actualScore ?? player.projection
+}
+
+function effectiveDraftPlayerVariance(player: DraftPricingPlayer): number {
+  return player.actualScore != null ? 0 : player.standardDeviation ** 2
+}
+
 function parseRosterTeams(
   raw: unknown,
   projections: ReturnType<typeof buildProjectionLookups>,
@@ -673,7 +689,7 @@ function parseRosterTeams(
                         player.round_score,
                         (player.player as Record<string, unknown> | undefined)?.current_score,
                         (player.player as Record<string, unknown> | undefined)?.score,
-                      ) ?? projectionPoint?.actualScore ?? null,
+                      ) ?? actualScoreForRound(projectionPoint, fantasyPlayer, round),
                     standardDeviation: projectionPoint?.standardDeviation ?? 8,
                     slotLabel,
                     isBench,
@@ -684,9 +700,9 @@ function parseRosterTeams(
                 .filter((player): player is DraftPricingPlayer => player !== null)
 
         const activePlayers = players.filter((player) => !player.isEmergency && !player.isBench && !player.isBye)
-        const projectedTotal = activePlayers.reduce((sum, player) => sum + player.projection, 0)
+        const projectedTotal = activePlayers.reduce((sum, player) => sum + effectiveDraftPlayerScore(player), 0)
         const activeWithActual = activePlayers.filter((player) => player.actualScore != null)
-        const variance = activePlayers.reduce((sum, player) => sum + player.standardDeviation ** 2, 0)
+        const variance = activePlayers.reduce((sum, player) => sum + effectiveDraftPlayerVariance(player), 0)
 
         teams.push({
           id: parsedId,
@@ -865,13 +881,13 @@ function buildTeamFromManualInput(
 
   const activePlayers = players.filter((player) => !player.isBench && !player.isEmergency && !player.isBye)
   const activeWithActual = activePlayers.filter((player) => player.actualScore != null)
-  const variance = activePlayers.reduce((sum, player) => sum + player.standardDeviation ** 2, 0)
+  const variance = activePlayers.reduce((sum, player) => sum + effectiveDraftPlayerVariance(player), 0)
 
   return {
     id: input.id,
     label: input.label,
     coachLabel: input.coachLabel ?? null,
-    projectedTotal: activePlayers.reduce((sum, player) => sum + player.projection, 0),
+    projectedTotal: activePlayers.reduce((sum, player) => sum + effectiveDraftPlayerScore(player), 0),
     actualTotal:
       activeWithActual.length > 0
         ? activeWithActual.reduce((sum, player) => sum + (player.actualScore ?? 0), 0)

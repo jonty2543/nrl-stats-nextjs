@@ -204,16 +204,16 @@ interface GlobalStatVsFantasyPoint {
 }
 
 const STAT_VS_FANTASY_OPTIONS = [
-  { label: "Run Metres", key: "All Run Metres" },
-  { label: "Tackles", key: "Tackles Made" },
-  { label: "Kick Metres", key: "Kicking Metres" },
-  { label: "Minutes", key: "Mins Played" },
-  { label: "Try Assists", key: "Try Assists" },
-  { label: "Line Breaks", key: "Line Breaks" },
-  { label: "Line Break Assists", key: "Line Break Assists" },
-  { label: "Tackle Breaks", key: "Tackle Breaks" },
-  { label: "Offloads", key: "Offloads" },
-  { label: "Tries", key: "Tries" },
+  { label: "Run Metres", key: "All Run Metres", rawKey: "all_run_metres" },
+  { label: "Tackles", key: "Tackles Made", rawKey: "tackles_made" },
+  { label: "Kick Metres", key: "Kicking Metres", rawKey: "kicking_metres" },
+  { label: "Minutes", key: "Mins Played", rawKey: "mins_played" },
+  { label: "Try Assists", key: "Try Assists", rawKey: "try_assists" },
+  { label: "Line Breaks", key: "Line Breaks", rawKey: "line_breaks" },
+  { label: "Line Break Assists", key: "Line Break Assists", rawKey: "line_break_assists" },
+  { label: "Tackle Breaks", key: "Tackle Breaks", rawKey: "tackle_breaks" },
+  { label: "Offloads", key: "Offloads", rawKey: "offloads" },
+  { label: "Tries", key: "Tries", rawKey: "tries" },
 ] as const
 
 type StatVsFantasyOptionLabel = (typeof STAT_VS_FANTASY_OPTIONS)[number]["label"]
@@ -466,6 +466,33 @@ function toFiniteNumber(value: unknown): number | null {
     return Number.isFinite(n) ? n : null
   }
   return null
+}
+
+function playerStatYear(row: PlayerStat): string {
+  const year = String(row.Year ?? "")
+  if (year) return year
+  const matchDate = String(row.match_date ?? "")
+  if (!matchDate) return ""
+  const parsedYear = new Date(matchDate).getFullYear()
+  return Number.isFinite(parsedYear) ? String(parsedYear) : ""
+}
+
+function playerStatName(row: PlayerStat): string {
+  return String(row.Name ?? row.player ?? "").trim()
+}
+
+function playerStatMetricValue(row: PlayerStat, key: string, rawKey?: string): number | null {
+  return toFiniteNumber(row[key]) ?? (rawKey ? toFiniteNumber(row[rawKey]) : null)
+}
+
+function hasAllPlayerStatsForYear(rows: PlayerStat[], year: string): boolean {
+  const names = new Set(
+    rows
+      .filter((row) => playerStatYear(row) === year)
+      .map(playerStatName)
+      .filter(Boolean)
+  )
+  return names.size >= 50
 }
 
 function normaliseName(value: string): string {
@@ -2032,7 +2059,7 @@ export function FantasyDashboard({
 
   const selectedYearData = useMemo(() => {
     if (selectedYears.length === 0) return allData
-    return allData.filter((row) => selectedYears.includes(row.Year))
+    return allData.filter((row) => selectedYears.includes(playerStatYear(row)))
   }, [allData, selectedYears])
 
   const teammateLookupSourceRows = useMemo(
@@ -2109,7 +2136,7 @@ export function FantasyDashboard({
     if (
       !showOwnedCards ||
       hasRequestedAllPlayersStats ||
-      allData.some((row) => row.Year === ALL_PLAYERS_STATS_YEAR)
+      hasAllPlayerStatsForYear(allData, ALL_PLAYERS_STATS_YEAR)
     ) return
 
     let cancelled = false
@@ -2409,8 +2436,8 @@ export function FantasyDashboard({
   )
 
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
-    const rows2026 = allData.filter((row) => row.Year === ALL_PLAYERS_STATS_YEAR)
-    const localNames = Array.from(new Set(rows2026.map((row) => row.Name))).sort()
+    const rows2026 = allData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
+    const localNames = Array.from(new Set(rows2026.map(playerStatName).filter(Boolean))).sort()
     const rowsByName = new Map<string, PlayerStat[]>()
     const namedLineupPlayers = new Set(lineupsProjections?.roleByPlayerName.keys() ?? [])
     const fantasyPlayerByName = new Map(
@@ -2418,22 +2445,24 @@ export function FantasyDashboard({
     )
 
     for (const row of rows2026) {
-      const rows = rowsByName.get(row.Name) ?? []
+      const name = playerStatName(row)
+      if (!name) continue
+      const rows = rowsByName.get(name) ?? []
       rows.push(row)
-      rowsByName.set(row.Name, rows)
+      rowsByName.set(name, rows)
     }
 
     return fantasyPlayers.map((player) => {
       const localName = findLocalPlayerMatch(player.name, localNames)
       const playerRows = localName ? rowsByName.get(localName) ?? [] : []
-      const fantasyScores = playerRows.map((row) => toFiniteNumber(row.Fantasy))
-      const minutes = playerRows.map((row) => toFiniteNumber(row["Mins Played"]))
+      const fantasyScores = playerRows.map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
+      const minutes = playerRows.map((row) => playerStatMetricValue(row, "Mins Played", "mins_played"))
       const totalFantasy = fantasyScores.reduce<number>((sum, value) => sum + (value ?? 0), 0)
       const totalMinutes = minutes.reduce<number>((sum, value) => sum + (value ?? 0), 0)
       const recentScores = [...playerRows]
         .sort(sortRoundsDesc)
         .slice(0, 3)
-        .map((row) => toFiniteNumber(row.Fantasy))
+        .map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
       const coachPlayer = fantasyCoachPlayers.find((entry) => entry.id === player.id)
       const coachMetrics = getFantasyCoachRoundMetrics(coachPlayer)
       const ownershipDelta = ownershipDeltaByPlayerId.get(player.id) ?? null
@@ -2551,7 +2580,7 @@ export function FantasyDashboard({
     [selectedGlobalStatVsFantasyLabel]
   )
   const globalStatVsFantasyPoints = useMemo<GlobalStatVsFantasyPoint[]>(() => {
-    const rows2026 = allData.filter((row) => row.Year === ALL_PLAYERS_STATS_YEAR)
+    const rows2026 = allData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
     const rowsByName = new Map<string, PlayerStat[]>()
 
     for (const row of rows2026) {
@@ -2564,7 +2593,13 @@ export function FantasyDashboard({
       if (!row.localName || row.avg2026 === null) return []
       const playerRows = rowsByName.get(row.localName) ?? []
       const statValue = averageNumbers(
-        playerRows.map((playerRow) => toFiniteNumber(playerRow[selectedGlobalStatVsFantasyOption.key]))
+        playerRows.map((playerRow) =>
+          playerStatMetricValue(
+            playerRow,
+            selectedGlobalStatVsFantasyOption.key,
+            selectedGlobalStatVsFantasyOption.rawKey,
+          )
+        )
       )
       if (statValue === null) return []
       return [{
@@ -2576,7 +2611,7 @@ export function FantasyDashboard({
         fantasyAvg: row.avg2026,
       }]
     })
-  }, [allData, allPlayersTableRows, selectedGlobalStatVsFantasyOption.key])
+  }, [allData, allPlayersTableRows, selectedGlobalStatVsFantasyOption.key, selectedGlobalStatVsFantasyOption.rawKey])
   const filteredGlobalStatVsFantasyPoints = useMemo(
     () =>
       globalStatVsFantasyPoints.filter(

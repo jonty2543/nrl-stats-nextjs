@@ -22,7 +22,7 @@ import {
 
 const PAGE_SIZE = 1000;
 const DAILY_REVALIDATE_SECONDS = 86400;
-const LINE_MARGIN_SIGMA = 16.85;
+const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 
 export interface PlayerImageRecord {
   player: string;
@@ -508,6 +508,21 @@ function normalCdf(z: number): number {
   return 0.5 * (1 + sign * erfApprox);
 }
 
+function normalInvProbability(p: number): number {
+  if (!(p > 0 && p < 1)) return Number.NaN;
+  let lo = -8;
+  let hi = 8;
+  for (let i = 0; i < 60; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (normalCdf(mid) < p) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
 interface PredictionModelRow extends Record<string, unknown> {
   url?: unknown;
   match_date?: unknown;
@@ -571,6 +586,27 @@ function buildOverrideLookup(rows: MarginOverrideRow[]): Map<string, number> {
   return out;
 }
 
+function inferPredictionSigma(rows: PredictionModelRow[]): number {
+  const sigmaValues: number[] = [];
+  for (const raw of rows) {
+    const predMargin = toNullableFinite(raw.pred_margin);
+    const winProb = toNullableProbability(raw.win_prob);
+    if (predMargin == null || winProb == null || Math.abs(predMargin) < 0.25) continue;
+    const z = normalInvProbability(winProb);
+    if (!Number.isFinite(z) || Math.abs(z) < 0.05) continue;
+    const sigma = Math.abs(predMargin / z);
+    if (Number.isFinite(sigma) && sigma >= 5 && sigma <= 40) {
+      sigmaValues.push(sigma);
+    }
+  }
+  if (sigmaValues.length === 0) return FALLBACK_LINE_MARGIN_SIGMA;
+  sigmaValues.sort((a, b) => a - b);
+  const mid = Math.floor(sigmaValues.length / 2);
+  return sigmaValues.length % 2 === 1
+    ? sigmaValues[mid]
+    : (sigmaValues[mid - 1] + sigmaValues[mid]) / 2;
+}
+
 function effectivePredictionMargin(raw: PredictionModelRow, overrides: Map<string, number>): number | null {
   const predMargin = toNullableFinite(raw.pred_margin);
   const preManual = toNullableFinite(raw.pred_margin_pre_manual);
@@ -593,6 +629,7 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
   const byDateTeam = new Map<string, PredictionLookupEntry>();
   const byDateMatchTeam = new Map<string, PredictionLookupEntry>();
   const overrides = buildOverrideLookup(overrideRows);
+  const marginSigma = inferPredictionSigma(rows);
 
   for (const raw of rows) {
     const date = toIsoDate(raw.match_date);
@@ -601,7 +638,7 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
 
     const predMargin = effectivePredictionMargin(raw, overrides);
     const entry: PredictionLookupEntry = {
-      winProb: predMargin == null ? toNullableProbability(raw.win_prob) : normalCdf(predMargin / LINE_MARGIN_SIGMA),
+      winProb: predMargin == null ? toNullableProbability(raw.win_prob) : normalCdf(predMargin / marginSigma),
       predMargin,
       updatedAtMs: toUpdatedAtMs(raw.updated_at),
     };

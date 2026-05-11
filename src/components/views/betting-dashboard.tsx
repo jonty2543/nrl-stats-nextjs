@@ -166,6 +166,7 @@ interface MobileBetSlip {
 }
 
 const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
+const DEFAULT_BETTING_MARKET: BettingMarket = "H2H";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const IMPLIED_LINE_SIGMA = 16.85;
@@ -912,7 +913,7 @@ export function BettingDashboard({
   const [targetProfitPct, setTargetProfitPct] = useState(2);
   const [kellyScale, setKellyScale] = useState(0.5);
   const [maxEdge, setMaxEdge] = useState(0.06);
-  const [selectedMarket, setSelectedMarket] = useState<BettingMarket>("H2H");
+  const [selectedMarket, setSelectedMarket] = useState<BettingMarket>(DEFAULT_BETTING_MARKET);
   const [stakeOverrides, setStakeOverrides] = useState<Record<string, number>>({});
   const [oddsOverrides, setOddsOverrides] = useState<Record<string, number>>({});
   const [trackerOpen, setTrackerOpen] = useState(false);

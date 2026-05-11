@@ -2638,7 +2638,7 @@ export function FantasyDashboard({
       )
     }
     const effectiveSort =
-      allPlayersSort.column === "weeklyChange" && filteredRows.every((row) => row.weeklyChange === null)
+      allPlayersSort.column === "weeklyChange" && filteredRows.every((row) => row.weeklyChange === null || row.weeklyChange === 0)
         ? { column: "projection" as const, direction: "desc" as const }
         : allPlayersSort
 

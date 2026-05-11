@@ -15,6 +15,7 @@ import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
 import { fetchApprovedArticles } from "@/lib/articles"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
+import type { Draw2026Data } from "@/lib/draw/types"
 import {
   applyFantasyBreakEvenOffset,
   applyFantasyProjectionOffset,
@@ -34,6 +35,7 @@ import {
   type LineupTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
 import type { PlayerStat } from "@/lib/data/types"
+import type { PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   fetchAvailableYears,
   fetchBettingOddsSnapshot,
@@ -971,10 +973,10 @@ export default async function Home() {
     })),
     fetchPlayerImages().catch(() => []),
     fetchApprovedArticles().catch(() => []),
-    fetchTeamLogos().catch(() => ({})),
+    fetchTeamLogos().catch((): Record<string, string> => ({})),
     loadDraw2026Data().catch(() => null),
     fetchUpcomingLineups({ includeFantasyProjections: true }).catch(() => []),
-    fetchUpcomingTryscorerOdds().catch(() => ({})),
+    fetchUpcomingTryscorerOdds().catch((): Record<string, LineupTryscorerOdds> => ({})),
   ])
 
   const previewYears = [...availableYears].map(String).sort((a, b) => Number(b) - Number(a)).slice(0, 3)

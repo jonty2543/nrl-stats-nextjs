@@ -864,6 +864,134 @@ function formatFantasySnapshotContext(
     .join("\n");
 }
 
+function formatFallbackFantasyNumber(value: number | null, digits = 1): string {
+  return value == null ? "unknown" : value.toFixed(digits);
+}
+
+function formatFallbackOwnershipDelta(value: number | null): string {
+  if (value == null) return "unknown";
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function scoreFallbackTradeInCandidate(entry: Record<string, unknown>, includeProMetrics: boolean): number {
+  const ownershipDelta = getFantasyNumber(entry, "ownershipDelta") ?? 0;
+  const avgPoints = getFantasyNumber(entry, "avgPoints");
+  const last3Avg = getFantasyNumber(entry, "last3Avg");
+  const pricedAt = getFantasyNumber(entry, "pricedAt");
+  const projection = getFantasyNumber(entry, "projection");
+  const projectionVsPricedAt = getFantasyNumber(entry, "projectionVsPricedAt");
+  const breakEven = getFantasyNumber(entry, "breakEven");
+  const playsNextMajorByeRound =
+    typeof entry.playsNextMajorByeRound === "boolean" ? entry.playsNextMajorByeRound : null;
+
+  let score = 6.5;
+  score += Math.min(1.2, Math.max(0, ownershipDelta) / 3);
+  if (pricedAt != null && last3Avg != null) score += Math.max(-0.8, Math.min(1.1, (last3Avg - pricedAt) / 12));
+  if (pricedAt != null && avgPoints != null) score += Math.max(-0.5, Math.min(0.8, (avgPoints - pricedAt) / 15));
+  if (includeProMetrics && projectionVsPricedAt != null) score += Math.max(-0.8, Math.min(1.2, projectionVsPricedAt / 10));
+  if (includeProMetrics && breakEven != null && pricedAt != null && breakEven < pricedAt) score += 0.4;
+  if (includeProMetrics && projection != null && projection >= 55) score += 0.3;
+  if (playsNextMajorByeRound === true) score += 0.3;
+  if (playsNextMajorByeRound === false) score -= 0.4;
+
+  return Math.max(5, Math.min(9.5, Math.round(score * 2) / 2));
+}
+
+function formatFallbackRating(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function buildFallbackTradeInLines(
+  buySnapshotResult: AiToolExecutionResult,
+  valueSnapshotResult: AiToolExecutionResult,
+  includeProMetrics: boolean
+): string {
+  const candidates = uniqueFantasySnapshotPlayers([
+    ...getFantasySnapshotPlayers(buySnapshotResult),
+    ...getFantasySnapshotPlayers(valueSnapshotResult),
+  ])
+    .filter((entry) => hasPositiveOwnershipDelta(entry))
+    .map((entry) => ({
+      entry,
+      score: scoreFallbackTradeInCandidate(entry, includeProMetrics),
+    }))
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 5);
+
+  if (candidates.length === 0) return "";
+
+  return candidates.map(({ entry, score }, index) => {
+    const name = typeof entry.name === "string" ? entry.name : "Unknown";
+    const position = typeof entry.position === "string" ? entry.position : "position unknown";
+    const price = getFantasyNumber(entry, "price");
+    const ownershipDelta = getFantasyNumber(entry, "ownershipDelta");
+    const pricedAt = getFantasyNumber(entry, "pricedAt");
+    const avgPoints = getFantasyNumber(entry, "avgPoints");
+    const last3Avg = getFantasyNumber(entry, "last3Avg");
+    const projection = getFantasyNumber(entry, "projection");
+    const projectionVsPricedAt = getFantasyNumber(entry, "projectionVsPricedAt");
+    const breakEven = getFantasyNumber(entry, "breakEven");
+    const nextMajorByeRound = getFantasyNumber(entry, "nextMajorByeRound");
+    const playsNextMajorByeRound =
+      typeof entry.playsNextMajorByeRound === "boolean" ? entry.playsNextMajorByeRound : null;
+    const byeDetail =
+      nextMajorByeRound != null && playsNextMajorByeRound !== null
+        ? `next major bye Rd${nextMajorByeRound} (${playsNextMajorByeRound ? "plays" : "misses"} Rd${nextMajorByeRound})`
+        : "next major bye unknown";
+    const priceLabel = price == null ? "price unknown" : formatFantasyPrice(price);
+    const titleProjection = includeProMetrics && projection != null ? ` — Projection ${projection.toFixed(1)}` : "";
+    const rating = formatFallbackRating(score);
+    const valueReason =
+      pricedAt != null && last3Avg != null && last3Avg >= pricedAt
+        ? "His recent scoring is ahead of his price"
+        : pricedAt != null && avgPoints != null && avgPoints >= pricedAt
+          ? "His season scoring stacks up well against his price"
+          : "He is one of the better available trade-in options from the live player pool";
+    const byeReason =
+      playsNextMajorByeRound === false
+        ? ", though you should factor in that he misses the next major bye"
+        : playsNextMajorByeRound === true
+          ? " and he helps your next major-bye coverage"
+          : "";
+
+    const details = includeProMetrics
+      ? `Ownership change: ${formatFallbackOwnershipDelta(ownershipDelta)}, BE ${breakEven ?? "unknown"}, priced at ${formatFallbackFantasyNumber(pricedAt)}, L3 avg ${formatFallbackFantasyNumber(last3Avg)}, projection vs pricedAt ${formatFallbackOwnershipDelta(projectionVsPricedAt).replace("%", "")}, ${byeDetail}.`
+      : `Ownership change: ${formatFallbackOwnershipDelta(ownershipDelta)}, priced at ${formatFallbackFantasyNumber(pricedAt)}, avg ${formatFallbackFantasyNumber(avgPoints)} / L3 ${formatFallbackFantasyNumber(last3Avg)}, ${byeDetail}.`;
+
+    return [
+      `${index + 1}) ${name} — ${position} — ${priceLabel}${titleProjection} — ${rating}/10`,
+      details,
+      `Reason: ${valueReason}${byeReason}.`,
+    ].join("\n");
+  }).join("\n\n");
+}
+
+function ensureTopTradeInsSection(
+  content: string,
+  buySnapshotResult: AiToolExecutionResult,
+  valueSnapshotResult: AiToolExecutionResult,
+  includeProMetrics: boolean
+): string {
+  const fallbackLines = buildFallbackTradeInLines(buySnapshotResult, valueSnapshotResult, includeProMetrics);
+  if (!fallbackLines) return content;
+
+  const sectionPattern = /(^|\n)(?:#+\s*)?Top 5 Trade-ins\s*\n([\s\S]*?)(?=\n(?:#+\s*)?Recommended Moves\b|$)/i;
+  const sectionMatch = content.match(sectionPattern);
+  if (sectionMatch) {
+    const body = sectionMatch[2] ?? "";
+    if (/^\s*\d+[\).]\s+/m.test(body)) return content;
+
+    return content.replace(sectionPattern, `${sectionMatch[1] ?? ""}Top 5 Trade-ins\n${fallbackLines}\n`);
+  }
+
+  const recommendedMovesPattern = /\n(?:#+\s*)?Recommended Moves\b/i;
+  if (recommendedMovesPattern.test(content)) {
+    return content.replace(recommendedMovesPattern, `\nTop 5 Trade-ins\n${fallbackLines}\n\nRecommended Moves`);
+  }
+
+  return `${content.trimEnd()}\n\nTop 5 Trade-ins\n${fallbackLines}`;
+}
+
 interface OpenAiFunctionToolCall {
   type: "function_call";
   name: string;
@@ -4914,9 +5042,15 @@ export async function runAiModelChat(
     const assistantMessage =
       stripFinalAnswerPrefix(extractAssistantText(response)) ||
       "I could not read the uploaded screenshots clearly enough to give reliable fantasy trade advice. Please retry with the same full-screen squad screenshots.";
+    const tradeSuggestionMessage = ensureTopTradeInsSection(
+      assistantMessage,
+      buySnapshotResult,
+      valueSnapshotResult,
+      hasProjectionAccess
+    );
 
     return {
-      assistantMessage,
+      assistantMessage: tradeSuggestionMessage,
       toolActivity: toolActivities,
       artifacts: [],
       model,

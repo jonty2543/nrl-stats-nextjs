@@ -548,6 +548,7 @@ interface PredictionLookupEntry {
 interface PredictionLookupMaps {
   byDateTeam: Map<string, PredictionLookupEntry>;
   byDateMatchTeam: Map<string, PredictionLookupEntry>;
+  lineMarginSigma: number;
 }
 
 function predictionHomeTeam(raw: PredictionModelRow): string | null {
@@ -656,7 +657,7 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
     );
   }
 
-  return { byDateTeam, byDateMatchTeam };
+  return { byDateTeam, byDateMatchTeam, lineMarginSigma: marginSigma };
 }
 
 function findPredictionForOddsRow(
@@ -701,7 +702,7 @@ function applyPredictionModelToRow(row: BettingOddsRow, lookup: PredictionLookup
     };
   }
 
-  const z = (prediction.predMargin + row.value) / LINE_MARGIN_SIGMA;
+  const z = (prediction.predMargin + row.value) / lookup.lineMarginSigma;
   const coverProbability = normalCdf(z);
   return {
     ...row,

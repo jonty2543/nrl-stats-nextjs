@@ -882,7 +882,11 @@ function formatFallbackSignedNumber(value: number | null, digits = 1): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(digits)}`;
 }
 
-function scoreFallbackTradeInCandidate(entry: Record<string, unknown>, includeProMetrics: boolean): number {
+function scoreFallbackTradeInCandidate(
+  entry: Record<string, unknown>,
+  includeProMetrics: boolean,
+  isOriginChance: boolean
+): number {
   const ownershipDelta = getFantasyNumber(entry, "ownershipDelta") ?? 0;
   const avgPoints = getFantasyNumber(entry, "avgPoints");
   const last3Avg = getFantasyNumber(entry, "last3Avg");
@@ -902,6 +906,8 @@ function scoreFallbackTradeInCandidate(entry: Record<string, unknown>, includePr
   if (includeProMetrics && projection != null && projection >= 55) score += 0.3;
   if (playsNextMajorByeRound === true) score += 0.3;
   if (playsNextMajorByeRound === false) score -= 0.4;
+  if (includeProMetrics && isOriginChance) score -= 0.5;
+  if (includeProMetrics && !isOriginChance) score += 0.2;
 
   return Math.max(5, Math.min(9.5, Math.round(score * 2) / 2));
 }
@@ -914,28 +920,81 @@ function buildFallbackTradeInLines(
   buySnapshotResult: AiToolExecutionResult,
   valueSnapshotResult: AiToolExecutionResult,
   broadTradeInSnapshotResult: AiToolExecutionResult,
+  originChances: OriginChanceRecord[],
   includeProMetrics: boolean
 ): string {
+  const originPlayers = includeProMetrics
+    ? originChances.map((row) => row.player).filter(Boolean)
+    : [];
+  const isOriginChance = (entry: Record<string, unknown>) => {
+    const name = typeof entry.name === "string" ? entry.name : "";
+    return Boolean(name && originPlayers.some((originName) => fantasyNamesMatch(originName, name)));
+  };
+  const isNamedToPlay = (entry: Record<string, unknown>) =>
+    typeof entry.namedToPlay === "boolean" ? entry.namedToPlay : true;
+  const isNotOwnershipFade = (entry: Record<string, unknown>) => {
+    const ownershipDelta = getFantasyNumber(entry, "ownershipDelta");
+    return ownershipDelta == null || ownershipDelta >= 0;
+  };
+  const hasFallbackBuySignal = (entry: Record<string, unknown>) => {
+    const pricedAt = getFantasyNumber(entry, "pricedAt");
+    const last3Avg = getFantasyNumber(entry, "last3Avg");
+    const avgPoints = getFantasyNumber(entry, "avgPoints");
+    const projection = getFantasyNumber(entry, "projection");
+    const projectionVsPricedAt = getFantasyNumber(entry, "projectionVsPricedAt");
+    const breakEven = getFantasyNumber(entry, "breakEven");
+    const playsNextMajorByeRound =
+      typeof entry.playsNextMajorByeRound === "boolean" ? entry.playsNextMajorByeRound : null;
+
+    return (
+      (pricedAt != null && last3Avg != null && last3Avg >= pricedAt) ||
+      (pricedAt != null && avgPoints != null && avgPoints >= pricedAt) ||
+      (includeProMetrics && projection != null && projection >= 50) ||
+      (includeProMetrics && projectionVsPricedAt != null && projectionVsPricedAt >= -5) ||
+      (includeProMetrics && breakEven != null && pricedAt != null && breakEven < pricedAt) ||
+      playsNextMajorByeRound === true
+    );
+  };
   const momentumCandidates = uniqueFantasySnapshotPlayers([
     ...getFantasySnapshotPlayers(buySnapshotResult),
     ...getFantasySnapshotPlayers(valueSnapshotResult),
   ])
     .filter((entry) => hasPositiveOwnershipDelta(entry))
-    .filter((entry) => (typeof entry.namedToPlay === "boolean" ? entry.namedToPlay : true));
-  const broadCandidates = uniqueFantasySnapshotPlayers(getFantasySnapshotPlayers(broadTradeInSnapshotResult))
-    .filter((entry) => (typeof entry.namedToPlay === "boolean" ? entry.namedToPlay : true));
-  const sourceCandidates = momentumCandidates.length > 0 ? momentumCandidates : broadCandidates;
+    .filter(isNamedToPlay);
+  const broadCandidates = uniqueFantasySnapshotPlayers(getFantasySnapshotPlayers(broadTradeInSnapshotResult));
+  const broadNamedSignalCandidates = broadCandidates.filter((entry) =>
+    isNamedToPlay(entry) &&
+    isNotOwnershipFade(entry) &&
+    hasFallbackBuySignal(entry)
+  );
+  const broadSignalCandidates = broadCandidates.filter((entry) => isNotOwnershipFade(entry) && hasFallbackBuySignal(entry));
+  const broadAnySignalCandidates = broadCandidates.filter(hasFallbackBuySignal);
+  const broadNamedCandidates = broadCandidates.filter((entry) => isNamedToPlay(entry) && isNotOwnershipFade(entry));
+  const usingTradeInMovement = momentumCandidates.length > 0;
+  const sourceCandidates = usingTradeInMovement
+    ? momentumCandidates
+    : broadNamedSignalCandidates.length > 0
+      ? broadNamedSignalCandidates
+      : broadSignalCandidates.length > 0
+        ? broadSignalCandidates
+        : broadAnySignalCandidates.length > 0
+          ? broadAnySignalCandidates
+          : broadNamedCandidates.length > 0
+            ? broadNamedCandidates
+            : broadCandidates;
   const candidates = sourceCandidates
     .map((entry) => ({
       entry,
-      score: scoreFallbackTradeInCandidate(entry, includeProMetrics),
+      score: scoreFallbackTradeInCandidate(entry, includeProMetrics, isOriginChance(entry)),
     }))
     .sort((left, right) => right.score - left.score)
     .slice(0, 5);
 
-  if (candidates.length === 0) return "";
+  if (candidates.length === 0) {
+    return "No trade-in movement data is available yet, and the broader fantasy snapshot did not return eligible non-owned options right now.";
+  }
 
-  return candidates.map(({ entry, score }, index) => {
+  const lines = candidates.map(({ entry, score }, index) => {
     const name = typeof entry.name === "string" ? entry.name : "Unknown";
     const position = typeof entry.position === "string" ? entry.position : "position unknown";
     const price = getFantasyNumber(entry, "price");
@@ -946,6 +1005,7 @@ function buildFallbackTradeInLines(
     const projection = getFantasyNumber(entry, "projection");
     const projectionVsPricedAt = getFantasyNumber(entry, "projectionVsPricedAt");
     const breakEven = getFantasyNumber(entry, "breakEven");
+    const originRisk = isOriginChance(entry);
     const nextMajorByeRound = getFantasyNumber(entry, "nextMajorByeRound");
     const playsNextMajorByeRound =
       typeof entry.playsNextMajorByeRound === "boolean" ? entry.playsNextMajorByeRound : null;
@@ -972,13 +1032,28 @@ function buildFallbackTradeInLines(
     const details = includeProMetrics
       ? `${formatFallbackOwnershipDetail(ownershipDelta)}, BE ${breakEven ?? "unknown"}, priced at ${formatFallbackFantasyNumber(pricedAt)}, L3 avg ${formatFallbackFantasyNumber(last3Avg)}, projection vs pricedAt ${formatFallbackSignedNumber(projectionVsPricedAt)}, ${byeDetail}.`
       : `${formatFallbackOwnershipDetail(ownershipDelta)}, priced at ${formatFallbackFantasyNumber(pricedAt)}, avg ${formatFallbackFantasyNumber(avgPoints)} / L3 ${formatFallbackFantasyNumber(last3Avg)}, ${byeDetail}.`;
+    const originReason =
+      includeProMetrics && originRisk
+        ? " He is an Origin chance, so factor in the missed-game risk."
+        : includeProMetrics
+          ? " He is not flagged as an Origin chance."
+          : "";
 
     return [
       `${index + 1}) ${name} — ${position} — ${priceLabel}${titleProjection} — ${rating}/10`,
       details,
-      `Reason: ${valueReason}${byeReason}.`,
+      `Reason: ${valueReason}${byeReason}.${originReason}`,
     ].join("\n");
-  }).join("\n\n");
+  });
+
+  return [
+    usingTradeInMovement
+      ? ""
+      : includeProMetrics
+        ? "No trade-in movement data is available yet, so these are ranked from value/form, breakeven/projection, bye coverage and Origin-risk signals instead."
+        : "No trade-in movement data is available yet, so these are ranked from value/form and bye coverage signals instead.",
+    lines.join("\n\n"),
+  ].filter(Boolean).join("\n\n");
 }
 
 function ensureTopTradeInsSection(
@@ -986,15 +1061,16 @@ function ensureTopTradeInsSection(
   buySnapshotResult: AiToolExecutionResult,
   valueSnapshotResult: AiToolExecutionResult,
   broadTradeInSnapshotResult: AiToolExecutionResult,
+  originChances: OriginChanceRecord[],
   includeProMetrics: boolean
 ): string {
   const fallbackLines = buildFallbackTradeInLines(
     buySnapshotResult,
     valueSnapshotResult,
     broadTradeInSnapshotResult,
+    originChances,
     includeProMetrics
   );
-  if (!fallbackLines) return content;
 
   const sectionPattern = /(^|\n)(?:#+\s*)?Top 5 Trade-ins\s*\n([\s\S]*?)(?=\n(?:#+\s*)?Recommended Moves\b|$)/i;
   const sectionMatch = content.match(sectionPattern);
@@ -5086,6 +5162,7 @@ export async function runAiModelChat(
       buySnapshotResult,
       valueSnapshotResult,
       broadTradeInSnapshotResult,
+      originChances,
       hasProjectionAccess
     );
 

@@ -873,6 +873,15 @@ function formatFallbackOwnershipDelta(value: number | null): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
+function formatFallbackOwnershipDetail(value: number | null): string {
+  return value == null ? "Ownership change: not available yet" : `Ownership change: ${formatFallbackOwnershipDelta(value)}`;
+}
+
+function formatFallbackSignedNumber(value: number | null, digits = 1): string {
+  if (value == null) return "unknown";
+  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}`;
+}
+
 function scoreFallbackTradeInCandidate(entry: Record<string, unknown>, includeProMetrics: boolean): number {
   const ownershipDelta = getFantasyNumber(entry, "ownershipDelta") ?? 0;
   const avgPoints = getFantasyNumber(entry, "avgPoints");
@@ -904,13 +913,19 @@ function formatFallbackRating(value: number): string {
 function buildFallbackTradeInLines(
   buySnapshotResult: AiToolExecutionResult,
   valueSnapshotResult: AiToolExecutionResult,
+  broadTradeInSnapshotResult: AiToolExecutionResult,
   includeProMetrics: boolean
 ): string {
-  const candidates = uniqueFantasySnapshotPlayers([
+  const momentumCandidates = uniqueFantasySnapshotPlayers([
     ...getFantasySnapshotPlayers(buySnapshotResult),
     ...getFantasySnapshotPlayers(valueSnapshotResult),
   ])
     .filter((entry) => hasPositiveOwnershipDelta(entry))
+    .filter((entry) => (typeof entry.namedToPlay === "boolean" ? entry.namedToPlay : true));
+  const broadCandidates = uniqueFantasySnapshotPlayers(getFantasySnapshotPlayers(broadTradeInSnapshotResult))
+    .filter((entry) => (typeof entry.namedToPlay === "boolean" ? entry.namedToPlay : true));
+  const sourceCandidates = momentumCandidates.length > 0 ? momentumCandidates : broadCandidates;
+  const candidates = sourceCandidates
     .map((entry) => ({
       entry,
       score: scoreFallbackTradeInCandidate(entry, includeProMetrics),
@@ -955,8 +970,8 @@ function buildFallbackTradeInLines(
           : "";
 
     const details = includeProMetrics
-      ? `Ownership change: ${formatFallbackOwnershipDelta(ownershipDelta)}, BE ${breakEven ?? "unknown"}, priced at ${formatFallbackFantasyNumber(pricedAt)}, L3 avg ${formatFallbackFantasyNumber(last3Avg)}, projection vs pricedAt ${formatFallbackOwnershipDelta(projectionVsPricedAt).replace("%", "")}, ${byeDetail}.`
-      : `Ownership change: ${formatFallbackOwnershipDelta(ownershipDelta)}, priced at ${formatFallbackFantasyNumber(pricedAt)}, avg ${formatFallbackFantasyNumber(avgPoints)} / L3 ${formatFallbackFantasyNumber(last3Avg)}, ${byeDetail}.`;
+      ? `${formatFallbackOwnershipDetail(ownershipDelta)}, BE ${breakEven ?? "unknown"}, priced at ${formatFallbackFantasyNumber(pricedAt)}, L3 avg ${formatFallbackFantasyNumber(last3Avg)}, projection vs pricedAt ${formatFallbackSignedNumber(projectionVsPricedAt)}, ${byeDetail}.`
+      : `${formatFallbackOwnershipDetail(ownershipDelta)}, priced at ${formatFallbackFantasyNumber(pricedAt)}, avg ${formatFallbackFantasyNumber(avgPoints)} / L3 ${formatFallbackFantasyNumber(last3Avg)}, ${byeDetail}.`;
 
     return [
       `${index + 1}) ${name} — ${position} — ${priceLabel}${titleProjection} — ${rating}/10`,
@@ -970,9 +985,15 @@ function ensureTopTradeInsSection(
   content: string,
   buySnapshotResult: AiToolExecutionResult,
   valueSnapshotResult: AiToolExecutionResult,
+  broadTradeInSnapshotResult: AiToolExecutionResult,
   includeProMetrics: boolean
 ): string {
-  const fallbackLines = buildFallbackTradeInLines(buySnapshotResult, valueSnapshotResult, includeProMetrics);
+  const fallbackLines = buildFallbackTradeInLines(
+    buySnapshotResult,
+    valueSnapshotResult,
+    broadTradeInSnapshotResult,
+    includeProMetrics
+  );
   if (!fallbackLines) return content;
 
   const sectionPattern = /(^|\n)(?:#+\s*)?Top 5 Trade-ins\s*\n([\s\S]*?)(?=\n(?:#+\s*)?Recommended Moves\b|$)/i;
@@ -4776,7 +4797,7 @@ export async function runAiModelChat(
   if (hasImageInputs) {
     const hasProjectionAccess = hasAiProDataAccess(access.plan);
     const requestedRound = parseRequestedRound(userMessage);
-    const [visiblePlayerNames, buySnapshot, valueSnapshot, sellSnapshot] = await Promise.all([
+    const [visiblePlayerNames, buySnapshot, valueSnapshot, broadTradeInSnapshot, sellSnapshot] = await Promise.all([
       extractVisibleFantasyPlayerNamesFromImages(model, imageInputs),
       runToolForLocalFallback(
         "get_fantasy_snapshot",
@@ -4788,6 +4809,19 @@ export async function runAiModelChat(
           requireOwnershipRise: true,
           excludeLocked: true,
           limit: 50,
+        },
+        access
+      ),
+      runToolForLocalFallback(
+        "get_fantasy_snapshot",
+        {
+          round: requestedRound,
+          positions: null,
+          priceMax: null,
+          sortBy: hasProjectionAccess ? "projection_vs_priced_at_desc" : "avg_points_desc",
+          requireOwnershipRise: false,
+          excludeLocked: true,
+          limit: 80,
         },
         access
       ),
@@ -4842,6 +4876,7 @@ export async function runAiModelChat(
     const toolActivities = [
       buySnapshot.activity,
       valueSnapshot.activity,
+      broadTradeInSnapshot.activity,
       sellSnapshot.activity,
       ...(visibleSnapshot ? [visibleSnapshot.activity] : []),
     ];
@@ -4858,6 +4893,10 @@ export async function runAiModelChat(
     const tradeInExcludedNames = visibleMatchedPlayerNames.length > 0 ? visibleMatchedPlayerNames : visiblePlayerNames;
     const buySnapshotResult = filterFantasySnapshotResultPlayers(buySnapshot.result, tradeInExcludedNames);
     const valueSnapshotResult = filterFantasySnapshotResultPlayers(valueSnapshot.result, tradeInExcludedNames);
+    const broadTradeInSnapshotResult = filterFantasySnapshotResultPlayers(
+      broadTradeInSnapshot.result,
+      tradeInExcludedNames
+    );
     const fantasySnapshotContext = formatFantasySnapshotContext(
       buySnapshotResult,
       "trade-in momentum",
@@ -5046,6 +5085,7 @@ export async function runAiModelChat(
       assistantMessage,
       buySnapshotResult,
       valueSnapshotResult,
+      broadTradeInSnapshotResult,
       hasProjectionAccess
     );
 

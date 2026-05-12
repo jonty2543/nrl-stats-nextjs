@@ -1045,7 +1045,10 @@ export async function fetchLineupsForRound({
       const away = lineupMatch.awayTeam?.team ?? lineupMatch.match.split(/\s+vs\s+/i)[1]?.trim()
       if (!home || !away) continue
       const key = matchMergeKey(lineupMatch.matchDate, home, away)
-      if (!seenKeys.has(key)) matches.push(lineupMatch)
+      if (!seenKeys.has(key)) {
+        matches.push(lineupMatch)
+        seenKeys.add(key)
+      }
     }
 
     for (const drawRow of drawRowsForRound(draw2026Data.rows, round)) {

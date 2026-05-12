@@ -148,14 +148,29 @@ function currentYearInBrisbane(): number {
 
 function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | null {
   if (options.length === 0) return null
+  const now = new Date()
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Australia/Brisbane",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date())
+  }).format(now)
+  const activeRound = options.find((option) => today >= option.startDate && today <= option.endDate)
+  if (activeRound) return activeRound
+
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Australia/Brisbane",
+    weekday: "short",
+  }).format(now)
+  const hour = Number(new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Brisbane",
+    hour: "numeric",
+    hour12: false,
+  }).format(now))
+  const shouldRollToUpcoming = weekday !== "Mon" || hour >= 12
+
   return (
-    options.find((option) => today >= option.startDate && today <= option.endDate) ??
+    (shouldRollToUpcoming ? options.find((option) => option.startDate >= today) : null) ??
     options.findLast((option) => option.startDate <= today) ??
     options.at(0) ??
     null

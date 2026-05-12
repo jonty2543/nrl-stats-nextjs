@@ -965,7 +965,7 @@ function renderTradeSuggestorInline(text: string) {
 
 function formatTradeSuggestorSectionTitle(title: string): string {
   if (/^sell watch/i.test(title)) return "Sell Watch"
-  if (/^top 5 trade-ins/i.test(title)) return "Top 5 Trade-ins"
+  if (/^top\s*5\s+trade(?:[-\s\u2011\u2013])?ins/i.test(title)) return "Top 5 Trade-ins"
   if (/^recommended moves?/i.test(title)) return "Recommended Moves"
   return title
 }
@@ -981,7 +981,7 @@ function buildTradeSuggestorSections(content: string) {
       continue
     }
 
-    if (/^(recommended moves?|sell watch|top 5 trade-ins|notes)\b/i.test(cleaned)) {
+    if (/^(recommended moves?|sell watch|top\s*5\s+trade(?:[-\s\u2011\u2013])?ins|notes)\b/i.test(cleaned)) {
       if (current) sections.push(current)
       current = { title: cleaned, lines: [] }
       continue
@@ -995,7 +995,8 @@ function buildTradeSuggestorSections(content: string) {
   const orderedTitles = ["Sell Watch", "Top 5 Trade-ins", "Recommended Moves"]
   return orderedTitles
     .map((title) => {
-      const section = sections.find((entry) => formatTradeSuggestorSectionTitle(entry.title) === title)
+      const matchingSections = sections.filter((entry) => formatTradeSuggestorSectionTitle(entry.title) === title)
+      const section = matchingSections.find((entry) => entry.lines.some((line) => line.trim().length > 0)) ?? matchingSections[0]
       if (!section) return null
 
       const blocks: string[][] = []

@@ -899,21 +899,27 @@ function scoreFallbackTradeInCandidate(
 
   let score = 6.5;
   score += Math.min(1.2, Math.max(0, ownershipDelta) / 3);
-  if (pricedAt != null && last3Avg != null) score += Math.max(-0.8, Math.min(1.1, (last3Avg - pricedAt) / 12));
+  if (pricedAt != null && last3Avg != null) score += Math.max(-0.8, Math.min(1.8, (last3Avg - pricedAt) / 8));
   if (pricedAt != null && avgPoints != null) score += Math.max(-0.5, Math.min(0.8, (avgPoints - pricedAt) / 15));
-  if (includeProMetrics && projectionVsPricedAt != null) score += Math.max(-0.8, Math.min(1.2, projectionVsPricedAt / 10));
-  if (includeProMetrics && breakEven != null && pricedAt != null && breakEven < pricedAt) score += 0.4;
-  if (includeProMetrics && projection != null && projection >= 55) score += 0.3;
-  if (playsNextMajorByeRound === true) score += 0.3;
-  if (playsNextMajorByeRound === false) score -= 0.4;
-  if (includeProMetrics && isOriginChance) score -= 0.5;
-  if (includeProMetrics && !isOriginChance) score += 0.2;
+  if (includeProMetrics && projectionVsPricedAt != null) score += Math.max(-1, Math.min(1.8, projectionVsPricedAt / 7));
+  if (includeProMetrics && breakEven != null && pricedAt != null && breakEven < pricedAt) score += 1.2;
+  if (includeProMetrics && projection != null && projection >= 55) score += 0.4;
+  if (playsNextMajorByeRound === true) score += 0.8;
+  if (playsNextMajorByeRound === false) score -= 0.5;
+  if (includeProMetrics && isOriginChance) score -= 0.8;
+  if (includeProMetrics && !isOriginChance) score += 0.5;
 
   return Math.max(5, Math.min(9.5, Math.round(score * 2) / 2));
 }
 
 function formatFallbackRating(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatFallbackReasonList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
 function buildFallbackTradeInLines(
@@ -940,17 +946,15 @@ function buildFallbackTradeInLines(
     const pricedAt = getFantasyNumber(entry, "pricedAt");
     const last3Avg = getFantasyNumber(entry, "last3Avg");
     const avgPoints = getFantasyNumber(entry, "avgPoints");
-    const projection = getFantasyNumber(entry, "projection");
     const projectionVsPricedAt = getFantasyNumber(entry, "projectionVsPricedAt");
     const breakEven = getFantasyNumber(entry, "breakEven");
     const playsNextMajorByeRound =
       typeof entry.playsNextMajorByeRound === "boolean" ? entry.playsNextMajorByeRound : null;
 
     return (
-      (pricedAt != null && last3Avg != null && last3Avg >= pricedAt) ||
+      (pricedAt != null && last3Avg != null && last3Avg > pricedAt) ||
       (pricedAt != null && avgPoints != null && avgPoints >= pricedAt) ||
-      (includeProMetrics && projection != null && projection >= 50) ||
-      (includeProMetrics && projectionVsPricedAt != null && projectionVsPricedAt >= -5) ||
+      (includeProMetrics && projectionVsPricedAt != null && projectionVsPricedAt > 0) ||
       (includeProMetrics && breakEven != null && pricedAt != null && breakEven < pricedAt) ||
       playsNextMajorByeRound === true
     );
@@ -1016,33 +1020,45 @@ function buildFallbackTradeInLines(
     const priceLabel = price == null ? "price unknown" : formatFantasyPrice(price);
     const titleProjection = includeProMetrics && projection != null ? ` — Projection ${projection.toFixed(1)}` : "";
     const rating = formatFallbackRating(score);
-    const valueReason =
-      pricedAt != null && last3Avg != null && last3Avg >= pricedAt
-        ? "His recent scoring is ahead of his price"
-        : pricedAt != null && avgPoints != null && avgPoints >= pricedAt
-          ? "His season scoring stacks up well against his price"
-          : "He is one of the better available trade-in options from the live player pool";
-    const byeReason =
+    const primaryReasons = [
+      pricedAt != null && last3Avg != null && last3Avg > pricedAt
+        ? "his L3 average is above what he is priced at"
+        : null,
+      includeProMetrics && projectionVsPricedAt != null && projectionVsPricedAt > 0
+        ? "he projects above what he is priced at"
+        : null,
+      includeProMetrics && breakEven != null && pricedAt != null && breakEven < pricedAt
+        ? "his breakeven is below what he is priced at"
+        : null,
+      pricedAt != null && avgPoints != null && avgPoints >= pricedAt
+        ? "his season average stacks up well against his price"
+        : null,
+    ].filter((reason): reason is string => reason !== null);
+    const secondaryReasons = [
+      playsNextMajorByeRound === true ? "he plays the next major bye" : null,
+      includeProMetrics && !originRisk ? "he is not flagged as an Origin chance" : null,
+    ].filter((reason): reason is string => reason !== null);
+    const fallbackReason =
+      primaryReasons.length > 0
+        ? `Reason: ${formatFallbackReasonList(primaryReasons)}.`
+        : "Reason: He is one of the better available trade-in options from the live player pool.";
+    const secondaryReason = secondaryReasons.length > 0
+      ? ` ${formatFallbackReasonList(secondaryReasons)}.`
+      : "";
+    const cautionReason =
       playsNextMajorByeRound === false
-        ? ", though you should factor in that he misses the next major bye"
-        : playsNextMajorByeRound === true
-          ? " and he helps your next major-bye coverage"
+        ? " Note that he misses the next major bye."
+        : includeProMetrics && originRisk
+          ? " He is an Origin chance, so factor in the missed-game risk."
           : "";
 
     const details = includeProMetrics
       ? `${formatFallbackOwnershipDetail(ownershipDelta)}, BE ${breakEven ?? "unknown"}, priced at ${formatFallbackFantasyNumber(pricedAt)}, L3 avg ${formatFallbackFantasyNumber(last3Avg)}, projection vs pricedAt ${formatFallbackSignedNumber(projectionVsPricedAt)}, ${byeDetail}.`
       : `${formatFallbackOwnershipDetail(ownershipDelta)}, priced at ${formatFallbackFantasyNumber(pricedAt)}, avg ${formatFallbackFantasyNumber(avgPoints)} / L3 ${formatFallbackFantasyNumber(last3Avg)}, ${byeDetail}.`;
-    const originReason =
-      includeProMetrics && originRisk
-        ? " He is an Origin chance, so factor in the missed-game risk."
-        : includeProMetrics
-          ? " He is not flagged as an Origin chance."
-          : "";
-
     return [
       `${index + 1}) ${name} — ${position} — ${priceLabel}${titleProjection} — ${rating}/10`,
       details,
-      `Reason: ${valueReason}${byeReason}.${originReason}`,
+      `${fallbackReason}${secondaryReason}${cautionReason}`,
     ].join("\n");
   });
 
@@ -1072,16 +1088,15 @@ function ensureTopTradeInsSection(
     includeProMetrics
   );
 
-  const sectionPattern = /(^|\n)(?:#+\s*)?Top 5 Trade-ins\s*\n([\s\S]*?)(?=\n(?:#+\s*)?Recommended Moves\b|$)/i;
+  const tradeInsHeading = String.raw`(?:#+\s*)?top\s*5\s+trade(?:[-\s\u2011\u2013])?ins:?\s*`;
+  const recommendedMovesHeading = String.raw`\n(?:#+\s*)?recommended moves?:?\b`;
+  const sectionPattern = new RegExp(`(^|\\n)${tradeInsHeading}\\n[\\s\\S]*?(?=${recommendedMovesHeading}|$)`, "i");
   const sectionMatch = content.match(sectionPattern);
   if (sectionMatch) {
-    const body = sectionMatch[2] ?? "";
-    if (/^\s*\d+[\).]\s+/m.test(body)) return content;
-
     return content.replace(sectionPattern, `${sectionMatch[1] ?? ""}Top 5 Trade-ins\n${fallbackLines}\n`);
   }
 
-  const recommendedMovesPattern = /\n(?:#+\s*)?Recommended Moves\b/i;
+  const recommendedMovesPattern = new RegExp(recommendedMovesHeading, "i");
   if (recommendedMovesPattern.test(content)) {
     return content.replace(recommendedMovesPattern, `\nTop 5 Trade-ins\n${fallbackLines}\n\nRecommended Moves`);
   }

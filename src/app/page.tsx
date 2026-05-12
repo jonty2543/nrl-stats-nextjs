@@ -22,10 +22,12 @@ import {
   buildFantasyOwnershipDeltaByPlayerId,
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
+  fetchLineupsProjectionsByPlayerId,
   getTopFantasyOwnershipRise,
   getFantasyCoachRoundMetrics,
   type FantasyCoachPlayerSnapshot,
   type FantasyPlayerSnapshot,
+  type LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import {
   fetchUpcomingLineups,
@@ -496,6 +498,7 @@ function getLineupPlayerMetric(
 function buildFantasyValuePreviewRows(
   fantasyPlayers: FantasyPlayerSnapshot[],
   fantasyCoachPlayers: FantasyCoachPlayerSnapshot[],
+  lineupsProjections: LineupsProjectionSnapshot,
   ownershipDeltaByPlayerId: Map<number, number | null>,
   topOwnershipRise: number | null,
   limit = 6,
@@ -504,8 +507,12 @@ function buildFantasyValuePreviewRows(
     .map((player) => {
       const coachMetrics = getFantasyCoachRoundMetrics(fantasyCoachPlayers.find((coachPlayer) => coachPlayer.id === player.id) ?? null)
       const weeklyChange = ownershipDeltaByPlayerId.get(player.id) ?? null
+      const modelProjection =
+        lineupsProjections.projectionByPlayerId.get(player.id) ??
+        lineupsProjections.projectionByPlayerName.get(normalisePersonName(player.name)) ??
+        null
       const projection = applyFantasyProjectionOffset(
-        coachMetrics.projection ?? player.projectedAvg ?? null,
+        modelProjection ?? coachMetrics.projection ?? player.projectedAvg ?? null,
         weeklyChange,
         topOwnershipRise,
       )
@@ -952,6 +959,7 @@ export default async function Home() {
   const [
     fantasyPlayers,
     fantasyCoachPlayers,
+    lineupsProjections,
     availableYears,
     bettingSnapshot,
     playerImages,
@@ -963,6 +971,7 @@ export default async function Home() {
   ] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
+    fetchLineupsProjectionsByPlayerId(),
     fetchAvailableYears(),
     fetchBettingOddsSnapshot().catch((): BettingOddsSnapshot => ({
       h2h: [],
@@ -995,6 +1004,7 @@ export default async function Home() {
   const fantasyValuePreviewRows = buildFantasyValuePreviewRows(
     fantasyPlayers,
     fantasyCoachPlayers,
+    lineupsProjections,
     ownershipDeltaByPlayerId,
     topOwnershipRise,
   )
@@ -1019,7 +1029,13 @@ export default async function Home() {
     ? ownershipDeltaByPlayerId.get(spotlightFantasyPlayer.id) ?? null
     : null
   const spotlightProjection = applyFantasyProjectionOffset(
-    spotlightCoachMetrics.projection ?? spotlightFantasyPlayer?.projectedAvg ?? null,
+    spotlightFantasyPlayer
+      ? lineupsProjections.projectionByPlayerId.get(spotlightFantasyPlayer.id) ??
+        lineupsProjections.projectionByPlayerName.get(normalisePersonName(spotlightFantasyPlayer.name)) ??
+        spotlightCoachMetrics.projection ??
+        spotlightFantasyPlayer.projectedAvg ??
+        null
+      : null,
     spotlightWeeklyDelta,
     topOwnershipRise,
   )

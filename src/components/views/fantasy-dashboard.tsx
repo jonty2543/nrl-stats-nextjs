@@ -965,7 +965,7 @@ function renderTradeSuggestorInline(text: string) {
 
 function formatTradeSuggestorSectionTitle(title: string): string {
   if (/^sell watch/i.test(title)) return "Sell Watch"
-  if (/^top\s*5\s+trade(?:[-\s\u2011\u2013])?ins/i.test(title)) return "Top 5 Trade-ins"
+  if (/^top 5 trade-ins/i.test(title)) return "Top 5 Trade-ins"
   if (/^recommended moves?/i.test(title)) return "Recommended Moves"
   return title
 }
@@ -981,7 +981,7 @@ function buildTradeSuggestorSections(content: string) {
       continue
     }
 
-    if (/^(recommended moves?|sell watch|top\s*5\s+trade(?:[-\s\u2011\u2013])?ins|notes)\b/i.test(cleaned)) {
+    if (/^(recommended moves?|sell watch|top 5 trade-ins|notes)\b/i.test(cleaned)) {
       if (current) sections.push(current)
       current = { title: cleaned, lines: [] }
       continue
@@ -995,8 +995,7 @@ function buildTradeSuggestorSections(content: string) {
   const orderedTitles = ["Sell Watch", "Top 5 Trade-ins", "Recommended Moves"]
   return orderedTitles
     .map((title) => {
-      const matchingSections = sections.filter((entry) => formatTradeSuggestorSectionTitle(entry.title) === title)
-      const section = matchingSections.find((entry) => entry.lines.some((line) => line.trim().length > 0)) ?? matchingSections[0]
+      const section = sections.find((entry) => formatTradeSuggestorSectionTitle(entry.title) === title)
       if (!section) return null
 
       const blocks: string[][] = []
@@ -1753,6 +1752,8 @@ export function FantasyDashboard({
   const [fantasyAnalyticsPan, setFantasyAnalyticsPan] = useState({ x: 0.5, y: 0.5 })
   const [fantasyAnalyticsDrag, setFantasyAnalyticsDrag] = useState<FantasyAnalyticsDragState | null>(null)
   const [selectedFantasyAnalyticsPoint, setSelectedFantasyAnalyticsPoint] = useState<FantasyAnalyticsPoint | null>(null)
+  const fantasyAnalyticsZoomTimeoutRef = useRef<number | null>(null)
+  const fantasyAnalyticsSuppressClickRef = useRef(false)
   const [selectedGlobalStatVsFantasyLabel, setSelectedGlobalStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [globalStatVsFantasyPositionFilter, setGlobalStatVsFantasyPositionFilter] = useState("All Positions")
   const [globalStatVsFantasyZoom, setGlobalStatVsFantasyZoom] = useState(1)
@@ -1788,6 +1789,18 @@ export function FantasyDashboard({
   const playerDetailsRef = useRef<HTMLElement | null>(null)
   const cardTagsPreferenceUserIdRef = useRef<string | null>(null)
 
+  const commitFantasyAnalyticsZoom = useCallback((value: number, delayMs = 80) => {
+    if (fantasyAnalyticsZoomTimeoutRef.current !== null) {
+      window.clearTimeout(fantasyAnalyticsZoomTimeoutRef.current)
+    }
+    const nextZoom = Math.max(FANTASY_ANALYTICS_MIN_ZOOM, Math.min(FANTASY_ANALYTICS_MAX_ZOOM, value))
+    fantasyAnalyticsZoomTimeoutRef.current = window.setTimeout(() => {
+      setFantasyAnalyticsZoom(nextZoom)
+      setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
+      fantasyAnalyticsZoomTimeoutRef.current = null
+    }, delayMs)
+  }, [])
+
   const commitGlobalStatVsFantasyZoom = useCallback((value: number, delayMs = 80) => {
     if (globalStatVsFantasyZoomTimeoutRef.current !== null) {
       window.clearTimeout(globalStatVsFantasyZoomTimeoutRef.current)
@@ -1802,6 +1815,9 @@ export function FantasyDashboard({
 
   useEffect(() => {
     return () => {
+      if (fantasyAnalyticsZoomTimeoutRef.current !== null) {
+        window.clearTimeout(fantasyAnalyticsZoomTimeoutRef.current)
+      }
       if (globalStatVsFantasyZoomTimeoutRef.current !== null) {
         window.clearTimeout(globalStatVsFantasyZoomTimeoutRef.current)
       }
@@ -3292,7 +3308,7 @@ export function FantasyDashboard({
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
               <div className="order-2 min-w-0 space-y-3 xl:order-1">
               <>
-              <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2">
+              <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 [contain-intrinsic-size:430px] [content-visibility:auto]">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
                   <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -3341,10 +3357,13 @@ export function FantasyDashboard({
                         min={FANTASY_ANALYTICS_MIN_ZOOM}
                         max={FANTASY_ANALYTICS_MAX_ZOOM}
                         step={FANTASY_ANALYTICS_ZOOM_STEP}
-                        value={fantasyAnalyticsZoom}
+                        key={`${fantasyAnalyticsPositionFilter}-${fantasyAnalyticsMetric}`}
+                        defaultValue={fantasyAnalyticsZoom}
                         onChange={(event) => {
-                          setFantasyAnalyticsZoom(Number(event.target.value))
-                          setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
+                          commitFantasyAnalyticsZoom(Number(event.currentTarget.value))
+                        }}
+                        onPointerUp={(event) => {
+                          commitFantasyAnalyticsZoom(Number(event.currentTarget.value), 0)
                         }}
                         className="w-full accent-nrl-accent"
                         aria-label="Priced at plot zoom"
@@ -3378,6 +3397,38 @@ export function FantasyDashboard({
                     const diagonalEnd = Math.min(xDomain.max, yDomain.max)
                     const plotWidth = width - left - right
                     const plotHeight = height - top - bottom
+                    const chartPoints = pricedAtProjectionPoints.map((point) => {
+                      const metricValue = getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric) ?? 0
+                      return {
+                        point,
+                        metricValue,
+                        delta: metricValue - (point.pricedAt ?? 0),
+                        x: scaleChartValue(point.pricedAt ?? 0, xDomain.min, xDomain.max, left, width - right),
+                        y: scaleChartValue(metricValue, yDomain.min, yDomain.max, height - bottom, top),
+                      }
+                    })
+                    const selectNearestPoint = (event: PointerEvent<SVGSVGElement> | MouseEvent<SVGSVGElement>) => {
+                      const rect = event.currentTarget.getBoundingClientRect()
+                      if (rect.width <= 0 || rect.height <= 0) return
+                      const x = ((event.clientX - rect.left) / rect.width) * width
+                      const y = ((event.clientY - rect.top) / rect.height) * height
+                      if (x < left || x > width - right || y < top || y > height - bottom) return
+
+                      let closest: FantasyAnalyticsPoint | null = null
+                      let closestDistance = Infinity
+                      for (const chartPoint of chartPoints) {
+                        const dx = chartPoint.x - x
+                        const dy = chartPoint.y - y
+                        const distance = dx * dx + dy * dy
+                        if (distance < closestDistance) {
+                          closestDistance = distance
+                          closest = chartPoint.point
+                        }
+                      }
+                      if (closest && closestDistance <= 20 * 20) {
+                        setSelectedFantasyAnalyticsPoint(closest)
+                      }
+                    }
 
                     return (
                       <div className="space-y-2">
@@ -3385,9 +3436,10 @@ export function FantasyDashboard({
                         viewBox={`0 0 ${width} ${height}`}
                         role="img"
                         aria-label={`Priced at vs ${fantasyAnalyticsMetricOption.label.toLowerCase()} scatter plot`}
-                        className={`block h-auto w-full ${fantasyAnalyticsZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
+                        className={`block h-auto w-full ${fantasyAnalyticsZoom > 1 ? "cursor-grab touch-pan-y active:cursor-grabbing" : "touch-pan-y"}`}
                         onPointerDown={(event) => {
                           if (fantasyAnalyticsZoom <= 1) return
+                          if (event.pointerType === "touch") return
                           event.currentTarget.setPointerCapture(event.pointerId)
                           setFantasyAnalyticsDrag({
                             pointerId: event.pointerId,
@@ -3398,7 +3450,10 @@ export function FantasyDashboard({
                           })
                         }}
                         onPointerMove={(event) => {
-                          if (!fantasyAnalyticsDrag || fantasyAnalyticsDrag.pointerId !== event.pointerId || fantasyAnalyticsZoom <= 1) return
+                          if (!fantasyAnalyticsDrag || fantasyAnalyticsDrag.pointerId !== event.pointerId || fantasyAnalyticsZoom <= 1) {
+                            if (event.pointerType === "mouse") selectNearestPoint(event)
+                            return
+                          }
                           const deltaX = event.clientX - fantasyAnalyticsDrag.startX
                           const deltaY = event.clientY - fantasyAnalyticsDrag.startY
                           const dragScale = fantasyAnalyticsZoom / (fantasyAnalyticsZoom - 1)
@@ -3408,10 +3463,27 @@ export function FantasyDashboard({
                           })
                         }}
                         onPointerUp={(event) => {
-                          if (fantasyAnalyticsDrag?.pointerId === event.pointerId) setFantasyAnalyticsDrag(null)
+                          if (fantasyAnalyticsDrag?.pointerId === event.pointerId) {
+                            const moved =
+                              Math.abs(event.clientX - fantasyAnalyticsDrag.startX) +
+                              Math.abs(event.clientY - fantasyAnalyticsDrag.startY)
+                            if (moved < 8) {
+                              selectNearestPoint(event)
+                            } else {
+                              fantasyAnalyticsSuppressClickRef.current = true
+                            }
+                            setFantasyAnalyticsDrag(null)
+                          }
                         }}
                         onPointerCancel={(event) => {
                           if (fantasyAnalyticsDrag?.pointerId === event.pointerId) setFantasyAnalyticsDrag(null)
+                        }}
+                        onClick={(event) => {
+                          if (fantasyAnalyticsSuppressClickRef.current) {
+                            fantasyAnalyticsSuppressClickRef.current = false
+                            return
+                          }
+                          selectNearestPoint(event)
                         }}
                       >
                         <defs>
@@ -3462,28 +3534,11 @@ export function FantasyDashboard({
                           {fantasyAnalyticsMetricOption.label}
                         </text>
                         <g clipPath="url(#fantasy-analytics-scatter-clip)">
-                        {pricedAtProjectionPoints.map((point) => {
-                          const metricValue = getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric) ?? 0
-                          const x = scaleChartValue(point.pricedAt ?? 0, xDomain.min, xDomain.max, left, width - right)
-                          const y = scaleChartValue(metricValue, yDomain.min, yDomain.max, height - bottom, top)
-                          const delta = metricValue - (point.pricedAt ?? 0)
+                        {chartPoints.map(({ point, metricValue, delta, x, y }) => {
                           const pointColor = getProjectionDeltaColor(delta, maxAbsDelta)
                           const selected = selectedFantasyAnalyticsPoint?.name === point.name
                           return (
                             <g key={`${point.name}-${point.position}`}>
-                              <circle
-                                cx={x}
-                                cy={y}
-                                r="11"
-                                fill="transparent"
-                                className="cursor-pointer"
-                                onMouseEnter={() => setSelectedFantasyAnalyticsPoint(point)}
-                                onFocus={() => setSelectedFantasyAnalyticsPoint(point)}
-                                onClick={() => setSelectedFantasyAnalyticsPoint(point)}
-                                tabIndex={0}
-                              >
-                                <title>{`${point.name}\nPriced At: ${formatTableNumber(point.pricedAt, 0)}\n${fantasyAnalyticsMetricOption.label}: ${formatTableNumber(metricValue, 1)}\nDelta: ${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`}</title>
-                              </circle>
                               <circle
                                 cx={x}
                                 cy={y}
@@ -3493,7 +3548,9 @@ export function FantasyDashboard({
                                 strokeWidth={selected ? "2" : "1"}
                                 pointerEvents="none"
                                 opacity="0.9"
-                              />
+                              >
+                                <title>{`${point.name}\nPriced At: ${formatTableNumber(point.pricedAt, 0)}\n${fantasyAnalyticsMetricOption.label}: ${formatTableNumber(metricValue, 1)}\nDelta: ${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`}</title>
+                              </circle>
                             </g>
                           )
                         })}
@@ -3530,7 +3587,7 @@ export function FantasyDashboard({
                 )}
                 {analysisLocked ? <FantasyAnalyticsLockOverlay /> : null}
               </div>
-              <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2">
+              <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 [contain-intrinsic-size:410px] [content-visibility:auto]">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -3646,9 +3703,10 @@ export function FantasyDashboard({
                           viewBox={`0 0 ${width} ${height}`}
                           role="img"
                           aria-label={`2026 fantasy average vs ${selectedGlobalStatVsFantasyOption.label.toLowerCase()} average scatter plot`}
-                          className={`block h-auto w-full ${globalStatVsFantasyZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
+                          className={`block h-auto w-full ${globalStatVsFantasyZoom > 1 ? "cursor-grab touch-pan-y active:cursor-grabbing" : "touch-pan-y"}`}
                           onPointerDown={(event) => {
                             if (globalStatVsFantasyZoom <= 1) return
+                            if (event.pointerType === "touch") return
                             event.currentTarget.setPointerCapture(event.pointerId)
                             setGlobalStatVsFantasyDrag({
                               pointerId: event.pointerId,

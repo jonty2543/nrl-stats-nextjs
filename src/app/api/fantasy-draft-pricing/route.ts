@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
-import { fetchFantasyPlayersSnapshot } from "@/lib/fantasy/nrl"
+import { fetchFantasyPlayersSnapshot, fetchLineupsProjectionsByPlayerId } from "@/lib/fantasy/nrl"
 import { buildDraftPricingResult } from "@/lib/fantasy/draft-pricing"
 import { fetchPlayerImages } from "@/lib/supabase/queries"
 
@@ -133,10 +133,11 @@ export async function GET(request: NextRequest) {
     }
 
     const rostersUrl = `https://fantasy.nrl.com/nrl_draft/api/leagues_draft/rosters?league_id=${encodeURIComponent(leagueId)}&round=${round}`
-    const [rostersRaw, projectionsRaw, fantasyPlayers, playerImages, draw2026Data] = await Promise.all([
+    const [rostersRaw, projectionsRaw, fantasyPlayers, lineupsProjections, playerImages, draw2026Data] = await Promise.all([
       fetchJson(rostersUrl),
       fetchJson(projectionsUrl),
       fetchFantasyPlayersSnapshot(),
+      fetchLineupsProjectionsByPlayerId(),
       fetchPlayerImages(),
       loadDraw2026Data().catch(() => null),
     ])
@@ -151,6 +152,7 @@ export async function GET(request: NextRequest) {
         showRaw,
         rostersRaw,
         projectionsRaw,
+        lineupsProjections,
         fantasyPlayers,
         fantasyPlayerTeams,
         draw2026Data,

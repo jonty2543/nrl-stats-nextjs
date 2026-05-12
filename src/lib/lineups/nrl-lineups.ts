@@ -580,7 +580,7 @@ function buildPlayer(row: RawRow, overrides: Map<string, LineupSide>, includeFan
     headImage: nullableText(row.head_image),
     bodyImage: nullableText(row.body_image),
     fantasyProjection: includeFantasyProjection
-      ? numberOrNull(row.fantasy_projection) ?? numberOrNull(row.model_projection)
+      ? numberOrNull(row.model_projection) ?? numberOrNull(row.fantasy_projection)
       : null,
     side,
     sideSource: override ? "override" : side === "unknown" ? "unknown" : "nominal",

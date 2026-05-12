@@ -13,6 +13,7 @@ import {
   getTopFantasyOwnershipRise,
   type FantasyOwnershipBaselineSnapshot,
   type FantasyPlayerSnapshot,
+  type LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import {
   buildDraftPricingPlayerPool,
@@ -773,6 +774,7 @@ export function FantasyDraftPricingPage({
   playerImages,
   fantasyPlayers,
   coachProjectionsRaw,
+  lineupsProjections,
   ownershipBaselineSnapshot = null,
   draw2026Data,
   playerFantasySdRows,
@@ -782,6 +784,7 @@ export function FantasyDraftPricingPage({
   playerImages: PlayerImageRecord[]
   fantasyPlayers: FantasyPlayerSnapshot[]
   coachProjectionsRaw: unknown
+  lineupsProjections: LineupsProjectionSnapshot | null
   ownershipBaselineSnapshot?: FantasyOwnershipBaselineSnapshot | null
   draw2026Data: Draw2026Data | null
   playerFantasySdRows: DraftPricingHistoricalPlayerSd[]
@@ -844,6 +847,7 @@ export function FantasyDraftPricingPage({
       buildDraftPricingPlayerPool({
         round: roundValue,
         projectionsRaw: coachProjectionsRaw,
+        lineupsProjections,
         fantasyPlayers,
         fantasyPlayerTeams,
         draw2026Data,
@@ -852,7 +856,7 @@ export function FantasyDraftPricingPage({
         historicalPlayerSdRows: playerFantasySdRows,
         historicalPositionSdRows: positionFantasySdRows,
       }),
-    [roundValue, coachProjectionsRaw, fantasyPlayers, fantasyPlayerTeams, draw2026Data, ownershipDeltaByPlayerId, topOwnershipRise, playerFantasySdRows, positionFantasySdRows]
+    [roundValue, coachProjectionsRaw, lineupsProjections, fantasyPlayers, fantasyPlayerTeams, draw2026Data, ownershipDeltaByPlayerId, topOwnershipRise, playerFantasySdRows, positionFantasySdRows]
   )
 
   const playerPoolById = useMemo(() => new Map(playerPool.map((player) => [player.id, player])), [playerPool])

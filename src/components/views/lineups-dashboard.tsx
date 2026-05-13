@@ -557,6 +557,16 @@ function resolveTeamColour(team: LineupTeam | null): string {
   return teamName ? TEAM_COLOURS[teamName] : "#60a5fa"
 }
 
+function needsWatermarkLift(team: LineupTeam | null): boolean {
+  if (!team) return false
+  return [team.team, team.teamName].flatMap(teamAliases).some((teamName) => teamName === "broncos" || teamName === "storm")
+}
+
+function isStormTeam(team: LineupTeam | null): boolean {
+  if (!team) return false
+  return [team.team, team.teamName].flatMap(teamAliases).includes("storm")
+}
+
 function sportsbetOddsForTeam(
   match: LineupMatch,
   team: LineupTeam | null,
@@ -1454,8 +1464,19 @@ function TeamBadge({
   return (
     <div className="flex min-h-[7.5rem] w-[6.5rem] min-w-0 max-w-full flex-col items-center justify-center gap-1 px-2 py-1.5 text-center sm:min-h-[8.5rem] sm:w-[7.5rem] sm:px-2.5">
       {logo ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt="" className="h-20 w-20 object-contain sm:h-24 sm:w-24" loading="lazy" />
+        <div className="relative grid h-20 w-20 place-items-center sm:h-24 sm:w-24">
+          <span
+            aria-hidden="true"
+            className="absolute inset-1 rounded-full bg-[radial-gradient(circle,rgba(226,239,255,0.16),rgba(226,239,255,0.05)_42%,transparent_72%)] blur-sm"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logo}
+            alt=""
+            className="relative z-[1] h-full w-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.55)] [filter:drop-shadow(0_0_7px_rgba(226,239,255,0.32))]"
+            loading="lazy"
+          />
+        </div>
       ) : null}
       <div className="w-full min-w-0">
         <div className="truncate text-xs font-bold text-nrl-text sm:hidden">{shortName}</div>
@@ -2010,6 +2031,14 @@ function LineupCard({
   const awayLogo = resolveLogo(match.awayTeam, teamLogos)
   const homeColour = resolveTeamColour(match.homeTeam)
   const awayColour = resolveTeamColour(match.awayTeam)
+  const homeWatermarkLift = needsWatermarkLift(match.homeTeam)
+  const awayWatermarkLift = needsWatermarkLift(match.awayTeam)
+  const homeWatermarkClass = isStormTeam(match.homeTeam)
+    ? "left-6 h-40 w-40 opacity-[0.2] brightness-125 saturate-150 sm:left-16 sm:h-48 sm:w-48"
+    : `-left-8 h-44 w-44 sm:left-4 sm:h-56 sm:w-56 ${homeWatermarkLift ? "opacity-[0.22] brightness-125 saturate-150" : "opacity-[0.065] grayscale"}`
+  const awayWatermarkClass = isStormTeam(match.awayTeam)
+    ? "right-6 h-40 w-40 opacity-[0.2] brightness-125 saturate-150 sm:right-16 sm:h-48 sm:w-48"
+    : `-right-8 h-44 w-44 sm:right-4 sm:h-56 sm:w-56 ${awayWatermarkLift ? "opacity-[0.22] brightness-125 saturate-150" : "opacity-[0.065] grayscale"}`
   const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
     ? {
         player: selectedPlayer,
@@ -2055,7 +2084,7 @@ function LineupCard({
             src={homeLogo}
             alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute -left-8 top-1/2 h-44 w-44 -translate-y-1/2 object-contain opacity-[0.065] grayscale sm:left-4 sm:h-56 sm:w-56"
+            className={`pointer-events-none absolute top-1/2 -translate-y-1/2 object-contain ${homeWatermarkClass}`}
             loading="lazy"
           />
         ) : null}
@@ -2065,7 +2094,7 @@ function LineupCard({
             src={awayLogo}
             alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute -right-8 top-1/2 h-44 w-44 -translate-y-1/2 object-contain opacity-[0.065] grayscale sm:right-4 sm:h-56 sm:w-56"
+            className={`pointer-events-none absolute top-1/2 -translate-y-1/2 object-contain ${awayWatermarkClass}`}
             loading="lazy"
           />
         ) : null}

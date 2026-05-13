@@ -1716,7 +1716,7 @@ export default async function Home() {
               "Interactive field view",
               "Fantasy and odds display modes",
               "Bench and role context",
-              "Notable outs for Pro users",
+              "Notable Outs",
             ]}
             ctaHref="/dashboard/lineups"
             ctaLabel="Lineups"
@@ -1763,7 +1763,34 @@ export default async function Home() {
                         <span className="px-2 py-1 text-white/45">Tackles</span>
                       </div>
                     </div>
-                    <div className="relative h-[22rem] overflow-hidden rounded-xl border border-white/10 bg-[#07151e]/40 md:h-[23rem]">
+                    <div className="grid gap-2 sm:hidden">
+                      {([
+                        { label: lineupsLandingMatch.homeTeam?.teamName ?? lineupsLandingMatch.homeTeam?.team ?? "Home", players: homeLineupPlayers },
+                        { label: lineupsLandingMatch.awayTeam?.teamName ?? lineupsLandingMatch.awayTeam?.team ?? "Away", players: awayLineupPlayers },
+                      ] as const).map((team) => (
+                        <div key={`mobile-lineup-${team.label}`} className="rounded-xl border border-white/10 bg-[#07151e]/58 p-3">
+                          <div className="mb-2 truncate text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">{team.label}</div>
+                          <div className="space-y-2">
+                            {team.players.slice(0, 5).map((player) => {
+                              const metric = getLineupPlayerMetric(player, tryscorerOdds)
+                              return (
+                                <div key={`mobile-lineup-${team.label}-${player.player}`} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2">
+                                  <div className="grid h-8 w-8 place-items-center overflow-hidden rounded-full border border-white/65 bg-[#10172f]">
+                                    <ImageWithFallback sources={getLineupPlayerImageSources(player)} alt={player.player} className="h-full w-full object-cover object-top" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="truncate text-[11px] font-semibold text-white">{player.player}</div>
+                                    <div className="text-[9px] uppercase tracking-[0.12em] text-white/38">{player.position || "Role"}</div>
+                                  </div>
+                                  <div className={`text-xs font-bold ${metric.valueClassName}`}>{metric.value}</div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="relative hidden h-[22rem] overflow-hidden rounded-xl border border-white/10 bg-[#07151e]/40 sm:block md:h-[23rem]">
                       <div className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-emerald-200/45" />
                       {[12, 24, 36, 64, 76, 88].map((left) => (
                         <div key={`line-${left}`} className="absolute inset-y-0 w-px bg-emerald-200/18" style={{ left: `${left}%` }} />

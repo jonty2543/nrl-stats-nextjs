@@ -610,7 +610,6 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
       .from("lineups")
       .select("player, player_id, fantasy_projection, model_projection, position, team, number, is_on_field")
       .eq("round", roundLabel)
-      .gte("match_date", lineupCutoffUtc)
 
     if (error || !data) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
 

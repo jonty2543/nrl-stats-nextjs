@@ -84,6 +84,7 @@ interface FantasyDashboardProps {
   playerImages?: PlayerImageRecord[]
   teamLogos?: Record<string, string>
   preloadedPlayerAllYears?: boolean
+  preloadSelectedPlayerAllYears?: boolean
   draw2026Data?: Draw2026Data | null
   initialSelectedFantasyName?: string
   showOwnedCards?: boolean
@@ -496,6 +497,14 @@ function hasAllPlayerStatsForYear(rows: PlayerStat[], year: string): boolean {
   return names.size >= 50
 }
 
+function playerStatsApiUrl(years: string[], playerName?: string): string {
+  const params = new URLSearchParams()
+  if (years.length > 0) params.set("years", years.join(","))
+  if (playerName) params.set("player", playerName)
+  const query = params.toString()
+  return query ? `/api/player-stats?${query}` : "/api/player-stats"
+}
+
 function normaliseName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim()
 }
@@ -724,6 +733,39 @@ function isFantasyPlayerUnavailableForFallback(player: FantasyPlayerSnapshot): b
   return Boolean(
     status &&
     ["injured", "suspended", "out", "unavailable", "not playing"].some((token) => status.includes(token))
+  )
+}
+
+function resolveFantasyProjectionForLineups(
+  player: FantasyPlayerSnapshot,
+  lineupsProjections: LineupsProjectionSnapshot | undefined,
+  coachProjection: number | null
+): number {
+  const playerNameKey = normaliseProjectionPlayerName(player.name)
+
+  if (lineupsProjections?.source === "lineups") {
+    const isNamed =
+      lineupsProjections.roleByPlayerId.has(player.id) ||
+      lineupsProjections.roleByPlayerName.has(playerNameKey)
+
+    if (!isNamed) return 0
+
+    return (
+      lineupsProjections.projectionByPlayerId.get(player.id) ??
+      lineupsProjections.projectionByPlayerName.get(playerNameKey) ??
+      0
+    )
+  }
+
+  const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(playerNameKey) ?? null
+  return (
+    lineupsProjections?.projectionByPlayerId.get(player.id) ??
+    (fallbackProjection != null
+      ? isFantasyPlayerUnavailableForFallback(player) ? 0 : fallbackProjection
+      : null) ??
+    coachProjection ??
+    player.projectedAvg ??
+    0
   )
 }
 
@@ -1687,6 +1729,7 @@ export function FantasyDashboard({
   playerImages = [],
   teamLogos = {},
   preloadedPlayerAllYears = false,
+  preloadSelectedPlayerAllYears = false,
   draw2026Data,
   initialSelectedFantasyName,
   showOwnedCards = true,
@@ -1713,6 +1756,7 @@ export function FantasyDashboard({
   const [allPlayersStatsData, setAllPlayersStatsData] = useState<PlayerStat[]>(initialAllPlayerStats)
   const [teammateLookupRows, setTeammateLookupRows] = useState<TeammateLookupRow[]>([])
   const [isLoadingStats, setIsLoadingStats] = useState(false)
+  const [preloadedSelectedPlayerAllYearsKey, setPreloadedSelectedPlayerAllYearsKey] = useState<string | null>(null)
   const [selectedFantasyName, setSelectedFantasyName] = useState(
     initialSelectedFantasyName ?? fantasyPlayers[0]?.name ?? ""
   )
@@ -1788,6 +1832,14 @@ export function FantasyDashboard({
   const analysisLocked = !hasFantasyPlotAccess
   const playerDetailsRef = useRef<HTMLElement | null>(null)
   const cardTagsPreferenceUserIdRef = useRef<string | null>(null)
+  const selectedPlayerAllYearsRequestKeyRef = useRef<string | null>(null)
+  const selectedPlayerAllYearsKey = useMemo(
+    () =>
+      selectedFantasyName && availableYears.length > 0
+        ? `${selectedFantasyName}::${availableYears.join(",")}`
+        : null,
+    [availableYears, selectedFantasyName]
+  )
 
   const commitFantasyAnalyticsZoom = useCallback((value: number, delayMs = 80) => {
     if (fantasyAnalyticsZoomTimeoutRef.current !== null) {
@@ -2035,20 +2087,43 @@ export function FantasyDashboard({
     const nextYears = validYears.length > 0 ? validYears : availableYears.slice(0, 1)
     setSelectedYears(nextYears)
     if (nextYears.length === 0) return
-    if (preloadedPlayerAllYears) {
+    const hasSelectedPlayerAllYears =
+      preloadSelectedPlayerAllYears &&
+      selectedPlayerAllYearsKey !== null &&
+      preloadedSelectedPlayerAllYearsKey === selectedPlayerAllYearsKey
+    if (preloadedPlayerAllYears || hasSelectedPlayerAllYears) {
       void loadTeammateLookupRows(nextYears)
       return
     }
+    const selectedPlayerStatsName = preloadSelectedPlayerAllYears ? selectedFantasyName : undefined
     setIsLoadingStats(true)
     try {
-      const res = await fetch(`/api/player-stats?years=${encodeURIComponent(nextYears.join(","))}`)
+      const res = await fetch(playerStatsApiUrl(nextYears, selectedPlayerStatsName))
       if (!res.ok) return
       const data = (await res.json()) as PlayerStat[]
       setAllData(Array.isArray(data) ? data : [])
+      const loadedEveryAvailableYear =
+        selectedPlayerStatsName &&
+        selectedPlayerAllYearsKey &&
+        nextYears.length === availableYears.length &&
+        nextYears.every((year, index) => year === availableYears[index])
+      if (loadedEveryAvailableYear) {
+        setPreloadedSelectedPlayerAllYearsKey(selectedPlayerAllYearsKey)
+      } else if (selectedPlayerStatsName) {
+        setPreloadedSelectedPlayerAllYearsKey(null)
+      }
     } finally {
       setIsLoadingStats(false)
     }
-  }, [availableYears, loadTeammateLookupRows, preloadedPlayerAllYears])
+  }, [
+    availableYears,
+    loadTeammateLookupRows,
+    preloadedPlayerAllYears,
+    preloadedSelectedPlayerAllYearsKey,
+    preloadSelectedPlayerAllYears,
+    selectedFantasyName,
+    selectedPlayerAllYearsKey,
+  ])
 
   const selectedFantasyPlayer = useMemo(
     () => fantasyPlayers.find((player) => player.name === selectedFantasyName) ?? null,
@@ -2110,8 +2185,8 @@ export function FantasyDashboard({
   }, [allData, selectedYears])
 
   const teammateLookupSourceRows = useMemo(
-    () => (preloadedPlayerAllYears ? teammateLookupRows : selectedYearData),
-    [preloadedPlayerAllYears, teammateLookupRows, selectedYearData]
+    () => (preloadedPlayerAllYears || preloadSelectedPlayerAllYears ? teammateLookupRows : selectedYearData),
+    [preloadSelectedPlayerAllYears, preloadedPlayerAllYears, teammateLookupRows, selectedYearData]
   )
 
   const allLocalNames = useMemo(
@@ -2175,9 +2250,56 @@ export function FantasyDashboard({
   )
 
   useEffect(() => {
-    if (!showPlayerDetails || !preloadedPlayerAllYears || !hasLoginAccess) return
+    if (!showPlayerDetails || !(preloadedPlayerAllYears || preloadSelectedPlayerAllYears) || !hasLoginAccess) return
     void loadTeammateLookupRows(selectedYears)
-  }, [hasLoginAccess, loadTeammateLookupRows, preloadedPlayerAllYears, selectedYears, showPlayerDetails])
+  }, [hasLoginAccess, loadTeammateLookupRows, preloadSelectedPlayerAllYears, preloadedPlayerAllYears, selectedYears, showPlayerDetails])
+
+  useEffect(() => {
+    if (
+      !preloadSelectedPlayerAllYears ||
+      !showPlayerDetails ||
+      !selectedFantasyName ||
+      availableYears.length === 0 ||
+      !selectedPlayerAllYearsKey ||
+      preloadedSelectedPlayerAllYearsKey === selectedPlayerAllYearsKey ||
+      selectedPlayerAllYearsRequestKeyRef.current === selectedPlayerAllYearsKey
+    ) {
+      return
+    }
+
+    let cancelled = false
+    selectedPlayerAllYearsRequestKeyRef.current = selectedPlayerAllYearsKey
+
+    const loadSelectedPlayerAllYears = async () => {
+      try {
+        const res = await fetch(playerStatsApiUrl(availableYears, selectedFantasyName))
+        if (!res.ok) return
+        const data = (await res.json()) as PlayerStat[]
+        if (!cancelled && Array.isArray(data)) {
+          setAllData(data)
+          setPreloadedSelectedPlayerAllYearsKey(selectedPlayerAllYearsKey)
+        }
+      } catch (error) {
+        console.error("Failed to preload selected fantasy player stats", error)
+      } finally {
+        if (selectedPlayerAllYearsRequestKeyRef.current === selectedPlayerAllYearsKey) {
+          selectedPlayerAllYearsRequestKeyRef.current = null
+        }
+      }
+    }
+
+    void loadSelectedPlayerAllYears()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    availableYears,
+    preloadedSelectedPlayerAllYearsKey,
+    preloadSelectedPlayerAllYears,
+    selectedFantasyName,
+    selectedPlayerAllYearsKey,
+    showPlayerDetails,
+  ])
 
   useEffect(() => {
     setHasRequestedAllPlayersStats(false)
@@ -2203,7 +2325,7 @@ export function FantasyDashboard({
     setHasRequestedAllPlayersStats(true)
     const loadAllPlayersYear = async () => {
       try {
-        const res = await fetch(`/api/player-stats?years=${ALL_PLAYERS_STATS_YEAR}`)
+        const res = await fetch(playerStatsApiUrl([ALL_PLAYERS_STATS_YEAR]))
         if (!res.ok) {
           if (!cancelled) setAllPlayersStatsLoadFailed(true)
           return
@@ -2541,15 +2663,11 @@ export function FantasyDashboard({
         resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
         resolvePlayerImage(player.name, teamHint, playerImages)
       const projectionRound = lineupsProjections?.round ?? coachMetrics.round
-      const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(normaliseProjectionPlayerName(player.name)) ?? null
-      const rawProjection =
-        lineupsProjections?.projectionByPlayerId.get(player.id) ??
-        (fallbackProjection != null
-          ? isFantasyPlayerUnavailableForFallback(player) ? 0 : fallbackProjection
-          : null) ??
-        coachMetrics.projection ??
-        player.projectedAvg ??
-        0
+      const rawProjection = resolveFantasyProjectionForLineups(
+        player,
+        lineupsProjections,
+        coachMetrics.projection
+      )
       const pricedAt = player.pricedAt
       const value = rawProjection != null && pricedAt != null ? rawProjection - pricedAt : null
       const lineupRole =
@@ -2828,15 +2946,10 @@ export function FantasyDashboard({
   const selectedAdjustedProjection = useMemo(
     () => {
       if (!selectedFantasyPlayer) return null
-      const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(normaliseProjectionPlayerName(selectedFantasyPlayer.name)) ?? null
-      return (
-        lineupsProjections?.projectionByPlayerId.get(selectedFantasyPlayer.id) ??
-        (fallbackProjection != null
-          ? isFantasyPlayerUnavailableForFallback(selectedFantasyPlayer) ? 0 : fallbackProjection
-          : null) ??
-        selectedFantasyCoachMetrics.projection ??
-        selectedFantasyPlayer.projectedAvg ??
-        0
+      return resolveFantasyProjectionForLineups(
+        selectedFantasyPlayer,
+        lineupsProjections,
+        selectedFantasyCoachMetrics.projection
       )
     },
     [lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyPlayer]

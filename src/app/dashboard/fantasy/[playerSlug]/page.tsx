@@ -155,6 +155,7 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
         teamLogos={teamLogos}
         initialSelectedFantasyName={selectedPlayer.name}
         showOwnedCards={false}
+        preloadSelectedPlayerAllYears
         showPlayerComments
         playerRouteBasePath="/dashboard/fantasy"
         ownershipBaselineSnapshot={ownershipBaselineSnapshot}

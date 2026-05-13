@@ -543,16 +543,20 @@ function addAttackComboInsight(
     .flatMap((team) => pairs.map((pair) => ({
       passer: playerForSlot(team, pair.passer),
       receiver: playerForSlot(team, pair.receiver),
+      receiverSlot: pair.receiver,
     })))
-    .filter((entry): entry is { passer: LineupPlayer; receiver: LineupPlayer } => {
+    .filter((entry): entry is { passer: LineupPlayer; receiver: LineupPlayer; receiverSlot: InsightSlot } => {
       if (!entry.passer || !entry.receiver) return false
       const lineBreakAssists = averageValue(playerAverages, entry.passer, "Line Break Assists")
       const lineBreaks = averageValue(playerAverages, entry.receiver, "Line Breaks")
       const tryAssists = averageValue(playerAverages, entry.passer, "Try Assists")
       const tries = averageValue(playerAverages, entry.receiver, "Tries")
+      const receiverIsEdge = entry.receiverSlot === "L2R" || entry.receiverSlot === "R2R"
+      const lineBreakThreshold = receiverIsEdge ? 0.5 : 0.8
+      const tryThreshold = receiverIsEdge ? 0.5 : 1
       return (
-        (lineBreakAssists != null && lineBreakAssists >= 1 && lineBreaks != null && lineBreaks >= 0.8) ||
-        (tryAssists != null && tryAssists >= 1 && tries != null && tries >= 1)
+        (lineBreakAssists != null && lineBreakAssists >= 1 && lineBreaks != null && lineBreaks >= lineBreakThreshold) ||
+        (tryAssists != null && tryAssists >= 1 && tries != null && tries >= tryThreshold)
       )
     })
     .map((entry) => ({
@@ -571,8 +575,11 @@ function addAttackComboInsight(
   const top = candidates[0]
   if (!top) return
 
-  const hasLineBreakCombo = top.lineBreakAssists >= 1 && top.lineBreaks >= 0.8
-  const hasTryCombo = top.tryAssists >= 1 && top.tries >= 1
+  const receiverIsEdge = top.receiverSlot === "L2R" || top.receiverSlot === "R2R"
+  const lineBreakThreshold = receiverIsEdge ? 0.5 : 0.8
+  const tryThreshold = receiverIsEdge ? 0.5 : 1
+  const hasLineBreakCombo = top.lineBreakAssists >= 1 && top.lineBreaks >= lineBreakThreshold
+  const hasTryCombo = top.tryAssists >= 1 && top.tries >= tryThreshold
   addInsight(
     insights,
     {
@@ -683,25 +690,25 @@ function addSideTryscorerInsight(
       const leftIsShorter = leftPair.wing.price < rightPair.wing.price && leftPair.centre.price < rightPair.centre.price
       const rightIsShorter = rightPair.wing.price < leftPair.wing.price && rightPair.centre.price < leftPair.centre.price
       const averageGap = Math.abs(leftAverage - rightAverage)
-      if (leftIsShorter || (!rightIsShorter && leftAverage < rightAverage && averageGap >= 0.25)) backedPair = leftPair
-      if (rightIsShorter || (!leftIsShorter && rightAverage < leftAverage && averageGap >= 0.25)) backedPair = rightPair
+      if (leftIsShorter && leftAverage < rightAverage && averageGap >= 0.45) backedPair = leftPair
+      if (rightIsShorter && rightAverage < leftAverage && averageGap >= 0.45) backedPair = rightPair
     } else {
       const onlyPair = leftPair ?? rightPair
       const onlyAverage = leftAverage ?? rightAverage
-      if (onlyPair && onlyAverage != null && onlyAverage <= 2.9) backedPair = onlyPair
+      if (onlyPair && onlyAverage != null && onlyAverage <= 2.6) backedPair = onlyPair
     }
 
     if (backedPair) {
       const wingPrice = backedPair.wing.price
       const centrePrice = backedPair.centre.price
-      if (Math.min(wingPrice, centrePrice) > 3.6) continue
+      if (Math.min(wingPrice, centrePrice) > 3.2) continue
 
       addInsight(
         insights,
         {
           category: "Betting",
           severity: Math.min(wingPrice, centrePrice) <= 2.2 ? "high" : "medium",
-          title: `${teamLabel(team)} look set to attack down the ${backedPair.side}.`,
+          title: `${teamLabel(team)} are heavily ${backedPair.side} side dominant in attack.`,
           description: `${playerLabel(backedPair.wing.player)} (${wingPrice.toFixed(2)}) and ${playerLabel(backedPair.centre.player)} (${centrePrice.toFixed(2)}) are being well backed in the tryscorer market.`,
           confidence: Math.min(wingPrice, centrePrice) <= 2.2 ? 0.77 : 0.69,
         },

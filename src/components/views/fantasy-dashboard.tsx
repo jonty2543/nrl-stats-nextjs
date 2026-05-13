@@ -3549,10 +3549,10 @@ export function FantasyDashboard({
                         viewBox={`0 0 ${width} ${height}`}
                         role="img"
                         aria-label={`Priced at vs ${fantasyAnalyticsMetricOption.label.toLowerCase()} scatter plot`}
-                        className={`block h-auto w-full ${fantasyAnalyticsZoom > 1 ? "cursor-grab touch-pan-y active:cursor-grabbing" : "touch-pan-y"}`}
+                        className={`block h-auto w-full ${fantasyAnalyticsZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-pan-y"}`}
                         onPointerDown={(event) => {
                           if (fantasyAnalyticsZoom <= 1) return
-                          if (event.pointerType === "touch") return
+                          if (event.cancelable) event.preventDefault()
                           event.currentTarget.setPointerCapture(event.pointerId)
                           setFantasyAnalyticsDrag({
                             pointerId: event.pointerId,
@@ -3567,6 +3567,7 @@ export function FantasyDashboard({
                             if (event.pointerType === "mouse") selectNearestPoint(event)
                             return
                           }
+                          if (event.cancelable) event.preventDefault()
                           const deltaX = event.clientX - fantasyAnalyticsDrag.startX
                           const deltaY = event.clientY - fantasyAnalyticsDrag.startY
                           const dragScale = fantasyAnalyticsZoom / (fantasyAnalyticsZoom - 1)
@@ -3816,10 +3817,10 @@ export function FantasyDashboard({
                           viewBox={`0 0 ${width} ${height}`}
                           role="img"
                           aria-label={`2026 fantasy average vs ${selectedGlobalStatVsFantasyOption.label.toLowerCase()} average scatter plot`}
-                          className={`block h-auto w-full ${globalStatVsFantasyZoom > 1 ? "cursor-grab touch-pan-y active:cursor-grabbing" : "touch-pan-y"}`}
+                          className={`block h-auto w-full ${globalStatVsFantasyZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-pan-y"}`}
                           onPointerDown={(event) => {
                             if (globalStatVsFantasyZoom <= 1) return
-                            if (event.pointerType === "touch") return
+                            if (event.cancelable) event.preventDefault()
                             event.currentTarget.setPointerCapture(event.pointerId)
                             setGlobalStatVsFantasyDrag({
                               pointerId: event.pointerId,
@@ -3834,6 +3835,7 @@ export function FantasyDashboard({
                               if (event.pointerType === "mouse") selectNearestPoint(event)
                               return
                             }
+                            if (event.cancelable) event.preventDefault()
                             const deltaX = event.clientX - globalStatVsFantasyDrag.startX
                             const deltaY = event.clientY - globalStatVsFantasyDrag.startY
                             const dragScale = globalStatVsFantasyZoom / (globalStatVsFantasyZoom - 1)

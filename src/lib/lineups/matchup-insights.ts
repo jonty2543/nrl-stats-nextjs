@@ -241,6 +241,33 @@ function selectStrongestInsights(insights: CandidateInsight[], maxInsights: numb
   return selected.sort((a, b) => b.score - a.score)
 }
 
+function hashString(value: string): number {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+function shuffledInsights(insights: CandidateInsight[], seed: string): CandidateInsight[] {
+  return [...insights].sort((a, b) => {
+    const aHash = hashString(`${seed}:${a.category}:${a.title}:${a.description}`)
+    const bHash = hashString(`${seed}:${b.category}:${b.title}:${b.description}`)
+    return aHash - bHash
+  })
+}
+
+function matchShuffleSeed(match: LineupMatch): string {
+  return [
+    match.matchId,
+    match.match,
+    match.matchDate,
+    match.homeTeam?.team,
+    match.awayTeam?.team,
+  ].filter(Boolean).join(":")
+}
+
 function teamOuts(team: LineupTeam | null, casualtyWardOuts?: Record<string, LineupCasualtyOut[]>): LineupCasualtyOut[] {
   if (!team || !casualtyWardOuts) return []
 
@@ -731,7 +758,7 @@ export function generateMatchupInsights({
   addTryscorerInsight(insights, match, tryscorerOdds)
   addStatAverageInsights(insights, match, playerAverages)
 
-  return selectStrongestInsights(insights, Math.max(0, maxInsights))
+  return shuffledInsights(selectStrongestInsights(insights, Math.max(0, maxInsights)), matchShuffleSeed(match))
     .map((insight) => {
       const result: MatchupInsight = {
         category: insight.category,

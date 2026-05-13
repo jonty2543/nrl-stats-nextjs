@@ -22,7 +22,6 @@ export type LineupAverageStatKey =
   | "Line Break Assists"
   | "Errors"
   | "Missed Tackles"
-  | "Receipts"
   | "Tackle Breaks"
   | "Offloads"
 
@@ -55,7 +54,7 @@ const PRIORITY_CATEGORY_QUOTAS: Array<{ category: MatchupInsightCategory; quota:
 
 const FANTASY_POSITION_GROUPS: Array<{ label: "halves" | "middle"; slots: InsightSlot[]; threshold: number }> = [
   { label: "halves", slots: ["FE", "HLF"], threshold: 18 },
-  { label: "middle", slots: ["PR", "HK", "LK"], threshold: 28 },
+  { label: "middle", slots: ["PR", "LK"], threshold: 20 },
 ]
 
 const STAT_RULES: Array<{
@@ -64,12 +63,8 @@ const STAT_RULES: Array<{
   playerThreshold: number
   highPlayerThreshold: number
   standoutGap: number
-  teamDiffThreshold: number
-  highTeamDiffThreshold: number
   playerTitle: (player: string) => string
   playerDescription: (value: string) => string
-  teamTitle: (team: string) => string
-  teamDescription: (diff: string) => string
 }> = [
   {
     key: "Tries",
@@ -77,12 +72,8 @@ const STAT_RULES: Array<{
     playerThreshold: 0.55,
     highPlayerThreshold: 0.8,
     standoutGap: 0.18,
-    teamDiffThreshold: 0.7,
-    highTeamDiffThreshold: 1.1,
     playerTitle: (player) => `${player} profiles as the strongest try-scoring threat.`,
     playerDescription: (value) => `${value} tries per game leads the named players.`,
-    teamTitle: (team) => `${team} project significantly more attacking opportunities.`,
-    teamDescription: (diff) => `${diff} more tries per game across the named side.`,
   },
   {
     key: "Try Assists",
@@ -90,12 +81,8 @@ const STAT_RULES: Array<{
     playerThreshold: 0.5,
     highPlayerThreshold: 0.75,
     standoutGap: 0.18,
-    teamDiffThreshold: 0.75,
-    highTeamDiffThreshold: 1.15,
     playerTitle: (player) => `${player} projects as the primary attacking catalyst.`,
     playerDescription: (value) => `${value} try assists per game is the top playmaking signal.`,
-    teamTitle: (team) => `${team} project the stronger creation profile.`,
-    teamDescription: (diff) => `${diff} more try assists per game across the named side.`,
   },
   {
     key: "All Run Metres",
@@ -103,12 +90,8 @@ const STAT_RULES: Array<{
     playerThreshold: 150,
     highPlayerThreshold: 180,
     standoutGap: 20,
-    teamDiffThreshold: 150,
-    highTeamDiffThreshold: 230,
     playerTitle: (player) => `${player} profiles with the strongest metre base.`,
     playerDescription: (value) => `${value} run metres per game gives a reliable floor.`,
-    teamTitle: (team) => `${team} project the stronger yardage base.`,
-    teamDescription: (diff) => `${diff} extra run metres per game across the named side.`,
   },
   {
     key: "Tackles Made",
@@ -116,12 +99,8 @@ const STAT_RULES: Array<{
     playerThreshold: 38,
     highPlayerThreshold: 45,
     standoutGap: 5,
-    teamDiffThreshold: 70,
-    highTeamDiffThreshold: 110,
     playerTitle: (player) => `${player} profiles with the strongest tackle floor.`,
     playerDescription: (value) => `${value} tackles per game leads this lineup.`,
-    teamTitle: (team) => `${team} project heavier defensive workload.`,
-    teamDescription: (diff) => `${diff} more tackles per game across the named side.`,
   },
   {
     key: "Line Breaks",
@@ -129,12 +108,8 @@ const STAT_RULES: Array<{
     playerThreshold: 0.45,
     highPlayerThreshold: 0.75,
     standoutGap: 0.16,
-    teamDiffThreshold: 0.6,
-    highTeamDiffThreshold: 1,
     playerTitle: (player) => `${player} profiles as the game's most dangerous line-break threat.`,
     playerDescription: (value) => `${value} line breaks per game is the strongest break signal.`,
-    teamTitle: (team) => `${team} project the sharper line-break profile.`,
-    teamDescription: (diff) => `${diff} more line breaks per game across the named side.`,
   },
   {
     key: "Line Break Assists",
@@ -142,12 +117,8 @@ const STAT_RULES: Array<{
     playerThreshold: 0.45,
     highPlayerThreshold: 0.7,
     standoutGap: 0.16,
-    teamDiffThreshold: 0.65,
-    highTeamDiffThreshold: 1,
     playerTitle: (player) => `${player} projects as the primary attacking catalyst.`,
     playerDescription: (value) => `${value} line-break assists per game tops this matchup.`,
-    teamTitle: (team) => `${team} project more line-break creation.`,
-    teamDescription: (diff) => `${diff} more line-break assists per game across the named side.`,
   },
   {
     key: "Errors",
@@ -155,12 +126,8 @@ const STAT_RULES: Array<{
     playerThreshold: 1.6,
     highPlayerThreshold: 2.2,
     standoutGap: 0.35,
-    teamDiffThreshold: 2.5,
-    highTeamDiffThreshold: 4,
     playerTitle: (player) => `${player} carries the clearest ball-security risk.`,
     playerDescription: (value) => `${value} errors per game is the highest risk marker.`,
-    teamTitle: (team) => `${team} profile with the larger error risk.`,
-    teamDescription: (diff) => `${diff} more errors per game across the named side.`,
   },
   {
     key: "Missed Tackles",
@@ -168,25 +135,8 @@ const STAT_RULES: Array<{
     playerThreshold: 3.2,
     highPlayerThreshold: 4.5,
     standoutGap: 0.8,
-    teamDiffThreshold: 6,
-    highTeamDiffThreshold: 9,
     playerTitle: (player) => `${player} profiles as the clearest defensive target.`,
     playerDescription: (value) => `${value} missed tackles per game stands out.`,
-    teamTitle: (team) => `${team} project more defensive leakage.`,
-    teamDescription: (diff) => `${diff} more missed tackles per game across the named side.`,
-  },
-  {
-    key: "Receipts",
-    category: "Stats",
-    playerThreshold: 42,
-    highPlayerThreshold: 52,
-    standoutGap: 7,
-    teamDiffThreshold: 25,
-    highTeamDiffThreshold: 40,
-    playerTitle: (player) => `${player} owns the strongest involvement profile.`,
-    playerDescription: (value) => `${value} receipts per game points to heavy touches.`,
-    teamTitle: (team) => `${team} project the bigger involvement base.`,
-    teamDescription: (diff) => `${diff} more receipts per game across the named side.`,
   },
   {
     key: "Tackle Breaks",
@@ -194,12 +144,8 @@ const STAT_RULES: Array<{
     playerThreshold: 4,
     highPlayerThreshold: 5.5,
     standoutGap: 1,
-    teamDiffThreshold: 4,
-    highTeamDiffThreshold: 6.5,
     playerTitle: (player) => `${player} profiles with the best tackle-break upside.`,
     playerDescription: (value) => `${value} tackle breaks per game is the top evasion signal.`,
-    teamTitle: (team) => `${team} project more tackle-break upside.`,
-    teamDescription: (diff) => `${diff} more tackle breaks per game across the named side.`,
   },
   {
     key: "Offloads",
@@ -207,12 +153,8 @@ const STAT_RULES: Array<{
     playerThreshold: 1.5,
     highPlayerThreshold: 2.3,
     standoutGap: 0.4,
-    teamDiffThreshold: 2.5,
-    highTeamDiffThreshold: 4,
     playerTitle: (player) => `${player} profiles with the clearest offload upside.`,
     playerDescription: (value) => `${value} offloads per game leads this matchup.`,
-    teamTitle: (team) => `${team} project more second-phase upside.`,
-    teamDescription: (diff) => `${diff} more offloads per game across the named side.`,
   },
 ]
 
@@ -334,7 +276,7 @@ function averageValue(playerAverages: PlayerAverages | undefined, player: Lineup
 }
 
 function formatStatValue(key: LineupAverageStatKey, value: number): string {
-  if (key === "All Run Metres" || key === "Post Contact Metres" || key === "Receipts") return value.toFixed(0)
+  if (key === "All Run Metres" || key === "Post Contact Metres") return value.toFixed(0)
   if (key === "Tackle Efficiency") return `${value.toFixed(1)}%`
   return value.toFixed(1)
 }
@@ -355,6 +297,10 @@ function playersForSlots(team: LineupTeam | null, slots: InsightSlot[]): LineupP
 function topPlayerForSlot(team: LineupTeam | null, slot: InsightSlot): LineupPlayer | null {
   return playersForSlots(team, [slot])
     .sort((a, b) => (projection(b) ?? 0) - (projection(a) ?? 0))[0] ?? null
+}
+
+function playerForSlot(team: LineupTeam | null, slot: InsightSlot): LineupPlayer | null {
+  return playersForSlots(team, [slot])[0] ?? null
 }
 
 function oddsForPlayer(player: LineupPlayer | null, tryscorerOdds: Record<string, LineupTryscorerOdds>): LineupTryscorerOdds | null {
@@ -423,35 +369,6 @@ function addStatAverageInsights(
       }
     }
 
-    const teamTotals = teams
-      .map((team) => ({
-        team,
-        total: namedPlayers(team)
-          .map((player) => averageValue(playerAverages, player, rule.key))
-          .filter((value): value is number => value != null)
-          .reduce((total, value) => total + value, 0),
-        count: namedPlayers(team).filter((player) => averageValue(playerAverages, player, rule.key) != null).length,
-      }))
-      .filter((entry) => entry.count >= 8)
-
-    if (teamTotals.length === 2) {
-      const [home, away] = teamTotals
-      const diff = Math.abs(home.total - away.total)
-      if (diff >= rule.teamDiffThreshold) {
-        const favouredTeam = home.total > away.total ? home.team : away.team
-        addInsight(
-          insights,
-          {
-            category: rule.category,
-            severity: diff >= rule.highTeamDiffThreshold ? "high" : "medium",
-            title: rule.teamTitle(teamLabel(favouredTeam)),
-            description: rule.teamDescription(formatStatValue(rule.key, diff)),
-            confidence: diff >= rule.highTeamDiffThreshold ? 0.75 : 0.67,
-          },
-          Math.min(60, Math.round((diff / rule.highTeamDiffThreshold) * 32))
-        )
-      }
-    }
   }
 }
 
@@ -496,31 +413,6 @@ function addPositionGroupInsight(insights: CandidateInsight[], match: LineupMatc
   }
 }
 
-function addElevatedPlayerInsight(insights: CandidateInsight[], match: LineupMatch) {
-  const projectedPlayers = [match.homeTeam, match.awayTeam]
-    .flatMap((team) => namedPlayers(team).map((player) => ({ player, team })))
-    .map(({ player, team }) => ({ player, team, projection: projection(player) }))
-    .filter((entry): entry is { player: LineupPlayer; team: LineupTeam | null; projection: number } => entry.projection != null)
-    .sort((a, b) => b.projection - a.projection)
-
-  const top = projectedPlayers[0]
-  if (!top || top.projection < 55) return
-
-  const nextBest = projectedPlayers[1]?.projection
-  const gap = nextBest != null ? top.projection - nextBest : 0
-  addInsight(
-    insights,
-    {
-      category: "Fantasy",
-      severity: top.projection >= 62 || gap >= 8 ? "high" : "medium",
-      title: `${playerLabel(top.player)} profiles as a premier fantasy target.`,
-      description: `${Math.round(top.projection)} projection leads this matchup for ${teamLabel(top.team)}${gap >= 8 ? `, ${Math.round(gap)} points clear of the next best` : ""}.`,
-      confidence: top.projection >= 62 ? 0.84 : 0.76,
-    },
-    Math.round(top.projection + gap)
-  )
-}
-
 function addTeamNewsInsight(
   insights: CandidateInsight[],
   match: LineupMatch,
@@ -547,6 +439,125 @@ function addTeamNewsInsight(
       confidence: highest.outs.length >= 5 ? 0.8 : 0.72,
     },
     highest.outs.length
+  )
+}
+
+function addMismatchInsight(
+  insights: CandidateInsight[],
+  match: LineupMatch,
+  playerAverages?: PlayerAverages
+) {
+  if (!playerAverages) return
+
+  const teams = [
+    { attack: match.homeTeam, defence: match.awayTeam },
+    { attack: match.awayTeam, defence: match.homeTeam },
+  ]
+  const directSlots: Array<{ attack: InsightSlot; defence: InsightSlot }> = [
+    { attack: "LW", defence: "RW" },
+    { attack: "RW", defence: "LW" },
+    { attack: "LC", defence: "RC" },
+    { attack: "RC", defence: "LC" },
+    { attack: "L2R", defence: "HLF" },
+    { attack: "R2R", defence: "FE" },
+    { attack: "L2R", defence: "R2R" },
+    { attack: "R2R", defence: "L2R" },
+  ]
+
+  const candidates = teams
+    .flatMap(({ attack, defence }) => directSlots.map((slots) => ({
+      attacker: playerForSlot(attack, slots.attack),
+      defender: playerForSlot(defence, slots.defence),
+    })))
+    .filter((entry): entry is { attacker: LineupPlayer; defender: LineupPlayer } => {
+      if (!entry.attacker || !entry.defender) return false
+      const tackleBreaks = averageValue(playerAverages, entry.attacker, "Tackle Breaks")
+      const missedTackles = averageValue(playerAverages, entry.defender, "Missed Tackles")
+      return tackleBreaks != null && tackleBreaks > 3 && missedTackles != null && missedTackles >= 3
+    })
+    .map((entry) => ({
+      ...entry,
+      tackleBreaks: averageValue(playerAverages, entry.attacker, "Tackle Breaks") ?? 0,
+      missedTackles: averageValue(playerAverages, entry.defender, "Missed Tackles") ?? 0,
+    }))
+    .sort((a, b) => (b.tackleBreaks + b.missedTackles) - (a.tackleBreaks + a.missedTackles))
+
+  const top = candidates[0]
+  if (!top) return
+
+  addInsight(
+    insights,
+    {
+      category: "Stats",
+      severity: top.tackleBreaks >= 5 || top.missedTackles >= 4.5 ? "high" : "medium",
+      title: `${playerLabel(top.attacker)} vs ${playerLabel(top.defender)} is a mismatch.`,
+      description: `${playerLabel(top.attacker)} averages ${top.tackleBreaks.toFixed(1)} tackle breaks; ${playerLabel(top.defender)} averages ${top.missedTackles.toFixed(1)} missed tackles.`,
+      confidence: top.tackleBreaks >= 5 || top.missedTackles >= 4.5 ? 0.78 : 0.7,
+    },
+    Math.round(top.tackleBreaks * 10 + top.missedTackles * 8)
+  )
+}
+
+function addAttackComboInsight(
+  insights: CandidateInsight[],
+  match: LineupMatch,
+  playerAverages?: PlayerAverages
+) {
+  if (!playerAverages) return
+
+  const pairs: Array<{ passer: InsightSlot; receiver: InsightSlot }> = [
+    { passer: "LC", receiver: "LW" },
+    { passer: "RC", receiver: "RW" },
+    { passer: "FE", receiver: "L2R" },
+    { passer: "HLF", receiver: "R2R" },
+  ]
+
+  const candidates = [match.homeTeam, match.awayTeam]
+    .flatMap((team) => pairs.map((pair) => ({
+      passer: playerForSlot(team, pair.passer),
+      receiver: playerForSlot(team, pair.receiver),
+    })))
+    .filter((entry): entry is { passer: LineupPlayer; receiver: LineupPlayer } => {
+      if (!entry.passer || !entry.receiver) return false
+      const lineBreakAssists = averageValue(playerAverages, entry.passer, "Line Break Assists")
+      const lineBreaks = averageValue(playerAverages, entry.receiver, "Line Breaks")
+      const tryAssists = averageValue(playerAverages, entry.passer, "Try Assists")
+      const tries = averageValue(playerAverages, entry.receiver, "Tries")
+      return (
+        (lineBreakAssists != null && lineBreakAssists >= 1 && lineBreaks != null && lineBreaks >= 0.8) ||
+        (tryAssists != null && tryAssists >= 1 && tries != null && tries >= 1)
+      )
+    })
+    .map((entry) => ({
+      ...entry,
+      lineBreakAssists: averageValue(playerAverages, entry.passer, "Line Break Assists") ?? 0,
+      lineBreaks: averageValue(playerAverages, entry.receiver, "Line Breaks") ?? 0,
+      tryAssists: averageValue(playerAverages, entry.passer, "Try Assists") ?? 0,
+      tries: averageValue(playerAverages, entry.receiver, "Tries") ?? 0,
+    }))
+    .sort((a, b) => {
+      const aScore = a.lineBreakAssists * 10 + a.lineBreaks * 10 + a.tryAssists * 8 + a.tries * 8
+      const bScore = b.lineBreakAssists * 10 + b.lineBreaks * 10 + b.tryAssists * 8 + b.tries * 8
+      return bScore - aScore
+    })
+
+  const top = candidates[0]
+  if (!top) return
+
+  const hasLineBreakCombo = top.lineBreakAssists >= 1 && top.lineBreaks >= 0.8
+  const hasTryCombo = top.tryAssists >= 1 && top.tries >= 1
+  addInsight(
+    insights,
+    {
+      category: "Stats",
+      severity: hasLineBreakCombo && hasTryCombo ? "high" : "medium",
+      title: `${playerLabel(top.passer)} and ${playerLabel(top.receiver)} could form a great combo in attack.`,
+      description: hasTryCombo
+        ? `${playerLabel(top.passer)} averages ${top.tryAssists.toFixed(1)} try assists; ${playerLabel(top.receiver)} averages ${top.tries.toFixed(1)} tries.`
+        : `${playerLabel(top.passer)} averages ${top.lineBreakAssists.toFixed(1)} line-break assists; ${playerLabel(top.receiver)} averages ${top.lineBreaks.toFixed(1)} line breaks.`,
+      confidence: hasLineBreakCombo && hasTryCombo ? 0.78 : 0.7,
+    },
+    Math.round(top.lineBreakAssists * 16 + top.lineBreaks * 14 + top.tryAssists * 12 + top.tries * 12)
   )
 }
 
@@ -601,10 +612,10 @@ function addAerialErrorTargetInsight(
   if (!playerAverages) return
 
   const candidates = [match.homeTeam, match.awayTeam]
-    .flatMap((team) => playersForSlots(team, ["LW", "RW"]).map((player) => ({ player, team })))
+    .flatMap((team) => playersForSlots(team, ["FB", "LW", "RW"]).map((player) => ({ player, team })))
     .map((entry) => ({ ...entry, errors: averageValue(playerAverages, entry.player, "Errors") }))
     .filter((entry): entry is { player: LineupPlayer; team: LineupTeam | null; errors: number } => {
-      return entry.errors != null && entry.errors >= 2
+      return entry.errors != null && entry.errors >= 1.7
     })
     .sort((a, b) => b.errors - a.errors)
 
@@ -618,7 +629,7 @@ function addAerialErrorTargetInsight(
       category: "Stats",
       severity: target.errors >= 2.5 ? "high" : "medium",
       title: `${teamLabel(attackingTeam)} could target ${playerLabel(target.player)} aerially.`,
-      description: `${playerLabel(target.player)} on the wing averages ${target.errors.toFixed(1)} errors per game.`,
+      description: `${playerLabel(target.player)} averages ${target.errors.toFixed(1)} errors per game.`,
       confidence: target.errors >= 2.5 ? 0.76 : 0.68,
     },
     Math.round(target.errors * 18)
@@ -711,8 +722,9 @@ export function generateMatchupInsights({
   const insights: CandidateInsight[] = []
 
   addPositionGroupInsight(insights, match)
-  addElevatedPlayerInsight(insights, match)
   addTeamNewsInsight(insights, match, casualtyWardOuts)
+  addMismatchInsight(insights, match, playerAverages)
+  addAttackComboInsight(insights, match, playerAverages)
   addAerialErrorTargetInsight(insights, match, playerAverages)
   addMissedTackleTargetInsight(insights, match, playerAverages)
   addSideTryscorerInsight(insights, match, tryscorerOdds)

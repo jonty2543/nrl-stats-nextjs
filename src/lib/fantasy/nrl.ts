@@ -490,9 +490,9 @@ export interface LineupsProjectionSnapshot {
   round: number | null
   source: FantasyProjectionSource
   lineupsAvailable: boolean
-  /** Maps NRL player_id → fantasy_projection. Missing players default to 0 at call sites. */
+  /** Maps NRL player_id → model projection. Missing players default to 0 at call sites. */
   projectionByPlayerId: Map<number, number>
-  /** Maps normalised player name → pre-lineups fantasy_projection/model_projection fallback. */
+  /** Maps normalised player name → model projection fallback. */
   projectionByPlayerName: Map<string, number>
   /** Maps NRL player_id → named lineup role for the selected lineups round. */
   roleByPlayerId: Map<number, LineupsPlayerRole>
@@ -608,9 +608,8 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     const { data, error } = await supabase
       .schema("nrl")
       .from("lineups")
-      .select("player, player_id, fantasy_projection, position, team, number, is_on_field")
+      .select("player, player_id, fantasy_projection, model_projection, position, team, number, is_on_field")
       .eq("round", roundLabel)
-      .gte("match_date", lineupCutoffUtc)
 
     if (error || !data) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
 
@@ -622,7 +621,8 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
       const playerNameKey = normaliseProjectionPlayerName(row.player)
       const projection = isZeroProjectionLineupPosition(row.position)
         ? 0
-        : toFiniteProjectionNumber(row.fantasy_projection)
+        : toFiniteProjectionNumber(row.model_projection) ??
+          toFiniteProjectionNumber(row.fantasy_projection)
       if (projection != null) {
         if (row.player_id != null) {
           projectionByPlayerId.set(Number(row.player_id), projection)

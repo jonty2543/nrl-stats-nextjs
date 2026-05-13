@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server"
 import { FantasyDraftPricingPage } from "@/components/views/fantasy-draft-pricing-page"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
-import { fetchFantasyPlayersSnapshot, fetchLatestFantasyOwnershipBaselineSnapshot } from "@/lib/fantasy/nrl"
+import { fetchFantasyPlayersSnapshot, fetchLatestFantasyOwnershipBaselineSnapshot, fetchLineupsProjectionsByPlayerId } from "@/lib/fantasy/nrl"
 import {
   fetchPlayerFantasySd5yFromSupabase,
   fetchPlayerImages,
@@ -36,10 +36,11 @@ export default async function FantasyDraftPricingRoutePage() {
   const { userId } = await auth()
   const locked = !(await getServerProPlotAccess(userId))
 
-  const [playerImages, fantasyPlayers, coachProjectionsRaw, ownershipBaselineSnapshot, draw2026Data, rawPlayerFantasySdRows, rawPositionFantasySdRows] = await Promise.all([
+  const [playerImages, fantasyPlayers, coachProjectionsRaw, lineupsProjections, ownershipBaselineSnapshot, draw2026Data, rawPlayerFantasySdRows, rawPositionFantasySdRows] = await Promise.all([
     fetchPlayerImages(),
     fetchFantasyPlayersSnapshot(),
     fetchCoachProjectionsRaw(),
+    fetchLineupsProjectionsByPlayerId(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
     loadDraw2026Data().catch(() => null),
     fetchPlayerFantasySd5yFromSupabase().catch(() => []),
@@ -62,6 +63,7 @@ export default async function FantasyDraftPricingRoutePage() {
       playerImages={playerImages}
       fantasyPlayers={fantasyPlayers}
       coachProjectionsRaw={coachProjectionsRaw}
+      lineupsProjections={lineupsProjections}
       ownershipBaselineSnapshot={ownershipBaselineSnapshot}
       draw2026Data={draw2026Data}
       playerFantasySdRows={playerFantasySdRows}

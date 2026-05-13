@@ -1,5 +1,5 @@
 import type { Draw2026Data } from "@/lib/draw/types"
-import { applyFantasyProjectionOffset, type FantasyPlayerSnapshot } from "@/lib/fantasy/nrl"
+import { applyFantasyProjectionOffset, type FantasyPlayerSnapshot, type LineupsProjectionSnapshot } from "@/lib/fantasy/nrl"
 
 export interface DraftPricingPlayer {
   id: number | null
@@ -491,6 +491,25 @@ function buildProjectionLookups(points: ProjectionPoint[]) {
   return { byId, byName }
 }
 
+function applyModelProjectionOverrides(
+  points: ProjectionPoint[],
+  lineupsProjections?: LineupsProjectionSnapshot | null
+): ProjectionPoint[] {
+  if (!lineupsProjections) return points
+  return points.map((point) => {
+    const modelProjection =
+      (point.id != null ? lineupsProjections.projectionByPlayerId.get(point.id) : undefined) ??
+      lineupsProjections.projectionByPlayerName.get(normaliseText(point.name)) ??
+      null
+    if (modelProjection == null) return point
+    return {
+      ...point,
+      projection: modelProjection,
+      standardDeviation: fallbackStandardDeviation(modelProjection, point.average),
+    }
+  })
+}
+
 function buildFantasyPlayerDirectory(points: FantasyPlayerSnapshot[], fantasyPlayerTeams: Record<number, string | null>) {
   const byId = new Map<number, FantasyPlayerDirectoryPoint>()
   const byName = new Map<string, FantasyPlayerDirectoryPoint>()
@@ -969,6 +988,7 @@ export function buildDraftPricingResult(params: {
   showRaw: unknown
   rostersRaw: unknown
   projectionsRaw: unknown
+  lineupsProjections?: LineupsProjectionSnapshot | null
   fantasyPlayers: FantasyPlayerSnapshot[]
   fantasyPlayerTeams: Record<number, string | null>
   draw2026Data: Draw2026Data | null
@@ -977,7 +997,10 @@ export function buildDraftPricingResult(params: {
   const leagueMeta = parseLeagueMeta(params.showRaw)
   const availableRounds = collectAvailableRounds(params.showRaw)
   const round = params.round ?? leagueMeta.currentRound ?? availableRounds[0] ?? null
-  const projectionPoints = collectProjectionPoints(params.projectionsRaw, round)
+  const projectionPoints = applyModelProjectionOverrides(
+    collectProjectionPoints(params.projectionsRaw, round),
+    params.lineupsProjections,
+  )
   const projectionLookups = buildProjectionLookups(projectionPoints)
   const fantasyPlayerDirectory = buildFantasyPlayerDirectory(params.fantasyPlayers, params.fantasyPlayerTeams)
   const teams = parseRosterTeams(params.rostersRaw, projectionLookups, fantasyPlayerDirectory, params.draw2026Data, round)
@@ -1041,6 +1064,7 @@ export function buildDraftPricingResult(params: {
 export function buildDraftPricingPlayerPool(params: {
   round: number | null
   projectionsRaw: unknown
+  lineupsProjections?: LineupsProjectionSnapshot | null
   fantasyPlayers: FantasyPlayerSnapshot[]
   fantasyPlayerTeams: Record<number, string | null>
   draw2026Data: Draw2026Data | null
@@ -1049,7 +1073,10 @@ export function buildDraftPricingPlayerPool(params: {
   historicalPlayerSdRows?: DraftPricingHistoricalPlayerSd[]
   historicalPositionSdRows?: DraftPricingHistoricalPositionSd[]
 }): DraftPricingPoolPlayer[] {
-  const projectionPoints = collectProjectionPoints(params.projectionsRaw, params.round)
+  const projectionPoints = applyModelProjectionOverrides(
+    collectProjectionPoints(params.projectionsRaw, params.round),
+    params.lineupsProjections,
+  )
   const projectionLookups = buildProjectionLookups(projectionPoints)
   const fantasyPlayerDirectory = buildFantasyPlayerDirectory(params.fantasyPlayers, params.fantasyPlayerTeams)
   const playerSdLookup = buildHistoricalPlayerSdLookup(params.historicalPlayerSdRows)

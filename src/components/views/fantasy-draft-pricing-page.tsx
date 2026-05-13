@@ -13,6 +13,7 @@ import {
   getTopFantasyOwnershipRise,
   type FantasyOwnershipBaselineSnapshot,
   type FantasyPlayerSnapshot,
+  type LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import {
   buildDraftPricingPlayerPool,
@@ -28,8 +29,14 @@ const H2H_BENCH_SLOT_LABELS = ["BEN", "BEN", "BEN", "BEN"] as const
 const H2H_SLOT_LABELS = [...DRAFT_SLOT_LABELS, ...H2H_BENCH_SLOT_LABELS] as const
 const DRAFT_PRICER_LOCAL_KEY_PREFIX = "fantasy-draft-pricer"
 const DRAFT_PRICER_SAVED_TEAMS_LOCAL_KEY_PREFIX = "fantasy-draft-pricer-teams"
+const DRAFT_SCREENSHOT_MAX_IMAGE_DATA_URL_LENGTH = 650_000
+const DRAFT_SCREENSHOT_SLOTS = [
+  { key: "top", label: "Screenshot 1", hint: "Top half with team names and starters." },
+  { key: "bottom", label: "Screenshot 2", hint: "Scroll down and capture remaining starters plus bench." },
+] as const
 
 type MatchupMode = "draft" | "h2h"
+type DraftScreenshotSlot = (typeof DRAFT_SCREENSHOT_SLOTS)[number]["key"]
 type CaptainSelections = {
   home: number | null
   away: number | null
@@ -43,6 +50,8 @@ interface SavedDraftPricerState {
   homeSlots: Array<number | null>
   awaySlots: Array<number | null>
   captainSelections: CaptainSelections
+  homeAvatarDataUrl?: string | null
+  awayAvatarDataUrl?: string | null
 }
 
 interface SavedDraftTeamPreset {
@@ -55,10 +64,129 @@ interface SavedDraftTeamPreset {
   updatedAt: string
 }
 
+interface DraftTeamScreenshot {
+  id: string
+  slot: DraftScreenshotSlot
+  name: string
+  mediaType: "image/jpeg"
+  dataUrl: string
+  avatarCrops: {
+    home: string | null
+    away: string | null
+  }
+}
+
+interface DraftScreenshotExtractedPlayer {
+  name?: unknown
+  slot?: unknown
+  isBench?: unknown
+  isCaptain?: unknown
+}
+
+interface DraftScreenshotExtractedTeam {
+  teamName?: unknown
+  ownerName?: unknown
+  players?: unknown
+}
+
+interface DraftScreenshotExtractedPayload {
+  home?: DraftScreenshotExtractedTeam
+  away?: DraftScreenshotExtractedTeam
+}
+
 const LEGACY_DEFAULT_TEAM_LABELS = new Set(["Paradisepalms", "Guns 'R' Us"])
 
 function normaliseDraftTeamLabel(value: string): string {
   return LEGACY_DEFAULT_TEAM_LABELS.has(value.trim()) ? "" : value
+}
+
+function readDraftScreenshotFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result)
+      } else {
+        reject(new Error("Unable to read image."))
+      }
+    }
+    reader.onerror = () => reject(new Error("Unable to read image."))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadDraftScreenshotImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new window.Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error("Unable to load image."))
+    image.src = src
+  })
+}
+
+function cropDraftTeamAvatar(image: HTMLImageElement, side: "home" | "away"): string | null {
+  const canvas = document.createElement("canvas")
+  const context = canvas.getContext("2d")
+  if (!context) return null
+
+  const sourceSize = Math.round(Math.min(image.naturalWidth * 0.115, image.naturalHeight * 0.064))
+  if (sourceSize <= 0) return null
+
+  const sourceX = Math.round(image.naturalWidth * (side === "home" ? 0.055 : 0.835))
+  const sourceY = Math.round(image.naturalHeight * 0.138)
+  canvas.width = 96
+  canvas.height = 96
+  context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, 96, 96)
+  return canvas.toDataURL("image/jpeg", 0.82)
+}
+
+async function buildDraftTeamScreenshot(file: File, slot: DraftScreenshotSlot): Promise<DraftTeamScreenshot> {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    throw new Error("Upload PNG, JPEG, or WebP screenshots.")
+  }
+
+  const sourceDataUrl = await readDraftScreenshotFileAsDataUrl(file)
+  const image = await loadDraftScreenshotImage(sourceDataUrl)
+  const maxWidth = 900
+  const canvas = document.createElement("canvas")
+  const canvasContext = canvas.getContext("2d")
+  if (!canvasContext) {
+    throw new Error("Unable to process image.")
+  }
+
+  let scale = Math.min(1, maxWidth / image.naturalWidth)
+  let dataUrl = ""
+  for (const widthScale of [1, 0.82, 0.68, 0.54, 0.42]) {
+    const width = Math.max(1, Math.round(image.naturalWidth * scale * widthScale))
+    const height = Math.max(1, Math.round(image.naturalHeight * scale * widthScale))
+    canvas.width = width
+    canvas.height = height
+    canvasContext.drawImage(image, 0, 0, width, height)
+
+    for (const quality of [0.78, 0.68, 0.58, 0.48]) {
+      dataUrl = canvas.toDataURL("image/jpeg", quality)
+      if (dataUrl.length <= DRAFT_SCREENSHOT_MAX_IMAGE_DATA_URL_LENGTH) break
+    }
+
+    if (dataUrl.length <= DRAFT_SCREENSHOT_MAX_IMAGE_DATA_URL_LENGTH) break
+    scale *= 0.9
+  }
+
+  if (dataUrl.length > DRAFT_SCREENSHOT_MAX_IMAGE_DATA_URL_LENGTH) {
+    throw new Error("That screenshot is too large. Try cropping it or uploading a clearer, smaller screenshot.")
+  }
+
+  return {
+    id: `${slot}-${file.name}-${file.size}-${file.lastModified}`,
+    slot,
+    name: file.name,
+    mediaType: "image/jpeg",
+    dataUrl,
+    avatarCrops: {
+      home: cropDraftTeamAvatar(image, "home"),
+      away: cropDraftTeamAvatar(image, "away"),
+    },
+  }
 }
 
 function slotLabelsForMode(mode: MatchupMode): readonly string[] {
@@ -205,6 +333,58 @@ function fairDecimalOdds(probability: number): number {
   return Math.round((1 / bounded) * 100) / 100
 }
 
+function normalisePlayerLookupValue(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function playerNameSignature(value: string): { initial: string; surname: string; full: string } {
+  const full = normalisePlayerLookupValue(value)
+  const abbreviated = full.match(/^([a-z])\s+(.+)$/)
+  if (abbreviated) {
+    return {
+      initial: abbreviated[1] ?? "",
+      surname: (abbreviated[2] ?? "").replace(/\s+/g, ""),
+      full,
+    }
+  }
+
+  const parts = full.split(" ").filter(Boolean)
+  const first = parts[0] ?? ""
+  return {
+    initial: first.slice(0, 1),
+    surname: parts.slice(1).join(""),
+    full,
+  }
+}
+
+function fantasyPlayerNameMatches(extractedName: string, playerName: string): boolean {
+  const extracted = playerNameSignature(extractedName)
+  const candidate = playerNameSignature(playerName)
+  if (!extracted.full || !candidate.full) return false
+  if (extracted.full === candidate.full) return true
+  if (!extracted.initial || extracted.initial !== candidate.initial) return false
+  if (!extracted.surname || !candidate.surname) return false
+  return extracted.surname === candidate.surname || candidate.surname.endsWith(extracted.surname)
+}
+
+function normaliseExtractedSlot(value: unknown, isBench: unknown): string | null {
+  if (isBench === true) return "BEN"
+  const slot = typeof value === "string" ? value.toUpperCase().replace(/[^A-Z]/g, "") : ""
+  if (slot.includes("BEN")) return "BEN"
+  if (slot.includes("HOOK")) return "HOK"
+  if (slot.includes("MIDDLE")) return "MID"
+  if (slot.includes("EDGE")) return "EDG"
+  if (slot.includes("HALF")) return "HLF"
+  if (slot.includes("CENTRE") || slot.includes("CENTER")) return "CTR"
+  if (slot.includes("WING") || slot.includes("FULLBACK") || slot.includes("FULL")) return "WFB"
+  if (["HOK", "MID", "EDG", "HLF", "CTR", "WFB"].includes(slot)) return slot
+  return null
+}
+
 function resolveCaptainId(
   playerIds: Array<number | null>,
   preferredCaptainId: number | null,
@@ -255,6 +435,60 @@ function buildSlotOptionLists(
       .map((player) => optionLabelById.get(player.id))
       .filter((label): label is string => Boolean(label))
   )
+}
+
+function resolveExtractedPlayersToSlots({
+  players,
+  existingSlots,
+  slotLabels,
+  playerPool,
+}: {
+  players: DraftScreenshotExtractedPlayer[]
+  existingSlots: Array<number | null>
+  slotLabels: readonly string[]
+  playerPool: DraftPricingPoolPlayer[]
+}): { slots: Array<number | null>; captainId: number | null; matched: number; total: number } {
+  const nextSlots = buildEmptySlots(slotLabels.length)
+  const usedPlayerIds = new Set<number>()
+  let captainId: number | null = null
+  let matched = 0
+  let total = 0
+
+  for (const extractedPlayer of players) {
+    const rawName = typeof extractedPlayer.name === "string" ? extractedPlayer.name.replace(/\s+/g, " ").trim() : ""
+    if (!rawName) continue
+    total += 1
+
+    const preferredSlot = normaliseExtractedSlot(extractedPlayer.slot, extractedPlayer.isBench)
+    if (preferredSlot === "BEN" && !slotLabels.includes("BEN")) continue
+
+    const match = playerPool.find((player) => {
+      if (usedPlayerIds.has(player.id)) return false
+      if (!fantasyPlayerNameMatches(rawName, player.name)) return false
+      return preferredSlot === "BEN" || preferredSlot == null || matchesSlotLabel(player, preferredSlot)
+    })
+    if (!match) continue
+
+    const preferredIndex = slotLabels.findIndex((slotLabel, index) => {
+      if (nextSlots[index] != null) return false
+      if (preferredSlot === "BEN") return slotLabel === "BEN"
+      return preferredSlot != null ? slotLabel === preferredSlot : matchesSlotLabel(match, slotLabel)
+    })
+    const fallbackIndex = slotLabels.findIndex((slotLabel, index) => nextSlots[index] == null && matchesSlotLabel(match, slotLabel))
+    const slotIndex = preferredIndex >= 0 ? preferredIndex : fallbackIndex
+    if (slotIndex < 0) continue
+
+    nextSlots[slotIndex] = match.id
+    usedPlayerIds.add(match.id)
+    matched += 1
+    if (extractedPlayer.isCaptain === true) captainId = match.id
+  }
+
+  if (matched === 0) {
+    return { slots: resizeSlots(existingSlots, slotLabels.length), captainId: null, matched, total }
+  }
+
+  return { slots: nextSlots, captainId, matched, total }
 }
 
 function buildBoardPlayer(
@@ -350,6 +584,7 @@ function TeamHeader({
   playerPoolById,
   fantasyPlayersById,
   playerImages,
+  avatarDataUrl,
   savedTeams,
   onLoadSavedTeam,
   onSaveCurrentTeam,
@@ -364,6 +599,7 @@ function TeamHeader({
   playerPoolById: Map<number, DraftPricingPoolPlayer>
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
   playerImages: PlayerImageRecord[]
+  avatarDataUrl?: string | null
   savedTeams: SavedDraftTeamPreset[]
   onLoadSavedTeam: (teamId: string) => void
   onSaveCurrentTeam: () => void
@@ -372,13 +608,15 @@ function TeamHeader({
   const selectedPlayers = players.filter((player): player is DraftPricingPlayer => player != null)
   const selectedCount = selectedPlayers.length
   const [selectedSavedTeamId, setSelectedSavedTeamId] = useState("")
-  const avatarSources = teamAvatarSources(
-    players,
-    selectedCaptainId,
-    playerPoolById,
-    fantasyPlayersById,
-    playerImages
-  )
+  const avatarSources = avatarDataUrl
+    ? [avatarDataUrl]
+    : teamAvatarSources(
+        players,
+        selectedCaptainId,
+        playerPoolById,
+        fantasyPlayersById,
+        playerImages
+      )
   const alignClass = side === "left" ? "items-start text-left" : "items-end text-right"
 
   return (
@@ -431,6 +669,134 @@ function TeamHeader({
             Delete
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function SparkAiIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true" className={className}>
+      <path
+        d="M23.5 4.5c1.2 8.1 5.9 12.8 14 14-8.1 1.2-12.8 5.9-14 14-1.2-8.1-5.9-12.8-14-14 8.1-1.2 12.8-5.9 14-14Z"
+        fill="currentColor"
+      />
+      <path
+        d="M37.5 29c.7 4.3 3.2 6.8 7.5 7.5-4.3.7-6.8 3.2-7.5 7.5-.7-4.3-3.2-6.8-7.5-7.5 4.3-.7 6.8-3.2 7.5-7.5Z"
+        fill="currentColor"
+        opacity="0.92"
+      />
+      <path
+        d="M38.5 2.5c.6 3.4 2.6 5.4 6 6-3.4.6-5.4 2.6-6 6-.6-3.4-2.6-5.4-6-6 3.4-.6 5.4-2.6 6-6Z"
+        fill="currentColor"
+        opacity="0.86"
+      />
+    </svg>
+  )
+}
+
+function DraftScreenshotAutofillPanel({
+  screenshots,
+  uploadingSlot,
+  isSubmitting,
+  error,
+  status,
+  locked,
+  onScreenshotChange,
+  onSubmit,
+  onClear,
+}: {
+  screenshots: Record<DraftScreenshotSlot, DraftTeamScreenshot | null>
+  uploadingSlot: DraftScreenshotSlot | null
+  isSubmitting: boolean
+  error: string | null
+  status: string | null
+  locked: boolean
+  onScreenshotChange: (slot: DraftScreenshotSlot, files: FileList | null) => void
+  onSubmit: () => void
+  onClear: () => void
+}) {
+  const hasScreenshot = DRAFT_SCREENSHOT_SLOTS.some((slot) => screenshots[slot.key] != null)
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-xl border border-nrl-accent/35 bg-[linear-gradient(135deg,rgba(0,245,138,0.12),rgba(124,58,237,0.16))]">
+      <div className="grid gap-4 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:p-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-white">
+            <SparkAiIcon className="h-5 w-5 shrink-0 text-nrl-accent" />
+            Best way to fill teams
+          </div>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-nrl-muted md:text-sm">
+            Upload the two matchup screenshots and NRL AI will fill both teams, team names, and profile photos. Manual entry is still below as a fallback.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={locked || !hasScreenshot || isSubmitting || uploadingSlot != null}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-nrl-accent/50 bg-[linear-gradient(135deg,#00f58a,#8b5cf6)] px-4 py-2 text-sm font-black text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          <SparkAiIcon className="h-5 w-5" />
+          {isSubmitting ? "Filling teams..." : "Autofill Teams"}
+        </button>
+      </div>
+
+      <div className="grid gap-3 border-t border-nrl-border/70 bg-nrl-panel/55 p-3 md:grid-cols-2 md:p-4">
+        {DRAFT_SCREENSHOT_SLOTS.map((slot) => {
+          const screenshot = screenshots[slot.key]
+          const uploading = uploadingSlot === slot.key
+          return (
+            <label
+              key={slot.key}
+              className="flex min-h-24 cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-nrl-accent/35 bg-[#20284a] p-3 transition-colors hover:border-nrl-accent"
+            >
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="sr-only"
+                disabled={locked || isSubmitting}
+                onChange={(event) => {
+                  onScreenshotChange(slot.key, event.currentTarget.files)
+                  event.currentTarget.value = ""
+                }}
+              />
+              <span className="flex min-w-0 items-center gap-3">
+                {screenshot ? (
+                  <span className="flex h-20 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={screenshot.dataUrl}
+                      alt={`${slot.label} preview`}
+                      className="h-full w-full object-contain"
+                    />
+                  </span>
+                ) : null}
+                <span className="min-w-0">
+                  <span className="block text-xs font-bold uppercase tracking-wide text-nrl-accent">{slot.label}</span>
+                  <span className="mt-1 block text-[10px] leading-4 text-nrl-muted">{slot.hint}</span>
+                </span>
+              </span>
+              <span className="shrink-0 rounded-md border border-nrl-border bg-nrl-panel px-2 py-1.5 text-[11px] font-semibold text-nrl-text">
+                {uploading ? "Processing..." : screenshot ? "Replace" : "Upload"}
+              </span>
+            </label>
+          )
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-nrl-border/70 px-3 py-2 text-xs md:px-4">
+        <div className={error ? "text-rose-200" : "text-nrl-muted"}>
+          {error ?? status ?? (hasScreenshot ? "Ready to fill from screenshots." : "Upload both screenshots for the most complete team fill.")}
+        </div>
+        {hasScreenshot ? (
+          <button
+            type="button"
+            onClick={onClear}
+            className="rounded-md border border-nrl-border px-2 py-1 text-[11px] font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+          >
+            Clear screenshots
+          </button>
+        ) : null}
       </div>
     </div>
   )
@@ -603,6 +969,8 @@ function EditableMatchupBoard({
   blurValues = false,
   homeLabel,
   awayLabel,
+  homeAvatarDataUrl,
+  awayAvatarDataUrl,
   onHomeLabelChange,
   onAwayLabelChange,
   homeSlots,
@@ -630,6 +998,8 @@ function EditableMatchupBoard({
   blurValues?: boolean
   homeLabel: string
   awayLabel: string
+  homeAvatarDataUrl?: string | null
+  awayAvatarDataUrl?: string | null
   onHomeLabelChange: (value: string) => void
   onAwayLabelChange: (value: string) => void
   homeSlots: Array<number | null>
@@ -671,6 +1041,7 @@ function EditableMatchupBoard({
             playerPoolById={playerPoolById}
             fantasyPlayersById={fantasyPlayersById}
             playerImages={playerImages}
+            avatarDataUrl={homeAvatarDataUrl}
             savedTeams={savedTeams}
             onLoadSavedTeam={(teamId) => onLoadSavedTeamToSide("home", teamId)}
             onSaveCurrentTeam={() => onSaveSideAsTeam("home")}
@@ -708,6 +1079,7 @@ function EditableMatchupBoard({
             playerPoolById={playerPoolById}
             fantasyPlayersById={fantasyPlayersById}
             playerImages={playerImages}
+            avatarDataUrl={awayAvatarDataUrl}
             savedTeams={savedTeams}
             onLoadSavedTeam={(teamId) => onLoadSavedTeamToSide("away", teamId)}
             onSaveCurrentTeam={() => onSaveSideAsTeam("away")}
@@ -773,6 +1145,7 @@ export function FantasyDraftPricingPage({
   playerImages,
   fantasyPlayers,
   coachProjectionsRaw,
+  lineupsProjections,
   ownershipBaselineSnapshot = null,
   draw2026Data,
   playerFantasySdRows,
@@ -782,6 +1155,7 @@ export function FantasyDraftPricingPage({
   playerImages: PlayerImageRecord[]
   fantasyPlayers: FantasyPlayerSnapshot[]
   coachProjectionsRaw: unknown
+  lineupsProjections: LineupsProjectionSnapshot | null
   ownershipBaselineSnapshot?: FantasyOwnershipBaselineSnapshot | null
   draw2026Data: Draw2026Data | null
   playerFantasySdRows: DraftPricingHistoricalPlayerSd[]
@@ -794,9 +1168,19 @@ export function FantasyDraftPricingPage({
   const [matchupMode, setMatchupMode] = useState<MatchupMode>("draft")
   const [homeLabel, setHomeLabel] = useState("")
   const [awayLabel, setAwayLabel] = useState("")
+  const [homeAvatarDataUrl, setHomeAvatarDataUrl] = useState<string | null>(null)
+  const [awayAvatarDataUrl, setAwayAvatarDataUrl] = useState<string | null>(null)
   const [homeSlots, setHomeSlots] = useState<Array<number | null>>(buildEmptySlots(DRAFT_SLOT_LABELS.length))
   const [awaySlots, setAwaySlots] = useState<Array<number | null>>(buildEmptySlots(DRAFT_SLOT_LABELS.length))
   const [captainSelections, setCaptainSelections] = useState<CaptainSelections>({ home: null, away: null })
+  const [draftScreenshots, setDraftScreenshots] = useState<Record<DraftScreenshotSlot, DraftTeamScreenshot | null>>({
+    top: null,
+    bottom: null,
+  })
+  const [draftScreenshotUploadingSlot, setDraftScreenshotUploadingSlot] = useState<DraftScreenshotSlot | null>(null)
+  const [isDraftScreenshotSubmitting, setIsDraftScreenshotSubmitting] = useState(false)
+  const [draftScreenshotError, setDraftScreenshotError] = useState<string | null>(null)
+  const [draftScreenshotStatus, setDraftScreenshotStatus] = useState<string | null>(null)
   const [savedTeams, setSavedTeams] = useState<SavedDraftTeamPreset[]>([])
   const [hasLoadedSavedState, setHasLoadedSavedState] = useState(false)
   const [isBackPending, setIsBackPending] = useState(false)
@@ -844,6 +1228,7 @@ export function FantasyDraftPricingPage({
       buildDraftPricingPlayerPool({
         round: roundValue,
         projectionsRaw: coachProjectionsRaw,
+        lineupsProjections,
         fantasyPlayers,
         fantasyPlayerTeams,
         draw2026Data,
@@ -852,7 +1237,7 @@ export function FantasyDraftPricingPage({
         historicalPlayerSdRows: playerFantasySdRows,
         historicalPositionSdRows: positionFantasySdRows,
       }),
-    [roundValue, coachProjectionsRaw, fantasyPlayers, fantasyPlayerTeams, draw2026Data, ownershipDeltaByPlayerId, topOwnershipRise, playerFantasySdRows, positionFantasySdRows]
+    [roundValue, coachProjectionsRaw, lineupsProjections, fantasyPlayers, fantasyPlayerTeams, draw2026Data, ownershipDeltaByPlayerId, topOwnershipRise, playerFantasySdRows, positionFantasySdRows]
   )
 
   const playerPoolById = useMemo(() => new Map(playerPool.map((player) => [player.id, player])), [playerPool])
@@ -940,6 +1325,8 @@ export function FantasyDraftPricingPage({
       if (typeof parsed.round === "string") setRound(parsed.round)
       if (typeof parsed.homeLabel === "string") setHomeLabel(normaliseDraftTeamLabel(parsed.homeLabel))
       if (typeof parsed.awayLabel === "string") setAwayLabel(normaliseDraftTeamLabel(parsed.awayLabel))
+      if (typeof parsed.homeAvatarDataUrl === "string") setHomeAvatarDataUrl(parsed.homeAvatarDataUrl)
+      if (typeof parsed.awayAvatarDataUrl === "string") setAwayAvatarDataUrl(parsed.awayAvatarDataUrl)
       if (Array.isArray(parsed.homeSlots)) {
         setHomeSlots(resizeSlots(parsed.homeSlots, parsedSlotCount))
       }
@@ -995,10 +1382,12 @@ export function FantasyDraftPricingPage({
       homeSlots,
       awaySlots,
       captainSelections,
+      homeAvatarDataUrl,
+      awayAvatarDataUrl,
     }
 
     window.localStorage.setItem(storageKey, JSON.stringify(payload))
-  }, [hasLoadedSavedState, storageKey, matchupMode, round, homeLabel, awayLabel, homeSlots, awaySlots, captainSelections])
+  }, [hasLoadedSavedState, storageKey, matchupMode, round, homeLabel, awayLabel, homeSlots, awaySlots, captainSelections, homeAvatarDataUrl, awayAvatarDataUrl])
 
   useEffect(() => {
     if (!hasLoadedSavedState) return
@@ -1011,6 +1400,115 @@ export function FantasyDraftPricingPage({
       setRound(roundOptions[0] ?? String(currentRound))
     }
   }, [currentRound, round, roundOptions])
+
+  const handleDraftScreenshotChange = async (slot: DraftScreenshotSlot, files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+
+    setDraftScreenshotUploadingSlot(slot)
+    setDraftScreenshotError(null)
+    setDraftScreenshotStatus(null)
+    try {
+      const screenshot = await buildDraftTeamScreenshot(file, slot)
+      setDraftScreenshots((current) => ({ ...current, [slot]: screenshot }))
+    } catch (error) {
+      setDraftScreenshotError(error instanceof Error ? error.message : "Unable to process screenshot.")
+    } finally {
+      setDraftScreenshotUploadingSlot(null)
+    }
+  }
+
+  const handleClearDraftScreenshots = () => {
+    setDraftScreenshots({ top: null, bottom: null })
+    setDraftScreenshotError(null)
+    setDraftScreenshotStatus(null)
+  }
+
+  const handleRunDraftScreenshotAutofill = async () => {
+    const screenshots = DRAFT_SCREENSHOT_SLOTS
+      .map((slot) => draftScreenshots[slot.key])
+      .filter((screenshot): screenshot is DraftTeamScreenshot => screenshot != null)
+    if (screenshots.length === 0) {
+      setDraftScreenshotError("Upload at least one matchup screenshot first.")
+      return
+    }
+
+    setIsDraftScreenshotSubmitting(true)
+    setDraftScreenshotError(null)
+    setDraftScreenshotStatus(null)
+
+    try {
+      const response = await fetch("/api/fantasy-draft-pricing/screenshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          images: screenshots.map((screenshot) => ({
+            name: screenshot.name,
+            dataUrl: screenshot.dataUrl,
+          })),
+        }),
+      })
+
+      const contentType = response.headers.get("content-type") ?? ""
+      if (!contentType.includes("application/json")) {
+        throw new Error("The AI screenshot request returned a sign-in page. Sign in again and retry.")
+      }
+
+      const payload = (await response.json().catch(() => null)) as {
+        extracted?: DraftScreenshotExtractedPayload
+        error?: string
+        details?: string
+      } | null
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Unable to fill teams from screenshots.")
+      }
+
+      const extracted = payload?.extracted
+      const homePlayers = Array.isArray(extracted?.home?.players)
+        ? (extracted.home.players as DraftScreenshotExtractedPlayer[])
+        : []
+      const awayPlayers = Array.isArray(extracted?.away?.players)
+        ? (extracted.away.players as DraftScreenshotExtractedPlayer[])
+        : []
+      const nextSlotLabels = slotLabelsForMode(matchupMode)
+      const homeResolved = resolveExtractedPlayersToSlots({
+        players: homePlayers,
+        existingSlots: homeSlots,
+        slotLabels: nextSlotLabels,
+        playerPool,
+      })
+      const awayResolved = resolveExtractedPlayersToSlots({
+        players: awayPlayers,
+        existingSlots: awaySlots,
+        slotLabels: nextSlotLabels,
+        playerPool,
+      })
+
+      const extractedHomeLabel = typeof extracted?.home?.teamName === "string" ? extracted.home.teamName.trim() : ""
+      const extractedAwayLabel = typeof extracted?.away?.teamName === "string" ? extracted.away.teamName.trim() : ""
+      if (extractedHomeLabel) setHomeLabel(extractedHomeLabel)
+      if (extractedAwayLabel) setAwayLabel(extractedAwayLabel)
+
+      setHomeSlots(homeResolved.slots)
+      setAwaySlots(awayResolved.slots)
+      setCaptainSelections((current) => ({
+        home: homeResolved.captainId ?? current.home,
+        away: awayResolved.captainId ?? current.away,
+      }))
+
+      const avatarSource = screenshots.find((screenshot) => screenshot.avatarCrops.home || screenshot.avatarCrops.away)
+      if (avatarSource?.avatarCrops.home) setHomeAvatarDataUrl(avatarSource.avatarCrops.home)
+      if (avatarSource?.avatarCrops.away) setAwayAvatarDataUrl(avatarSource.avatarCrops.away)
+
+      setDraftScreenshotStatus(
+        `Filled ${homeResolved.matched}/${homeResolved.total || homePlayers.length} left players and ${awayResolved.matched}/${awayResolved.total || awayPlayers.length} right players.`
+      )
+    } catch (error) {
+      setDraftScreenshotError(error instanceof Error ? error.message : "Unable to fill teams from screenshots.")
+    } finally {
+      setIsDraftScreenshotSubmitting(false)
+    }
+  }
 
   const saveSideAsTeam = (side: "home" | "away") => {
     const sourceSlots = side === "home" ? homeSlots : awaySlots
@@ -1051,12 +1549,14 @@ export function FantasyDraftPricingPage({
 
     if (side === "home") {
       setHomeLabel(preset.label)
+      setHomeAvatarDataUrl(null)
       setHomeSlots(nextSlots)
       setCaptainSelections((current) => ({ ...current, home: preset.captainId }))
       return
     }
 
     setAwayLabel(preset.label)
+    setAwayAvatarDataUrl(null)
     setAwaySlots(nextSlots)
     setCaptainSelections((current) => ({ ...current, away: preset.captainId }))
   }
@@ -1140,6 +1640,8 @@ export function FantasyDraftPricingPage({
               onClick={() => {
                 setHomeSlots(buildEmptySlots(slotLabels.length))
                 setAwaySlots(buildEmptySlots(slotLabels.length))
+                setHomeAvatarDataUrl(null)
+                setAwayAvatarDataUrl(null)
                 setCaptainSelections({ home: null, away: null })
               }}
               className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1.5 text-[13px] font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text md:px-3 md:py-2 md:text-sm"
@@ -1149,12 +1651,30 @@ export function FantasyDraftPricingPage({
           </div>
         </div>
 
+        <DraftScreenshotAutofillPanel
+          screenshots={draftScreenshots}
+          uploadingSlot={draftScreenshotUploadingSlot}
+          isSubmitting={isDraftScreenshotSubmitting}
+          error={draftScreenshotError}
+          status={draftScreenshotStatus}
+          locked={locked}
+          onScreenshotChange={(slot, files) => {
+            void handleDraftScreenshotChange(slot, files)
+          }}
+          onSubmit={() => {
+            void handleRunDraftScreenshotAutofill()
+          }}
+          onClear={handleClearDraftScreenshots}
+        />
+
         <EditableMatchupBoard
           matchupMode={matchupMode}
           slotLabels={slotLabels}
           blurValues={locked}
           homeLabel={homeLabel}
           awayLabel={awayLabel}
+          homeAvatarDataUrl={homeAvatarDataUrl}
+          awayAvatarDataUrl={awayAvatarDataUrl}
           onHomeLabelChange={setHomeLabel}
           onAwayLabelChange={setAwayLabel}
           homeSlots={homeSlots}

@@ -2,7 +2,6 @@
 
 import { useState, type CSSProperties } from "react"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
-import { TEAM_COLOURS, type TeamName } from "@/lib/data/constants"
 import { generateMatchupInsights, type MatchupInsight } from "@/lib/lineups/matchup-insights"
 import type {
   LineupCasualtyOut,
@@ -554,13 +553,6 @@ function resolveTeamLogo(teamName: string | null | undefined, teamLogos: Record<
 function resolveLogo(team: LineupTeam | null, teamLogos: Record<string, string>): string | null {
   if (!team) return null
   return resolveTeamLogo(team.team, teamLogos) ?? resolveTeamLogo(team.teamName, teamLogos)
-}
-
-function resolveTeamColour(team: LineupTeam | null): string {
-  if (!team) return "#60a5fa"
-  const candidates = [team.team, team.teamName, ...teamAliases(team.team), ...teamAliases(team.teamName)]
-  const teamName = candidates.find((candidate): candidate is TeamName => Boolean(candidate && candidate in TEAM_COLOURS))
-  return teamName ? TEAM_COLOURS[teamName] : "#60a5fa"
 }
 
 function needsWatermarkLift(team: LineupTeam | null): boolean {
@@ -1471,15 +1463,11 @@ function TeamBadge({
     <div className="flex min-h-[7.5rem] w-[6.5rem] min-w-0 max-w-full flex-col items-center justify-center gap-1 px-2 py-1.5 text-center sm:min-h-[8.5rem] sm:w-[7.5rem] sm:px-2.5">
       {logo ? (
         <div className="relative grid h-20 w-20 place-items-center sm:h-24 sm:w-24">
-          <span
-            aria-hidden="true"
-            className="absolute inset-1 rounded-full bg-[radial-gradient(circle,rgba(226,239,255,0.16),rgba(226,239,255,0.05)_42%,transparent_72%)] blur-sm"
-          />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logo}
             alt=""
-            className="relative z-[1] h-full w-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.55)] [filter:drop-shadow(0_0_7px_rgba(226,239,255,0.32))]"
+            className="h-full w-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.55)]"
             loading="lazy"
           />
         </div>
@@ -2045,8 +2033,6 @@ function LineupCard({
   const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
   const homeLogo = resolveLogo(match.homeTeam, teamLogos)
   const awayLogo = resolveLogo(match.awayTeam, teamLogos)
-  const homeColour = resolveTeamColour(match.homeTeam)
-  const awayColour = resolveTeamColour(match.awayTeam)
   const homeWatermarkLift = needsWatermarkLift(match.homeTeam)
   const awayWatermarkLift = needsWatermarkLift(match.awayTeam)
   const homeWatermarkClass = isStormTeam(match.homeTeam)
@@ -2085,16 +2071,6 @@ function LineupCard({
         style={MATCH_CARD_TEXTURE_STYLE}
       />
       <summary className="relative z-[1] cursor-pointer list-none px-3 py-3 marker:hidden sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 w-2/5 opacity-70"
-          style={{ background: `radial-gradient(circle at 22% 50%, ${homeColour}33, transparent 58%)` }}
-        />
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 w-2/5 opacity-70"
-          style={{ background: `radial-gradient(circle at 78% 50%, ${awayColour}33, transparent 58%)` }}
-        />
         {homeLogo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img

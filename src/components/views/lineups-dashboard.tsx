@@ -555,14 +555,19 @@ function resolveLogo(team: LineupTeam | null, teamLogos: Record<string, string>)
   return resolveTeamLogo(team.team, teamLogos) ?? resolveTeamLogo(team.teamName, teamLogos)
 }
 
-function needsWatermarkLift(team: LineupTeam | null): boolean {
-  if (!team) return false
-  return [team.team, team.teamName].flatMap(teamAliases).some((teamName) => teamName === "broncos" || teamName === "storm")
-}
-
 function isStormTeam(team: LineupTeam | null): boolean {
   if (!team) return false
   return [team.team, team.teamName].flatMap(teamAliases).includes("storm")
+}
+
+function isBroncosTeam(team: LineupTeam | null): boolean {
+  if (!team) return false
+  return [team.team, team.teamName].flatMap(teamAliases).includes("broncos")
+}
+
+function isRabbitohsTeam(team: LineupTeam | null): boolean {
+  if (!team) return false
+  return [team.team, team.teamName].flatMap(teamAliases).includes("rabbitohs")
 }
 
 function sportsbetOddsForTeam(
@@ -2033,14 +2038,20 @@ function LineupCard({
   const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
   const homeLogo = resolveLogo(match.homeTeam, teamLogos)
   const awayLogo = resolveLogo(match.awayTeam, teamLogos)
-  const homeWatermarkLift = needsWatermarkLift(match.homeTeam)
-  const awayWatermarkLift = needsWatermarkLift(match.awayTeam)
   const homeWatermarkClass = isStormTeam(match.homeTeam)
-    ? "left-6 h-40 w-40 opacity-[0.2] brightness-125 saturate-150 sm:left-16 sm:h-48 sm:w-48"
-    : `-left-8 h-44 w-44 sm:left-4 sm:h-56 sm:w-56 ${homeWatermarkLift ? "opacity-[0.22] brightness-125 saturate-150" : "opacity-[0.065] grayscale"}`
+    ? "left-6 h-40 w-40 opacity-[0.09] grayscale sm:left-16 sm:h-48 sm:w-48"
+    : isBroncosTeam(match.homeTeam)
+      ? "-left-8 h-44 w-44 opacity-[0.09] grayscale sm:left-4 sm:h-56 sm:w-56"
+    : isRabbitohsTeam(match.homeTeam)
+      ? "-left-8 h-44 w-44 opacity-[0.22] sm:left-4 sm:h-56 sm:w-56"
+    : "-left-8 h-44 w-44 opacity-[0.065] grayscale sm:left-4 sm:h-56 sm:w-56"
   const awayWatermarkClass = isStormTeam(match.awayTeam)
-    ? "right-6 h-40 w-40 opacity-[0.2] brightness-125 saturate-150 sm:right-16 sm:h-48 sm:w-48"
-    : `-right-8 h-44 w-44 sm:right-4 sm:h-56 sm:w-56 ${awayWatermarkLift ? "opacity-[0.22] brightness-125 saturate-150" : "opacity-[0.065] grayscale"}`
+    ? "right-6 h-40 w-40 opacity-[0.09] grayscale sm:right-16 sm:h-48 sm:w-48"
+    : isBroncosTeam(match.awayTeam)
+      ? "-right-8 h-44 w-44 opacity-[0.09] grayscale sm:right-4 sm:h-56 sm:w-56"
+    : isRabbitohsTeam(match.awayTeam)
+      ? "-right-8 h-44 w-44 opacity-[0.22] sm:right-4 sm:h-56 sm:w-56"
+    : "-right-8 h-44 w-44 opacity-[0.065] grayscale sm:right-4 sm:h-56 sm:w-56"
   const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
     ? {
         player: selectedPlayer,

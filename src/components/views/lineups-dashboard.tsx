@@ -46,6 +46,12 @@ type PlayerStatsSelection = {
   baselinePpm: number | null
   baselineLabel: string | null
 }
+
+const FREE_INSIGHT_CATEGORY_ROTATION: MatchupInsight["category"][][] = [
+  ["Betting", "Stats", "Fantasy", "Team News", "Matchup"],
+  ["Stats", "Fantasy", "Betting", "Team News", "Matchup"],
+  ["Fantasy", "Betting", "Stats", "Team News", "Matchup"],
+]
 type PlayerStatDisplayItem = {
   label: string
   value: string
@@ -1849,12 +1855,20 @@ function NotableOuts({
 function MatchupInsightsPanel({
   insights,
   canAccessFullInsights,
+  freeInsightCategoryPriority,
 }: {
   insights: MatchupInsight[]
   canAccessFullInsights: boolean
+  freeInsightCategoryPriority: MatchupInsight["category"][]
 }) {
-  const visibleInsights = canAccessFullInsights ? insights : insights.slice(0, 1)
-  const lockedPreviewInsights = canAccessFullInsights ? [] : insights.slice(1)
+  const preferredFreeInsight = freeInsightCategoryPriority
+    .map((category) => insights.find((insight) => insight.category === category))
+    .find((insight): insight is MatchupInsight => Boolean(insight))
+  const orderedInsights = !canAccessFullInsights && preferredFreeInsight
+    ? [preferredFreeInsight, ...insights.filter((insight) => insight !== preferredFreeInsight)]
+    : insights
+  const visibleInsights = canAccessFullInsights ? orderedInsights : orderedInsights.slice(0, 1)
+  const lockedPreviewInsights = canAccessFullInsights ? [] : orderedInsights.slice(1)
   const lockedInsightCount = canAccessFullInsights ? 0 : Math.max(0, insights.length - visibleInsights.length)
 
   return (
@@ -1980,6 +1994,7 @@ function DisplayModeControl({
 
 function LineupCard({
   match,
+  matchIndex,
   liveMatch,
   matchStats,
   teamLogos,
@@ -1993,6 +2008,7 @@ function LineupCard({
   positionPpmBaselines,
 }: {
   match: LineupMatch
+  matchIndex: number
   liveMatch: LineupLiveMatch | null
   matchStats: LineupMatchStats | null
   teamLogos: Record<string, string>
@@ -2056,6 +2072,7 @@ function LineupCard({
         casualtyWardOuts,
         playerAverages,
       })
+  const freeInsightCategoryPriority = FREE_INSIGHT_CATEGORY_ROTATION[matchIndex % FREE_INSIGHT_CATEGORY_ROTATION.length]
 
   return (
     <details
@@ -2064,7 +2081,7 @@ function LineupCard({
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-px rounded-[calc(0.5rem-1px)] opacity-70"
+        className="pointer-events-none absolute inset-px rounded-[calc(0.5rem-1px)] opacity-70 transition-opacity group-open:opacity-0"
         style={MATCH_CARD_TEXTURE_STYLE}
       />
       <summary className="relative z-[1] cursor-pointer list-none px-3 py-3 marker:hidden sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
@@ -2146,7 +2163,13 @@ function LineupCard({
           <MatchStatsPanel match={match} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />
         ) : hasLineupData ? (
           <>
-            {showPregameContent ? <MatchupInsightsPanel insights={insights} canAccessFullInsights={canAccessFantasyProjections} /> : null}
+            {showPregameContent ? (
+              <MatchupInsightsPanel
+                insights={insights}
+                canAccessFullInsights={canAccessFantasyProjections}
+                freeInsightCategoryPriority={freeInsightCategoryPriority}
+              />
+            ) : null}
             <Pitch
               homePlayers={homePlayers}
               awayPlayers={awayPlayers}
@@ -2270,6 +2293,7 @@ export function LineupsDashboard({
     },
     []
   )
+  const matchIndexById = new Map(matches.map((match, index) => [match.matchId, index]))
 
   return (
     <div className="space-y-3">
@@ -2285,6 +2309,7 @@ export function LineupsDashboard({
                 <LineupCard
                   key={match.matchId}
                   match={match}
+                  matchIndex={matchIndexById.get(match.matchId) ?? 0}
                   liveMatch={liveMatches[match.matchId] ?? null}
                   matchStats={matchStats[match.matchId] ?? null}
                   teamLogos={teamLogos}

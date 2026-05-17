@@ -375,9 +375,9 @@ function addRecentResults(match: LineupMatch, results: LineupRecentResult[]): Li
   const previousResults = results.filter((result) => resultBeforeMatch(result, match.matchDate))
   return {
     ...match,
-    recentHeadToHead: previousResults.filter((result) => resultIncludesMatchup(result, homeTeam, awayTeam)).slice(0, 5),
-    homeRecentResults: previousResults.filter((result) => resultIncludesTeam(result, homeTeam)).slice(0, 5),
-    awayRecentResults: previousResults.filter((result) => resultIncludesTeam(result, awayTeam)).slice(0, 5),
+    recentHeadToHead: previousResults.filter((result) => resultIncludesMatchup(result, homeTeam, awayTeam)).slice(0, 30),
+    homeRecentResults: previousResults.filter((result) => resultIncludesTeam(result, homeTeam)).slice(0, 30),
+    awayRecentResults: previousResults.filter((result) => resultIncludesTeam(result, awayTeam)).slice(0, 30),
   }
 }
 

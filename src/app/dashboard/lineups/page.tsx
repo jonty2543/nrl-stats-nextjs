@@ -11,6 +11,7 @@ import {
 } from "@/lib/lineups/nrl-lineups"
 import { fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
 import type { PlayerStat } from "@/lib/data/types"
+import type { PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type { LineupLiveMatch, LineupMatch, LineupRoundOption } from "@/lib/lineups/nrl-lineups"
 
 export const dynamic = "force-dynamic"
@@ -64,6 +65,33 @@ function buildPlayerAverages(rows: PlayerStat[]): Record<string, Record<AverageK
       ) as Record<AverageKey, number>,
     ])
   )
+}
+
+function buildPlayerTryHistory(rows: PlayerStat[]): PlayerTryHistory {
+  const history = new Map<string, PlayerTryHistory[string]>()
+  const sortedRows = [...rows].sort((a, b) => {
+    const yearDiff = Number(b.Year) - Number(a.Year)
+    if (yearDiff !== 0) return yearDiff
+    return Number(b.Round ?? 0) - Number(a.Round ?? 0)
+  })
+
+  for (const row of sortedRows) {
+    const key = normaliseName(row.Name)
+    if (!key) continue
+    const tries = Number(row.Tries ?? 0)
+    const entry = {
+      team: String(row.Team ?? ""),
+      opponent: typeof row.Opponent === "string" ? row.Opponent : null,
+      tries: Number.isFinite(tries) ? tries : 0,
+      year: String(row.Year ?? ""),
+      round: Number(row.Round ?? 0),
+    }
+    const current = history.get(key) ?? []
+    current.push(entry)
+    history.set(key, current)
+  }
+
+  return Object.fromEntries(history)
 }
 
 function positionBaselineKey(position: string | null | undefined, number: string | number | null | undefined): PositionBaselineKey | null {
@@ -182,14 +210,16 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const { userId } = await auth()
   const hasProAccess = await getServerProPlotAccess(userId)
   const year = currentYearInBrisbane()
-  const [roundOptions, teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStats2026] = await Promise.all([
+  const playerStatYears = Array.from({ length: 5 }, (_, index) => String(year - index))
+  const [roundOptions, teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStatsHistory] = await Promise.all([
     fetchLineupRoundOptions(year),
     fetchTeamLogos(),
     fetchUpcomingTryscorerOdds(),
     fetchUpcomingSportsbetH2HOdds(),
     fetchCasualtyWardOuts(),
-    fetchPlayerStats([String(year)]),
+    fetchPlayerStats(playerStatYears),
   ])
+  const playerStatsCurrentYear = playerStatsHistory.filter((row) => String(row.Year) === String(year))
   const selectedRound = roundOptions.find((option) => option.value === params.round)?.value ?? currentRoundOption(roundOptions)?.value ?? "Round 1"
   const { matches, matchStats } = await fetchLineupsForRound({
     round: selectedRound,
@@ -211,8 +241,9 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       sportsbetOdds={sportsbetOdds}
       canAccessFantasyProjections={hasProAccess}
       casualtyWardOuts={casualtyWardOuts}
-      playerAverages={buildPlayerAverages(playerStats2026)}
-      positionPpmBaselines={buildPositionPpmBaselines(playerStats2026)}
+      playerAverages={buildPlayerAverages(playerStatsCurrentYear)}
+      playerTryHistory={buildPlayerTryHistory(playerStatsHistory)}
+      positionPpmBaselines={buildPositionPpmBaselines(playerStatsCurrentYear)}
     />
   )
 }

@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties } from "react"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
-import { generateMatchupInsights, type MatchupInsight } from "@/lib/lineups/matchup-insights"
+import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type {
   LineupCasualtyOut,
   LineupLiveMatch,
@@ -31,6 +31,7 @@ interface LineupsDashboardProps {
   canAccessFantasyProjections: boolean
   casualtyWardOuts: Record<string, LineupCasualtyOut[]>
   playerAverages: Record<string, Record<AverageStatKey, number>>
+  playerTryHistory: PlayerTryHistory
   positionPpmBaselines: Record<string, number>
 }
 
@@ -1052,9 +1053,9 @@ function HeadToHeadResults({ results, teamLogos }: { results: LineupRecentResult
 function PregameMatchStatsPreview({ match, teamLogos }: { match: LineupMatch; teamLogos: Record<string, string> }) {
   const homeTeam = match.homeTeam?.team ?? match.match.split(/\s+vs\s+/i)[0]?.trim() ?? "Home"
   const awayTeam = match.awayTeam?.team ?? match.match.split(/\s+vs\s+/i)[1]?.trim() ?? "Away"
-  const homeResults = match.homeRecentResults ?? []
-  const awayResults = match.awayRecentResults ?? []
-  const headToHead = match.recentHeadToHead ?? []
+  const homeResults = (match.homeRecentResults ?? []).slice(0, 5)
+  const awayResults = (match.awayRecentResults ?? []).slice(0, 5)
+  const headToHead = (match.recentHeadToHead ?? []).slice(0, 5)
 
   return (
     <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
@@ -2004,6 +2005,7 @@ function LineupCard({
   canAccessFantasyProjections,
   casualtyWardOuts,
   playerAverages,
+  playerTryHistory,
   positionPpmBaselines,
 }: {
   match: LineupMatch
@@ -2018,6 +2020,7 @@ function LineupCard({
   canAccessFantasyProjections: boolean
   casualtyWardOuts: Record<string, LineupCasualtyOut[]>
   playerAverages: Record<string, Record<AverageStatKey, number>>
+  playerTryHistory: PlayerTryHistory
   positionPpmBaselines: Record<string, number>
 }) {
   const historicalData = historicalLiveMatch(match, matchStats)
@@ -2072,8 +2075,8 @@ function LineupCard({
     : generateMatchupInsights({
         match,
         tryscorerOdds,
-        casualtyWardOuts,
         playerAverages,
+        playerTryHistory,
       })
   const freeInsightCategoryPriority = FREE_INSIGHT_CATEGORY_ROTATION[matchIndex % FREE_INSIGHT_CATEGORY_ROTATION.length]
 
@@ -2270,6 +2273,7 @@ export function LineupsDashboard({
   canAccessFantasyProjections,
   casualtyWardOuts,
   playerAverages,
+  playerTryHistory,
   positionPpmBaselines,
 }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("odds")
@@ -2313,6 +2317,7 @@ export function LineupsDashboard({
                   canAccessFantasyProjections={canAccessFantasyProjections}
                   casualtyWardOuts={casualtyWardOuts}
                   playerAverages={playerAverages}
+                  playerTryHistory={playerTryHistory}
                   positionPpmBaselines={positionPpmBaselines}
                 />
               ))}

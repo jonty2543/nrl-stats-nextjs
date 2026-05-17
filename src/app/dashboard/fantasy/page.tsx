@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { fetchApprovedArticles } from "@/lib/articles"
+import { fetchApprovedArticleLinks } from "@/lib/articles"
 import { isAccessibleSeason } from "@/lib/access/season-access"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
@@ -34,20 +34,20 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticles, relevantOutCandidates, draw2026Data, originChances, initialAllPlayerStats] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticleLinks, relevantOutCandidates, draw2026Data, originChances, initialAllPlayerStats] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchLineupsProjectionsByPlayerId(),
     fetchAvailableYears(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
     fetchPlayerImages(),
-    fetchApprovedArticles(),
+    fetchApprovedArticleLinks(),
     fetchRelevantCasualtyWardOutCandidates(),
     loadDraw2026Data().catch(() => null),
     fetchOriginChances(),
     fetchPlayerStats(["2026"]),
   ])
-  const fantasyProjectionArticle = approvedArticles.find((article) => {
+  const fantasyProjectionArticle = approvedArticleLinks.find((article) => {
     const title = normaliseArticleTitle(article.title)
     return title.includes("fantasy projection model") || (title.includes("fantasy") && title.includes("model"))
   }) ?? null

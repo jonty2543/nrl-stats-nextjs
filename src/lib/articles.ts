@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/client";
 export const ARTICLE_IMAGE_BUCKET = "article-images";
 export const ARTICLE_SELECT =
   "id, clerk_user_id, display_name, title, slug, body, status, header_image_1, header_image_2, rejection_reason, created_at, updated_at, approved_at, approved_by";
+const ARTICLE_LINK_SELECT = "title, slug, header_image_1, header_image_2";
 
 export type ArticleStatus = "pending" | "approved" | "rejected";
 
@@ -25,6 +26,13 @@ interface ArticleRow {
   approved_by: string | null;
 }
 
+interface ArticleLinkRow {
+  title: string;
+  slug: string;
+  header_image_1: string | null;
+  header_image_2: string | null;
+}
+
 export interface Article {
   id: string;
   authorId: string;
@@ -40,6 +48,12 @@ export interface Article {
   createdAt: string;
   updatedAt: string;
   approvedAt: string | null;
+}
+
+export interface ArticleLink {
+  title: string;
+  slug: string;
+  imageUrls: string[];
 }
 
 type Metadata = Record<string, unknown> | null | undefined;
@@ -78,6 +92,16 @@ export function mapArticle(row: ArticleRow): Article {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     approvedAt: row.approved_at,
+  };
+}
+
+function mapArticleLink(row: ArticleLinkRow): ArticleLink {
+  return {
+    title: row.title,
+    slug: row.slug,
+    imageUrls: [getPublicImageUrl(row.header_image_1), getPublicImageUrl(row.header_image_2)].filter(
+      (url): url is string => Boolean(url)
+    ),
   };
 }
 
@@ -139,6 +163,25 @@ export async function fetchApprovedArticles(): Promise<Article[]> {
   }
 
   return ((data as ArticleRow[] | null) ?? []).map(mapArticle);
+}
+
+export async function fetchApprovedArticleLinks(): Promise<ArticleLink[]> {
+  const supabase = createServerSupabaseClient("shortside");
+  const { data, error } = await supabase
+    .from("articles")
+    .select(ARTICLE_LINK_SELECT)
+    .eq("status", "approved")
+    .order("approved_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    if (!isMissingArticlesTableError(error)) {
+      console.warn("Unable to fetch approved article links.");
+    }
+    return [];
+  }
+
+  return ((data as ArticleLinkRow[] | null) ?? []).map(mapArticleLink);
 }
 
 export async function fetchUserArticles(userId: string | null | undefined): Promise<Article[]> {

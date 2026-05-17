@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { PointerEvent as ReactPointerEvent } from "react"
 import type { PlayerStat } from "@/lib/data/types"
 
-type TrendBrushRow = {
+export type TrendBrushRow = {
   Year: string
   Round: number
   Opponent?: string | null
@@ -12,7 +12,7 @@ type TrendBrushRow = {
   [key: string]: unknown
 }
 
-interface FantasyGameLogTrendBrushProps<T extends TrendBrushRow = PlayerStat> {
+export interface FantasyGameLogTrendBrushProps<T extends TrendBrushRow = PlayerStat> {
   rows: T[]
   defaultStartYear?: string
   headerTitle?: string
@@ -42,6 +42,8 @@ interface DragState {
   startClientX: number
   originStartIndex: number
   originEndIndex: number
+  overviewLeft: number
+  overviewWidth: number
 }
 
 interface HoveredChartPoint {
@@ -187,12 +189,13 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [hoveredHandle, setHoveredHandle] = useState<DragMode | null>(null)
   const [hoveredChartPoint, setHoveredChartPoint] = useState<HoveredChartPoint | null>(null)
-  const [selectedRange, setSelectedRange] = useState<{ startIndex: number; endIndex: number }>({
-    startIndex: 0,
-    endIndex: Math.max(rows.length - 1, 0),
-  })
   const overviewRef = useRef<SVGSVGElement | null>(null)
   const mainChartRef = useRef<SVGSVGElement | null>(null)
+  const selectionRectRef = useRef<SVGRectElement | null>(null)
+  const startHitRectRef = useRef<SVGRectElement | null>(null)
+  const endHitRectRef = useRef<SVGRectElement | null>(null)
+  const startHandleRef = useRef<SVGRectElement | null>(null)
+  const endHandleRef = useRef<SVGRectElement | null>(null)
   const rollingWindow = controlledRollingWindow ?? rollingWindowState
 
   const orderedRows = useMemo(() => sortTrendRows(rows), [rows])
@@ -219,9 +222,21 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
     }
   }, [defaultStartYear, orderedRows])
 
+  const lastOrderedRow = orderedRows[orderedRows.length - 1]
+  const defaultSelectedRangeKey = `${defaultStartYear ?? ""}:${orderedRows.length}:${orderedRows[0]?.Year ?? ""}:${orderedRows[0]?.Round ?? ""}:${lastOrderedRow?.Year ?? ""}:${lastOrderedRow?.Round ?? ""}`
+  const [selectedRangeState, setSelectedRangeState] = useState(() => ({
+    key: defaultSelectedRangeKey,
+    range: defaultSelectedRange,
+  }))
+  const selectedRange =
+    selectedRangeState.key === defaultSelectedRangeKey ? selectedRangeState.range : defaultSelectedRange
+  const selectedRangeRef = useRef(selectedRange)
+  const liveDragRangeRef = useRef(selectedRange)
+
   useEffect(() => {
-    setSelectedRange(defaultSelectedRange)
-  }, [defaultSelectedRange])
+    selectedRangeRef.current = selectedRange
+    liveDragRangeRef.current = selectedRange
+  }, [selectedRange])
 
   const safeStartIndex = clamp(selectedRange.startIndex, 0, Math.max(orderedRows.length - 1, 0))
   const safeEndIndex = clamp(selectedRange.endIndex, safeStartIndex, Math.max(orderedRows.length - 1, 0))
@@ -401,28 +416,55 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
     [orderedRows.length, snapThreshold, yearBoundaries]
   )
 
-  const getIndexFromClientX = useCallback(
-    (clientX: number) => {
-      const container = overviewRef.current
-      if (!container || orderedRows.length <= 1) return 0
-      const rect = container.getBoundingClientRect()
-      if (rect.width <= 0) return 0
-      const ratio = clamp((clientX - rect.left) / rect.width, 0, 1)
-      return Math.round(ratio * (orderedRows.length - 1))
+  const setSelectedRangeIfChanged = useCallback((nextRange: { startIndex: number; endIndex: number }) => {
+    const current = selectedRangeRef.current
+    if (current.startIndex === nextRange.startIndex && current.endIndex === nextRange.endIndex) return
+    selectedRangeRef.current = nextRange
+    setSelectedRangeState({ key: defaultSelectedRangeKey, range: nextRange })
+  }, [defaultSelectedRangeKey])
+
+  const getOverviewSelectionMetrics = useCallback((range: { startIndex: number; endIndex: number }) => {
+    const denominator = Math.max(orderedRows.length - 1, 1)
+    const overviewInnerWidth = OVERVIEW_CHART_WIDTH - OVERVIEW_PADDING.left - OVERVIEW_PADDING.right
+    const left = OVERVIEW_PADDING.left + (range.startIndex / denominator) * overviewInnerWidth
+    const right = OVERVIEW_PADDING.left + (range.endIndex / denominator) * overviewInnerWidth
+    return {
+      left,
+      width: Math.max(right - left, 14),
+    }
+  }, [orderedRows.length])
+
+  const updateLiveBrush = useCallback(
+    (nextRange: { startIndex: number; endIndex: number }) => {
+      liveDragRangeRef.current = nextRange
+      const { left, width } = getOverviewSelectionMetrics(nextRange)
+      selectionRectRef.current?.setAttribute("x", String(left))
+      selectionRectRef.current?.setAttribute("width", String(width))
+      startHitRectRef.current?.setAttribute("x", String(left - 16))
+      endHitRectRef.current?.setAttribute("x", String(left + width - 16))
+      startHandleRef.current?.setAttribute("x", String(left - 5))
+      endHandleRef.current?.setAttribute("x", String(left + width - 5))
     },
-    [orderedRows.length]
+    [getOverviewSelectionMetrics]
   )
 
   useEffect(() => {
     if (!dragState) return
 
+    const getDragIndexFromClientX = (clientX: number) => {
+      if (orderedRows.length <= 1) return 0
+      const ratio = clamp((clientX - dragState.overviewLeft) / dragState.overviewWidth, 0, 1)
+      return Math.round(ratio * (orderedRows.length - 1))
+    }
+
     const handlePointerMove = (event: PointerEvent) => {
       if (event.pointerId !== dragState.pointerId) return
+      if (event.cancelable) event.preventDefault()
 
       const nextRange = (() => {
         if (dragState.mode === "start") {
           return {
-            startIndex: Math.min(getIndexFromClientX(event.clientX), dragState.originEndIndex),
+            startIndex: Math.min(getDragIndexFromClientX(event.clientX), dragState.originEndIndex),
             endIndex: dragState.originEndIndex,
           }
         }
@@ -430,21 +472,19 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
         if (dragState.mode === "end") {
           return {
             startIndex: dragState.originStartIndex,
-            endIndex: Math.max(getIndexFromClientX(event.clientX), dragState.originStartIndex),
+            endIndex: Math.max(getDragIndexFromClientX(event.clientX), dragState.originStartIndex),
           }
         }
 
-        const container = overviewRef.current
-        if (!container || orderedRows.length <= 1) {
+        if (orderedRows.length <= 1) {
           return {
             startIndex: dragState.originStartIndex,
             endIndex: dragState.originEndIndex,
           }
         }
 
-        const rect = container.getBoundingClientRect()
         const deltaIndex = Math.round(
-          ((event.clientX - dragState.startClientX) / Math.max(rect.width, 1)) * (orderedRows.length - 1)
+          ((event.clientX - dragState.startClientX) / dragState.overviewWidth) * (orderedRows.length - 1)
         )
         const width = dragState.originEndIndex - dragState.originStartIndex
         const nextStart = clamp(dragState.originStartIndex + deltaIndex, 0, Math.max(orderedRows.length - 1 - width, 0))
@@ -454,16 +494,19 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
         }
       })()
 
-      setSelectedRange(nextRange)
+      updateLiveBrush(nextRange)
     }
 
     const handlePointerUp = (event: PointerEvent) => {
       if (event.pointerId !== dragState.pointerId) return
-      setSelectedRange((current) => snapRange(current, dragState.mode))
+      if (event.cancelable) event.preventDefault()
+      const nextRange = snapRange(liveDragRangeRef.current, dragState.mode)
+      updateLiveBrush(nextRange)
+      setSelectedRangeIfChanged(nextRange)
       setDragState(null)
     }
 
-    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointermove", handlePointerMove, { passive: false })
     window.addEventListener("pointerup", handlePointerUp)
     window.addEventListener("pointercancel", handlePointerUp)
 
@@ -472,7 +515,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
       window.removeEventListener("pointerup", handlePointerUp)
       window.removeEventListener("pointercancel", handlePointerUp)
     }
-  }, [dragState, getIndexFromClientX, orderedRows.length, snapRange])
+  }, [dragState, orderedRows.length, setSelectedRangeIfChanged, snapRange, updateLiveBrush])
 
   const handleRollingWindowChange = useCallback(
     (value: number) => {
@@ -508,12 +551,21 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
 
   const handlePointerDown = (mode: DragMode) => (event: ReactPointerEvent<SVGRectElement>) => {
     event.preventDefault()
+    event.stopPropagation()
+    const overview = overviewRef.current
+    const rect = overview?.getBoundingClientRect()
+    if (!rect || rect.width <= 0) return
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    liveDragRangeRef.current = { startIndex: safeStartIndex, endIndex: safeEndIndex }
+    setHoveredHandle(null)
     setDragState({
       mode,
       pointerId: event.pointerId,
       startClientX: event.clientX,
       originStartIndex: safeStartIndex,
       originEndIndex: safeEndIndex,
+      overviewLeft: rect.left,
+      overviewWidth: Math.max(rect.width, 1),
     })
   }
 
@@ -828,6 +880,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
             ref={overviewRef}
             viewBox={`0 0 ${OVERVIEW_CHART_WIDTH} ${OVERVIEW_CHART_HEIGHT}`}
             className="h-[72px] w-full touch-none select-none sm:h-[100px]"
+            style={{ touchAction: "none" }}
           >
             <rect
               x={0}
@@ -881,6 +934,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
             )}
 
             <rect
+              ref={selectionRectRef}
               x={selectionLeft}
               y={6}
               width={selectionWidth}
@@ -890,9 +944,32 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
               strokeWidth="1.5"
               rx="3"
               onPointerDown={handlePointerDown("move")}
-              style={{ cursor: dragState?.mode === "move" ? "grabbing" : "grab" }}
+              style={{ cursor: dragState?.mode === "move" ? "grabbing" : "grab", touchAction: "none" }}
             />
             <rect
+              ref={startHitRectRef}
+              x={selectionLeft - 16}
+              y={4}
+              width={32}
+              height={OVERVIEW_CHART_HEIGHT - OVERVIEW_PADDING.bottom}
+              fill="transparent"
+              pointerEvents="all"
+              onPointerDown={handlePointerDown("start")}
+              style={{ cursor: dragState?.mode === "start" ? "grabbing" : "ew-resize", touchAction: "none" }}
+            />
+            <rect
+              ref={endHitRectRef}
+              x={selectionLeft + selectionWidth - 16}
+              y={4}
+              width={32}
+              height={OVERVIEW_CHART_HEIGHT - OVERVIEW_PADDING.bottom}
+              fill="transparent"
+              pointerEvents="all"
+              onPointerDown={handlePointerDown("end")}
+              style={{ cursor: dragState?.mode === "end" ? "grabbing" : "ew-resize", touchAction: "none" }}
+            />
+            <rect
+              ref={startHandleRef}
               x={selectionLeft - 5}
               y={10}
               width={10}
@@ -902,9 +979,10 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
               onPointerDown={handlePointerDown("start")}
               onPointerEnter={() => setHoveredHandle("start")}
               onPointerLeave={() => setHoveredHandle((current) => (current === "start" ? null : current))}
-              style={{ cursor: dragState?.mode === "start" ? "grabbing" : "ew-resize" }}
+              style={{ cursor: dragState?.mode === "start" ? "grabbing" : "ew-resize", touchAction: "none" }}
             />
             <rect
+              ref={endHandleRef}
               x={selectionLeft + selectionWidth - 5}
               y={10}
               width={10}
@@ -914,7 +992,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
               onPointerDown={handlePointerDown("end")}
               onPointerEnter={() => setHoveredHandle("end")}
               onPointerLeave={() => setHoveredHandle((current) => (current === "end" ? null : current))}
-              style={{ cursor: dragState?.mode === "end" ? "grabbing" : "ew-resize" }}
+              style={{ cursor: dragState?.mode === "end" ? "grabbing" : "ew-resize", touchAction: "none" }}
             />
             {hoveredHandle === "start" ? (
               <g pointerEvents="none">

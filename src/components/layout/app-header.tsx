@@ -23,11 +23,8 @@ export function AppHeader({
           <Link href="/" className="relative z-10 inline-flex min-w-0 items-center gap-3">
             <Image src="/logo-mark.svg" alt="Short Side logo" width={30} height={30} priority />
             <div className="min-w-0">
-              <div className="truncate text-[9px] font-semibold uppercase tracking-[0.28em] text-white/45">
+              <div className="truncate text-lg font-semibold text-white/92 sm:text-xl">
                 Short Side
-              </div>
-              <div className="truncate text-sm font-semibold text-white/92 sm:text-[1.05rem]">
-                NRL Analytics Hub
               </div>
             </div>
           </Link>

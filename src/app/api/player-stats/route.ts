@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
-import { fetchAvailableYears, fetchPlayerStats } from "@/lib/supabase/queries";
+import { fetchAvailableYears, fetchFantasyPlayerStatsForYears, fetchPlayerStats } from "@/lib/supabase/queries";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
 export async function GET(request: NextRequest) {
@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const canAccessProSeason = await getServerProPlotAccess(userId);
     const { searchParams } = request.nextUrl;
     const yearsParam = searchParams.get("years");
+    const playerParam = searchParams.get("player")?.trim();
     const requestedYears = yearsParam
       ? yearsParam
           .split(",")
@@ -30,7 +31,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
 
-    const data = await fetchPlayerStats(allowedYears);
+    const data = playerParam
+      ? await fetchFantasyPlayerStatsForYears(playerParam, allowedYears)
+      : await fetchPlayerStats(allowedYears);
     return NextResponse.json(data);
   } catch (error) {
     console.error("Error fetching player stats:", error);

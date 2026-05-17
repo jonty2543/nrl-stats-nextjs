@@ -1,10 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react"
+import dynamic from "next/dynamic"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type MouseEvent, type PointerEvent } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
+import type { FantasyGameLogTrendBrushProps } from "@/components/charts/fantasy-game-log-trend-brush"
 import type { Draw2026Data } from "@/lib/draw/types"
 import type {
   FantasyCoachPlayerSnapshot,
@@ -34,17 +36,42 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { PillRadio } from "@/components/ui/pill-radio"
 import { YearRangeSlider } from "@/components/ui/year-range-slider"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
-import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-trend-brush"
 import {
   PlayerImageCard,
   primaryTeamForRows,
   resolvePlayerImage,
   resolveTeamLogoUrl,
 } from "@/components/views/player-comparison"
-import { WithWithoutKDE } from "@/components/charts/with-without-kde"
-import { ScatterCorrelation } from "@/components/charts/scatter-correlation"
-import { PlayerComments } from "@/components/fantasy/player-comments"
 import { linearRegression, pearsonR } from "@/lib/data/stats"
+
+const LazyChartFallback = () => (
+  <div className="grid min-h-[220px] place-items-center rounded-lg border border-nrl-border bg-nrl-panel-2 text-xs text-nrl-muted">
+    Loading chart…
+  </div>
+)
+
+const FantasyGameLogTrendBrush = dynamic(
+  () => import("@/components/charts/fantasy-game-log-trend-brush").then((mod) => mod.FantasyGameLogTrendBrush),
+  { loading: LazyChartFallback }
+) as ComponentType<FantasyGameLogTrendBrushProps<PlayerStat>>
+const WithWithoutKDE = dynamic(
+  () => import("@/components/charts/with-without-kde").then((mod) => mod.WithWithoutKDE),
+  { loading: LazyChartFallback }
+)
+const ScatterCorrelation = dynamic(
+  () => import("@/components/charts/scatter-correlation").then((mod) => mod.ScatterCorrelation),
+  { loading: LazyChartFallback }
+)
+const PlayerComments = dynamic(
+  () => import("@/components/fantasy/player-comments").then((mod) => mod.PlayerComments),
+  {
+    loading: () => (
+      <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4 text-xs text-nrl-muted">
+        Loading comments…
+      </div>
+    ),
+  }
+)
 
 interface FantasyArticleLink {
   title: string
@@ -84,6 +111,7 @@ interface FantasyDashboardProps {
   playerImages?: PlayerImageRecord[]
   teamLogos?: Record<string, string>
   preloadedPlayerAllYears?: boolean
+  preloadSelectedPlayerAllYears?: boolean
   draw2026Data?: Draw2026Data | null
   initialSelectedFantasyName?: string
   showOwnedCards?: boolean
@@ -218,6 +246,7 @@ const STAT_VS_FANTASY_OPTIONS = [
 ] as const
 
 type StatVsFantasyOptionLabel = (typeof STAT_VS_FANTASY_OPTIONS)[number]["label"]
+type StatVsFantasyOption = (typeof STAT_VS_FANTASY_OPTIONS)[number]
 const ROLLING_AVERAGE_STAT_OPTIONS = PLAYER_STATS as readonly string[]
 
 const HEATMAP_LOW_SCORE = 20
@@ -496,6 +525,14 @@ function hasAllPlayerStatsForYear(rows: PlayerStat[], year: string): boolean {
   return names.size >= 50
 }
 
+function playerStatsApiUrl(years: string[], playerName?: string): string {
+  const params = new URLSearchParams()
+  if (years.length > 0) params.set("years", years.join(","))
+  if (playerName) params.set("player", playerName)
+  const query = params.toString()
+  return query ? `/api/player-stats?${query}` : "/api/player-stats"
+}
+
 function normaliseName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim()
 }
@@ -724,6 +761,39 @@ function isFantasyPlayerUnavailableForFallback(player: FantasyPlayerSnapshot): b
   return Boolean(
     status &&
     ["injured", "suspended", "out", "unavailable", "not playing"].some((token) => status.includes(token))
+  )
+}
+
+function resolveFantasyProjectionForLineups(
+  player: FantasyPlayerSnapshot,
+  lineupsProjections: LineupsProjectionSnapshot | undefined,
+  coachProjection: number | null
+): number {
+  const playerNameKey = normaliseProjectionPlayerName(player.name)
+
+  if (lineupsProjections?.source === "lineups") {
+    const isNamed =
+      lineupsProjections.roleByPlayerId.has(player.id) ||
+      lineupsProjections.roleByPlayerName.has(playerNameKey)
+
+    if (!isNamed) return 0
+
+    return (
+      lineupsProjections.projectionByPlayerId.get(player.id) ??
+      lineupsProjections.projectionByPlayerName.get(playerNameKey) ??
+      0
+    )
+  }
+
+  const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(playerNameKey) ?? null
+  return (
+    lineupsProjections?.projectionByPlayerId.get(player.id) ??
+    (fallbackProjection != null
+      ? isFantasyPlayerUnavailableForFallback(player) ? 0 : fallbackProjection
+      : null) ??
+    coachProjection ??
+    player.projectedAvg ??
+    0
   )
 }
 
@@ -965,7 +1035,7 @@ function renderTradeSuggestorInline(text: string) {
 
 function formatTradeSuggestorSectionTitle(title: string): string {
   if (/^sell watch/i.test(title)) return "Sell Watch"
-  if (/^top\s*5\s+trade(?:[-\s\u2011\u2013])?ins/i.test(title)) return "Top 5 Trade-ins"
+  if (/^top 5 trade-ins/i.test(title)) return "Top 5 Trade-ins"
   if (/^recommended moves?/i.test(title)) return "Recommended Moves"
   return title
 }
@@ -981,7 +1051,7 @@ function buildTradeSuggestorSections(content: string) {
       continue
     }
 
-    if (/^(recommended moves?|sell watch|top\s*5\s+trade(?:[-\s\u2011\u2013])?ins|notes)\b/i.test(cleaned)) {
+    if (/^(recommended moves?|sell watch|top 5 trade-ins|notes)\b/i.test(cleaned)) {
       if (current) sections.push(current)
       current = { title: cleaned, lines: [] }
       continue
@@ -995,8 +1065,7 @@ function buildTradeSuggestorSections(content: string) {
   const orderedTitles = ["Sell Watch", "Top 5 Trade-ins", "Recommended Moves"]
   return orderedTitles
     .map((title) => {
-      const matchingSections = sections.filter((entry) => formatTradeSuggestorSectionTitle(entry.title) === title)
-      const section = matchingSections.find((entry) => entry.lines.some((line) => line.trim().length > 0)) ?? matchingSections[0]
+      const section = sections.find((entry) => formatTradeSuggestorSectionTitle(entry.title) === title)
       if (!section) return null
 
       const blocks: string[][] = []
@@ -1347,6 +1416,533 @@ function getFantasyPositionColor(position: string): string {
   return FANTASY_POSITION_COLORS[primaryPosition] ?? "rgba(148,163,184,0.82)"
 }
 
+interface FantasyAnalyticsScatterPlotProps {
+  points: FantasyAnalyticsPoint[]
+  metric: FantasyAnalyticsMetric
+  metricOption: { key: FantasyAnalyticsMetric; label: string; shortLabel: string }
+}
+
+function FantasyAnalyticsScatterPlot({
+  points,
+  metric,
+  metricOption,
+}: FantasyAnalyticsScatterPlotProps) {
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0.5, y: 0.5 })
+  const [selectedPoint, setSelectedPoint] = useState<FantasyAnalyticsPoint | null>(null)
+  const dragRef = useRef<FantasyAnalyticsDragState | null>(null)
+  const suppressClickRef = useRef(false)
+  const pendingPanRef = useRef<{ x: number; y: number } | null>(null)
+  const panFrameRef = useRef<number | null>(null)
+
+  const width = 640
+  const height = 380
+  const left = 44
+  const right = 18
+  const top = 1
+  const bottom = 22
+  const plotWidth = width - left - right
+  const plotHeight = height - top - bottom
+  const baseXDomain = useMemo(() => getPaddedDomain(points.map((point) => point.pricedAt ?? 0)), [points])
+  const baseYDomain = useMemo(
+    () => getPaddedDomain(points.map((point) => getFantasyAnalyticsMetricValue(point, metric) ?? 0)),
+    [metric, points]
+  )
+  const xDomain = getZoomedDomain(baseXDomain, zoom, pan.x)
+  const yDomain = getZoomedDomain(baseYDomain, zoom, pan.y)
+  const xTicks = [xDomain.min, (xDomain.min + xDomain.max) / 2, xDomain.max]
+  const yTicks = [yDomain.min, (yDomain.min + yDomain.max) / 2, yDomain.max]
+  const maxAbsDelta = Math.max(
+    ...points.map((point) => Math.abs((getFantasyAnalyticsMetricValue(point, metric) ?? 0) - (point.pricedAt ?? 0))),
+    1
+  )
+  const diagonalStart = Math.max(xDomain.min, yDomain.min)
+  const diagonalEnd = Math.min(xDomain.max, yDomain.max)
+  const chartPoints = points.map((point) => {
+    const metricValue = getFantasyAnalyticsMetricValue(point, metric) ?? 0
+    return {
+      point,
+      metricValue,
+      delta: metricValue - (point.pricedAt ?? 0),
+      x: scaleChartValue(point.pricedAt ?? 0, xDomain.min, xDomain.max, left, width - right),
+      y: scaleChartValue(metricValue, yDomain.min, yDomain.max, height - bottom, top),
+    }
+  })
+  const visibleChartPoints = chartPoints.filter(
+    ({ x, y }) => x >= left - 8 && x <= width - right + 8 && y >= top - 8 && y <= height - bottom + 8
+  )
+
+  const queuePan = useCallback((nextPan: { x: number; y: number }) => {
+    pendingPanRef.current = nextPan
+    if (panFrameRef.current !== null) return
+    panFrameRef.current = window.requestAnimationFrame(() => {
+      panFrameRef.current = null
+      const pendingPan = pendingPanRef.current
+      if (!pendingPan) return
+      pendingPanRef.current = null
+      setPan(pendingPan)
+    })
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (panFrameRef.current !== null) window.cancelAnimationFrame(panFrameRef.current)
+    }
+  }, [])
+
+  const selectNearestPoint = (event: PointerEvent<SVGSVGElement> | MouseEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const x = ((event.clientX - rect.left) / rect.width) * width
+    const y = ((event.clientY - rect.top) / rect.height) * height
+    if (x < left || x > width - right || y < top || y > height - bottom) return
+
+    let closest: FantasyAnalyticsPoint | null = null
+    let closestDistance = Infinity
+    for (const chartPoint of visibleChartPoints) {
+      const dx = chartPoint.x - x
+      const dy = chartPoint.y - y
+      const distance = dx * dx + dy * dy
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closest = chartPoint.point
+      }
+    }
+    if (closest && closestDistance <= 20 * 20 && closest.name !== selectedPoint?.name) {
+      setSelectedPoint(closest)
+    }
+  }
+
+  const handleZoomChange = (value: number) => {
+    const nextZoom = Math.max(FANTASY_ANALYTICS_MIN_ZOOM, Math.min(FANTASY_ANALYTICS_MAX_ZOOM, value))
+    setZoom(nextZoom)
+    setPan({ x: 0.5, y: 0.5 })
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="flex min-w-0 items-center rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+        <input
+          type="range"
+          min={FANTASY_ANALYTICS_MIN_ZOOM}
+          max={FANTASY_ANALYTICS_MAX_ZOOM}
+          step={FANTASY_ANALYTICS_ZOOM_STEP}
+          value={zoom}
+          onChange={(event) => handleZoomChange(Number(event.currentTarget.value))}
+          className="w-full accent-nrl-accent"
+          aria-label="Priced at plot zoom"
+        />
+      </label>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={`Priced at vs ${metricOption.label.toLowerCase()} scatter plot`}
+        className={`block h-auto w-full ${zoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-pan-y"}`}
+        onPointerDown={(event) => {
+          if (zoom <= 1) return
+          event.preventDefault()
+          event.currentTarget.setPointerCapture(event.pointerId)
+          dragRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            panX: pan.x,
+            panY: pan.y,
+          }
+        }}
+        onPointerMove={(event) => {
+          const drag = dragRef.current
+          if (!drag || drag.pointerId !== event.pointerId || zoom <= 1) {
+            if (event.pointerType === "mouse") selectNearestPoint(event)
+            return
+          }
+          event.preventDefault()
+          const deltaX = event.clientX - drag.startX
+          const deltaY = event.clientY - drag.startY
+          const dragScale = zoom / (zoom - 1)
+          queuePan({
+            x: Math.max(0, Math.min(1, drag.panX - (deltaX / plotWidth) * dragScale)),
+            y: Math.max(0, Math.min(1, drag.panY + (deltaY / plotHeight) * dragScale)),
+          })
+        }}
+        onPointerUp={(event) => {
+          const drag = dragRef.current
+          if (drag?.pointerId === event.pointerId) {
+            const moved = Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY)
+            if (moved < 8) {
+              selectNearestPoint(event)
+            } else {
+              suppressClickRef.current = true
+            }
+            dragRef.current = null
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId)
+            }
+          }
+        }}
+        onPointerCancel={(event) => {
+          if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null
+        }}
+        onClick={(event) => {
+          if (suppressClickRef.current) {
+            suppressClickRef.current = false
+            return
+          }
+          selectNearestPoint(event)
+        }}
+      >
+        <defs>
+          <clipPath id="fantasy-analytics-scatter-clip">
+            <rect x={left} y={top} width={width - left - right} height={height - top - bottom} rx="6" />
+          </clipPath>
+        </defs>
+        <rect x={left} y={top} width={width - left - right} height={height - top - bottom} fill="#111832" rx="6" />
+        {xTicks.map((tick) => {
+          const x = scaleChartValue(tick, xDomain.min, xDomain.max, left, width - right)
+          return (
+            <g key={`x-${tick}`}>
+              <line x1={x} x2={x} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.12)" />
+              <text x={x} y={height - 10} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                {formatTableNumber(tick, 0)}
+              </text>
+            </g>
+          )
+        })}
+        {diagonalEnd > diagonalStart ? (
+          <line
+            x1={scaleChartValue(diagonalStart, xDomain.min, xDomain.max, left, width - right)}
+            x2={scaleChartValue(diagonalEnd, xDomain.min, xDomain.max, left, width - right)}
+            y1={scaleChartValue(diagonalStart, yDomain.min, yDomain.max, height - bottom, top)}
+            y2={scaleChartValue(diagonalEnd, yDomain.min, yDomain.max, height - bottom, top)}
+            stroke="rgba(226,232,240,0.5)"
+            strokeDasharray="6 5"
+            clipPath="url(#fantasy-analytics-scatter-clip)"
+          />
+        ) : null}
+        {yTicks.map((tick) => {
+          const y = scaleChartValue(tick, yDomain.min, yDomain.max, height - bottom, top)
+          return (
+            <g key={`y-${tick}`}>
+              <line x1={left} x2={width - right} y1={y} y2={y} stroke="rgba(148,163,184,0.12)" />
+              <text x={left - 8} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px]">
+                {formatTableNumber(tick, 0)}
+              </text>
+            </g>
+          )
+        })}
+        <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
+        <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
+        <text x={(width + left - right) / 2} y={height} textAnchor="middle" className="fill-slate-400 text-[10px]">
+          Priced At
+        </text>
+        <text x="12" y={(height - bottom + top) / 2} textAnchor="middle" transform={`rotate(-90 12 ${(height - bottom + top) / 2})`} className="fill-slate-400 text-[10px]">
+          {metricOption.label}
+        </text>
+        <g clipPath="url(#fantasy-analytics-scatter-clip)">
+          {visibleChartPoints.map(({ point, metricValue, delta, x, y }) => {
+            const pointColor = getProjectionDeltaColor(delta, maxAbsDelta)
+            const selected = selectedPoint?.name === point.name
+            return (
+              <circle
+                key={`${point.name}-${point.position}`}
+                cx={x}
+                cy={y}
+                r={selected ? "6" : "4"}
+                fill={pointColor}
+                stroke={selected ? "#f8fafc" : "#07131f"}
+                strokeWidth={selected ? "2" : "1"}
+                pointerEvents="none"
+                opacity="0.9"
+              >
+                <title>{`${point.name}\nPriced At: ${formatTableNumber(point.pricedAt, 0)}\n${metricOption.label}: ${formatTableNumber(metricValue, 1)}\nDelta: ${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`}</title>
+              </circle>
+            )
+          })}
+        </g>
+      </svg>
+      {selectedPoint ? (
+        <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-2 text-xs text-nrl-text">
+          <div className="font-semibold">{selectedPoint.name}</div>
+          <div className="mt-1 grid gap-1 text-[10px] text-nrl-muted sm:grid-cols-3">
+            <span>Priced At: {formatTableNumber(selectedPoint.pricedAt, 0)}</span>
+            <span>
+              {metricOption.label}: {formatTableNumber(getFantasyAnalyticsMetricValue(selectedPoint, metric), 1)}
+            </span>
+            <span>
+              Delta: {(() => {
+                const metricValue = getFantasyAnalyticsMetricValue(selectedPoint, metric) ?? 0
+                const delta = metricValue - (selectedPoint.pricedAt ?? 0)
+                return `${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`
+              })()}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="text-[10px] text-nrl-muted">
+          {zoom > 1 ? "Drag the plot to pan. Hover or tap a point to inspect the player." : "Hover or tap a point to inspect the player."}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface GlobalStatVsFantasyScatterPlotProps {
+  points: GlobalStatVsFantasyPoint[]
+  selectedOption: StatVsFantasyOption
+  positionFilter: string
+  trendline: { m: number; b: number } | null
+}
+
+function GlobalStatVsFantasyScatterPlot({
+  points,
+  selectedOption,
+  positionFilter,
+  trendline,
+}: GlobalStatVsFantasyScatterPlotProps) {
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0.5, y: 0.5 })
+  const [selectedPoint, setSelectedPoint] = useState<GlobalStatVsFantasyPoint | null>(null)
+  const dragRef = useRef<FantasyAnalyticsDragState | null>(null)
+  const suppressClickRef = useRef(false)
+  const pendingPanRef = useRef<{ x: number; y: number } | null>(null)
+  const panFrameRef = useRef<number | null>(null)
+
+  const width = 640
+  const height = 350
+  const left = 44
+  const right = 18
+  const top = 1
+  const bottom = 22
+  const plotWidth = width - left - right
+  const plotHeight = height - top - bottom
+  const baseXDomain = useMemo(() => getPaddedDomain(points.map((point) => point.statValue)), [points])
+  const baseYDomain = useMemo(() => getPaddedDomain(points.map((point) => point.fantasyAvg)), [points])
+  const xDomain = getZoomedDomain(baseXDomain, zoom, pan.x)
+  const yDomain = getZoomedDomain(baseYDomain, zoom, pan.y)
+  const xTicks = [xDomain.min, (xDomain.min + xDomain.max) / 2, xDomain.max]
+  const yTicks = [yDomain.min, (yDomain.min + yDomain.max) / 2, yDomain.max]
+  const trendStartY = trendline ? trendline.m * xDomain.min + trendline.b : null
+  const trendEndY = trendline ? trendline.m * xDomain.max + trendline.b : null
+  const chartPoints = points.map((point) => ({
+    point,
+    x: scaleChartValue(point.statValue, xDomain.min, xDomain.max, left, width - right),
+    y: scaleChartValue(point.fantasyAvg, yDomain.min, yDomain.max, height - bottom, top),
+  }))
+  const visibleChartPoints = chartPoints.filter(
+    ({ x, y }) => x >= left - 8 && x <= width - right + 8 && y >= top - 8 && y <= height - bottom + 8
+  )
+
+  const queuePan = useCallback((nextPan: { x: number; y: number }) => {
+    pendingPanRef.current = nextPan
+    if (panFrameRef.current !== null) return
+    panFrameRef.current = window.requestAnimationFrame(() => {
+      panFrameRef.current = null
+      const pendingPan = pendingPanRef.current
+      if (!pendingPan) return
+      pendingPanRef.current = null
+      setPan(pendingPan)
+    })
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (panFrameRef.current !== null) window.cancelAnimationFrame(panFrameRef.current)
+    }
+  }, [])
+
+  const selectNearestPoint = (event: PointerEvent<SVGSVGElement> | MouseEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const x = ((event.clientX - rect.left) / rect.width) * width
+    const y = ((event.clientY - rect.top) / rect.height) * height
+    if (x < left || x > width - right || y < top || y > height - bottom) return
+
+    let closest: GlobalStatVsFantasyPoint | null = null
+    let closestDistance = Infinity
+    for (const chartPoint of visibleChartPoints) {
+      const dx = chartPoint.x - x
+      const dy = chartPoint.y - y
+      const distance = dx * dx + dy * dy
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closest = chartPoint.point
+      }
+    }
+    if (closest && closestDistance <= 20 * 20 && closest.name !== selectedPoint?.name) {
+      setSelectedPoint(closest)
+    }
+  }
+
+  const handleZoomChange = (value: number) => {
+    const nextZoom = Math.max(FANTASY_ANALYTICS_MIN_ZOOM, Math.min(FANTASY_ANALYTICS_MAX_ZOOM, value))
+    setZoom(nextZoom)
+    setPan({ x: 0.5, y: 0.5 })
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="flex min-w-0 items-center rounded border border-nrl-border bg-nrl-panel px-2 py-1">
+        <input
+          type="range"
+          min={FANTASY_ANALYTICS_MIN_ZOOM}
+          max={FANTASY_ANALYTICS_MAX_ZOOM}
+          step={FANTASY_ANALYTICS_ZOOM_STEP}
+          value={zoom}
+          onChange={(event) => handleZoomChange(Number(event.currentTarget.value))}
+          className="w-full accent-nrl-accent"
+          aria-label="Fantasy vs stat plot zoom"
+        />
+      </label>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={`2026 fantasy average vs ${selectedOption.label.toLowerCase()} average scatter plot`}
+        className={`block h-auto w-full ${zoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-pan-y"}`}
+        onPointerDown={(event) => {
+          if (zoom <= 1) return
+          event.preventDefault()
+          event.currentTarget.setPointerCapture(event.pointerId)
+          dragRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            panX: pan.x,
+            panY: pan.y,
+          }
+        }}
+        onPointerMove={(event) => {
+          const drag = dragRef.current
+          if (!drag || drag.pointerId !== event.pointerId || zoom <= 1) {
+            if (event.pointerType === "mouse") selectNearestPoint(event)
+            return
+          }
+          event.preventDefault()
+          const deltaX = event.clientX - drag.startX
+          const deltaY = event.clientY - drag.startY
+          const dragScale = zoom / (zoom - 1)
+          queuePan({
+            x: Math.max(0, Math.min(1, drag.panX - (deltaX / plotWidth) * dragScale)),
+            y: Math.max(0, Math.min(1, drag.panY + (deltaY / plotHeight) * dragScale)),
+          })
+        }}
+        onPointerUp={(event) => {
+          const drag = dragRef.current
+          if (drag?.pointerId === event.pointerId) {
+            const moved = Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY)
+            if (moved < 8) {
+              selectNearestPoint(event)
+            } else {
+              suppressClickRef.current = true
+            }
+            dragRef.current = null
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId)
+            }
+          }
+        }}
+        onPointerCancel={(event) => {
+          if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null
+        }}
+        onClick={(event) => {
+          if (suppressClickRef.current) {
+            suppressClickRef.current = false
+            return
+          }
+          selectNearestPoint(event)
+        }}
+      >
+        <defs>
+          <clipPath id="fantasy-global-stat-scatter-clip">
+            <rect x={left} y={top} width={width - left - right} height={height - top - bottom} rx="6" />
+          </clipPath>
+        </defs>
+        <rect x={left} y={top} width={width - left - right} height={height - top - bottom} fill="#111832" rx="6" />
+        {xTicks.map((tick) => {
+          const x = scaleChartValue(tick, xDomain.min, xDomain.max, left, width - right)
+          return (
+            <g key={`global-x-${tick}`}>
+              <line x1={x} x2={x} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.12)" />
+              <text x={x} y={height - 10} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                {formatTableNumber(tick, 0)}
+              </text>
+            </g>
+          )
+        })}
+        {yTicks.map((tick) => {
+          const y = scaleChartValue(tick, yDomain.min, yDomain.max, height - bottom, top)
+          return (
+            <g key={`global-y-${tick}`}>
+              <line x1={left} x2={width - right} y1={y} y2={y} stroke="rgba(148,163,184,0.12)" />
+              <text x={left - 8} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px]">
+                {formatTableNumber(tick, 0)}
+              </text>
+            </g>
+          )
+        })}
+        <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
+        <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
+        <text x={(width + left - right) / 2} y={height} textAnchor="middle" className="fill-slate-400 text-[10px]">
+          {selectedOption.label}
+        </text>
+        <text x="12" y={(height - bottom + top) / 2} textAnchor="middle" transform={`rotate(-90 12 ${(height - bottom + top) / 2})`} className="fill-slate-400 text-[10px]">
+          Fantasy Avg
+        </text>
+        <g clipPath="url(#fantasy-global-stat-scatter-clip)">
+          {trendStartY !== null && trendEndY !== null ? (
+            <line
+              x1={left}
+              y1={scaleChartValue(trendStartY, yDomain.min, yDomain.max, height - bottom, top)}
+              x2={width - right}
+              y2={scaleChartValue(trendEndY, yDomain.min, yDomain.max, height - bottom, top)}
+              stroke="rgba(226,232,240,0.7)"
+              strokeWidth="2"
+              strokeDasharray="6 5"
+            />
+          ) : null}
+          {visibleChartPoints.map(({ point, x, y }) => {
+            const selected = selectedPoint?.name === point.name
+            return (
+              <circle
+                key={`${point.name}-${point.position}-global-stat`}
+                cx={x}
+                cy={y}
+                r={selected ? "6" : "4"}
+                fill={getFantasyPositionColor(positionFilter === "All Positions" ? point.position : positionFilter)}
+                stroke={selected ? "#f8fafc" : "#07131f"}
+                strokeWidth={selected ? "2" : "1"}
+                pointerEvents="none"
+              >
+                <title>{`${point.name}\n${selectedOption.label}: ${formatTableNumber(point.statValue, 1)}\nFantasy Avg: ${formatTableNumber(point.fantasyAvg, 1)}`}</title>
+              </circle>
+            )
+          })}
+        </g>
+      </svg>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-semibold text-nrl-muted">
+        {POSITION_TABLES.map((position) => (
+          <span key={position.label} className="inline-flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getFantasyPositionColor(position.label) }} />
+            {position.label}
+          </span>
+        ))}
+      </div>
+      {selectedPoint ? (
+        <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-2 text-xs text-nrl-text">
+          <div className="font-semibold">{selectedPoint.name}</div>
+          <div className="mt-1 grid gap-1 text-[10px] text-nrl-muted sm:grid-cols-2">
+            <span>{selectedOption.label}: {formatTableNumber(selectedPoint.statValue, 1)}</span>
+            <span>Fantasy Avg: {formatTableNumber(selectedPoint.fantasyAvg, 1)}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="text-[10px] text-nrl-muted">
+          {zoom > 1 ? "Drag the plot to pan. Hover or tap a player to inspect their 2026 averages." : "Hover or tap a player to inspect their 2026 averages."}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function formatOpponent(value: string | null): string {
   if (!value) return "-"
   return value.replace(/-/g, " ")
@@ -1688,6 +2284,7 @@ export function FantasyDashboard({
   playerImages = [],
   teamLogos = {},
   preloadedPlayerAllYears = false,
+  preloadSelectedPlayerAllYears = false,
   draw2026Data,
   initialSelectedFantasyName,
   showOwnedCards = true,
@@ -1714,6 +2311,7 @@ export function FantasyDashboard({
   const [allPlayersStatsData, setAllPlayersStatsData] = useState<PlayerStat[]>(initialAllPlayerStats)
   const [teammateLookupRows, setTeammateLookupRows] = useState<TeammateLookupRow[]>([])
   const [isLoadingStats, setIsLoadingStats] = useState(false)
+  const [preloadedSelectedPlayerAllYearsKey, setPreloadedSelectedPlayerAllYearsKey] = useState<string | null>(null)
   const [selectedFantasyName, setSelectedFantasyName] = useState(
     initialSelectedFantasyName ?? fantasyPlayers[0]?.name ?? ""
   )
@@ -1749,18 +2347,8 @@ export function FantasyDashboard({
   const showFantasyAnalytics = initialShowFantasyAnalytics
   const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("projection")
   const [fantasyAnalyticsPositionFilter, setFantasyAnalyticsPositionFilter] = useState("All Positions")
-  const [fantasyAnalyticsZoom, setFantasyAnalyticsZoom] = useState(1)
-  const [fantasyAnalyticsPan, setFantasyAnalyticsPan] = useState({ x: 0.5, y: 0.5 })
-  const [fantasyAnalyticsDrag, setFantasyAnalyticsDrag] = useState<FantasyAnalyticsDragState | null>(null)
-  const [selectedFantasyAnalyticsPoint, setSelectedFantasyAnalyticsPoint] = useState<FantasyAnalyticsPoint | null>(null)
   const [selectedGlobalStatVsFantasyLabel, setSelectedGlobalStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [globalStatVsFantasyPositionFilter, setGlobalStatVsFantasyPositionFilter] = useState("All Positions")
-  const [globalStatVsFantasyZoom, setGlobalStatVsFantasyZoom] = useState(1)
-  const [globalStatVsFantasyPan, setGlobalStatVsFantasyPan] = useState({ x: 0.5, y: 0.5 })
-  const [globalStatVsFantasyDrag, setGlobalStatVsFantasyDrag] = useState<FantasyAnalyticsDragState | null>(null)
-  const [selectedGlobalStatVsFantasyPoint, setSelectedGlobalStatVsFantasyPoint] = useState<GlobalStatVsFantasyPoint | null>(null)
-  const globalStatVsFantasyZoomTimeoutRef = useRef<number | null>(null)
-  const globalStatVsFantasySuppressClickRef = useRef(false)
   const [fantasyTemplateMode, setFantasyTemplateMode] = useState<FantasyTemplateMode>("change")
   const [isFantasyAnalyticsPending, setIsFantasyAnalyticsPending] = useState(false)
   const [isFantasyDraftPending, setIsFantasyDraftPending] = useState(false)
@@ -1787,26 +2375,14 @@ export function FantasyDashboard({
   const analysisLocked = !hasFantasyPlotAccess
   const playerDetailsRef = useRef<HTMLElement | null>(null)
   const cardTagsPreferenceUserIdRef = useRef<string | null>(null)
-
-  const commitGlobalStatVsFantasyZoom = useCallback((value: number, delayMs = 80) => {
-    if (globalStatVsFantasyZoomTimeoutRef.current !== null) {
-      window.clearTimeout(globalStatVsFantasyZoomTimeoutRef.current)
-    }
-    const nextZoom = Math.max(FANTASY_ANALYTICS_MIN_ZOOM, Math.min(FANTASY_ANALYTICS_MAX_ZOOM, value))
-    globalStatVsFantasyZoomTimeoutRef.current = window.setTimeout(() => {
-      setGlobalStatVsFantasyZoom(nextZoom)
-      setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
-      globalStatVsFantasyZoomTimeoutRef.current = null
-    }, delayMs)
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (globalStatVsFantasyZoomTimeoutRef.current !== null) {
-        window.clearTimeout(globalStatVsFantasyZoomTimeoutRef.current)
-      }
-    }
-  }, [])
+  const selectedPlayerAllYearsRequestKeyRef = useRef<string | null>(null)
+  const selectedPlayerAllYearsKey = useMemo(
+    () =>
+      selectedFantasyName && availableYears.length > 0
+        ? `${selectedFantasyName}::${availableYears.join(",")}`
+        : null,
+    [availableYears, selectedFantasyName]
+  )
 
   useEffect(() => {
     if (!isAuthLoaded) return
@@ -2019,20 +2595,43 @@ export function FantasyDashboard({
     const nextYears = validYears.length > 0 ? validYears : availableYears.slice(0, 1)
     setSelectedYears(nextYears)
     if (nextYears.length === 0) return
-    if (preloadedPlayerAllYears) {
+    const hasSelectedPlayerAllYears =
+      preloadSelectedPlayerAllYears &&
+      selectedPlayerAllYearsKey !== null &&
+      preloadedSelectedPlayerAllYearsKey === selectedPlayerAllYearsKey
+    if (preloadedPlayerAllYears || hasSelectedPlayerAllYears) {
       void loadTeammateLookupRows(nextYears)
       return
     }
+    const selectedPlayerStatsName = preloadSelectedPlayerAllYears ? selectedFantasyName : undefined
     setIsLoadingStats(true)
     try {
-      const res = await fetch(`/api/player-stats?years=${encodeURIComponent(nextYears.join(","))}`)
+      const res = await fetch(playerStatsApiUrl(nextYears, selectedPlayerStatsName))
       if (!res.ok) return
       const data = (await res.json()) as PlayerStat[]
       setAllData(Array.isArray(data) ? data : [])
+      const loadedEveryAvailableYear =
+        selectedPlayerStatsName &&
+        selectedPlayerAllYearsKey &&
+        nextYears.length === availableYears.length &&
+        nextYears.every((year, index) => year === availableYears[index])
+      if (loadedEveryAvailableYear) {
+        setPreloadedSelectedPlayerAllYearsKey(selectedPlayerAllYearsKey)
+      } else if (selectedPlayerStatsName) {
+        setPreloadedSelectedPlayerAllYearsKey(null)
+      }
     } finally {
       setIsLoadingStats(false)
     }
-  }, [availableYears, loadTeammateLookupRows, preloadedPlayerAllYears])
+  }, [
+    availableYears,
+    loadTeammateLookupRows,
+    preloadedPlayerAllYears,
+    preloadedSelectedPlayerAllYearsKey,
+    preloadSelectedPlayerAllYears,
+    selectedFantasyName,
+    selectedPlayerAllYearsKey,
+  ])
 
   const selectedFantasyPlayer = useMemo(
     () => fantasyPlayers.find((player) => player.name === selectedFantasyName) ?? null,
@@ -2094,8 +2693,8 @@ export function FantasyDashboard({
   }, [allData, selectedYears])
 
   const teammateLookupSourceRows = useMemo(
-    () => (preloadedPlayerAllYears ? teammateLookupRows : selectedYearData),
-    [preloadedPlayerAllYears, teammateLookupRows, selectedYearData]
+    () => (preloadedPlayerAllYears || preloadSelectedPlayerAllYears ? teammateLookupRows : selectedYearData),
+    [preloadSelectedPlayerAllYears, preloadedPlayerAllYears, teammateLookupRows, selectedYearData]
   )
 
   const allLocalNames = useMemo(
@@ -2159,9 +2758,56 @@ export function FantasyDashboard({
   )
 
   useEffect(() => {
-    if (!showPlayerDetails || !preloadedPlayerAllYears || !hasLoginAccess) return
+    if (!showPlayerDetails || !(preloadedPlayerAllYears || preloadSelectedPlayerAllYears) || !hasLoginAccess) return
     void loadTeammateLookupRows(selectedYears)
-  }, [hasLoginAccess, loadTeammateLookupRows, preloadedPlayerAllYears, selectedYears, showPlayerDetails])
+  }, [hasLoginAccess, loadTeammateLookupRows, preloadSelectedPlayerAllYears, preloadedPlayerAllYears, selectedYears, showPlayerDetails])
+
+  useEffect(() => {
+    if (
+      !preloadSelectedPlayerAllYears ||
+      !showPlayerDetails ||
+      !selectedFantasyName ||
+      availableYears.length === 0 ||
+      !selectedPlayerAllYearsKey ||
+      preloadedSelectedPlayerAllYearsKey === selectedPlayerAllYearsKey ||
+      selectedPlayerAllYearsRequestKeyRef.current === selectedPlayerAllYearsKey
+    ) {
+      return
+    }
+
+    let cancelled = false
+    selectedPlayerAllYearsRequestKeyRef.current = selectedPlayerAllYearsKey
+
+    const loadSelectedPlayerAllYears = async () => {
+      try {
+        const res = await fetch(playerStatsApiUrl(availableYears, selectedFantasyName))
+        if (!res.ok) return
+        const data = (await res.json()) as PlayerStat[]
+        if (!cancelled && Array.isArray(data)) {
+          setAllData(data)
+          setPreloadedSelectedPlayerAllYearsKey(selectedPlayerAllYearsKey)
+        }
+      } catch (error) {
+        console.error("Failed to preload selected fantasy player stats", error)
+      } finally {
+        if (selectedPlayerAllYearsRequestKeyRef.current === selectedPlayerAllYearsKey) {
+          selectedPlayerAllYearsRequestKeyRef.current = null
+        }
+      }
+    }
+
+    void loadSelectedPlayerAllYears()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    availableYears,
+    preloadedSelectedPlayerAllYearsKey,
+    preloadSelectedPlayerAllYears,
+    selectedFantasyName,
+    selectedPlayerAllYearsKey,
+    showPlayerDetails,
+  ])
 
   useEffect(() => {
     setHasRequestedAllPlayersStats(false)
@@ -2187,7 +2833,7 @@ export function FantasyDashboard({
     setHasRequestedAllPlayersStats(true)
     const loadAllPlayersYear = async () => {
       try {
-        const res = await fetch(`/api/player-stats?years=${ALL_PLAYERS_STATS_YEAR}`)
+        const res = await fetch(playerStatsApiUrl([ALL_PLAYERS_STATS_YEAR]))
         if (!res.ok) {
           if (!cancelled) setAllPlayersStatsLoadFailed(true)
           return
@@ -2525,15 +3171,11 @@ export function FantasyDashboard({
         resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
         resolvePlayerImage(player.name, teamHint, playerImages)
       const projectionRound = lineupsProjections?.round ?? coachMetrics.round
-      const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(normaliseProjectionPlayerName(player.name)) ?? null
-      const rawProjection =
-        lineupsProjections?.projectionByPlayerId.get(player.id) ??
-        (fallbackProjection != null
-          ? isFantasyPlayerUnavailableForFallback(player) ? 0 : fallbackProjection
-          : null) ??
-        coachMetrics.projection ??
-        player.projectedAvg ??
-        0
+      const rawProjection = resolveFantasyProjectionForLineups(
+        player,
+        lineupsProjections,
+        coachMetrics.projection
+      )
       const pricedAt = player.pricedAt
       const value = rawProjection != null && pricedAt != null ? rawProjection - pricedAt : null
       const lineupRole =
@@ -2812,15 +3454,10 @@ export function FantasyDashboard({
   const selectedAdjustedProjection = useMemo(
     () => {
       if (!selectedFantasyPlayer) return null
-      const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(normaliseProjectionPlayerName(selectedFantasyPlayer.name)) ?? null
-      return (
-        lineupsProjections?.projectionByPlayerId.get(selectedFantasyPlayer.id) ??
-        (fallbackProjection != null
-          ? isFantasyPlayerUnavailableForFallback(selectedFantasyPlayer) ? 0 : fallbackProjection
-          : null) ??
-        selectedFantasyCoachMetrics.projection ??
-        selectedFantasyPlayer.projectedAvg ??
-        0
+      return resolveFantasyProjectionForLineups(
+        selectedFantasyPlayer,
+        lineupsProjections,
+        selectedFantasyCoachMetrics.projection
       )
     },
     [lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyPlayer]
@@ -3262,6 +3899,8 @@ export function FantasyDashboard({
                           src={url}
                           alt=""
                           className="h-full w-full object-cover opacity-70 transition-transform duration-300 group-hover:scale-[1.03]"
+                          loading="lazy"
+                          decoding="async"
                         />
                       </div>
                     ))}
@@ -3292,7 +3931,7 @@ export function FantasyDashboard({
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
               <div className="order-2 min-w-0 space-y-3 xl:order-1">
               <>
-              <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2">
+              <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 [contain-intrinsic-size:430px] [content-visibility:auto]">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
                   <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -3300,7 +3939,7 @@ export function FantasyDashboard({
                   </div>
                     <div className="text-[10px] text-nrl-muted">{pricedAtProjectionPoints.length} players with {fantasyAnalyticsMetricOption.label.toLowerCase()}</div>
                   </div>
-                  <div className="grid w-full grid-cols-[minmax(0,0.9fr)_minmax(128px,1.1fr)_minmax(0,0.9fr)] items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[450px]">
+                  <div className="grid w-full grid-cols-[minmax(0,0.9fr)_minmax(128px,1.1fr)] items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[320px]">
                     <div className="min-w-0">
                       <Select
                         label=""
@@ -3308,9 +3947,6 @@ export function FantasyDashboard({
                         options={FANTASY_ANALYTICS_POSITION_OPTIONS}
                         onChange={(value) => {
                           setFantasyAnalyticsPositionFilter(value)
-                          setFantasyAnalyticsZoom(1)
-                          setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
-                          setSelectedFantasyAnalyticsPoint(null)
                         }}
                       />
                     </div>
@@ -3321,9 +3957,6 @@ export function FantasyDashboard({
                           type="button"
                           onClick={() => {
                             setFantasyAnalyticsMetric(metric.key)
-                            setFantasyAnalyticsZoom(1)
-                            setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
-                            setSelectedFantasyAnalyticsPoint(null)
                           }}
                           className={`min-w-0 flex-1 whitespace-nowrap rounded px-1.5 py-1 text-[9px] font-semibold transition-colors sm:px-2 sm:text-[10px] ${
                             fantasyAnalyticsMetric === metric.key
@@ -3335,202 +3968,21 @@ export function FantasyDashboard({
                         </button>
                       ))}
                     </div>
-                    <label className="flex min-w-0 items-center rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                      <input
-                        type="range"
-                        min={FANTASY_ANALYTICS_MIN_ZOOM}
-                        max={FANTASY_ANALYTICS_MAX_ZOOM}
-                        step={FANTASY_ANALYTICS_ZOOM_STEP}
-                        value={fantasyAnalyticsZoom}
-                        onChange={(event) => {
-                          setFantasyAnalyticsZoom(Number(event.target.value))
-                          setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
-                        }}
-                        className="w-full accent-nrl-accent"
-                        aria-label="Priced at plot zoom"
-                      />
-                    </label>
                   </div>
                 </div>
                 {pricedAtProjectionPoints.length > 0 ? (
-                  (() => {
-                    const width = 640
-                    const height = 380
-                    const left = 44
-                    const right = 18
-                    const top = 1
-                    const bottom = 22
-                    const baseXDomain = getPaddedDomain(pricedAtProjectionPoints.map((point) => point.pricedAt ?? 0))
-                    const baseYDomain = getPaddedDomain(
-                      pricedAtProjectionPoints.map((point) => getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric) ?? 0)
-                    )
-                    const xDomain = getZoomedDomain(baseXDomain, fantasyAnalyticsZoom, fantasyAnalyticsPan.x)
-                    const yDomain = getZoomedDomain(baseYDomain, fantasyAnalyticsZoom, fantasyAnalyticsPan.y)
-                    const xTicks = [xDomain.min, (xDomain.min + xDomain.max) / 2, xDomain.max]
-                    const yTicks = [yDomain.min, (yDomain.min + yDomain.max) / 2, yDomain.max]
-                    const maxAbsDelta = Math.max(
-                      ...pricedAtProjectionPoints.map((point) =>
-                        Math.abs((getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric) ?? 0) - (point.pricedAt ?? 0))
-                      ),
-                      1
-                    )
-                    const diagonalStart = Math.max(xDomain.min, yDomain.min)
-                    const diagonalEnd = Math.min(xDomain.max, yDomain.max)
-                    const plotWidth = width - left - right
-                    const plotHeight = height - top - bottom
-
-                    return (
-                      <div className="space-y-2">
-                      <svg
-                        viewBox={`0 0 ${width} ${height}`}
-                        role="img"
-                        aria-label={`Priced at vs ${fantasyAnalyticsMetricOption.label.toLowerCase()} scatter plot`}
-                        className={`block h-auto w-full ${fantasyAnalyticsZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
-                        onPointerDown={(event) => {
-                          if (fantasyAnalyticsZoom <= 1) return
-                          event.currentTarget.setPointerCapture(event.pointerId)
-                          setFantasyAnalyticsDrag({
-                            pointerId: event.pointerId,
-                            startX: event.clientX,
-                            startY: event.clientY,
-                            panX: fantasyAnalyticsPan.x,
-                            panY: fantasyAnalyticsPan.y,
-                          })
-                        }}
-                        onPointerMove={(event) => {
-                          if (!fantasyAnalyticsDrag || fantasyAnalyticsDrag.pointerId !== event.pointerId || fantasyAnalyticsZoom <= 1) return
-                          const deltaX = event.clientX - fantasyAnalyticsDrag.startX
-                          const deltaY = event.clientY - fantasyAnalyticsDrag.startY
-                          const dragScale = fantasyAnalyticsZoom / (fantasyAnalyticsZoom - 1)
-                          setFantasyAnalyticsPan({
-                            x: Math.max(0, Math.min(1, fantasyAnalyticsDrag.panX - (deltaX / plotWidth) * dragScale)),
-                            y: Math.max(0, Math.min(1, fantasyAnalyticsDrag.panY + (deltaY / plotHeight) * dragScale)),
-                          })
-                        }}
-                        onPointerUp={(event) => {
-                          if (fantasyAnalyticsDrag?.pointerId === event.pointerId) setFantasyAnalyticsDrag(null)
-                        }}
-                        onPointerCancel={(event) => {
-                          if (fantasyAnalyticsDrag?.pointerId === event.pointerId) setFantasyAnalyticsDrag(null)
-                        }}
-                      >
-                        <defs>
-                          <clipPath id="fantasy-analytics-scatter-clip">
-                            <rect x={left} y={top} width={width - left - right} height={height - top - bottom} rx="6" />
-                          </clipPath>
-                        </defs>
-                        <rect x={left} y={top} width={width - left - right} height={height - top - bottom} fill="#111832" rx="6" />
-                        {xTicks.map((tick) => {
-                          const x = scaleChartValue(tick, xDomain.min, xDomain.max, left, width - right)
-                          return (
-                            <g key={`x-${tick}`}>
-                              <line x1={x} x2={x} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.12)" />
-                              <text x={x} y={height - 10} textAnchor="middle" className="fill-slate-400 text-[10px]">
-                                {formatTableNumber(tick, 0)}
-                              </text>
-                            </g>
-                          )
-                        })}
-                        {diagonalEnd > diagonalStart ? (
-                          <line
-                            x1={scaleChartValue(diagonalStart, xDomain.min, xDomain.max, left, width - right)}
-                            x2={scaleChartValue(diagonalEnd, xDomain.min, xDomain.max, left, width - right)}
-                            y1={scaleChartValue(diagonalStart, yDomain.min, yDomain.max, height - bottom, top)}
-                            y2={scaleChartValue(diagonalEnd, yDomain.min, yDomain.max, height - bottom, top)}
-                            stroke="rgba(226,232,240,0.5)"
-                            strokeDasharray="6 5"
-                            clipPath="url(#fantasy-analytics-scatter-clip)"
-                          />
-                        ) : null}
-                        {yTicks.map((tick) => {
-                          const y = scaleChartValue(tick, yDomain.min, yDomain.max, height - bottom, top)
-                          return (
-                            <g key={`y-${tick}`}>
-                              <line x1={left} x2={width - right} y1={y} y2={y} stroke="rgba(148,163,184,0.12)" />
-                              <text x={left - 8} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px]">
-                                {formatTableNumber(tick, 0)}
-                              </text>
-                            </g>
-                          )
-                        })}
-                        <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
-                        <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
-                        <text x={(width + left - right) / 2} y={height} textAnchor="middle" className="fill-slate-400 text-[10px]">
-                          Priced At
-                        </text>
-                        <text x="12" y={(height - bottom + top) / 2} textAnchor="middle" transform={`rotate(-90 12 ${(height - bottom + top) / 2})`} className="fill-slate-400 text-[10px]">
-                          {fantasyAnalyticsMetricOption.label}
-                        </text>
-                        <g clipPath="url(#fantasy-analytics-scatter-clip)">
-                        {pricedAtProjectionPoints.map((point) => {
-                          const metricValue = getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric) ?? 0
-                          const x = scaleChartValue(point.pricedAt ?? 0, xDomain.min, xDomain.max, left, width - right)
-                          const y = scaleChartValue(metricValue, yDomain.min, yDomain.max, height - bottom, top)
-                          const delta = metricValue - (point.pricedAt ?? 0)
-                          const pointColor = getProjectionDeltaColor(delta, maxAbsDelta)
-                          const selected = selectedFantasyAnalyticsPoint?.name === point.name
-                          return (
-                            <g key={`${point.name}-${point.position}`}>
-                              <circle
-                                cx={x}
-                                cy={y}
-                                r="11"
-                                fill="transparent"
-                                className="cursor-pointer"
-                                onMouseEnter={() => setSelectedFantasyAnalyticsPoint(point)}
-                                onFocus={() => setSelectedFantasyAnalyticsPoint(point)}
-                                onClick={() => setSelectedFantasyAnalyticsPoint(point)}
-                                tabIndex={0}
-                              >
-                                <title>{`${point.name}\nPriced At: ${formatTableNumber(point.pricedAt, 0)}\n${fantasyAnalyticsMetricOption.label}: ${formatTableNumber(metricValue, 1)}\nDelta: ${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`}</title>
-                              </circle>
-                              <circle
-                                cx={x}
-                                cy={y}
-                                r={selected ? "6" : "4"}
-                                fill={pointColor}
-                                stroke={selected ? "#f8fafc" : "#07131f"}
-                                strokeWidth={selected ? "2" : "1"}
-                                pointerEvents="none"
-                                opacity="0.9"
-                              />
-                            </g>
-                          )
-                        })}
-                        </g>
-                      </svg>
-                      {selectedFantasyAnalyticsPoint ? (
-                        <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-2 text-xs text-nrl-text">
-                          <div className="font-semibold">{selectedFantasyAnalyticsPoint.name}</div>
-                          <div className="mt-1 grid gap-1 text-[10px] text-nrl-muted sm:grid-cols-3">
-                            <span>Priced At: {formatTableNumber(selectedFantasyAnalyticsPoint.pricedAt, 0)}</span>
-                            <span>
-                              {fantasyAnalyticsMetricOption.label}:{" "}
-                              {formatTableNumber(getFantasyAnalyticsMetricValue(selectedFantasyAnalyticsPoint, fantasyAnalyticsMetric), 1)}
-                            </span>
-                            <span>
-                              Delta: {(() => {
-                                const metricValue = getFantasyAnalyticsMetricValue(selectedFantasyAnalyticsPoint, fantasyAnalyticsMetric) ?? 0
-                                const delta = metricValue - (selectedFantasyAnalyticsPoint.pricedAt ?? 0)
-                                return `${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-nrl-muted">
-                          {fantasyAnalyticsZoom > 1 ? "Drag the plot to pan. Hover or tap a point to inspect the player." : "Hover or tap a point to inspect the player."}
-                        </div>
-                      )}
-                      </div>
-                    )
-                  })()
+                  <FantasyAnalyticsScatterPlot
+                    key={`${fantasyAnalyticsPositionFilter}-${fantasyAnalyticsMetric}`}
+                    points={pricedAtProjectionPoints}
+                    metric={fantasyAnalyticsMetric}
+                    metricOption={fantasyAnalyticsMetricOption}
+                  />
                 ) : (
                   <div className="grid h-[280px] place-items-center text-xs text-nrl-muted">No projection data available.</div>
                 )}
                 {analysisLocked ? <FantasyAnalyticsLockOverlay /> : null}
               </div>
-              <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2">
+              <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 [contain-intrinsic-size:410px] [content-visibility:auto]">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -3543,7 +3995,7 @@ export function FantasyDashboard({
                         : ""}
                     </div>
                   </div>
-                  <div className="grid w-full grid-cols-3 items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[490px]">
+                  <div className="grid w-full grid-cols-2 items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[360px]">
                   <div className="min-w-0">
                     <Select
                       label=""
@@ -3551,9 +4003,6 @@ export function FantasyDashboard({
                       options={FANTASY_ANALYTICS_POSITION_OPTIONS}
                       onChange={(value) => {
                         setGlobalStatVsFantasyPositionFilter(value)
-                        setGlobalStatVsFantasyZoom(1)
-                        setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
-                        setSelectedGlobalStatVsFantasyPoint(null)
                       }}
                     />
                   </div>
@@ -3564,234 +4013,19 @@ export function FantasyDashboard({
                       options={STAT_VS_FANTASY_OPTIONS.map((option) => option.label)}
                       onChange={(value) => {
                         setSelectedGlobalStatVsFantasyLabel(value as StatVsFantasyOptionLabel)
-                        setGlobalStatVsFantasyZoom(1)
-                        setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
-                        setSelectedGlobalStatVsFantasyPoint(null)
                       }}
                     />
                   </div>
-                  <label className="flex min-w-0 items-center rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                    <input
-                      type="range"
-                      min={FANTASY_ANALYTICS_MIN_ZOOM}
-                      max={FANTASY_ANALYTICS_MAX_ZOOM}
-                      step={FANTASY_ANALYTICS_ZOOM_STEP}
-                      key={`${globalStatVsFantasyPositionFilter}-${selectedGlobalStatVsFantasyLabel}`}
-                      defaultValue={globalStatVsFantasyZoom}
-                      onChange={(event) => {
-                        commitGlobalStatVsFantasyZoom(Number(event.currentTarget.value))
-                      }}
-                      onPointerUp={(event) => {
-                        commitGlobalStatVsFantasyZoom(Number(event.currentTarget.value), 0)
-                      }}
-                      className="w-full accent-nrl-accent"
-                      aria-label="Fantasy vs stat plot zoom"
-                    />
-                  </label>
                   </div>
                 </div>
                 {filteredGlobalStatVsFantasyPoints.length > 0 ? (
-                  (() => {
-                    const width = 640
-                    const height = 350
-                    const left = 44
-                    const right = 18
-                    const top = 1
-                    const bottom = 22
-                    const baseXDomain = getPaddedDomain(filteredGlobalStatVsFantasyPoints.map((point) => point.statValue))
-                    const baseYDomain = getPaddedDomain(filteredGlobalStatVsFantasyPoints.map((point) => point.fantasyAvg))
-                    const xDomain = getZoomedDomain(baseXDomain, globalStatVsFantasyZoom, globalStatVsFantasyPan.x)
-                    const yDomain = getZoomedDomain(baseYDomain, globalStatVsFantasyZoom, globalStatVsFantasyPan.y)
-                    const xTicks = [xDomain.min, (xDomain.min + xDomain.max) / 2, xDomain.max]
-                    const yTicks = [yDomain.min, (yDomain.min + yDomain.max) / 2, yDomain.max]
-                    const plotWidth = width - left - right
-                    const plotHeight = height - top - bottom
-                    const trendStartY = globalStatVsFantasyTrendline
-                      ? globalStatVsFantasyTrendline.m * xDomain.min + globalStatVsFantasyTrendline.b
-                      : null
-                    const trendEndY = globalStatVsFantasyTrendline
-                      ? globalStatVsFantasyTrendline.m * xDomain.max + globalStatVsFantasyTrendline.b
-                      : null
-                    const chartPoints = filteredGlobalStatVsFantasyPoints.map((point) => ({
-                      point,
-                      x: scaleChartValue(point.statValue, xDomain.min, xDomain.max, left, width - right),
-                      y: scaleChartValue(point.fantasyAvg, yDomain.min, yDomain.max, height - bottom, top),
-                    }))
-                    const selectNearestPoint = (event: PointerEvent<SVGSVGElement> | MouseEvent<SVGSVGElement>) => {
-                      const rect = event.currentTarget.getBoundingClientRect()
-                      if (rect.width <= 0 || rect.height <= 0) return
-                      const x = ((event.clientX - rect.left) / rect.width) * width
-                      const y = ((event.clientY - rect.top) / rect.height) * height
-                      if (x < left || x > width - right || y < top || y > height - bottom) return
-
-                      let closest: GlobalStatVsFantasyPoint | null = null
-                      let closestDistance = Infinity
-                      for (const chartPoint of chartPoints) {
-                        const dx = chartPoint.x - x
-                        const dy = chartPoint.y - y
-                        const distance = dx * dx + dy * dy
-                        if (distance < closestDistance) {
-                          closestDistance = distance
-                          closest = chartPoint.point
-                        }
-                      }
-                      if (closest && closestDistance <= 20 * 20) {
-                        setSelectedGlobalStatVsFantasyPoint(closest)
-                      }
-                    }
-
-                    return (
-                      <div className="space-y-2">
-                        <svg
-                          viewBox={`0 0 ${width} ${height}`}
-                          role="img"
-                          aria-label={`2026 fantasy average vs ${selectedGlobalStatVsFantasyOption.label.toLowerCase()} average scatter plot`}
-                          className={`block h-auto w-full ${globalStatVsFantasyZoom > 1 ? "cursor-grab touch-none active:cursor-grabbing" : "touch-manipulation"}`}
-                          onPointerDown={(event) => {
-                            if (globalStatVsFantasyZoom <= 1) return
-                            event.currentTarget.setPointerCapture(event.pointerId)
-                            setGlobalStatVsFantasyDrag({
-                              pointerId: event.pointerId,
-                              startX: event.clientX,
-                              startY: event.clientY,
-                              panX: globalStatVsFantasyPan.x,
-                              panY: globalStatVsFantasyPan.y,
-                            })
-                          }}
-                          onPointerMove={(event) => {
-                            if (!globalStatVsFantasyDrag || globalStatVsFantasyDrag.pointerId !== event.pointerId || globalStatVsFantasyZoom <= 1) {
-                              if (event.pointerType === "mouse") selectNearestPoint(event)
-                              return
-                            }
-                            const deltaX = event.clientX - globalStatVsFantasyDrag.startX
-                            const deltaY = event.clientY - globalStatVsFantasyDrag.startY
-                            const dragScale = globalStatVsFantasyZoom / (globalStatVsFantasyZoom - 1)
-                            setGlobalStatVsFantasyPan({
-                              x: Math.max(0, Math.min(1, globalStatVsFantasyDrag.panX - (deltaX / plotWidth) * dragScale)),
-                              y: Math.max(0, Math.min(1, globalStatVsFantasyDrag.panY + (deltaY / plotHeight) * dragScale)),
-                            })
-                          }}
-                          onPointerUp={(event) => {
-                            if (globalStatVsFantasyDrag?.pointerId === event.pointerId) {
-                              const moved =
-                                Math.abs(event.clientX - globalStatVsFantasyDrag.startX) +
-                                Math.abs(event.clientY - globalStatVsFantasyDrag.startY)
-                              if (moved < 8) {
-                                selectNearestPoint(event)
-                              } else {
-                                globalStatVsFantasySuppressClickRef.current = true
-                              }
-                              setGlobalStatVsFantasyDrag(null)
-                            }
-                          }}
-                          onPointerCancel={(event) => {
-                            if (globalStatVsFantasyDrag?.pointerId === event.pointerId) setGlobalStatVsFantasyDrag(null)
-                          }}
-                          onClick={(event) => {
-                            if (globalStatVsFantasySuppressClickRef.current) {
-                              globalStatVsFantasySuppressClickRef.current = false
-                              return
-                            }
-                            selectNearestPoint(event)
-                          }}
-                        >
-                          <defs>
-                            <clipPath id="fantasy-global-stat-scatter-clip">
-                              <rect x={left} y={top} width={width - left - right} height={height - top - bottom} rx="6" />
-                            </clipPath>
-                          </defs>
-                          <rect x={left} y={top} width={width - left - right} height={height - top - bottom} fill="#111832" rx="6" />
-                          {xTicks.map((tick) => {
-                            const x = scaleChartValue(tick, xDomain.min, xDomain.max, left, width - right)
-                            return (
-                              <g key={`global-x-${tick}`}>
-                                <line x1={x} x2={x} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.12)" />
-                                <text x={x} y={height - 10} textAnchor="middle" className="fill-slate-400 text-[10px]">
-                                  {formatTableNumber(tick, 0)}
-                                </text>
-                              </g>
-                            )
-                          })}
-                          {yTicks.map((tick) => {
-                            const y = scaleChartValue(tick, yDomain.min, yDomain.max, height - bottom, top)
-                            return (
-                              <g key={`global-y-${tick}`}>
-                                <line x1={left} x2={width - right} y1={y} y2={y} stroke="rgba(148,163,184,0.12)" />
-                                <text x={left - 8} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px]">
-                                  {formatTableNumber(tick, 0)}
-                                </text>
-                              </g>
-                            )
-                          })}
-                          <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
-                          <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="rgba(148,163,184,0.35)" />
-                          <text x={(width + left - right) / 2} y={height} textAnchor="middle" className="fill-slate-400 text-[10px]">
-                            {selectedGlobalStatVsFantasyOption.label}
-                          </text>
-                          <text x="12" y={(height - bottom + top) / 2} textAnchor="middle" transform={`rotate(-90 12 ${(height - bottom + top) / 2})`} className="fill-slate-400 text-[10px]">
-                            Fantasy Avg
-                          </text>
-                          <g clipPath="url(#fantasy-global-stat-scatter-clip)">
-                            {trendStartY !== null && trendEndY !== null ? (
-                              <line
-                                x1={left}
-                                y1={scaleChartValue(trendStartY, yDomain.min, yDomain.max, height - bottom, top)}
-                                x2={width - right}
-                                y2={scaleChartValue(trendEndY, yDomain.min, yDomain.max, height - bottom, top)}
-                                stroke="rgba(226,232,240,0.7)"
-                                strokeWidth="2"
-                                strokeDasharray="6 5"
-                              />
-                            ) : null}
-                            {chartPoints.map(({ point, x, y }) => {
-                              const selected = selectedGlobalStatVsFantasyPoint?.name === point.name
-                              return (
-                                <g key={`${point.name}-${point.position}-global-stat`}>
-                                  <circle
-                                    cx={x}
-                                    cy={y}
-                                    r={selected ? "6" : "4"}
-                                    fill={getFantasyPositionColor(
-                                      globalStatVsFantasyPositionFilter === "All Positions"
-                                        ? point.position
-                                        : globalStatVsFantasyPositionFilter
-                                    )}
-                                    stroke={selected ? "#f8fafc" : "#07131f"}
-                                    strokeWidth={selected ? "2" : "1"}
-                                    pointerEvents="none"
-                                  >
-                                    <title>{`${point.name}\n${selectedGlobalStatVsFantasyOption.label}: ${formatTableNumber(point.statValue, 1)}\nFantasy Avg: ${formatTableNumber(point.fantasyAvg, 1)}`}</title>
-                                  </circle>
-                                </g>
-                              )
-                            })}
-                          </g>
-                        </svg>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-semibold text-nrl-muted">
-                          {POSITION_TABLES.map((position) => (
-                            <span key={position.label} className="inline-flex items-center gap-1">
-                              <span
-                                className="h-2 w-2 rounded-full"
-                                style={{ backgroundColor: getFantasyPositionColor(position.label) }}
-                              />
-                              {position.label}
-                            </span>
-                          ))}
-                        </div>
-                        {selectedGlobalStatVsFantasyPoint ? (
-                          <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-2 text-xs text-nrl-text">
-                            <div className="font-semibold">{selectedGlobalStatVsFantasyPoint.name}</div>
-                            <div className="mt-1 grid gap-1 text-[10px] text-nrl-muted sm:grid-cols-2">
-                              <span>{selectedGlobalStatVsFantasyOption.label}: {formatTableNumber(selectedGlobalStatVsFantasyPoint.statValue, 1)}</span>
-                              <span>Fantasy Avg: {formatTableNumber(selectedGlobalStatVsFantasyPoint.fantasyAvg, 1)}</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-[10px] text-nrl-muted">Hover or tap a player to inspect their 2026 averages.</div>
-                        )}
-                      </div>
-                    )
-                  })()
+                  <GlobalStatVsFantasyScatterPlot
+                    key={globalStatVsFantasyPositionFilter + "-" + selectedGlobalStatVsFantasyLabel}
+                    points={filteredGlobalStatVsFantasyPoints}
+                    selectedOption={selectedGlobalStatVsFantasyOption}
+                    positionFilter={globalStatVsFantasyPositionFilter}
+                    trendline={globalStatVsFantasyTrendline}
+                  />
                 ) : (
                   <div className="grid h-[220px] place-items-center text-xs text-nrl-muted">No 2026 stat averages available.</div>
                 )}
@@ -3968,12 +4202,6 @@ export function FantasyDashboard({
                   options={allPlayersTagFilterOptions}
                   onChange={(value) => {
                     setAllPlayersTagFilters(value)
-                    setFantasyAnalyticsZoom(1)
-                    setFantasyAnalyticsPan({ x: 0.5, y: 0.5 })
-                    setSelectedFantasyAnalyticsPoint(null)
-                    setGlobalStatVsFantasyZoom(1)
-                    setGlobalStatVsFantasyPan({ x: 0.5, y: 0.5 })
-                    setSelectedGlobalStatVsFantasyPoint(null)
                   }}
                   placeholder="All Tags"
                 />

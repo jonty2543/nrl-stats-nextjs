@@ -45,6 +45,12 @@ type PlayerStatsSelection = {
   baselinePpm: number | null
   baselineLabel: string | null
 }
+
+const FREE_INSIGHT_CATEGORY_ROTATION: MatchupInsight["category"][][] = [
+  ["Betting", "Stats", "Fantasy", "Team News", "Matchup"],
+  ["Stats", "Fantasy", "Betting", "Team News", "Matchup"],
+  ["Fantasy", "Betting", "Stats", "Team News", "Matchup"],
+]
 type PlayerStatDisplayItem = {
   label: string
   value: string
@@ -82,6 +88,13 @@ const BOOKIE_LOGOS: Record<string, string> = {
 const BLUE_GRADIENT_BORDER_STYLE: CSSProperties = {
   background:
     "linear-gradient(180deg, rgba(28,35,62,0.98), rgba(28,35,62,0.98)) padding-box, linear-gradient(90deg, rgba(147,197,253,0.68), rgba(59,130,246,0.34) 18%, rgba(226,239,255,0.58) 50%, rgba(59,130,246,0.34) 82%, rgba(147,197,253,0.68)) border-box",
+}
+
+const MATCH_CARD_TEXTURE_STYLE: CSSProperties = {
+  backgroundImage:
+    "radial-gradient(circle, rgba(226,239,255,0.08) 0 1px, transparent 1.2px), radial-gradient(circle, rgba(0,245,138,0.06) 0 1px, transparent 1.3px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(0deg, rgba(0,245,138,0.018) 1px, transparent 1px)",
+  backgroundPosition: "0 0, 9px 10px, 0 0, 0 0",
+  backgroundSize: "18px 18px, 22px 22px, 28px 28px, 32px 32px",
 }
 
 function normaliseBookieKey(value: string): string {
@@ -540,6 +553,21 @@ function resolveTeamLogo(teamName: string | null | undefined, teamLogos: Record<
 function resolveLogo(team: LineupTeam | null, teamLogos: Record<string, string>): string | null {
   if (!team) return null
   return resolveTeamLogo(team.team, teamLogos) ?? resolveTeamLogo(team.teamName, teamLogos)
+}
+
+function isStormTeam(team: LineupTeam | null): boolean {
+  if (!team) return false
+  return [team.team, team.teamName].flatMap(teamAliases).includes("storm")
+}
+
+function isBroncosTeam(team: LineupTeam | null): boolean {
+  if (!team) return false
+  return [team.team, team.teamName].flatMap(teamAliases).includes("broncos")
+}
+
+function isRabbitohsTeam(team: LineupTeam | null): boolean {
+  if (!team) return false
+  return [team.team, team.teamName].flatMap(teamAliases).includes("rabbitohs")
 }
 
 function sportsbetOddsForTeam(
@@ -1032,12 +1060,18 @@ function PregameMatchStatsPreview({ match, teamLogos }: { match: LineupMatch; te
     <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
       <div className="grid grid-cols-[minmax(3.2rem,0.42fr)_minmax(0,1.7fr)_minmax(3.2rem,0.42fr)] gap-2 sm:gap-3">
         <div className="flex h-full flex-col rounded-lg border border-white/8 bg-nrl-panel-2/55 p-2 text-center sm:p-3">
-          <div className="mb-2 truncate text-[10px] font-black text-nrl-text sm:text-xs">{homeTeam}</div>
+          <div className="mb-2 flex justify-center sm:hidden">
+            <TeamLogoMark team={homeTeam} teamLogos={teamLogos} />
+          </div>
+          <div className="mb-2 hidden truncate text-xs font-black text-nrl-text sm:block">{homeTeam}</div>
           <RecentFormPills team={homeTeam} results={homeResults} compact />
         </div>
         <HeadToHeadResults results={headToHead} teamLogos={teamLogos} />
         <div className="flex h-full flex-col rounded-lg border border-white/8 bg-nrl-panel-2/55 p-2 text-center sm:p-3">
-          <div className="mb-2 truncate text-[10px] font-black text-nrl-text sm:text-xs">{awayTeam}</div>
+          <div className="mb-2 flex justify-center sm:hidden">
+            <TeamLogoMark team={awayTeam} teamLogos={teamLogos} />
+          </div>
+          <div className="mb-2 hidden truncate text-xs font-black text-nrl-text sm:block">{awayTeam}</div>
           <RecentFormPills team={awayTeam} results={awayResults} compact />
         </div>
       </div>
@@ -1439,8 +1473,15 @@ function TeamBadge({
   return (
     <div className="flex min-h-[7.5rem] w-[6.5rem] min-w-0 max-w-full flex-col items-center justify-center gap-1 px-2 py-1.5 text-center sm:min-h-[8.5rem] sm:w-[7.5rem] sm:px-2.5">
       {logo ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt="" className="h-16 w-16 object-contain sm:h-20 sm:w-20" loading="lazy" />
+        <div className="relative grid h-20 w-20 place-items-center sm:h-24 sm:w-24">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logo}
+            alt=""
+            className="h-full w-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.55)]"
+            loading="lazy"
+          />
+        </div>
       ) : null}
       <div className="w-full min-w-0">
         <div className="truncate text-xs font-bold text-nrl-text sm:hidden">{shortName}</div>
@@ -1813,12 +1854,20 @@ function NotableOuts({
 function MatchupInsightsPanel({
   insights,
   canAccessFullInsights,
+  freeInsightCategoryPriority,
 }: {
   insights: MatchupInsight[]
   canAccessFullInsights: boolean
+  freeInsightCategoryPriority: MatchupInsight["category"][]
 }) {
-  const visibleInsights = canAccessFullInsights ? insights : insights.slice(0, 1)
-  const lockedPreviewInsights = canAccessFullInsights ? [] : insights.slice(1)
+  const preferredFreeInsight = freeInsightCategoryPriority
+    .map((category) => insights.find((insight) => insight.category === category))
+    .find((insight): insight is MatchupInsight => Boolean(insight))
+  const orderedInsights = !canAccessFullInsights && preferredFreeInsight
+    ? [preferredFreeInsight, ...insights.filter((insight) => insight !== preferredFreeInsight)]
+    : insights
+  const visibleInsights = canAccessFullInsights ? orderedInsights : orderedInsights.slice(0, 1)
+  const lockedPreviewInsights = canAccessFullInsights ? [] : orderedInsights.slice(1)
   const lockedInsightCount = canAccessFullInsights ? 0 : Math.max(0, insights.length - visibleInsights.length)
 
   return (
@@ -1944,6 +1993,7 @@ function DisplayModeControl({
 
 function LineupCard({
   match,
+  matchIndex,
   liveMatch,
   matchStats,
   teamLogos,
@@ -1957,6 +2007,7 @@ function LineupCard({
   positionPpmBaselines,
 }: {
   match: LineupMatch
+  matchIndex: number
   liveMatch: LineupLiveMatch | null
   matchStats: LineupMatchStats | null
   teamLogos: Record<string, string>
@@ -1991,6 +2042,22 @@ function LineupCard({
   const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
   const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.homeTeam, sportsbetOdds) : null
   const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
+  const homeLogo = resolveLogo(match.homeTeam, teamLogos)
+  const awayLogo = resolveLogo(match.awayTeam, teamLogos)
+  const homeWatermarkClass = isStormTeam(match.homeTeam)
+    ? "hidden left-6 h-40 w-40 opacity-[0.16] grayscale sm:left-16 sm:block sm:h-48 sm:w-48"
+    : isBroncosTeam(match.homeTeam)
+      ? "hidden -left-8 h-44 w-44 opacity-[0.16] grayscale sm:left-4 sm:block sm:h-56 sm:w-56"
+    : isRabbitohsTeam(match.homeTeam)
+      ? "hidden -left-8 h-44 w-44 opacity-[0.22] sm:left-4 sm:block sm:h-56 sm:w-56"
+    : "hidden -left-8 h-44 w-44 opacity-[0.065] grayscale sm:left-4 sm:block sm:h-56 sm:w-56"
+  const awayWatermarkClass = isStormTeam(match.awayTeam)
+    ? "hidden right-6 h-40 w-40 opacity-[0.16] grayscale sm:right-16 sm:block sm:h-48 sm:w-48"
+    : isBroncosTeam(match.awayTeam)
+      ? "hidden -right-8 h-44 w-44 opacity-[0.16] grayscale sm:right-4 sm:block sm:h-56 sm:w-56"
+    : isRabbitohsTeam(match.awayTeam)
+      ? "hidden -right-8 h-44 w-44 opacity-[0.22] sm:right-4 sm:block sm:h-56 sm:w-56"
+    : "hidden -right-8 h-44 w-44 opacity-[0.065] grayscale sm:right-4 sm:block sm:h-56 sm:w-56"
   const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
     ? {
         player: selectedPlayer,
@@ -2008,14 +2075,40 @@ function LineupCard({
         casualtyWardOuts,
         playerAverages,
       })
+  const freeInsightCategoryPriority = FREE_INSIGHT_CATEGORY_ROTATION[matchIndex % FREE_INSIGHT_CATEGORY_ROTATION.length]
 
   return (
     <details
-      className="group rounded-lg border border-transparent shadow-[0_22px_52px_rgba(0,0,0,0.36)]"
+      className="group relative origin-top overflow-hidden rounded-lg border border-transparent shadow-[0_24px_54px_rgba(0,0,0,0.48),0_0_38px_rgba(96,165,250,0.18)] transform-gpu [transform:perspective(1100px)_rotateX(3.2deg)_scaleY(0.965)]"
       style={BLUE_GRADIENT_BORDER_STYLE}
     >
-      <summary className="relative cursor-pointer list-none px-3 py-3 marker:hidden sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
-        <div className="mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.5rem,auto)_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_minmax(0,1fr)] sm:gap-6">
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-px rounded-[calc(0.5rem-1px)] opacity-70 transition-opacity group-open:opacity-0"
+        style={MATCH_CARD_TEXTURE_STYLE}
+      />
+      <summary className="relative z-[1] cursor-pointer list-none px-3 py-3 marker:hidden sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
+        {homeLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={homeLogo}
+            alt=""
+            aria-hidden="true"
+            className={`pointer-events-none absolute top-1/2 -translate-y-1/2 object-contain ${homeWatermarkClass}`}
+            loading="lazy"
+          />
+        ) : null}
+        {awayLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={awayLogo}
+            alt=""
+            aria-hidden="true"
+            className={`pointer-events-none absolute top-1/2 -translate-y-1/2 object-contain ${awayWatermarkClass}`}
+            loading="lazy"
+          />
+        ) : null}
+        <div className="relative z-[1] mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.5rem,auto)_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_minmax(0,1fr)] sm:gap-6">
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={match.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
@@ -2037,7 +2130,7 @@ function LineupCard({
         </span>
       </summary>
 
-      <div className="relative px-2 pb-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,rgba(191,219,254,0.5),rgba(59,130,246,0.18),transparent)] sm:px-3">
+      <div className="relative z-[1] px-2 pb-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,rgba(191,219,254,0.5),rgba(59,130,246,0.18),transparent)] sm:px-3">
         <div className="pt-5" />
         <LiveTryScorersStrip match={match} liveMatch={displayLiveMatch} />
         {availableDetailViews.length > 1 ? (
@@ -2063,7 +2156,13 @@ function LineupCard({
           <MatchStatsPanel match={match} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />
         ) : hasLineupData ? (
           <>
-            {showPregameContent ? <MatchupInsightsPanel insights={insights} canAccessFullInsights={canAccessFantasyProjections} /> : null}
+            {showPregameContent ? (
+              <MatchupInsightsPanel
+                insights={insights}
+                canAccessFullInsights={canAccessFantasyProjections}
+                freeInsightCategoryPriority={freeInsightCategoryPriority}
+              />
+            ) : null}
             <Pitch
               homePlayers={homePlayers}
               awayPlayers={awayPlayers}
@@ -2187,6 +2286,7 @@ export function LineupsDashboard({
     },
     []
   )
+  const matchIndexById = new Map(matches.map((match, index) => [match.matchId, index]))
 
   return (
     <div className="space-y-3">
@@ -2202,6 +2302,7 @@ export function LineupsDashboard({
                 <LineupCard
                   key={match.matchId}
                   match={match}
+                  matchIndex={matchIndexById.get(match.matchId) ?? 0}
                   liveMatch={liveMatches[match.matchId] ?? null}
                   matchStats={matchStats[match.matchId] ?? null}
                   teamLogos={teamLogos}

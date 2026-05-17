@@ -17,25 +17,25 @@ export default function AppleIcon() {
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <rect width="1024" height="1024" rx="224" fill="#1B2B49" />
-        <rect x="6" y="6" width="1012" height="1012" rx="220" stroke="#2B3F62" strokeWidth="12" />
+        <rect width="1024" height="1024" fill="#1B2B49" />
+        <circle cx="512" cy="512" r="506" stroke="#2B3F62" strokeWidth="12" />
         <defs>
           <radialGradient id="glow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#00F58A" stopOpacity="0.12" />
             <stop offset="100%" stopColor="#00F58A" stopOpacity="0" />
           </radialGradient>
         </defs>
-        <rect width="1024" height="1024" rx="224" fill="url(#glow)" />
-        <circle cx="512" cy="512" r="420" stroke="#00F58A" strokeWidth="22" />
-        <g stroke="#00F58A" strokeWidth="28" strokeLinecap="round">
-          <line x1="340" y1="292" x2="340" y2="732" />
-          <line x1="684" y1="292" x2="684" y2="732" />
-          <line x1="340" y1="512" x2="684" y2="512" />
-          <line x1="384" y1="724" x2="384" y2="850" />
-          <line x1="448" y1="684" x2="448" y2="850" />
-          <line x1="512" y1="632" x2="512" y2="850" />
-          <line x1="576" y1="664" x2="576" y2="850" />
-          <line x1="640" y1="704" x2="640" y2="850" />
+        <rect width="1024" height="1024" fill="url(#glow)" />
+        <circle cx="512" cy="512" r="466" stroke="#00F58A" strokeWidth="30" />
+        <g stroke="#00F58A" strokeWidth="42" strokeLinecap="round">
+          <line x1="278" y1="176" x2="278" y2="724" />
+          <line x1="746" y1="176" x2="746" y2="724" />
+          <line x1="278" y1="464" x2="746" y2="464" />
+          <line x1="340" y1="710" x2="340" y2="930" />
+          <line x1="426" y1="654" x2="426" y2="930" />
+          <line x1="512" y1="590" x2="512" y2="930" />
+          <line x1="598" y1="630" x2="598" y2="930" />
+          <line x1="684" y1="690" x2="684" y2="930" />
         </g>
       </svg>
     ),

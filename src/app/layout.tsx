@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Short Side Stats",
+  title: "Short Side NRL",
   description: "NRL player and team statistics dashboard",
   icons: {
     icon: "/app-icon.svg",

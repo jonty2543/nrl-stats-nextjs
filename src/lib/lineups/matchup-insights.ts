@@ -31,6 +31,7 @@ export type PlayerTryHistory = Record<string, Array<{ team: string; opponent: st
 
 type CandidateInsight = MatchupInsight & {
   score: number
+  family?: "win-record" | "try-scorer"
 }
 
 export interface GenerateMatchupInsightsInput {
@@ -109,11 +110,13 @@ function fullPlayerLabel(player: LineupPlayer): string {
 function addInsight(
   insights: CandidateInsight[],
   insight: MatchupInsight,
-  tieBreaker = 0
+  tieBreaker = 0,
+  family?: CandidateInsight["family"]
 ) {
   insights.push({
     ...insight,
     score: SEVERITY_SCORE[insight.severity] * 100 + Math.round((insight.confidence ?? 0.65) * 20) + tieBreaker,
+    family,
   })
 }
 
@@ -143,6 +146,36 @@ function selectStrongestInsights(insights: CandidateInsight[], maxInsights: numb
   }
 
   return selected.sort((a, b) => b.score - a.score)
+}
+
+function limitInsightFamilies(insights: CandidateInsight[]): CandidateInsight[] {
+  const limits: Partial<Record<NonNullable<CandidateInsight["family"]>, number>> = {
+    "try-scorer": 2,
+    "win-record": 2,
+  }
+  const familyCounts = new Map<NonNullable<CandidateInsight["family"]>, number>()
+  const ranked = rankedInsights(insights)
+  const selected = new Set<CandidateInsight>()
+
+  for (const insight of ranked) {
+    if (!insight.family) {
+      selected.add(insight)
+      continue
+    }
+
+    const limit = limits[insight.family]
+    if (limit == null) {
+      selected.add(insight)
+      continue
+    }
+
+    const count = familyCounts.get(insight.family) ?? 0
+    if (count >= limit) continue
+    familyCounts.set(insight.family, count + 1)
+    selected.add(insight)
+  }
+
+  return insights.filter((insight) => selected.has(insight))
 }
 
 function hashString(value: string): number {
@@ -295,30 +328,32 @@ function addTeamRecordInsight(
       description: description(wins),
       confidence: wins >= 8 ? 0.78 : 0.7,
     },
-    tieBreaker + wins * 5
+    tieBreaker + wins * 5,
+    "win-record"
   )
 }
 
 function addTeamRecordTrendInsights(insights: CandidateInsight[], match: LineupMatch) {
+  const recordInsights: CandidateInsight[] = []
   const headToHead = uniqueRecentResults(match.recentHeadToHead ?? []).slice(0, 10)
   for (const team of [match.homeTeam, match.awayTeam]) {
     const opponent = opposingTeam(match, team)
     addTeamRecordInsight(
-      insights,
+      recordInsights,
       team,
       headToHead,
-      `${teamLabel(team)} - Last 10 H2H Record`,
-      (wins) => `${teamLabel(team)} have won ${wins} of the last 10 games between these two sides${opponent ? ` against ${teamLabel(opponent)}` : ""}.`,
+      `${teamLabel(team)} have had success over ${teamLabel(opponent)} recently.`,
+      (wins) => `${teamLabel(team)} have won ${wins} of the last 10 games between the two sides.`,
       82
     )
 
     const h2hHomeGames = headToHead.filter((result) => normaliseKey(result.homeTeam) === normaliseKey(team?.team || team?.teamName)).slice(0, 10)
     addTeamRecordInsight(
-      insights,
+      recordInsights,
       team,
       h2hHomeGames,
-      `${teamLabel(team)} - Last 10 Home H2H Record`,
-      (wins) => `${teamLabel(team)} have won ${wins} of their last 10 home games between these two sides${opponent ? ` against ${teamLabel(opponent)}` : ""}.`,
+      `${teamLabel(team)} have had success over ${teamLabel(opponent)} at home.`,
+      (wins) => `${teamLabel(team)} have won ${wins} of their last 10 home games between the two sides.`,
       76
     )
   }
@@ -330,10 +365,10 @@ function addTeamRecordTrendInsights(insights: CandidateInsight[], match: LineupM
 
   for (const { team, results } of teams) {
     addTeamRecordInsight(
-      insights,
+      recordInsights,
       team,
       results.slice(0, 10),
-      `${teamLabel(team)} - Last 10 Record`,
+      `${teamLabel(team)} are carrying strong recent form.`,
       (wins) => `${teamLabel(team)} have won ${wins} of their last 10 games against all teams.`,
       70
     )
@@ -342,14 +377,16 @@ function addTeamRecordTrendInsights(insights: CandidateInsight[], match: LineupM
       .filter((result) => normaliseKey(result.homeTeam) === normaliseKey(team?.team || team?.teamName))
       .slice(0, 10)
     addTeamRecordInsight(
-      insights,
+      recordInsights,
       team,
       homeGames,
-      `${teamLabel(team)} - Last 10 Home Record`,
+      `${teamLabel(team)} have been hard to beat at home.`,
       (wins) => `${teamLabel(team)} have won ${wins} of their last 10 home games against all teams.`,
       66
     )
   }
+
+  insights.push(...recordInsights.sort((a, b) => b.score - a.score).slice(0, 2))
 }
 
 function addMatchTotalPointsTrendInsight(insights: CandidateInsight[], match: LineupMatch) {
@@ -458,11 +495,12 @@ function addPlayerTryMarketTrendInsights(
       {
         category: "Betting",
         severity: candidate.tries >= 0.7 || price <= 2.2 ? "high" : "medium",
-        title: `${fullPlayerLabel(candidate.player)} - 1+ Try ${price.toFixed(2)}`,
+        title: `${fullPlayerLabel(candidate.player)} is a live try-scoring chance.`,
         description: `${fullPlayerLabel(candidate.player)} averages ${candidate.tries.toFixed(1)} tries per game this season and is listed at ${price.toFixed(2)} in the anytime tryscorer market.`,
         confidence: candidate.tries >= 0.7 || price <= 2.2 ? 0.76 : 0.68,
       },
-      Math.round(candidate.tries * 44 + Math.max(0, 4.5 - price) * 10)
+      Math.round(candidate.tries * 44 + Math.max(0, 4.5 - price) * 10),
+      "try-scorer"
     )
   }
 }
@@ -514,11 +552,12 @@ function addPlayerTryRunInsights(
       {
         category: "Stats",
         severity: candidate.tries >= 7 ? "high" : "medium",
-        title: `${fullPlayerLabel(candidate.player)} - Recent Try Run`,
+        title: `${fullPlayerLabel(candidate.player)} is in fine try-scoring form.`,
         description: `${fullPlayerLabel(candidate.player)} has scored ${candidate.tries} tries in his last ${candidate.sample} games.`,
         confidence: candidate.tries >= 7 ? 0.78 : 0.7,
       },
-      86 + candidate.tries * 4
+      86 + candidate.tries * 4,
+      "try-scorer"
     )
   }
 
@@ -530,11 +569,12 @@ function addPlayerTryRunInsights(
       {
         category: "Stats",
         severity: candidate.tries >= 7 ? "high" : "medium",
-        title: `${fullPlayerLabel(candidate.player)} - Try Record vs ${teamLabel(candidate.opponent)}`,
+        title: `${fullPlayerLabel(candidate.player)} has enjoyed this matchup.`,
         description: `${fullPlayerLabel(candidate.player)} has scored ${candidate.tries} tries in his last ${candidate.sample} games against ${teamLabel(candidate.opponent)}.`,
         confidence: candidate.tries >= 7 ? 0.78 : 0.7,
       },
-      84 + candidate.tries * 4
+      84 + candidate.tries * 4,
+      "try-scorer"
     )
   }
 }
@@ -559,11 +599,12 @@ function addTryscorerInsight(
     {
       category: "Betting",
       severity: price <= 2.5 ? "high" : "medium",
-      title: `${fullPlayerLabel(shortest.player)} - 1+ Try ${price.toFixed(2)}`,
+      title: `${fullPlayerLabel(shortest.player)} is the market's clearest try threat.`,
       description: `${fullPlayerLabel(shortest.player)} owns the shortest listed anytime try price for ${teamLabel(shortest.team)}${shortest.odds.bestBookie ? ` with ${shortest.odds.bestBookie}` : ""}.`,
       confidence: price <= 2.5 ? 0.76 : 0.68,
     },
-    Math.round((4 - price) * 10)
+    Math.round((4 - price) * 10),
+    "try-scorer"
   )
 }
 
@@ -584,7 +625,7 @@ export function generateMatchupInsights({
   addPlayerTryMarketTrendInsights(insights, match, tryscorerOdds, playerAverages)
   addTryscorerInsight(insights, match, tryscorerOdds)
 
-  return shuffledInsights(selectStrongestInsights(insights, Math.max(0, maxInsights)), matchShuffleSeed(match))
+  return shuffledInsights(selectStrongestInsights(limitInsightFamilies(insights), Math.max(0, maxInsights)), matchShuffleSeed(match))
     .map((insight) => {
       const result: MatchupInsight = {
         category: insight.category,

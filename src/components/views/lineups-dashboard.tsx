@@ -1060,12 +1060,18 @@ function PregameMatchStatsPreview({ match, teamLogos }: { match: LineupMatch; te
     <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
       <div className="grid grid-cols-[minmax(3.2rem,0.42fr)_minmax(0,1.7fr)_minmax(3.2rem,0.42fr)] gap-2 sm:gap-3">
         <div className="flex h-full flex-col rounded-lg border border-white/8 bg-nrl-panel-2/55 p-2 text-center sm:p-3">
-          <div className="mb-2 truncate text-[10px] font-black text-nrl-text sm:text-xs">{homeTeam}</div>
+          <div className="mb-2 flex justify-center sm:hidden">
+            <TeamLogoMark team={homeTeam} teamLogos={teamLogos} />
+          </div>
+          <div className="mb-2 hidden truncate text-xs font-black text-nrl-text sm:block">{homeTeam}</div>
           <RecentFormPills team={homeTeam} results={homeResults} compact />
         </div>
         <HeadToHeadResults results={headToHead} teamLogos={teamLogos} />
         <div className="flex h-full flex-col rounded-lg border border-white/8 bg-nrl-panel-2/55 p-2 text-center sm:p-3">
-          <div className="mb-2 truncate text-[10px] font-black text-nrl-text sm:text-xs">{awayTeam}</div>
+          <div className="mb-2 flex justify-center sm:hidden">
+            <TeamLogoMark team={awayTeam} teamLogos={teamLogos} />
+          </div>
+          <div className="mb-2 hidden truncate text-xs font-black text-nrl-text sm:block">{awayTeam}</div>
           <RecentFormPills team={awayTeam} results={awayResults} compact />
         </div>
       </div>

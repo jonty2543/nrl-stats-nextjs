@@ -2082,7 +2082,7 @@ function LineupCard({
 
   return (
     <details
-      className="group relative origin-top overflow-hidden rounded-lg border border-transparent shadow-[0_24px_54px_rgba(0,0,0,0.48),0_0_38px_rgba(96,165,250,0.18)] transform-gpu [transform:perspective(1100px)_rotateX(3.2deg)_scaleY(0.965)]"
+      className="group relative origin-top overflow-visible rounded-lg border border-transparent shadow-[0_24px_54px_rgba(0,0,0,0.48),0_0_38px_rgba(96,165,250,0.18)] transform-gpu [transform:perspective(1100px)_rotateX(3.2deg)_scaleY(0.965)]"
       style={BLUE_GRADIENT_BORDER_STYLE}
     >
       <span

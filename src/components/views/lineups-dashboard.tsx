@@ -2039,19 +2039,19 @@ function LineupCard({
   const homeLogo = resolveLogo(match.homeTeam, teamLogos)
   const awayLogo = resolveLogo(match.awayTeam, teamLogos)
   const homeWatermarkClass = isStormTeam(match.homeTeam)
-    ? "left-6 h-40 w-40 opacity-[0.16] grayscale sm:left-16 sm:h-48 sm:w-48"
+    ? "hidden left-6 h-40 w-40 opacity-[0.16] grayscale sm:left-16 sm:block sm:h-48 sm:w-48"
     : isBroncosTeam(match.homeTeam)
-      ? "-left-8 h-44 w-44 opacity-[0.16] grayscale sm:left-4 sm:h-56 sm:w-56"
+      ? "hidden -left-8 h-44 w-44 opacity-[0.16] grayscale sm:left-4 sm:block sm:h-56 sm:w-56"
     : isRabbitohsTeam(match.homeTeam)
-      ? "-left-8 h-44 w-44 opacity-[0.22] sm:left-4 sm:h-56 sm:w-56"
-    : "-left-8 h-44 w-44 opacity-[0.065] grayscale sm:left-4 sm:h-56 sm:w-56"
+      ? "hidden -left-8 h-44 w-44 opacity-[0.22] sm:left-4 sm:block sm:h-56 sm:w-56"
+    : "hidden -left-8 h-44 w-44 opacity-[0.065] grayscale sm:left-4 sm:block sm:h-56 sm:w-56"
   const awayWatermarkClass = isStormTeam(match.awayTeam)
-    ? "right-6 h-40 w-40 opacity-[0.16] grayscale sm:right-16 sm:h-48 sm:w-48"
+    ? "hidden right-6 h-40 w-40 opacity-[0.16] grayscale sm:right-16 sm:block sm:h-48 sm:w-48"
     : isBroncosTeam(match.awayTeam)
-      ? "-right-8 h-44 w-44 opacity-[0.16] grayscale sm:right-4 sm:h-56 sm:w-56"
+      ? "hidden -right-8 h-44 w-44 opacity-[0.16] grayscale sm:right-4 sm:block sm:h-56 sm:w-56"
     : isRabbitohsTeam(match.awayTeam)
-      ? "-right-8 h-44 w-44 opacity-[0.22] sm:right-4 sm:h-56 sm:w-56"
-    : "-right-8 h-44 w-44 opacity-[0.065] grayscale sm:right-4 sm:h-56 sm:w-56"
+      ? "hidden -right-8 h-44 w-44 opacity-[0.22] sm:right-4 sm:block sm:h-56 sm:w-56"
+    : "hidden -right-8 h-44 w-44 opacity-[0.065] grayscale sm:right-4 sm:block sm:h-56 sm:w-56"
   const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
     ? {
         player: selectedPlayer,

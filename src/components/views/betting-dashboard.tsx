@@ -337,6 +337,48 @@ function resolveTeamLogoUrl(teamName: string | null | undefined, teamLogos: Reco
   return Object.entries(teamLogos).find(([logoKey]) => logoKey.endsWith(` ${key}`) || logoKey.includes(key))?.[1] ?? null;
 }
 
+function TeamLogoImage({
+  teamName,
+  teamLogos,
+  className = "h-5 w-5",
+}: {
+  teamName: string | null | undefined;
+  teamLogos: Record<string, string>;
+  className?: string;
+}) {
+  const logoUrl = resolveTeamLogoUrl(teamName, teamLogos);
+  if (!logoUrl) return null;
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoUrl}
+      alt=""
+      className={`shrink-0 object-contain ${className}`}
+      loading="lazy"
+    />
+  );
+}
+
+function TeamNameWithLogo({
+  name,
+  teamLogos,
+  className = "",
+  logoClassName = "h-5 w-5",
+}: {
+  name: string;
+  teamLogos: Record<string, string>;
+  className?: string;
+  logoClassName?: string;
+}) {
+  return (
+    <span className={`inline-flex min-w-0 items-center gap-1.5 ${className}`}>
+      <TeamLogoImage teamName={name} teamLogos={teamLogos} className={logoClassName} />
+      <span className="min-w-0">{name}</span>
+    </span>
+  );
+}
+
 function TryscorerForm({ form }: { form: TryscorerFormSummary | null }) {
   if (!form || form.lastFive.length === 0) return null;
   const oldestToNewest = [...form.lastFive].reverse();
@@ -2527,9 +2569,14 @@ function MarketSection({
               >
                 <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
                   <div>
-                    <div className="text-base font-semibold text-nrl-text sm:text-lg">
-                      {home}
-                      {away ? ` vs ${away}` : ""}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-semibold text-nrl-text sm:text-lg">
+                      <TeamNameWithLogo name={home} teamLogos={teamLogos} logoClassName="h-5 w-5 sm:h-6 sm:w-6" />
+                      {away ? (
+                        <>
+                          <span className="text-nrl-muted">vs</span>
+                          <TeamNameWithLogo name={away} teamLogos={teamLogos} logoClassName="h-5 w-5 sm:h-6 sm:w-6" />
+                        </>
+                      ) : null}
                     </div>
                     <div className="text-xs text-nrl-muted">{group.market}</div>
                   </div>
@@ -2649,21 +2696,13 @@ function MarketSection({
                     const playerTeam = group.market === "Tryscorer"
                       ? tryscorerForm?.team ?? playerTeamsByName.get(normaliseLookupKey(row.result)) ?? null
                       : null;
-                    const teamLogoUrl = resolveTeamLogoUrl(playerTeam, teamLogos);
+                    const outcomeLogoTeam = group.market === "Tryscorer" ? playerTeam : row.result;
 
                     return (
                       <div key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`} className="border-t border-nrl-border/60 py-3 first:border-t-0 first:pt-0">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex min-w-0 items-start gap-1.5">
-                            {teamLogoUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={teamLogoUrl}
-                                alt=""
-                                className="mt-0.5 h-4 w-4 shrink-0 object-contain"
-                                loading="lazy"
-                              />
-                            ) : null}
+                            <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} className="mt-0.5 h-4 w-4" />
                             <div className="min-w-0">
                               <div className="truncate text-xs font-semibold text-nrl-text">{row.result}</div>
                               <TryscorerForm form={tryscorerForm} />
@@ -2873,21 +2912,13 @@ function MarketSection({
                         const playerTeam = group.market === "Tryscorer"
                           ? tryscorerForm?.team ?? playerTeamsByName.get(normaliseLookupKey(row.result)) ?? null
                           : null;
-                        const teamLogoUrl = resolveTeamLogoUrl(playerTeam, teamLogos);
+                        const outcomeLogoTeam = group.market === "Tryscorer" ? playerTeam : row.result;
 
                         return (
                           <tr key={`${group.key}-${row.result}-${row.bestValueComputed ?? ""}`} className="border-b border-nrl-border/50">
                             <td className="py-2 pr-3 font-medium text-nrl-text">
                               <span className="inline-flex min-w-0 items-center gap-2">
-                                {teamLogoUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={teamLogoUrl}
-                                    alt=""
-                                    className="h-5 w-5 shrink-0 object-contain"
-                                    loading="lazy"
-                                  />
-                                ) : null}
+                                <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} />
                                 <span className="min-w-0">
                                   <span className="block whitespace-nowrap">{outcomeLabel}</span>
                                   <TryscorerForm form={tryscorerForm} />

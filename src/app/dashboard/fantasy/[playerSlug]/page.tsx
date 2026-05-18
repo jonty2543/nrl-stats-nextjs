@@ -109,7 +109,10 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
   )
-  const initialPlayerStatsYears = initialYears.includes("2026") ? ["2026"] : initialYears.slice(0, 1)
+  const preferredPlayerStatsYears = ["2026", "2025"].filter((year) => initialYears.includes(year))
+  const initialPlayerStatsYears = preferredPlayerStatsYears.length > 0
+    ? preferredPlayerStatsYears
+    : initialYears.slice(0, 1)
   const selectedLineupRole = lineupsProjections.roleByPlayerId.get(selectedPlayer.id) ?? null
   const shouldFetchRelevantOuts =
     lineupsProjections.source === "lineups" &&

@@ -59,6 +59,7 @@ function PlanCard({
   suffix,
   priceClassName,
   priceRowClassName,
+  className,
   description,
   features,
   tone = "default",
@@ -69,6 +70,7 @@ function PlanCard({
   suffix?: string;
   priceClassName?: string;
   priceRowClassName?: string;
+  className?: string;
   description: string;
   features: string[];
   tone?: PlanTone;
@@ -82,7 +84,7 @@ function PlanCard({
         isFeatured
           ? "border-[#7a5cff] bg-[linear-gradient(180deg,rgba(28,23,49,0.98),rgba(14,18,34,1))]"
           : "border-nrl-border bg-[linear-gradient(180deg,rgba(27,32,54,0.94),rgba(17,21,38,1))]"
-      }`}
+      } ${className ?? ""}`}
     >
       <div className="text-center text-xl font-semibold text-nrl-text sm:text-3xl">{title}</div>
 
@@ -154,11 +156,12 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
             </p>
           </div>
 
-          <div className="mt-8 overflow-x-auto pb-2">
-            <div className="grid min-w-[960px] grid-cols-3 gap-4 lg:gap-6">
+          <div className="mt-8 pb-2">
+            <div className="mx-auto grid max-w-md grid-cols-1 gap-4 lg:max-w-none lg:grid-cols-3 lg:gap-6">
               <PlanCard
                 title="Free"
                 price="$0"
+                className="order-2 lg:order-1"
                 description="The base tier for exploring the app before you upgrade."
                 features={[
                   "Core app access",
@@ -194,6 +197,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 title="Pro"
                 price="$5"
                 suffix="/month"
+                className="order-1 lg:order-2"
                 description="All paid access available today starts here."
                 tone="featured"
                 features={[
@@ -227,6 +231,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
               <PlanCard
                 title="Premium"
                 price="Coming Soon"
+                className="order-3"
                 priceClassName="text-2xl sm:text-4xl"
                 priceRowClassName="items-center"
                 description="The future top tier above Pro for premium-only capabilities."

@@ -1804,7 +1804,7 @@ export function PlayerComparison({
       )}
       <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
         <div className="mb-4 text-xs font-bold uppercase tracking-wide text-nrl-accent">Player Comparison</div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-2 gap-4">
           <SearchableSelect
             label="Player 1"
             value={player1 || p1PlayerOptions[0] || ""}
@@ -1860,7 +1860,7 @@ export function PlayerComparison({
               mobileColumns={2}
             />
 
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3">
               <Select
                 label="Minutes Over"
                 value={minutesOverFilter}
@@ -1873,10 +1873,7 @@ export function PlayerComparison({
                 options={[...MINUTES_FILTER_OPTIONS]}
                 onChange={setMinutesUnderFilter}
               />
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[170px_1fr_auto] lg:items-end">
+              <>
                 <Select
                   label="Player 1 Position"
                   value={player1Position}
@@ -1890,8 +1887,8 @@ export function PlayerComparison({
                   onChange={handleTeammate1Change}
                   disabled={player1 === "None"}
                 />
-                <div className="pb-0.5">
-                  {teammate1 !== "None" ? (
+                {teammate1 !== "None" ? (
+                  <div className="pb-0.5">
                     <div className="flex flex-col gap-0.5">
                       <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
                         With / Without
@@ -1905,8 +1902,8 @@ export function PlayerComparison({
                         />
                       </div>
                     </div>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
                 {teammate1 !== "None" ? (
                   <Select
                     label="Player 1 Tm Position"
@@ -1916,9 +1913,9 @@ export function PlayerComparison({
                     disabled={player1 === "None"}
                   />
                 ) : null}
-              </div>
+              </>
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[170px_1fr_auto] lg:items-end">
+              <>
                 <Select
                   label="Player 2 Position"
                   value={player2Position}
@@ -1932,8 +1929,8 @@ export function PlayerComparison({
                   onChange={handleTeammate2Change}
                   disabled={player2 === "None"}
                 />
-                <div className="pb-0.5">
-                  {teammate2 !== "None" ? (
+                {teammate2 !== "None" ? (
+                  <div className="pb-0.5">
                     <div className="flex flex-col gap-0.5">
                       <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
                         With / Without
@@ -1947,8 +1944,8 @@ export function PlayerComparison({
                         />
                       </div>
                     </div>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
                 {teammate2 !== "None" ? (
                   <Select
                     label="Player 2 Tm Position"
@@ -1958,7 +1955,7 @@ export function PlayerComparison({
                     disabled={player2 === "None"}
                   />
                 ) : null}
-              </div>
+              </>
             </div>
           </div>
 

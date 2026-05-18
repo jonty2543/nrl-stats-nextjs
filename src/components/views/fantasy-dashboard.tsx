@@ -128,6 +128,7 @@ type TeammateMode = "With" | "Without"
 type GameLogSortDirection = "asc" | "desc"
 type AllPlayersSortDirection = "asc" | "desc"
 type FantasyAnalyticsMetric = "projection" | "last3" | "avg2026"
+type LockedPreviewPlot = "rolling" | "box" | "stat" | "heatmap" | "baseUpside"
 type FantasyTemplateMode = "ownership" | "change"
 type AllPlayersSortKey =
   | "name"
@@ -285,9 +286,48 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
 const FANTASY_FILTER_TAG_RELEVANT_OUTS = "Relevant Outs"
 const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin"
 const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
+const PRO_PRICE_LABEL = "$5/month"
+const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
   "inline-flex h-5 w-12 items-center justify-center rounded bg-[#263154] text-slate-100"
 const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[3px] select-none"
+const STATIC_LOCKED_PREVIEW_TREND_ROWS = [
+  { Year: "2025", Round: 1, Round_Label: "1", Opponent: "BRI", Fantasy: 43, "All Run Metres": 112 },
+  { Year: "2025", Round: 2, Round_Label: "2", Opponent: "MEL", Fantasy: 57, "All Run Metres": 138 },
+  { Year: "2025", Round: 3, Round_Label: "3", Opponent: "PEN", Fantasy: 49, "All Run Metres": 126 },
+  { Year: "2025", Round: 4, Round_Label: "4", Opponent: "SYD", Fantasy: 64, "All Run Metres": 152 },
+  { Year: "2025", Round: 5, Round_Label: "5", Opponent: "NQL", Fantasy: 58, "All Run Metres": 147 },
+  { Year: "2025", Round: 6, Round_Label: "6", Opponent: "CAN", Fantasy: 72, "All Run Metres": 168 },
+  { Year: "2025", Round: 7, Round_Label: "7", Opponent: "MAN", Fantasy: 61, "All Run Metres": 156 },
+  { Year: "2025", Round: 8, Round_Label: "8", Opponent: "CRO", Fantasy: 78, "All Run Metres": 181 },
+  { Year: "2025", Round: 9, Round_Label: "9", Opponent: "NEW", Fantasy: 69, "All Run Metres": 172 },
+  { Year: "2025", Round: 10, Round_Label: "10", Opponent: "WST", Fantasy: 81, "All Run Metres": 196 },
+] as unknown as PlayerStat[]
+const STATIC_LOCKED_PREVIEW_BOX_ROWS: FantasyBoxPlotRow[] = [
+  { label: "All", values: [34, 46, 55, 62, 73, 88], min: 34, q1: 48, median: 60, q3: 72, max: 88 },
+  { label: "2026", values: [41, 52, 59, 69, 83], min: 41, q1: 53, median: 62, q3: 74, max: 83 },
+  { label: "2025", values: [32, 44, 51, 61, 76], min: 32, q1: 45, median: 55, q3: 66, max: 76 },
+]
+const STATIC_LOCKED_PREVIEW_BASE_UPSIDE_ROWS = {
+  maxFantasy: 90,
+  rows: [
+    { label: "Sample 1", split: { basePoints: 42, upsidePoints: 18, fantasyPoints: 60 } },
+    { label: "Sample 2", split: { basePoints: 51, upsidePoints: 24, fantasyPoints: 75 } },
+    { label: "Sample 3", split: { basePoints: 38, upsidePoints: 9, fantasyPoints: 47 } },
+    { label: "Sample 4", split: { basePoints: 57, upsidePoints: 14, fantasyPoints: 71 } },
+  ],
+}
+const STATIC_LOCKED_PREVIEW_OPPONENT_HEATMAP = [
+  { opponent: "BRI", average: 72, games: 4 },
+  { opponent: "MEL", average: 64, games: 5 },
+  { opponent: "PEN", average: 58, games: 4 },
+  { opponent: "SYD", average: 81, games: 3 },
+  { opponent: "NQL", average: 46, games: 5 },
+  { opponent: "CAN", average: 67, games: 4 },
+  { opponent: "MAN", average: 53, games: 3 },
+  { opponent: "CRO", average: 76, games: 4 },
+]
+const STATIC_LOCKED_PREVIEW_PLOTS: LockedPreviewPlot[] = ["rolling", "box", "stat", "heatmap", "baseUpside"]
 const TRADE_SCREENSHOT_SLOTS: Array<{ key: TradeScreenshotSlot; label: string; hint: string }> = [
   { key: "starters", label: "Starters", hint: "Selected 13 / field view" },
   { key: "bench", label: "Bench", hint: "Interchange + emergencies" },
@@ -1303,23 +1343,6 @@ function PlayerContextTags({
   )
 }
 
-function FantasyAnalyticsLockOverlay() {
-  return (
-    <div className="absolute inset-0 z-10 grid place-items-center bg-[#080d1f]/35 backdrop-blur-[2px]">
-      <BillingPageLink className="rounded-xl bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]">
-        <div className="rounded-[calc(0.75rem-1px)] bg-slate-950/85 px-4 py-3 text-center">
-          <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
-            Sign Up To Pro
-          </div>
-          <div className="mt-1 text-xs text-slate-400">
-            Unlock fantasy analytics plots.
-          </div>
-        </div>
-      </BillingPageLink>
-    </div>
-  )
-}
-
 function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
   if (rows.length === 0) return null
 
@@ -2262,7 +2285,7 @@ function MetricCard({
         {label}
       </div>
       <div
-        className={`${compact ? mobileTight ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${blurValue ? "select-none blur-[5px]" : ""
+        className={`${compact ? mobileTight ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${blurValue ? "select-none blur-[3px]" : ""
           }`}
         aria-hidden={blurValue || undefined}
       >
@@ -2309,11 +2332,12 @@ export function FantasyDashboard({
   const { isLoaded: isAuthLoaded, userId } = useAuth()
   const initialSelectedYears = useMemo(
     () => {
-      if (availableYears.includes(ALL_PLAYERS_STATS_YEAR)) return [ALL_PLAYERS_STATS_YEAR]
       const validDefaultYears = defaultYears.filter((year) => availableYears.includes(year))
+      if (showPlayerDetails && validDefaultYears.length > 0) return validDefaultYears
+      if (availableYears.includes(ALL_PLAYERS_STATS_YEAR)) return [ALL_PLAYERS_STATS_YEAR]
       return validDefaultYears.length > 0 ? validDefaultYears : availableYears.slice(0, 1)
     },
-    [availableYears, defaultYears]
+    [availableYears, defaultYears, showPlayerDetails]
   )
   const [selectedYears, setSelectedYears] = useState<string[]>(initialSelectedYears)
   const [allData, setAllData] = useState<PlayerStat[]>(initialPlayerStats)
@@ -2338,6 +2362,7 @@ export function FantasyDashboard({
   const [showOpponentHeatmap, setShowOpponentHeatmap] = useState(false)
   const [showFantasyBoxPlot, setShowFantasyBoxPlot] = useState(false)
   const [showStatVsFantasyPlot, setShowStatVsFantasyPlot] = useState(false)
+  const [lockedPreviewPlotIndex, setLockedPreviewPlotIndex] = useState(0)
   const [selectedRollingAverageStat, setSelectedRollingAverageStat] = useState<string>("Fantasy")
   const [selectedStatVsFantasyLabel, setSelectedStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [showWithWithoutPlot, setShowWithWithoutPlot] = useState(false)
@@ -2354,7 +2379,7 @@ export function FantasyDashboard({
   const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(false)
   const [cardTagsPreferenceHydrated, setCardTagsPreferenceHydrated] = useState(false)
   const showFantasyAnalytics = initialShowFantasyAnalytics
-  const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("projection")
+  const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("last3")
   const [fantasyAnalyticsPositionFilter, setFantasyAnalyticsPositionFilter] = useState("All Positions")
   const [selectedGlobalStatVsFantasyLabel, setSelectedGlobalStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [globalStatVsFantasyPositionFilter, setGlobalStatVsFantasyPositionFilter] = useState("All Positions")
@@ -2884,6 +2909,7 @@ export function FantasyDashboard({
 
   useEffect(() => {
     if (hasFantasyPlotAccess) return
+    setFantasyAnalyticsMetric((current) => (current === "projection" ? "last3" : current))
     setShowBaseUpsideBars(false)
     setShowOpponentHeatmap(false)
     setShowFantasyBoxPlot(false)
@@ -3381,9 +3407,12 @@ export function FantasyDashboard({
         (row) => matchesFantasyTagFilters(getFantasyFilterTags(row), allPlayersTagFilters)
       )
     }
+    const weeklyChangeUnavailable = filteredRows.every((row) => row.weeklyChange === null || row.weeklyChange === 0)
+    const projectionUnavailable = filteredRows.every((row) => row.projection === null)
     const effectiveSort =
-      allPlayersSort.column === "weeklyChange" && filteredRows.every((row) => row.weeklyChange === null || row.weeklyChange === 0)
-        ? { column: "projection" as const, direction: "desc" as const }
+      (allPlayersSort.column === "weeklyChange" && weeklyChangeUnavailable) ||
+      (allPlayersSort.column === "projection" && projectionUnavailable)
+        ? { column: "price" as const, direction: "desc" as const }
         : allPlayersSort
 
     const getSortValue = (row: AllPlayersTableRow): number | string | null => {
@@ -3721,6 +3750,30 @@ export function FantasyDashboard({
     if (max <= min) return { min: Math.max(0, min - 5), max: max + 5 }
     return { min, max }
   }, [fantasyBoxPlotRows])
+  const lockedPreviewTrendRows = STATIC_LOCKED_PREVIEW_TREND_ROWS
+  const lockedPreviewBoxPlotRows = STATIC_LOCKED_PREVIEW_BOX_ROWS
+  const lockedPreviewBoxPlotRange = useMemo(() => {
+    const allValues = lockedPreviewBoxPlotRows.flatMap((row) => row.values)
+    if (allValues.length === 0) return { min: 0, max: 100 }
+    const min = Math.min(...allValues)
+    const max = Math.max(...allValues)
+    if (max <= min) return { min: Math.max(0, min - 5), max: max + 5 }
+    return { min, max }
+  }, [lockedPreviewBoxPlotRows])
+  const lockedPreviewBaseUpsideRows = STATIC_LOCKED_PREVIEW_BASE_UPSIDE_ROWS
+  const lockedPreviewOpponentHeatmap = STATIC_LOCKED_PREVIEW_OPPONENT_HEATMAP
+  const lockedPreviewPlots = STATIC_LOCKED_PREVIEW_PLOTS
+  const lockedPreviewPlot = lockedPreviewPlots.length > 0
+    ? lockedPreviewPlots[lockedPreviewPlotIndex % lockedPreviewPlots.length]
+    : null
+
+  useEffect(() => {
+    if (!analysisLocked || lockedPreviewPlots.length <= 1) return
+    const intervalId = window.setInterval(() => {
+      setLockedPreviewPlotIndex((current) => current + 1)
+    }, 4500)
+    return () => window.clearInterval(intervalId)
+  }, [analysisLocked, lockedPreviewPlots.length])
 
   const sortedFilteredRows = useMemo(() => {
     const defaultRows = [...filteredRows].sort(sortRoundsDesc)
@@ -3950,7 +4003,13 @@ export function FantasyDashboard({
                   </div>
                     <div className="text-[10px] text-nrl-muted">{pricedAtProjectionPoints.length} players with {fantasyAnalyticsMetricOption.label.toLowerCase()}</div>
                   </div>
-                  <div className="grid w-full grid-cols-[minmax(0,0.9fr)_minmax(128px,1.1fr)] items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[320px]">
+                  {!hasFantasyPlotAccess ? (
+                    <BillingPageLink className="inline-flex min-h-8 shrink-0 items-center justify-center rounded-full border border-nrl-accent/45 bg-nrl-accent/10 px-3 text-[10px] font-bold uppercase tracking-wide text-nrl-accent shadow-[0_8px_18px_rgba(0,245,138,0.08)] transition-colors hover:border-nrl-accent hover:bg-nrl-accent/15">
+                      Pro unlocks projection
+                    </BillingPageLink>
+                  ) : null}
+                  <div className="w-full overflow-x-auto">
+                  <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(128px,1.1fr)] items-center gap-2">
                     <div className="min-w-0">
                       <Select
                         label=""
@@ -3961,24 +4020,35 @@ export function FantasyDashboard({
                         }}
                       />
                     </div>
-                    <div className="flex min-w-0 justify-center rounded-md border border-nrl-border bg-nrl-panel p-0.5">
-                      {FANTASY_ANALYTICS_METRICS.map((metric) => (
-                        <button
-                          key={metric.key}
-                          type="button"
-                          onClick={() => {
-                            setFantasyAnalyticsMetric(metric.key)
-                          }}
-                          className={`min-w-0 flex-1 whitespace-nowrap rounded px-1.5 py-1 text-[9px] font-semibold transition-colors sm:px-2 sm:text-[10px] ${
-                            fantasyAnalyticsMetric === metric.key
-                              ? "bg-nrl-accent/15 text-nrl-accent"
-                              : "text-nrl-muted hover:text-nrl-text"
-                          }`}
-                        >
-                          {metric.shortLabel}
-                        </button>
-                      ))}
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 justify-center rounded-md border border-nrl-border bg-nrl-panel p-0.5">
+                        {FANTASY_ANALYTICS_METRICS.map((metric) => {
+                          const metricLocked = !hasFantasyPlotAccess && metric.key === "projection"
+                          return (
+                            <button
+                              key={metric.key}
+                              type="button"
+                              disabled={metricLocked}
+                              title={metricLocked ? `${PRO_UNLOCK_COPY} unlocks projections` : undefined}
+                              onClick={() => {
+                                if (metricLocked) return
+                                setFantasyAnalyticsMetric(metric.key)
+                              }}
+                              className={`min-w-0 flex-1 whitespace-nowrap rounded px-1.5 py-1 text-[9px] font-semibold transition-colors sm:px-2 sm:text-[10px] ${
+                                fantasyAnalyticsMetric === metric.key
+                                  ? "bg-nrl-accent/15 text-nrl-accent"
+                                  : metricLocked
+                                    ? "cursor-not-allowed text-nrl-muted/45"
+                                    : "text-nrl-muted hover:text-nrl-text"
+                              }`}
+                            >
+                              {metric.shortLabel}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
+                  </div>
                   </div>
                 </div>
                 {pricedAtProjectionPoints.length > 0 ? (
@@ -3991,7 +4061,6 @@ export function FantasyDashboard({
                 ) : (
                   <div className="grid h-[280px] place-items-center text-xs text-nrl-muted">No projection data available.</div>
                 )}
-                {analysisLocked ? <FantasyAnalyticsLockOverlay /> : null}
               </div>
               <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 [contain-intrinsic-size:410px] [content-visibility:auto]">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
@@ -4040,7 +4109,6 @@ export function FantasyDashboard({
                 ) : (
                   <div className="grid h-[220px] place-items-center text-xs text-nrl-muted">No 2026 stat averages available.</div>
                 )}
-                {analysisLocked ? <FantasyAnalyticsLockOverlay /> : null}
               </div>
               </>
               </div>
@@ -4453,7 +4521,7 @@ export function FantasyDashboard({
                           disabled={disabled}
                           onClick={() => toggleAllPlayersSort(column.key, disabled)}
                           className={`inline-flex w-full items-center gap-1 whitespace-nowrap ${column.align === "right" ? "justify-center sm:justify-end" : column.align === "center" ? "justify-center" : "justify-start"} ${disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:text-nrl-accent"}`}
-                          title={disabled ? "Pro unlocks projection and breakeven" : `Sort by ${column.label}`}
+                          title={disabled ? `${PRO_UNLOCK_COPY} unlocks projection, breakeven and value sorting` : `Sort by ${column.label}`}
                         >
                           <span>{column.label}</span>
                           {active ? <span>{allPlayersSort.direction === "asc" ? "↑" : "↓"}</span> : null}
@@ -4825,7 +4893,7 @@ export function FantasyDashboard({
                     Showing <span className="font-semibold text-nrl-text">{filteredRows.length}</span> games
                   </div>
                 </div>
-                <div className={analysisLocked ? "pointer-events-none select-none opacity-40" : undefined}>
+                <div className={analysisLocked ? "select-none" : undefined}>
                   <div className={`mb-5 grid gap-4 sm:gap-5 ${
                     selectedLineupRole?.position && lineupsProjections?.source === "lineups"
                       ? "grid-cols-3 sm:max-w-[760px]"
@@ -4852,76 +4920,226 @@ export function FantasyDashboard({
                       blurValue={analysisLocked}
                     />
                   </div>
-                  <div className="mx-auto grid w-full max-w-[43rem] grid-cols-2 gap-2">
-                    <FantasyPlotToggleButton
-                      active={showRollingAveragePlot}
-                      locked={analysisLocked}
-                      onClick={() => setShowRollingAveragePlot((prev) => !prev)}
-                      activeLabel="Hide Rolling Average Plot"
-                      inactiveLabel="Show Rolling Average Plot"
-                    />
-                    <FantasyPlotToggleButton
-                      active={showBaseUpsideBars}
-                      locked={analysisLocked}
-                      onClick={() => setShowBaseUpsideBars((prev) => !prev)}
-                      activeLabel="Hide Base vs Upside"
-                      inactiveLabel="Show Base vs Upside"
-                    />
-                    <FantasyPlotToggleButton
-                      active={showOpponentHeatmap}
-                      locked={analysisLocked}
-                      onClick={() => setShowOpponentHeatmap((prev) => !prev)}
-                      activeLabel="Hide Avg vs Opp Heatmap"
-                      inactiveLabel="Show Avg vs Opp Heatmap"
-                    />
-                    <FantasyPlotToggleButton
-                      active={showFantasyBoxPlot}
-                      locked={analysisLocked}
-                      onClick={() => setShowFantasyBoxPlot((prev) => !prev)}
-                      activeLabel="Hide Fantasy Box Plot"
-                      inactiveLabel="Show Fantasy Box Plot"
-                    />
-                    <FantasyPlotToggleButton
-                      active={showStatVsFantasyPlot}
-                      locked={analysisLocked}
-                      onClick={() => setShowStatVsFantasyPlot((prev) => !prev)}
-                      activeLabel="Hide Stat vs Fantasy Plot"
-                      inactiveLabel="Show Stat vs Fantasy Plot"
-                    />
-                    {hasLoginAccess && teammate !== "None" ? (
+                  <div className="relative mx-auto w-full max-w-[43rem]">
+                    <div className={`grid grid-cols-2 gap-2 ${analysisLocked ? "pointer-events-none opacity-45 blur-[1px]" : ""}`}>
                       <FantasyPlotToggleButton
-                        active={showWithWithoutPlot}
+                        active={showRollingAveragePlot}
                         locked={analysisLocked}
-                        onClick={() => setShowWithWithoutPlot((prev) => !prev)}
-                        activeLabel="Hide With vs Without Plot"
-                        inactiveLabel="Show With vs Without Plot"
+                        onClick={() => setShowRollingAveragePlot((prev) => !prev)}
+                        activeLabel="Hide Rolling Average Plot"
+                        inactiveLabel="Show Rolling Average Plot"
                       />
-                    ) : null}
-                    {showBaseUpsideBars ? (
-                      <div className="flex items-center gap-2 text-[10px] text-nrl-muted">
-                        <span className="inline-block h-2.5 w-2.5 rounded-sm bg-nrl-accent" />
-                        <span>Base</span>
-                        <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-400" />
-                        <span>Upside</span>
+                      <FantasyPlotToggleButton
+                        active={showBaseUpsideBars}
+                        locked={analysisLocked}
+                        onClick={() => setShowBaseUpsideBars((prev) => !prev)}
+                        activeLabel="Hide Base vs Upside"
+                        inactiveLabel="Show Base vs Upside"
+                      />
+                      <FantasyPlotToggleButton
+                        active={showOpponentHeatmap}
+                        locked={analysisLocked}
+                        onClick={() => setShowOpponentHeatmap((prev) => !prev)}
+                        activeLabel="Hide Avg vs Opp Heatmap"
+                        inactiveLabel="Show Avg vs Opp Heatmap"
+                      />
+                      <FantasyPlotToggleButton
+                        active={showFantasyBoxPlot}
+                        locked={analysisLocked}
+                        onClick={() => setShowFantasyBoxPlot((prev) => !prev)}
+                        activeLabel="Hide Fantasy Box Plot"
+                        inactiveLabel="Show Fantasy Box Plot"
+                      />
+                      <FantasyPlotToggleButton
+                        active={showStatVsFantasyPlot}
+                        locked={analysisLocked}
+                        onClick={() => setShowStatVsFantasyPlot((prev) => !prev)}
+                        activeLabel="Hide Stat vs Fantasy Plot"
+                        inactiveLabel="Show Stat vs Fantasy Plot"
+                      />
+                      {hasLoginAccess && teammate !== "None" ? (
+                        <FantasyPlotToggleButton
+                          active={showWithWithoutPlot}
+                          locked={analysisLocked}
+                          onClick={() => setShowWithWithoutPlot((prev) => !prev)}
+                          activeLabel="Hide With vs Without Plot"
+                          inactiveLabel="Show With vs Without Plot"
+                        />
+                      ) : null}
+                      {showBaseUpsideBars ? (
+                        <div className="flex items-center gap-2 text-[10px] text-nrl-muted">
+                          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-nrl-accent" />
+                          <span>Base</span>
+                          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-400" />
+                          <span>Upside</span>
+                        </div>
+                      ) : null}
+                    </div>
+                    {analysisLocked ? (
+                      <div className="absolute inset-0 z-10 flex items-center justify-center px-3">
+                        <BillingPageLink className="block rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]">
+                          <div className="rounded-[calc(1rem-1px)] bg-slate-950/85 px-4 py-2.5 text-center backdrop-blur-[2px]">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-100 sm:text-sm">
+                              Sign Up To {PRO_UNLOCK_COPY}
+                            </div>
+                            <div className="mt-1 text-[10px] text-slate-400 sm:text-xs">
+                              Unlock projections, breakevens and full plots.
+                            </div>
+                          </div>
+                        </BillingPageLink>
                       </div>
                     ) : null}
                   </div>
                 </div>
 
-                {analysisLocked ? (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-xl px-4">
-                    <BillingPageLink
-                      className="block rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]"
-                    >
-                      <div className="rounded-[calc(1rem-1px)] bg-slate-950/80 px-4 py-3 text-center backdrop-blur-[2px]">
-                        <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
-                          Sign Up To Pro
-                        </div>
-                        <div className="mt-1 text-xs text-slate-400">
-                          Unlock projections, breakevens and plots.
+                {analysisLocked && lockedPreviewPlot ? (
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                          Fantasy Plot Preview
                         </div>
                       </div>
-                    </BillingPageLink>
+                      <div className="flex items-center gap-1.5">
+                        {lockedPreviewPlots.map((plot) => (
+                          <span
+                            key={plot}
+                            className={`h-1.5 w-5 rounded-full ${lockedPreviewPlot === plot ? "bg-nrl-accent" : "bg-white/18"}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="pointer-events-none h-[210px] overflow-hidden select-none opacity-75 sm:h-[224px]">
+                      <div
+                        className="flex h-full transition-transform duration-700 ease-in-out"
+                        style={{ transform: `translateX(-${lockedPreviewPlots.indexOf(lockedPreviewPlot) * 100}%)` }}
+                      >
+                        {lockedPreviewPlots.map((plot) => (
+                          <div key={plot} className="h-full w-full shrink-0 overflow-hidden">
+                            {plot === "rolling" ? (
+                              <div>
+                                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                                  Rolling Average Preview
+                                </div>
+                                <div className="opacity-70 blur-[2px]">
+                                  <FantasyGameLogTrendBrush
+                                    key={`locked-preview-${gameLogChartKey}`}
+                                    rows={lockedPreviewTrendRows}
+                                    headerTitle=""
+                                    mainChartClassName="w-full h-[124px] sm:h-[136px]"
+                                    rollingWindow={5}
+                                    showInternalControls={false}
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
+                            {plot === "box" ? (
+                              <div className="flex h-full flex-col py-1">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                                  Fantasy Box Plot Preview
+                                </div>
+                                <div className="flex flex-1 flex-col justify-around">
+                                {lockedPreviewBoxPlotRows.slice(0, 4).map((row) => {
+                                  const range = Math.max(1, lockedPreviewBoxPlotRange.max - lockedPreviewBoxPlotRange.min)
+                                  const scale = (value: number) =>
+                                    FANTASY_BOX_PLOT_PAD_PCT +
+                                    ((value - lockedPreviewBoxPlotRange.min) / range) * (100 - FANTASY_BOX_PLOT_PAD_PCT * 2)
+                                  return (
+                                    <div key={`preview-box-${row.label}`} className="grid grid-cols-[74px_minmax(0,1fr)] items-center gap-3">
+                                      <div className="text-[10px] font-semibold text-nrl-muted">{row.label}</div>
+                                      <svg viewBox="0 0 100 28" preserveAspectRatio="none" className="h-9 w-full overflow-visible opacity-70 blur-[2px]">
+                                        <line x1={scale(row.min)} x2={scale(row.max)} y1="14" y2="14" stroke="rgba(154,164,191,0.9)" strokeWidth="1.3" />
+                                        <rect
+                                          x={scale(row.q1)}
+                                          y="6"
+                                          width={Math.max(1.5, scale(row.q3) - scale(row.q1))}
+                                          height="16"
+                                          rx="1.5"
+                                          fill="rgba(0,245,138,0.18)"
+                                          stroke="rgba(0,245,138,0.9)"
+                                          strokeWidth="1.3"
+                                        />
+                                        <line x1={scale(row.median)} x2={scale(row.median)} y1="5" y2="23" stroke="rgba(255,255,255,0.95)" strokeWidth="1.5" />
+                                      </svg>
+                                    </div>
+                                  )
+                                })}
+                                </div>
+                              </div>
+                            ) : null}
+                            {plot === "stat" ? (
+                              <div className="h-full overflow-hidden">
+                                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                                  Stat vs Fantasy Preview
+                                </div>
+                                <div className="opacity-70 blur-[2px]">
+                                  <ScatterCorrelation
+                                    rows={STATIC_LOCKED_PREVIEW_TREND_ROWS}
+                                    statX={selectedStatVsFantasyOption.key}
+                                    statY="Fantasy"
+                                    title={`Fantasy ${selectedStatVsFantasyOption.label} vs Score`}
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
+                            {plot === "heatmap" ? (
+                              <div className="flex h-full flex-col py-1">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                                  Avg vs Opponent Heatmap Preview
+                                </div>
+                                <div className="mt-3 grid flex-1 grid-cols-4 gap-2">
+                                  {lockedPreviewOpponentHeatmap.map((row) => (
+                                    <div
+                                      key={`preview-heat-${row.opponent}`}
+                                      className="flex min-h-12 flex-col items-center justify-center rounded border border-nrl-border/60 px-2 py-1 text-center"
+                                      style={{ backgroundColor: getHeatColorForAverage(row.average) }}
+                                    >
+                                      <div className="text-[10px] font-bold text-nrl-text">{row.opponent}</div>
+                                      <div className="opacity-70 blur-[2px]">
+                                        <div className="text-xs font-semibold text-nrl-text">{row.average.toFixed(1)}</div>
+                                        <div className="text-[8px] text-nrl-muted">n={row.games}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {plot === "baseUpside" ? (
+                              <div className="flex h-full flex-col py-1">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                                  Base vs Upside Preview
+                                </div>
+                                <div className="mt-3 flex flex-1 flex-col justify-around">
+                                  {lockedPreviewBaseUpsideRows.rows.map((row) => {
+                                    const widths = getScaledBaseUpsideBarWidths(row.split, lockedPreviewBaseUpsideRows.maxFantasy)
+                                    return (
+                                      <div key={`preview-base-${row.label}`} className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-3">
+                                        <div className="text-[10px] font-semibold text-nrl-muted">{row.label}</div>
+                                        <div>
+                                          <div className="opacity-70 blur-[2px]">
+                                            <div className="flex h-3 w-full overflow-hidden rounded-sm border border-nrl-border bg-nrl-panel">
+                                              <div className="bg-nrl-accent" style={{ width: `${widths.basePct}%` }} />
+                                              <div
+                                                className={row.split.upsidePoints < 0 ? "bg-rose-500" : "bg-violet-400"}
+                                                style={{ width: `${widths.upsidePct}%` }}
+                                              />
+                                            </div>
+                                          </div>
+                                          <div className="mt-1 flex justify-between text-[9px] text-nrl-muted">
+                                            <span>Base</span>
+                                            <span>Upside</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : null}
 

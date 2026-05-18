@@ -1615,7 +1615,7 @@ export function FantasyDraftPricingPage({
               <BillingPageLink
                 className="rounded-full border border-[rgba(0,245,138,0.28)] bg-[linear-gradient(135deg,rgba(91,61,173,0.28),rgba(12,93,74,0.24))] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:border-nrl-accent md:px-3 md:text-[10px] md:tracking-[0.16em]"
               >
-                Sign Up To Pro
+                Pro $5/month
               </BillingPageLink>
             ) : null}
           </div>

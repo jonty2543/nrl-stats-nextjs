@@ -1,12 +1,13 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" fill="#1B2B49"/>
-  <circle cx="256" cy="256" r="253" stroke="#2B3F62" stroke-width="6"/>
-  <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-    <stop offset="0%" stop-color="#00F58A" stop-opacity="0.12"/>
-    <stop offset="100%" stop-color="#00F58A" stop-opacity="0"/>
-  </radialGradient>
-  <rect width="512" height="512" fill="url(#glow)"/>
-  <circle cx="256" cy="256" r="233" stroke="#00F58A" stroke-width="15"/>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00F58A" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#00F58A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="256" cy="256" r="256" fill="#00F58A"/>
+  <circle cx="256" cy="256" r="240" fill="#1B2B49"/>
+  <circle cx="256" cy="256" r="240" fill="url(#glow)"/>
   <g stroke="#00F58A" stroke-width="21" stroke-linecap="round">
     <line x1="139" y1="88" x2="139" y2="362"/>
     <line x1="373" y1="88" x2="373" y2="362"/>

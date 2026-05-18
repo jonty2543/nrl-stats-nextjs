@@ -17,16 +17,15 @@ export default function AppleIcon() {
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <rect width="1024" height="1024" fill="#1B2B49" />
-        <circle cx="512" cy="512" r="506" stroke="#2B3F62" strokeWidth="12" />
         <defs>
           <radialGradient id="glow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#00F58A" stopOpacity="0.12" />
             <stop offset="100%" stopColor="#00F58A" stopOpacity="0" />
           </radialGradient>
         </defs>
-        <rect width="1024" height="1024" fill="url(#glow)" />
-        <circle cx="512" cy="512" r="466" stroke="#00F58A" strokeWidth="30" />
+        <circle cx="512" cy="512" r="512" fill="#00F58A" />
+        <circle cx="512" cy="512" r="482" fill="#1B2B49" />
+        <circle cx="512" cy="512" r="482" fill="url(#glow)" />
         <g stroke="#00F58A" strokeWidth="42" strokeLinecap="round">
           <line x1="278" y1="176" x2="278" y2="724" />
           <line x1="746" y1="176" x2="746" y2="724" />

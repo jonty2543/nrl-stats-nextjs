@@ -6,16 +6,16 @@
     </radialGradient>
   </defs>
   <circle cx="256" cy="256" r="256" fill="#00F58A"/>
-  <circle cx="256" cy="256" r="240" fill="#1B2B49"/>
-  <circle cx="256" cy="256" r="240" fill="url(#glow)"/>
-  <g stroke="#00F58A" stroke-width="21" stroke-linecap="round">
-    <line x1="139" y1="88" x2="139" y2="362"/>
-    <line x1="373" y1="88" x2="373" y2="362"/>
-    <line x1="139" y1="232" x2="373" y2="232"/>
-    <line x1="170" y1="355" x2="170" y2="465"/>
-    <line x1="213" y1="327" x2="213" y2="465"/>
-    <line x1="256" y1="295" x2="256" y2="465"/>
-    <line x1="299" y1="315" x2="299" y2="465"/>
-    <line x1="342" y1="345" x2="342" y2="465"/>
+  <circle cx="256" cy="256" r="237" fill="#1B2B49"/>
+  <circle cx="256" cy="256" r="237" fill="url(#glow)"/>
+  <g stroke="#00F58A" stroke-width="29" stroke-linecap="round">
+    <line x1="123" y1="68" x2="123" y2="365"/>
+    <line x1="389" y1="68" x2="389" y2="365"/>
+    <line x1="123" y1="224" x2="389" y2="224"/>
+    <line x1="159" y1="348" x2="159" y2="475"/>
+    <line x1="208" y1="316" x2="208" y2="475"/>
+    <line x1="256" y1="279" x2="256" y2="475"/>
+    <line x1="305" y1="303" x2="305" y2="475"/>
+    <line x1="353" y1="337" x2="353" y2="475"/>
   </g>
 </svg>

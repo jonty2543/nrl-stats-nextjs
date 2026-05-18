@@ -19,6 +19,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Short Side NRL",
   description: "NRL player and team statistics dashboard",
+  openGraph: {
+    title: "Short Side NRL",
+    description: "NRL player and team statistics dashboard",
+    url: "https://shortsidenrl.com",
+    siteName: "Short Side NRL",
+  },
+  twitter: {
+    card: "summary",
+    title: "Short Side NRL",
+    description: "NRL player and team statistics dashboard",
+  },
   icons: {
     icon: "/app-icon.svg",
     shortcut: "/app-icon.svg",

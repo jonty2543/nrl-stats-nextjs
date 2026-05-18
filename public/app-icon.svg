@@ -7,20 +7,20 @@
   </defs>
 
   <circle cx="512" cy="512" r="512" fill="#00F58A"/>
-  <circle cx="512" cy="512" r="482" fill="#1B2B49"/>
-  <circle cx="512" cy="512" r="482" fill="url(#glow)"/>
+  <circle cx="512" cy="512" r="474" fill="#1B2B49"/>
+  <circle cx="512" cy="512" r="474" fill="url(#glow)"/>
 
-  <g stroke="#00F58A" stroke-width="42" stroke-linecap="round">
+  <g stroke="#00F58A" stroke-width="58" stroke-linecap="round">
     <!-- Two vertical bars -->
-    <line x1="278" y1="176" x2="278" y2="724"/>
-    <line x1="746" y1="176" x2="746" y2="724"/>
+    <line x1="246" y1="136" x2="246" y2="730"/>
+    <line x1="778" y1="136" x2="778" y2="730"/>
     <!-- Horizontal crossbar -->
-    <line x1="278" y1="464" x2="746" y2="464"/>
+    <line x1="246" y1="448" x2="778" y2="448"/>
     <!-- Five descending lines -->
-    <line x1="340" y1="710" x2="340" y2="930"/>
-    <line x1="426" y1="654" x2="426" y2="930"/>
-    <line x1="512" y1="590" x2="512" y2="930"/>
-    <line x1="598" y1="630" x2="598" y2="930"/>
-    <line x1="684" y1="690" x2="684" y2="930"/>
+    <line x1="318" y1="696" x2="318" y2="950"/>
+    <line x1="415" y1="632" x2="415" y2="950"/>
+    <line x1="512" y1="558" x2="512" y2="950"/>
+    <line x1="609" y1="606" x2="609" y2="950"/>
+    <line x1="706" y1="674" x2="706" y2="950"/>
   </g>
 </svg>

@@ -768,7 +768,7 @@ function resolveFantasyProjectionForLineups(
   player: FantasyPlayerSnapshot,
   lineupsProjections: LineupsProjectionSnapshot | undefined,
   coachProjection: number | null
-): number {
+): number | null {
   const playerNameKey = normaliseProjectionPlayerName(player.name)
 
   if (lineupsProjections?.source === "lineups") {
@@ -785,8 +785,13 @@ function resolveFantasyProjectionForLineups(
     )
   }
 
-  if (lineupsProjections?.source === "lineup_unaware" && isFantasyPlayerUnavailableForFallback(player)) {
-    return 0
+  if (lineupsProjections?.source === "lineup_unaware") {
+    if (isFantasyPlayerUnavailableForFallback(player)) return null
+    return (
+      lineupsProjections.projectionByPlayerId.get(player.id) ??
+      lineupsProjections.projectionByPlayerName.get(playerNameKey) ??
+      null
+    )
   }
 
   const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(playerNameKey) ?? null

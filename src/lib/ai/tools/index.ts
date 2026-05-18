@@ -2710,8 +2710,10 @@ async function runGetFantasySnapshot(
       // from nrl.lineup_unaware_fantasy_projections by player name, matching the dashboard.
       const fallbackProjectionRaw = defaultMetrics.projection ?? player.projectedAvg ?? null;
       const projectionRaw =
-        lineupsProjections.source === "lineup_unaware" && player.isBye
-          ? null
+        lineupsProjections.source === "lineup_unaware"
+          ? lineupsProjections.projectionByPlayerId.get(player.id) ??
+            lineupsProjections.projectionByPlayerName.get(normalizeLooseSearchValue(player.name)) ??
+            null
           : lineupsProjections.projectionByPlayerId.get(player.id) ??
             lineupsProjections.projectionByPlayerName.get(normalizeLooseSearchValue(player.name)) ??
             fallbackProjectionRaw ??

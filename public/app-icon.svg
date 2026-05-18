@@ -1,26 +1,16 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#00F58A" stop-opacity="0.12"/>
-      <stop offset="100%" stop-color="#00F58A" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-
-  <circle cx="512" cy="512" r="512" fill="#00F58A"/>
-  <circle cx="512" cy="512" r="474" fill="#1B2B49"/>
-  <circle cx="512" cy="512" r="474" fill="url(#glow)"/>
-
-  <g stroke="#00F58A" stroke-width="58" stroke-linecap="round">
-    <!-- Two vertical bars -->
-    <line x1="246" y1="136" x2="246" y2="730"/>
-    <line x1="778" y1="136" x2="778" y2="730"/>
-    <!-- Horizontal crossbar -->
-    <line x1="246" y1="448" x2="778" y2="448"/>
-    <!-- Five descending lines -->
-    <line x1="318" y1="696" x2="318" y2="950"/>
-    <line x1="415" y1="632" x2="415" y2="950"/>
-    <line x1="512" y1="558" x2="512" y2="950"/>
-    <line x1="609" y1="606" x2="609" y2="950"/>
-    <line x1="706" y1="674" x2="706" y2="950"/>
+  <g transform="translate(512 512) scale(2.1694915254) translate(-256 -256)">
+    <circle cx="256" cy="256" r="236" fill="#00F58A"/>
+    <circle cx="256" cy="256" r="220" fill="#1B2B49"/>
+    <g stroke="#00F58A" stroke-width="16" stroke-linecap="round">
+      <line x1="170" y1="146" x2="170" y2="366"/>
+      <line x1="342" y1="146" x2="342" y2="366"/>
+      <line x1="170" y1="256" x2="342" y2="256"/>
+      <line x1="192" y1="362" x2="192" y2="425"/>
+      <line x1="224" y1="342" x2="224" y2="425"/>
+      <line x1="256" y1="316" x2="256" y2="425"/>
+      <line x1="288" y1="332" x2="288" y2="425"/>
+      <line x1="320" y1="352" x2="320" y2="425"/>
+    </g>
   </g>
 </svg>

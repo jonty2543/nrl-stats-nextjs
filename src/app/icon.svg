@@ -1,21 +1,16 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#00F58A" stop-opacity="0.12"/>
-      <stop offset="100%" stop-color="#00F58A" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <circle cx="256" cy="256" r="256" fill="#00F58A"/>
-  <circle cx="256" cy="256" r="237" fill="#1B2B49"/>
-  <circle cx="256" cy="256" r="237" fill="url(#glow)"/>
-  <g stroke="#00F58A" stroke-width="29" stroke-linecap="round">
-    <line x1="123" y1="68" x2="123" y2="365"/>
-    <line x1="389" y1="68" x2="389" y2="365"/>
-    <line x1="123" y1="224" x2="389" y2="224"/>
-    <line x1="159" y1="348" x2="159" y2="475"/>
-    <line x1="208" y1="316" x2="208" y2="475"/>
-    <line x1="256" y1="279" x2="256" y2="475"/>
-    <line x1="305" y1="303" x2="305" y2="475"/>
-    <line x1="353" y1="337" x2="353" y2="475"/>
+  <g transform="translate(256 256) scale(1.0847457627) translate(-256 -256)">
+    <circle cx="256" cy="256" r="236" fill="#00F58A"/>
+    <circle cx="256" cy="256" r="220" fill="#1B2B49"/>
+    <g stroke="#00F58A" stroke-width="16" stroke-linecap="round">
+      <line x1="170" y1="146" x2="170" y2="366"/>
+      <line x1="342" y1="146" x2="342" y2="366"/>
+      <line x1="170" y1="256" x2="342" y2="256"/>
+      <line x1="192" y1="362" x2="192" y2="425"/>
+      <line x1="224" y1="342" x2="224" y2="425"/>
+      <line x1="256" y1="316" x2="256" y2="425"/>
+      <line x1="288" y1="332" x2="288" y2="425"/>
+      <line x1="320" y1="352" x2="320" y2="425"/>
+    </g>
   </g>
 </svg>

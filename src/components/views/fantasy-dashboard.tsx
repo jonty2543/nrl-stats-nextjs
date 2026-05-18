@@ -283,7 +283,7 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
   { key: "ownership", label: "Total Ownership" },
 ]
 const FANTASY_FILTER_TAG_RELEVANT_OUTS = "Relevant Outs"
-const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin Chance"
+const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin"
 const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
   "inline-flex h-5 w-12 items-center justify-center rounded bg-[#263154] text-slate-100"
@@ -1283,11 +1283,11 @@ function PlayerContextTags({
       {originChance ? (
         <span
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-blue-300/35 bg-[linear-gradient(135deg,rgba(220,38,38,0.34),rgba(37,99,235,0.34))] px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-slate-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-          title="Origin Chance"
+          title="Origin"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logos/SOO.webp" alt="" className="h-3 w-3 rounded-sm object-contain" loading="lazy" />
-          Origin Chance
+          Origin
         </span>
       ) : null}
     </div>
@@ -2459,7 +2459,7 @@ export function FantasyDashboard({
         "Do not say recent form has slipped when L3 average is above priced at.",
         "In each sell/watch player title, include the player name, position, price, and projection, but no rating. In each trade-in title, include the player name, position, price, projection, and rating.",
         "For each sell or buy, use the label Ownership change: and include BE, priced at, L3 average, projection vs priced at, next major bye availability, and one short reason.",
-        "Use supplied player tags when they exist for a suggested player: next major bye tags, Origin Chance as an availability risk, and Relevant out with return timing as a secondary role-security note.",
+        "Use supplied player tags when they exist for a suggested player: next major bye tags, Origin as an availability risk, and Relevant out with return timing as a secondary role-security note.",
       ]
       : [
         "For free users, do not use projections, breakevens, projection vs priced at, casualty ward context, or Origin context as trade reasons.",
@@ -2469,7 +2469,7 @@ export function FantasyDashboard({
         "If a player is -1.0% or worse in ownership delta but L3 is sound, bye coverage is useful, and there is no availability issue, frame them as Hold / Possible sell rather than a hard sell.",
         "In each sell/watch player title, include the player name, position, and price, but no rating. In each trade-in title, include the player name, position, price, and rating.",
         "For each sell or buy, use the label Ownership change: and include priced at, average/L3 form, next major bye availability, and one short reason. Do not include projections, breakevens, or projection vs priced at for free users.",
-        "Use next major bye tags when they exist for a suggested player. Do not use Origin Chance or Relevant out context for free users.",
+        "Use next major bye tags when they exist for a suggested player. Do not use Origin or Relevant out context for free users.",
       ]
     const prompt = [
       "Fantasy Trade Suggestor dashboard request.",

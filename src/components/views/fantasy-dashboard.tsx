@@ -785,6 +785,10 @@ function resolveFantasyProjectionForLineups(
     )
   }
 
+  if (lineupsProjections?.source === "lineup_unaware" && isFantasyPlayerUnavailableForFallback(player)) {
+    return 0
+  }
+
   const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(playerNameKey) ?? null
   return (
     lineupsProjections?.projectionByPlayerId.get(player.id) ??

@@ -512,8 +512,66 @@ function emptyLineupsProjectionSnapshot(source: FantasyProjectionSource = "none"
   }
 }
 
-function getLineupCutoffUtc(): string {
-  return new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+const BRISBANE_TIME_ZONE = "Australia/Brisbane"
+const BRISBANE_UTC_OFFSET = "+10:00"
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+
+function getBrisbaneDateParts(date: Date): { dateKey: string; weekday: number; hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BRISBANE_TIME_ZONE,
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date)
+
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ""
+  const weekday = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[value("weekday") as "Sun" | "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat"] ?? 0
+  return {
+    dateKey: `${value("year")}-${value("month")}-${value("day")}`,
+    weekday,
+    hour: Number(value("hour")),
+    minute: Number(value("minute")),
+  }
+}
+
+function addDaysToBrisbaneDateKey(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T12:00:00${BRISBANE_UTC_OFFSET}`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BRISBANE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date)
+}
+
+function isPreTeamListWindowInBrisbane(now = new Date()): boolean {
+  const brisbane = getBrisbaneDateParts(now)
+  if (brisbane.weekday === 1) {
+    return brisbane.hour >= 10
+  }
+  if (brisbane.weekday === 2) {
+    return brisbane.hour < 16
+  }
+  return false
+}
+
+function getTuesdayTeamListReleaseUtc(now = new Date()): string {
+  const brisbane = getBrisbaneDateParts(now)
+  const daysUntilTuesday = brisbane.weekday <= 2 ? 2 - brisbane.weekday : 9 - brisbane.weekday
+  const tuesdayDateKey = addDaysToBrisbaneDateKey(brisbane.dateKey, daysUntilTuesday)
+  return new Date(`${tuesdayDateKey}T16:00:00${BRISBANE_UTC_OFFSET}`).toISOString()
+}
+
+function getProjectionFixtureCutoffUtc(now = new Date()): string {
+  if (isPreTeamListWindowInBrisbane(now)) {
+    return getTuesdayTeamListReleaseUtc(now)
+  }
+  return new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString()
 }
 
 function normaliseProjectionPlayerName(value: unknown): string {
@@ -549,11 +607,23 @@ async function fetchLineupUnawareProjectionSnapshot(cutoffUtc: string): Promise<
     .from("lineup_unaware_fantasy_projections")
     .select("player, team, assumed_jersey, assumed_position, projection, model_projection, kickoff_utc")
     .gte("kickoff_utc", cutoffUtc)
+    .order("kickoff_utc", { ascending: true })
 
   if (error || !data) return emptyLineupsProjectionSnapshot("lineup_unaware")
 
   const snapshot = emptyLineupsProjectionSnapshot("lineup_unaware")
-  for (const row of data) {
+  const firstKickoffMs = data
+    .map((row) => Date.parse(String(row.kickoff_utc ?? "")))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b)[0]
+  const roundRows = firstKickoffMs == null
+    ? data
+    : data.filter((row) => {
+        const kickoffMs = Date.parse(String(row.kickoff_utc ?? ""))
+        return Number.isFinite(kickoffMs) && kickoffMs >= firstKickoffMs && kickoffMs < firstKickoffMs + 6 * ONE_DAY_MS
+      })
+
+  for (const row of roundRows) {
     const nameKey = normaliseProjectionPlayerName(row.player)
     if (!nameKey) continue
 
@@ -578,7 +648,11 @@ async function fetchLineupUnawareProjectionSnapshot(cutoffUtc: string): Promise<
 export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjectionSnapshot> {
   try {
     const supabase = createServerSupabaseClient()
-    const lineupCutoffUtc = getLineupCutoffUtc()
+    const lineupCutoffUtc = getProjectionFixtureCutoffUtc()
+
+    if (isPreTeamListWindowInBrisbane()) {
+      return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
+    }
 
     // Prefer the next upcoming lineups round. Before team lists are released,
     // use the lineup-unaware model instead of stale previous-round lineups.

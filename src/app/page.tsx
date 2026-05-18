@@ -511,8 +511,12 @@ function buildFantasyValuePreviewRows(
         lineupsProjections.projectionByPlayerId.get(player.id) ??
         lineupsProjections.projectionByPlayerName.get(normalisePersonName(player.name)) ??
         null
+      const projectionBase =
+        lineupsProjections.source === "lineup_unaware" && player.isBye
+          ? 0
+          : modelProjection ?? coachMetrics.projection ?? player.projectedAvg ?? null
       const projection = applyFantasyProjectionOffset(
-        modelProjection ?? coachMetrics.projection ?? player.projectedAvg ?? null,
+        projectionBase,
         weeklyChange,
         topOwnershipRise,
       )
@@ -1030,11 +1034,13 @@ export default async function Home() {
     : null
   const spotlightProjection = applyFantasyProjectionOffset(
     spotlightFantasyPlayer
-      ? lineupsProjections.projectionByPlayerId.get(spotlightFantasyPlayer.id) ??
-        lineupsProjections.projectionByPlayerName.get(normalisePersonName(spotlightFantasyPlayer.name)) ??
-        spotlightCoachMetrics.projection ??
-        spotlightFantasyPlayer.projectedAvg ??
-        null
+      ? lineupsProjections.source === "lineup_unaware" && spotlightFantasyPlayer.isBye
+        ? 0
+        : lineupsProjections.projectionByPlayerId.get(spotlightFantasyPlayer.id) ??
+          lineupsProjections.projectionByPlayerName.get(normalisePersonName(spotlightFantasyPlayer.name)) ??
+          spotlightCoachMetrics.projection ??
+          spotlightFantasyPlayer.projectedAvg ??
+          null
       : null,
     spotlightWeeklyDelta,
     topOwnershipRise,

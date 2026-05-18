@@ -3181,7 +3181,9 @@ export function FantasyDashboard({
         coachMetrics.projection
       )
       const pricedAt = player.pricedAt
-      const value = rawProjection != null && pricedAt != null ? rawProjection - pricedAt : null
+      const originChance = originChancePlayerNames.has(normaliseProjectionPlayerName(player.name))
+      const projection = player.isBye || originChance ? null : rawProjection
+      const value = projection != null && pricedAt != null ? projection - pricedAt : null
       const lineupRole =
         lineupsProjections?.roleByPlayerId.get(player.id) ??
         lineupsProjections?.roleByPlayerName.get(normaliseProjectionPlayerName(player.name)) ??
@@ -3213,7 +3215,7 @@ export function FantasyDashboard({
         ppm: totalMinutes > 0 ? totalFantasy / totalMinutes : null,
         weeklyChange: ownershipDelta,
         pricedAt,
-        projection: rawProjection,
+        projection,
         value,
         breakeven: applyFantasyBreakEvenOffset(
           coachMetrics.breakEven ?? player.be ?? null,
@@ -3223,7 +3225,7 @@ export function FantasyDashboard({
         relevantOuts: relevantOutRows,
         nextMajorByeRound,
         playsNextMajorBye,
-        originChance: originChancePlayerNames.has(normaliseProjectionPlayerName(player.name)),
+        originChance,
         gamesPlayed: playerRows.length || player.gamesPlayed || 0,
       }
     })

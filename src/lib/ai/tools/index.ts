@@ -2711,7 +2711,7 @@ async function runGetFantasySnapshot(
       const fallbackProjectionRaw = defaultMetrics.projection ?? player.projectedAvg ?? null;
       const projectionRaw =
         lineupsProjections.source === "lineup_unaware" && player.isBye
-          ? 0
+          ? null
           : lineupsProjections.projectionByPlayerId.get(player.id) ??
             lineupsProjections.projectionByPlayerName.get(normalizeLooseSearchValue(player.name)) ??
             fallbackProjectionRaw ??

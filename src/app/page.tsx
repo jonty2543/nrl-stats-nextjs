@@ -513,7 +513,7 @@ function buildFantasyValuePreviewRows(
         null
       const projectionBase =
         lineupsProjections.source === "lineup_unaware" && player.isBye
-          ? 0
+          ? null
           : modelProjection ?? coachMetrics.projection ?? player.projectedAvg ?? null
       const projection = applyFantasyProjectionOffset(
         projectionBase,
@@ -1035,7 +1035,7 @@ export default async function Home() {
   const spotlightProjection = applyFantasyProjectionOffset(
     spotlightFantasyPlayer
       ? lineupsProjections.source === "lineup_unaware" && spotlightFantasyPlayer.isBye
-        ? 0
+        ? null
         : lineupsProjections.projectionByPlayerId.get(spotlightFantasyPlayer.id) ??
           lineupsProjections.projectionByPlayerName.get(normalisePersonName(spotlightFantasyPlayer.name)) ??
           spotlightCoachMetrics.projection ??

@@ -321,6 +321,10 @@ function playerLabelForPrompt(
 ): string {
   const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) : null
   const namedInLineups = getLineupsNamedStatus(player, fantasyPlayersById, lineupsProjections)
+  const modelProjection =
+    fantasyPlayer && hasFantasyPlotAccess
+      ? modelProjectionForFantasyPlayer(fantasyPlayer, lineupsProjections, fantasyPlayer.projectedAvg)
+      : null
   const parts = [
     fantasyPlayer?.name ?? player.displayName,
     player.slot ? `slot ${player.slot}` : null,
@@ -335,7 +339,7 @@ function playerLabelForPrompt(
     fantasyPlayer?.cost != null ? `price ${fantasyPlayer.cost}` : null,
     fantasyPlayer?.avgPoints != null ? `avg ${fantasyPlayer.avgPoints}` : null,
     hasFantasyPlotAccess && fantasyPlayer?.be != null ? `BE ${fantasyPlayer.be}` : null,
-    hasFantasyPlotAccess && fantasyPlayer?.projectedAvg != null ? `projected avg ${fantasyPlayer.projectedAvg}` : null,
+    hasFantasyPlotAccess && modelProjection != null ? `projection ${modelProjection}` : null,
   ].filter(Boolean)
   return parts.join(" | ")
 }
@@ -829,12 +833,65 @@ function ScreenshotUploadPanel({
 }
 
 function normaliseLineupsName(value: string): string {
-  return value
+  const key = value
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
+  if (key === "api koroisau") return "apisai koroisau"
+  return key
+}
+
+function isFantasyPlayerUnavailableForProjectionFallback(player: FantasyPlayerSnapshot): boolean {
+  if (player.isBye) return true
+  const status = player.status?.trim().toLowerCase()
+  return Boolean(
+    status &&
+    ["injured", "suspended", "out", "unavailable", "not playing"].some((token) => status.includes(token))
+  )
+}
+
+function modelProjectionForFantasyPlayer(
+  fantasyPlayer: FantasyPlayerSnapshot,
+  lineupsProjections: LineupsProjectionSnapshot,
+  fallbackProjection: number | null,
+): number | null {
+  const playerNameKey = normaliseLineupsName(fantasyPlayer.name)
+
+  if (lineupsProjections.source === "lineups") {
+    const isNamed =
+      lineupsProjections.roleByPlayerId.has(fantasyPlayer.id) ||
+      lineupsProjections.roleByPlayerName.has(playerNameKey)
+
+    if (!isNamed) return 0
+
+    return (
+      lineupsProjections.projectionByPlayerId.get(fantasyPlayer.id) ??
+      lineupsProjections.projectionByPlayerName.get(playerNameKey) ??
+      0
+    )
+  }
+
+  if (lineupsProjections.source === "lineup_unaware") {
+    if (isFantasyPlayerUnavailableForProjectionFallback(fantasyPlayer)) return null
+    return (
+      lineupsProjections.projectionByPlayerId.get(fantasyPlayer.id) ??
+      lineupsProjections.projectionByPlayerName.get(playerNameKey) ??
+      null
+    )
+  }
+
+  const nameProjection = lineupsProjections.projectionByPlayerName.get(playerNameKey) ?? null
+  return (
+    lineupsProjections.projectionByPlayerId.get(fantasyPlayer.id) ??
+    (nameProjection != null
+      ? isFantasyPlayerUnavailableForProjectionFallback(fantasyPlayer) ? 0 : nameProjection
+      : null) ??
+    fallbackProjection ??
+    fantasyPlayer.projectedAvg ??
+    0
+  )
 }
 
 function getLineupsNamedStatus(
@@ -874,11 +931,14 @@ function projectionForPlayer(
   player: MyTeamPlayer,
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
   fantasyCoachPlayersById: Map<number, FantasyCoachPlayerSnapshot>,
+  lineupsProjections: LineupsProjectionSnapshot,
 ): number | null {
   const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) : null
-  if (fantasyPlayer?.isBye || player.status === "injured" || player.status === "suspended") return 0
+  if (!fantasyPlayer) return null
+  if (fantasyPlayer.isBye || player.status === "injured" || player.status === "suspended") return 0
   const coachPlayer = player.playerId != null ? fantasyCoachPlayersById.get(player.playerId) : null
-  const projection = getFantasyCoachRoundMetrics(coachPlayer).projection
+  const coachProjection = getFantasyCoachRoundMetrics(coachPlayer).projection
+  const projection = modelProjectionForFantasyPlayer(fantasyPlayer, lineupsProjections, coachProjection)
   return typeof projection === "number" && Number.isFinite(projection) ? projection : null
 }
 
@@ -886,8 +946,9 @@ function effectiveProjectionForPlayer(
   player: MyTeamPlayer,
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
   fantasyCoachPlayersById: Map<number, FantasyCoachPlayerSnapshot>,
+  lineupsProjections: LineupsProjectionSnapshot,
 ): number | null {
-  const projection = projectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById)
+  const projection = projectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
   if (projection == null) return null
   return player.isCaptain ? projection * 2 : projection
 }
@@ -928,7 +989,7 @@ function PlayerToken({
       ? player.squadRole === "emergency" ? "border-[#f16161]" : "border-[#a85db5]"
       : "border-[#f1f3f5]"
   const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) : null
-  const displayedProjection = showProjections ? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById) : null
+  const displayedProjection = showProjections ? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections) : null
 
   const content = (
     <>
@@ -1002,7 +1063,7 @@ function TeamBoard({
     .sort((a, b) => (a.benchOrder ?? 99) - (b.benchOrder ?? 99))
   const projectedScore = players
     .filter((player) => player.squadRole === "starter")
-    .reduce((sum, player) => sum + (effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById) ?? 0), 0)
+    .reduce((sum, player) => sum + (effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections) ?? 0), 0)
 
   return (
     <section className="overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel text-nrl-text shadow-[0_18px_48px_rgba(2,6,23,0.28)]">

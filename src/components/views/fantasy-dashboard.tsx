@@ -1287,7 +1287,28 @@ function getFantasyFilterTags({
 }
 
 function matchesFantasyTagFilters(rowTags: string[], selectedTags: string[]): boolean {
-  return selectedTags.length === 0 || selectedTags.some((tag) => rowTags.includes(tag))
+  return selectedTags.length === 0 || selectedTags.every((tag) => rowTags.includes(tag))
+}
+
+function fantasyByeTagSortValue(tag: string): { round: number; state: number } | null {
+  const roundMatch = tag.match(/\bRd(\d+)\b/i)
+  if (!roundMatch?.[1]) return null
+  return {
+    round: Number.parseInt(roundMatch[1], 10),
+    state: tag.includes("✓") ? 0 : 1,
+  }
+}
+
+function sortFantasyTagFilterOptions(a: string, b: string): number {
+  const aBye = fantasyByeTagSortValue(a)
+  const bBye = fantasyByeTagSortValue(b)
+  if (aBye && bBye) {
+    if (aBye.round !== bBye.round) return aBye.round - bBye.round
+    return aBye.state - bBye.state
+  }
+  if (aBye) return -1
+  if (bBye) return 1
+  return a.localeCompare(b)
 }
 
 function teamPlaysInRound(draw2026Data: Draw2026Data | null | undefined, round: number | null, team: string | null | undefined): boolean | null {
@@ -3487,7 +3508,7 @@ export function FantasyDashboard({
       if (row.originChance) hasOriginChance = true
     }
     return [
-      ...Array.from(byeOptions),
+      ...Array.from(byeOptions).sort(sortFantasyTagFilterOptions),
       ...(hasRelevantOuts ? [FANTASY_FILTER_TAG_RELEVANT_OUTS] : []),
       ...(hasOriginChance ? [FANTASY_FILTER_TAG_ORIGIN_CHANCE] : []),
     ]

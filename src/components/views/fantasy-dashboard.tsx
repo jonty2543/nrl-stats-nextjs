@@ -1330,16 +1330,13 @@ function PlayerContextTags({
       {byeTags.map((tag) => (
         <span
           key={tag.round}
-          className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
+          className={`shrink-0 rounded-md border px-1 py-0.5 text-[8px] font-bold uppercase leading-none tracking-wide ${
             tag.plays
-              ? "border-emerald-400/35 bg-emerald-400/10 text-slate-100"
-              : "border-rose-400/35 bg-rose-400/10 text-slate-100"
+              ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+              : "border-rose-400/30 bg-rose-400/10 text-rose-300"
           }`}
           title={tag.plays ? `Plays in Round ${tag.round}` : `Bye in Round ${tag.round}`}
         >
-          <span aria-hidden="true" className={tag.plays ? "text-emerald-300" : "text-rose-300"}>
-            {tag.plays ? "✓" : "✕"}{" "}
-          </span>
           Rd{tag.round}
         </span>
       ))}

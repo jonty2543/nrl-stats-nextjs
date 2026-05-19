@@ -75,10 +75,15 @@ interface FantasyPlayerPageProps {
   params: Promise<{
     playerSlug: string
   }>
+  searchParams?: Promise<{
+    from?: string
+  }>
 }
 
-export default async function FantasyPlayerPage({ params }: FantasyPlayerPageProps) {
+export default async function FantasyPlayerPage({ params, searchParams }: FantasyPlayerPageProps) {
   const { playerSlug } = await params
+  const query = await searchParams
+  const fromMyTeam = query?.from === "my-team"
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
@@ -141,7 +146,10 @@ export default async function FantasyPlayerPage({ params }: FantasyPlayerPagePro
   return (
     <div className="space-y-4">
       <div>
-        <FantasyBackLink />
+        <FantasyBackLink
+          href={fromMyTeam ? "/dashboard/fantasy/my-team" : "/dashboard/fantasy"}
+          label={fromMyTeam ? "Back to My Team" : "Back to Fantasy Dashboard"}
+        />
       </div>
 
       <FantasyDashboard

@@ -3235,7 +3235,7 @@ const CORE_AI_TOOLS: AiTool[] = [
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      required: ["round", "positions", "priceMax", "sortBy", "requireOwnershipRise", "excludeLocked", "limit"],
+      required: ["round", "playerNames", "positions", "priceMax", "sortBy", "requireOwnershipRise", "excludeLocked", "limit"],
       properties: {
         round: { type: ["number", "null"] },
         playerNames: {

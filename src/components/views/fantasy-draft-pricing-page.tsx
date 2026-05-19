@@ -1578,7 +1578,7 @@ export function FantasyDraftPricingPage({
         >
           Back to Fantasy Dashboard
           {isBackPending ? (
-            <span className="ml-2 h-3 w-3 animate-spin rounded-full border-2 border-nrl-muted/30 border-t-nrl-accent" />
+            <span className="ml-2 h-3 w-3 animate-spin rounded-full border-2 border-nrl-accent/25 border-t-nrl-accent" />
           ) : null}
         </Link>
       </div>

@@ -1005,6 +1005,21 @@ function DollarIcon({ className = "" }: { className?: string }) {
   )
 }
 
+function PersonIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path
+        d="M12 12.2a4.1 4.1 0 1 0 0-8.2 4.1 4.1 0 0 0 0 8.2ZM4.5 20c.7-3.8 3.4-6.1 7.5-6.1s6.8 2.3 7.5 6.1"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.2"
+      />
+    </svg>
+  )
+}
+
 function getTradeSuggestorRatingClass(rating: number): string {
   if (rating >= 8) return "border-emerald-300/45 bg-emerald-400/15 text-emerald-200"
   if (rating >= 6) return "border-amber-300/45 bg-amber-400/15 text-amber-100"
@@ -2397,6 +2412,7 @@ export function FantasyDashboard({
   const [fantasyTemplateMode, setFantasyTemplateMode] = useState<FantasyTemplateMode>("change")
   const [isFantasyAnalyticsPending, setIsFantasyAnalyticsPending] = useState(false)
   const [isFantasyDraftPending, setIsFantasyDraftPending] = useState(false)
+  const [isMyTeamPending, setIsMyTeamPending] = useState(false)
   const [isTradeSuggestorOpen, setIsTradeSuggestorOpen] = useState(false)
   const [tradeScreenshots, setTradeScreenshots] = useState<Record<TradeScreenshotSlot, FantasyTradeScreenshot | null>>({
     starters: null,
@@ -3883,28 +3899,33 @@ export function FantasyDashboard({
         </section>
 
         {showOwnedCards ? (
-          <div className="grid gap-5 xl:grid-cols-2 xl:items-stretch">
-            <button
-              type="button"
-              onClick={() => {
-                setIsTradeSuggestorOpen(true)
-                setTradeSuggestorError(null)
-              }}
-              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/40 bg-[linear-gradient(135deg,#6d28d9,#a21caf)] px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(88,28,135,0.34)] transition-colors hover:border-violet-200 hover:bg-[linear-gradient(135deg,#7c3aed,#c026d3)] xl:order-1 xl:min-h-[64px] xl:py-2"
+          <div className="grid gap-5 xl:grid-cols-3 xl:items-stretch">
+            <Link
+              href="/dashboard/fantasy/my-team"
+              onClick={() => setIsMyTeamPending(true)}
+              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/45 bg-[linear-gradient(135deg,#00f58a_0%,#18c77d_46%,#7c3aed_100%)] px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(0,245,138,0.18)] transition-colors hover:border-violet-200 hover:bg-[linear-gradient(135deg,#22ff9d_0%,#24d28b_46%,#8b5cf6_100%)] xl:order-1 xl:min-h-[64px] xl:py-2"
             >
-              <span className="inline-flex items-center gap-2">
-                <SparkAiIcon className="h-5 w-5 text-violet-100" />
-                <span className="text-sm font-bold">Find Trades</span>
+              <span className="absolute -right-1 -top-2 rounded-full border border-violet-200 bg-violet-700 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-white shadow-[0_8px_18px_rgba(76,29,149,0.38)]">
+                NRL AI
               </span>
-              <span className="text-[10px] font-medium text-violet-100/85">
-                Submit screenshots to get personalised trades
+              <span className="inline-flex items-center gap-2 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
+                <PersonIcon className="h-5 w-5" />
+                <span className="text-sm font-black">My Team</span>
               </span>
-            </button>
+              <span className="px-5 text-[10px] font-black leading-tight text-white drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
+                Upload screenshots, save your team and get personalised advice
+              </span>
+              {isMyTeamPending ? (
+                <span className="absolute inset-x-5 bottom-2 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                  <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                </span>
+              ) : null}
+            </Link>
             <div className="grid grid-cols-8 items-center gap-4 xl:contents">
               <Link
                 href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
                 onClick={() => setIsFantasyAnalyticsPending(true)}
-                className={`relative col-span-8 flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] xl:order-3 xl:col-span-1 xl:min-h-[64px] xl:py-2 ${
+                className={`relative col-span-8 flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] xl:order-2 xl:col-span-1 xl:min-h-[64px] xl:py-2 ${
                   showFantasyAnalytics
                     ? "border-nrl-accent bg-[#20284a]"
                     : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
@@ -3914,7 +3935,7 @@ export function FantasyDashboard({
                   <TrendGraphIcon className="h-4 w-4 text-nrl-accent" />
                   Find Value
                 </span>
-                <span className="mt-1 text-[10px] font-medium text-nrl-muted">
+                <span className="px-5 text-[10px] font-black leading-tight text-nrl-muted">
                   Projections vs price, stat trends & template teams
                 </span>
                 {isFantasyAnalyticsPending ? (
@@ -3923,7 +3944,7 @@ export function FantasyDashboard({
                   </span>
                 ) : null}
               </Link>
-              <div className="group col-span-5 self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))] xl:order-2 xl:col-span-1">
+              <div className="group col-span-5 self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))] xl:order-3 xl:col-span-1">
                 {hasFantasyPlotAccess ? (
                   <Link
                     href="/dashboard/fantasy/draft"
@@ -3934,7 +3955,7 @@ export function FantasyDashboard({
                       <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
                       Draft / H2H Odds
                     </span>
-                    <span className="mt-1 text-[9px] font-medium text-nrl-muted">
+                    <span className="px-3 text-[10px] font-black leading-tight text-nrl-muted">
                       See how likely you are to win your matchup
                     </span>
                     {isFantasyDraftPending ? (
@@ -3953,7 +3974,7 @@ export function FantasyDashboard({
                       <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
                       Draft / H2H Odds
                     </div>
-                    <div className="mt-1 text-[9px] font-medium leading-tight text-nrl-muted">
+                    <div className="px-3 text-[10px] font-black leading-tight text-nrl-muted">
                       See how likely you are to win your matchup
                     </div>
                     {isFantasyDraftPending ? (

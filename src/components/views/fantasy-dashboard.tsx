@@ -4697,11 +4697,6 @@ export function FantasyDashboard({
                         <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1 py-0.5 text-[8px] text-nrl-muted sm:px-2 sm:text-xs">
                           {selectedFantasyPlayer.positionLabel}
                         </span>
-                        {selectedFantasyPlayer.isBye ? (
-                          <span className="rounded-md border border-amber-400/40 bg-amber-400/10 px-1 py-0.5 text-[8px] font-semibold text-amber-300 sm:px-2 sm:text-xs">
-                            Bye
-                          </span>
-                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-1.5 text-[8px] sm:gap-3 sm:text-xs">
                         {latestLocalRow ? (

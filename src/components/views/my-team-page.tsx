@@ -620,29 +620,29 @@ function MyTeamAiChatPanel({
       <button
         type="button"
         onClick={() => setIsMinimized((value) => !value)}
-        className={`flex w-full items-center justify-between gap-3 bg-[#111832] px-4 py-3 text-left transition-colors hover:bg-[#151e3d] ${
+        className={`flex w-full items-center justify-between gap-3 bg-[#111832] px-4 py-3 text-left transition-colors hover:bg-[#151e3d] lg:px-6 lg:py-4 ${
           isMinimized ? "" : "border-b border-nrl-border"
         }`}
         aria-expanded={!isMinimized}
       >
         <span className="inline-flex items-center gap-2">
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-nrl-accent/15 text-nrl-accent">
-            <MagicAiIcon className="h-4 w-4" />
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-nrl-accent/15 text-nrl-accent lg:h-9 lg:w-9">
+            <MagicAiIcon className="h-4 w-4 lg:h-5 lg:w-5" />
           </span>
           <span>
-            <span className="block text-xs font-black uppercase tracking-[0.18em] text-nrl-accent">NRL AI</span>
-            <span className="block text-[11px] font-semibold text-nrl-muted">
+            <span className="block text-xs font-black uppercase tracking-[0.18em] text-nrl-accent lg:text-sm">NRL AI</span>
+            <span className="block text-[11px] font-semibold text-nrl-muted lg:text-sm">
               Trades, captaincy, loops
             </span>
           </span>
         </span>
-        <span className="text-lg font-black leading-none text-nrl-muted">{isMinimized ? "+" : "-"}</span>
+        <span className="text-lg font-black leading-none text-nrl-muted lg:text-2xl">{isMinimized ? "+" : "-"}</span>
       </button>
 
       {!isMinimized ? (
         <>
-          <div className="border-b border-nrl-border bg-[#111832] px-4 py-3">
-            <div className="flex flex-wrap gap-2">
+          <div className="border-b border-nrl-border bg-[#111832] px-4 py-3 lg:px-6 lg:py-4">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
               {quickQuestions.map((question) => (
                 <button
                   key={question}
@@ -651,7 +651,7 @@ function MyTeamAiChatPanel({
                     void submitQuestion(question)
                   }}
                   disabled={isSending}
-                  className="rounded-full border border-nrl-border bg-[#20284a] px-3 py-1.5 text-[11px] font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full whitespace-nowrap rounded-full border border-nrl-border bg-[#20284a] px-1.5 py-1.5 text-[8px] font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-50 min-[380px]:px-2 min-[380px]:text-[9px] sm:w-auto sm:px-3 sm:text-[11px] lg:px-4 lg:py-2 lg:text-sm"
                 >
                   {question}
                 </button>
@@ -659,7 +659,7 @@ function MyTeamAiChatPanel({
             </div>
           </div>
 
-          <div className="space-y-4 px-4 py-4">
+          <div className="space-y-4 px-4 py-4 lg:px-6 lg:py-5">
             {messages.length > 0 || isSending ? (
               <div ref={chatScrollRef} className="max-h-80 space-y-4 overflow-y-auto pr-1">
                 {messages.map((message, index) => (
@@ -692,13 +692,13 @@ function MyTeamAiChatPanel({
                 onChange={(event) => setDraft(event.target.value)}
                 rows={1}
                 placeholder="Ask about a trade, loop, captaincy or who to play..."
-                className="min-h-10 w-full resize-none rounded-xl border border-nrl-border bg-[#0e1530] py-2.5 pl-3 pr-12 text-sm text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent"
+                className="min-h-10 w-full resize-none overflow-hidden whitespace-nowrap rounded-xl border border-nrl-border bg-[#0e1530] py-2.5 pl-3 pr-12 text-[10px] leading-5 text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent min-[380px]:text-[11px] sm:text-sm lg:min-h-12 lg:py-3 lg:pl-4 lg:pr-14 lg:text-base"
               />
               <button
                 type="submit"
                 disabled={!draft.trim() || isSending}
                 aria-label="Ask NRL AI"
-                className="absolute bottom-1.5 right-1.5 grid h-7 w-7 place-items-center rounded-full border border-nrl-accent/50 bg-nrl-accent text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.22)] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
+                className="absolute bottom-1.5 right-1.5 grid h-7 w-7 place-items-center rounded-full border border-nrl-accent/50 bg-nrl-accent text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.22)] transition-opacity disabled:cursor-not-allowed disabled:opacity-45 lg:bottom-2 lg:right-2 lg:h-8 lg:w-8"
               >
                 {isSending ? (
                   <span className="inline-flex items-center gap-0.5">
@@ -915,9 +915,9 @@ function PlayerToken({
 }) {
   if (!player) {
     return (
-      <div className="mx-auto flex min-h-[72px] w-full max-w-[6rem] flex-col items-center justify-end opacity-35">
-        <div className="h-12 w-12 rounded-full border-[3px] border-white bg-white" />
-        <div className="mt-1 h-2 w-12 rounded bg-slate-300" />
+      <div className="mx-auto flex min-h-[72px] w-full max-w-[6rem] flex-col items-center justify-end opacity-35 lg:min-h-[116px] lg:max-w-[9rem]">
+        <div className="h-12 w-12 rounded-full border-[3px] border-white bg-white lg:h-24 lg:w-24 lg:border-4" />
+        <div className="mt-1 h-2 w-12 rounded bg-slate-300 lg:mt-2 lg:h-2.5 lg:w-24" />
       </div>
     )
   }
@@ -933,32 +933,32 @@ function PlayerToken({
   const content = (
     <>
       {bench ? (
-        <span className={`absolute left-[7%] top-[33%] z-20 rounded-l-full px-1.5 py-0.5 text-[8px] font-black text-white ${player.squadRole === "emergency" ? "bg-[#f16161]" : "bg-[#a85db5]"}`}>
+        <span className={`absolute left-[7%] top-[33%] z-20 rounded-l-full px-1.5 py-0.5 text-[8px] font-black text-white lg:px-2 lg:text-[10px] ${player.squadRole === "emergency" ? "bg-[#f16161]" : "bg-[#a85db5]"}`}>
           {player.squadRole === "emergency" ? "EMG" : "INT"}
         </span>
       ) : null}
-      <div className={`relative h-16 w-16 overflow-hidden rounded-full border-[3px] bg-white shadow-[0_10px_24px_rgba(10,22,38,0.14)] ${ring}`}>
+      <div className={`relative h-16 w-16 overflow-hidden rounded-full border-[3px] bg-white shadow-[0_10px_24px_rgba(10,22,38,0.14)] lg:h-24 lg:w-24 lg:border-4 ${ring}`}>
         <ImageWithFallback
           sources={imageSourcesForPlayer(player, fantasyPlayersById, playerImages)}
           alt={`${player.displayName} player image`}
           className="h-full w-full object-cover object-top"
         />
       </div>
-      <span className={`absolute right-[5%] top-[27%] grid h-6 w-6 place-items-center rounded-full border text-[8px] font-black shadow-[0_8px_18px_rgba(10,22,38,0.22)] ${
+      <span className={`absolute right-[5%] top-[27%] grid h-6 w-6 place-items-center rounded-full border text-[8px] font-black shadow-[0_8px_18px_rgba(10,22,38,0.22)] lg:h-9 lg:w-9 lg:text-xs ${
         player.isCaptain
           ? "border-orange-300/80 bg-[#5a2f1d] text-orange-200"
           : "border-[#c4b5fd]/70 bg-[#31285f] text-[#ede9fe]"
       }`}>
         {showProjections ? formatProjection(displayedProjection) : "-"}
       </span>
-      <div className="mt-0.5 flex max-w-full items-center justify-center gap-1 text-[10px] font-black leading-tight text-nrl-text md:text-[11px]">
+      <div className="mt-0.5 flex max-w-full items-center justify-center gap-1 text-[10px] font-black leading-tight text-nrl-text md:text-[11px] lg:mt-1.5 lg:text-base">
         <Marker player={player} fantasyPlayersById={fantasyPlayersById} lineupsProjections={lineupsProjections} />
         <span className="truncate">{player.displayName}</span>
       </div>
     </>
   )
 
-  const className = "relative mx-auto flex min-h-[72px] w-full max-w-[6rem] flex-col items-center justify-end text-center"
+  const className = "relative mx-auto flex min-h-[72px] w-full max-w-[6rem] flex-col items-center justify-end text-center lg:min-h-[116px] lg:max-w-[9rem]"
   if (!fantasyPlayer) {
     return <div className={className}>{content}</div>
   }
@@ -1006,7 +1006,7 @@ function TeamBoard({
 
   return (
     <section className="overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel text-nrl-text shadow-[0_18px_48px_rgba(2,6,23,0.28)]">
-      <div className="bg-[linear-gradient(135deg,#101936,#123a36)] px-4 py-4 text-center text-2xl font-black italic tracking-wide text-nrl-accent">
+      <div className="bg-[linear-gradient(135deg,#101936,#123a36)] px-4 py-4 text-center text-2xl font-black italic tracking-wide text-nrl-accent lg:text-2xl">
         {team?.teamName || "My Team"}
       </div>
       <div className="grid grid-cols-2 border-b border-nrl-border bg-[#111832] text-center">
@@ -1019,18 +1019,18 @@ function TeamBoard({
           <div className="text-xl font-black text-nrl-accent">{showProjections ? formatProjection(projectedScore) : "--"}</div>
         </div>
       </div>
-      <div className="border-b border-nrl-border bg-[#111832] px-4 py-3 text-center text-lg font-black text-nrl-text">
+      <div className="border-b border-nrl-border bg-[#111832] px-4 py-3 text-center text-lg font-black text-nrl-text lg:py-4 lg:text-2xl">
         {team?.round ? `Round ${team.round}` : "Round"}
       </div>
-      <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top,rgba(0,245,138,0.12),transparent_42%),linear-gradient(180deg,#101936,#0b1026)] px-3 pb-4 pt-2">
+      <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top,rgba(0,245,138,0.12),transparent_42%),linear-gradient(180deg,#101936,#0b1026)] px-3 pb-4 pt-2 lg:px-8 lg:pb-8 lg:pt-4">
         <div className="absolute inset-x-[8%] top-0 bottom-0 skew-x-[-4deg] rounded-b-[2rem] bg-[#f1f3f5]/14 shadow-[0_24px_50px_rgba(2,6,23,0.32)]" />
-        <div className="relative space-y-5">
+        <div className="relative space-y-5 lg:space-y-9">
           {STARTER_ROWS.map((row) => {
             const rowPlayers = startersBySlot.get(row.slot) ?? []
             const cells = Array.from({ length: row.count }, (_, index) => rowPlayers[index] ?? null)
             return (
               <div key={row.slot} className="relative">
-                <div className={`grid items-end gap-1 ${row.count === 2 ? "mx-auto w-[68%] grid-cols-2" : "grid-cols-3"}`}>
+                <div className={`grid items-end gap-1 lg:gap-6 ${row.count === 2 ? "mx-auto w-[68%] grid-cols-2" : "grid-cols-3"}`}>
                   {row.count === 1 ? (
                     <>
                       <div />
@@ -1062,9 +1062,9 @@ function TeamBoard({
         </div>
       </div>
 
-      <div className="bg-[#123a36] px-4 py-3 text-base font-black uppercase text-nrl-accent">Bench ({Math.min(8, benchPlayers.length)}/8)</div>
-      <div className="bg-[#101936] px-4 py-5">
-        <div className="mx-auto grid w-[58%] grid-cols-2 gap-x-0 gap-y-5">
+      <div className="bg-[#123a36] px-4 py-3 text-base font-black uppercase text-nrl-accent lg:px-6 lg:py-4 lg:text-xl">Bench ({Math.min(8, benchPlayers.length)}/8)</div>
+      <div className="bg-[#101936] px-4 py-5 lg:px-8 lg:py-8">
+        <div className="mx-auto grid w-[58%] grid-cols-2 gap-x-0 gap-y-5 lg:w-[54%] lg:gap-y-8">
           {Array.from({ length: 8 }, (_, index) => (
             <PlayerToken
               key={`bench-${index}`}
@@ -1306,13 +1306,13 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
       ) : null}
 
       {team ? (
-        <section className="mx-auto max-w-[760px] rounded-xl border border-nrl-border bg-nrl-panel px-4 py-3">
+        <section className="mx-auto max-w-[760px] rounded-xl border border-nrl-border bg-nrl-panel px-4 py-3 lg:max-w-[1040px] lg:px-6 lg:py-4">
           <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-wide text-nrl-muted sm:flex-row sm:items-center sm:justify-between">
             <span>Captain</span>
             <select
               value={captainValue}
               onChange={(event) => handleCaptainChange(event.target.value)}
-              className="min-w-0 rounded-md border border-nrl-border bg-[#0e1530] px-3 py-2 text-sm font-semibold normal-case tracking-normal text-nrl-text outline-none focus:border-nrl-accent sm:min-w-64"
+              className="min-w-0 rounded-md border border-nrl-border bg-[#0e1530] px-3 py-2 text-sm font-semibold normal-case tracking-normal text-nrl-text outline-none focus:border-nrl-accent sm:min-w-64 lg:min-w-96 lg:px-4 lg:py-3 lg:text-base"
             >
               <option value="-1">Select captain</option>
               {team.players.map((player, index) => {
@@ -1328,7 +1328,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
         </section>
       ) : null}
 
-      <div className="mx-auto max-w-[760px]">
+      <div className="mx-auto max-w-[760px] lg:max-w-[1040px]">
         {team ? (
           <div ref={aiPanelAnchorRef} className="relative z-30 mb-3 mt-5">
             {isAiPanelPinned ? <div style={{ height: aiPanelHeight }} /> : null}

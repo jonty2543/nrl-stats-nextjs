@@ -650,12 +650,8 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     const supabase = createServerSupabaseClient()
     const lineupCutoffUtc = getProjectionFixtureCutoffUtc()
 
-    if (isPreTeamListWindowInBrisbane()) {
-      return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
-    }
-
-    // Prefer the next upcoming lineups round. Before team lists are released,
-    // use the lineup-unaware model instead of stale previous-round lineups.
+    // Prefer actual upcoming lineups whenever they exist. If team lists have not
+    // been released yet, fall back to the lineup-unaware model.
     let roundLabel: string | null = null
 
     const { data: upcoming } = await supabase

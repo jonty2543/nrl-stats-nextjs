@@ -284,7 +284,6 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
   { key: "change", label: "Weekly Deltas" },
   { key: "ownership", label: "Total Ownership" },
 ]
-const FANTASY_FILTER_TAG_RELEVANT_OUTS = "Relevant Outs"
 const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin"
 const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
 const PRO_PRICE_LABEL = "$5/month"
@@ -1233,21 +1232,6 @@ function CasualtyWardPills({ rows }: { rows: CasualtyWardRecord[] }) {
   )
 }
 
-function formatRelevantOutReturnTag(value: string | null): string {
-  const trimmed = value?.trim()
-  if (!trimmed) return "TBC"
-  if (/\b2027\b/.test(trimmed)) return "TBC"
-  const round = trimmed.match(/^round\s+(.+)$/i)
-  if (round?.[1]) return `R${round[1].trim()}`
-  return trimmed
-}
-
-function formatRelevantOutTag(rows: CasualtyWardRecord[]): string {
-  const [row] = rows
-  if (!row) return ""
-  return `${row.player} ${formatRelevantOutReturnTag(row.returnDate)}`
-}
-
 const MAJOR_BYE_ROUNDS = [12, 15, 18] as const
 
 function getNextMajorByeRound(currentRound: number | null | undefined): number | null {
@@ -1264,13 +1248,11 @@ function getFantasyFilterTags({
   majorByeRoundTags,
   nextMajorByeRound,
   playsNextMajorBye,
-  relevantOuts,
   originChance,
 }: {
   majorByeRoundTags?: MajorByeRoundTag[]
   nextMajorByeRound: number | null
   playsNextMajorBye: boolean | null
-  relevantOuts: CasualtyWardRecord[]
   originChance: boolean
 }): string[] {
   const tags: string[] = []
@@ -1281,7 +1263,6 @@ function getFantasyFilterTags({
         .filter((tag): tag is string => Boolean(tag))
       : [formatNextMajorByeTag(nextMajorByeRound, playsNextMajorBye)].filter((tag): tag is string => Boolean(tag))
   tags.push(...byeTags)
-  if (relevantOuts.length > 0) tags.push(FANTASY_FILTER_TAG_RELEVANT_OUTS)
   if (originChance) tags.push(FANTASY_FILTER_TAG_ORIGIN_CHANCE)
   return tags
 }
@@ -1324,14 +1305,12 @@ function teamPlaysInRound(draw2026Data: Draw2026Data | null | undefined, round: 
 }
 
 function PlayerContextTags({
-  relevantOuts,
   majorByeRoundTags,
   nextMajorByeRound,
   playsNextMajorBye,
   originChance,
   className = "",
 }: {
-  relevantOuts: CasualtyWardRecord[]
   majorByeRoundTags?: MajorByeRoundTag[]
   nextMajorByeRound: number | null
   playsNextMajorBye: boolean | null
@@ -1344,7 +1323,7 @@ function PlayerContextTags({
       : nextMajorByeRound !== null && playsNextMajorBye !== null
         ? [{ round: nextMajorByeRound, plays: playsNextMajorBye }]
         : []
-  if (byeTags.length === 0 && !originChance && relevantOuts.length === 0) return null
+  if (byeTags.length === 0 && !originChance) return null
 
   return (
     <div className={`flex min-w-0 flex-wrap items-center gap-1.5 ${className}`}>
@@ -1361,14 +1340,6 @@ function PlayerContextTags({
           Rd{tag.round}
         </span>
       ))}
-      {relevantOuts.length > 0 ? (
-        <span
-          className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-slate-100"
-          title={formatRelevantOutTag(relevantOuts)}
-        >
-          <span aria-hidden="true" className="text-amber-300">⚠ </span>{formatRelevantOutTag(relevantOuts)}
-        </span>
-      ) : null}
       {originChance ? (
         <span
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-blue-300/35 bg-[linear-gradient(135deg,rgba(220,38,38,0.34),rgba(37,99,235,0.34))] px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-slate-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
@@ -3497,19 +3468,16 @@ export function FantasyDashboard({
 
   const allPlayersTagFilterOptions = useMemo(() => {
     const byeOptions = new Set<string>()
-    let hasRelevantOuts = false
     let hasOriginChance = false
     for (const row of allPlayersTableRows) {
       for (const tag of row.majorByeRoundTags) {
         const byeTag = formatNextMajorByeTag(tag.round, tag.plays)
         if (byeTag) byeOptions.add(byeTag)
       }
-      if (row.relevantOuts.length > 0) hasRelevantOuts = true
       if (row.originChance) hasOriginChance = true
     }
     return [
       ...Array.from(byeOptions).sort(sortFantasyTagFilterOptions),
-      ...(hasRelevantOuts ? [FANTASY_FILTER_TAG_RELEVANT_OUTS] : []),
       ...(hasOriginChance ? [FANTASY_FILTER_TAG_ORIGIN_CHANCE] : []),
     ]
   }, [allPlayersTableRows])
@@ -4494,7 +4462,6 @@ export function FantasyDashboard({
                             <span>{row.player.positionLabel}</span>
                             {showAllPlayersCardTags ? (
                               <PlayerContextTags
-                                relevantOuts={row.relevantOuts}
                                 majorByeRoundTags={row.majorByeRoundTags}
                                 nextMajorByeRound={row.nextMajorByeRound}
                                 playsNextMajorBye={row.playsNextMajorBye}
@@ -4731,7 +4698,6 @@ export function FantasyDashboard({
                         ) : null}
                         {selectedAllPlayersTableRow ? (
                           <PlayerContextTags
-                            relevantOuts={[]}
                             majorByeRoundTags={selectedAllPlayersTableRow.majorByeRoundTags}
                             nextMajorByeRound={selectedAllPlayersTableRow.nextMajorByeRound}
                             playsNextMajorBye={selectedAllPlayersTableRow.playsNextMajorBye}

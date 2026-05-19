@@ -628,8 +628,8 @@ async function fetchLineupUnawareProjectionSnapshot(cutoffUtc: string): Promise<
     if (!nameKey) continue
 
     const projection =
-      toFiniteProjectionNumber(row.model_projection) ??
-      toFiniteProjectionNumber(row.projection)
+      toFiniteProjectionNumber(row.projection) ??
+      toFiniteProjectionNumber(row.model_projection)
     if (projection != null) {
       snapshot.projectionByPlayerName.set(nameKey, projection)
     }
@@ -682,10 +682,27 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     const { data, error } = await supabase
       .schema("nrl")
       .from("lineups")
-      .select("player, player_id, fantasy_projection, model_projection, position, team, number, is_on_field")
+      .select("match_id, player, player_id, model_projection, position, team, number, is_on_field")
       .eq("round", roundLabel)
 
     if (error || !data) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
+
+    const matchIds = Array.from(new Set(data.map((row) => String(row.match_id ?? "")).filter(Boolean)))
+    const playerIds = Array.from(new Set(data.map((row) => String(row.player_id ?? "")).filter(Boolean)))
+    const overrideByKey = new Map<string, number>()
+    if (matchIds.length > 0 && playerIds.length > 0) {
+      const { data: overrides } = await supabase
+        .schema("nrl")
+        .from("fantasy_projection_overrides")
+        .select("match_id, player_id, projection_override_points")
+        .in("match_id", matchIds)
+        .in("player_id", playerIds)
+      for (const row of overrides ?? []) {
+        const delta = toFiniteProjectionNumber(row.projection_override_points)
+        if (delta == null) continue
+        overrideByKey.set(`${row.match_id ?? ""}:${row.player_id ?? ""}`, delta)
+      }
+    }
 
     const projectionByPlayerId = new Map<number, number>()
     const projectionByPlayerName = new Map<string, number>()
@@ -693,10 +710,13 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
     const roleByPlayerName = new Map<string, LineupsPlayerRole>()
     for (const row of data) {
       const playerNameKey = normaliseProjectionPlayerName(row.player)
+      const modelProjection = toFiniteProjectionNumber(row.model_projection)
+      const manualDelta = overrideByKey.get(`${row.match_id ?? ""}:${row.player_id ?? ""}`) ?? 0
       const projection = isZeroProjectionLineupPosition(row.position)
         ? 0
-        : toFiniteProjectionNumber(row.model_projection) ??
-          toFiniteProjectionNumber(row.fantasy_projection)
+        : modelProjection == null
+          ? null
+          : modelProjection + manualDelta
       if (projection != null) {
         if (row.player_id != null) {
           projectionByPlayerId.set(Number(row.player_id), projection)

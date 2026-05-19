@@ -469,12 +469,16 @@ function overrideKey(matchId: string, team: string, playerId: number | null, num
   return keys
 }
 
+function projectionOverrideKey(matchId: string, playerId: number | null): string {
+  return `${matchId}|${playerId ?? ""}`
+}
+
 async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: boolean): Promise<RawRow[]> {
   const supabase = createServerSupabaseClient("nrl")
   const rows: RawRow[] = []
   let start = 0
   const selectColumns = includeFantasyProjections
-    ? [...LINEUP_SELECT_BASE, "fantasy_projection", "model_projection"].join(",")
+    ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
 
   while (true) {
@@ -504,7 +508,7 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
   const supabase = createServerSupabaseClient("nrl")
   const rows: RawRow[] = []
   const selectColumns = includeFantasyProjections
-    ? [...LINEUP_SELECT_BASE, "fantasy_projection", "model_projection"].join(",")
+    ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
   let start = 0
 
@@ -554,12 +558,37 @@ async function fetchSideOverrides(): Promise<Map<string, LineupSide>> {
   return overrides
 }
 
-function buildPlayer(row: RawRow, overrides: Map<string, LineupSide>, includeFantasyProjection: boolean): LineupPlayer {
+async function fetchProjectionOverrides(): Promise<Map<string, number>> {
+  const supabase = createServerSupabaseClient("nrl")
+  const { data, error } = await supabase
+    .from("fantasy_projection_overrides")
+    .select("match_id, player_id, projection_override_points")
+  if (error || !data) return new Map()
+
+  const overrides = new Map<string, number>()
+  for (const row of data as unknown as RawRow[]) {
+    const matchId = text(row.match_id)
+    const playerId = numberOrNull(row.player_id)
+    const delta = numberOrNull(row.projection_override_points)
+    if (!matchId || playerId == null || delta == null) continue
+    overrides.set(projectionOverrideKey(matchId, playerId), delta)
+  }
+  return overrides
+}
+
+function buildPlayer(
+  row: RawRow,
+  overrides: Map<string, LineupSide>,
+  projectionOverrides: Map<string, number>,
+  includeFantasyProjection: boolean,
+): LineupPlayer {
   const matchId = text(row.match_id)
   const team = text(row.team)
   const number = numberOrNull(row.number)
   const playerId = numberOrNull(row.player_id)
   const isOnField = booleanValue(row.is_on_field)
+  const modelProjection = numberOrNull(row.model_projection)
+  const projectionDelta = projectionOverrides.get(projectionOverrideKey(matchId, playerId)) ?? 0
   const override = overrideKey(matchId, team, playerId, number)
     .map((key) => overrides.get(key))
     .find((side): side is LineupSide => Boolean(side))
@@ -580,7 +609,7 @@ function buildPlayer(row: RawRow, overrides: Map<string, LineupSide>, includeFan
     headImage: nullableText(row.head_image),
     bodyImage: nullableText(row.body_image),
     fantasyProjection: includeFantasyProjection
-      ? numberOrNull(row.model_projection) ?? numberOrNull(row.fantasy_projection)
+      ? modelProjection == null ? null : modelProjection + projectionDelta
       : null,
     side,
     sideSource: override ? "override" : side === "unknown" ? "unknown" : "nominal",
@@ -608,13 +637,18 @@ function emptyTeam(team: string, teamType: "Home" | "Away"): LineupTeam {
   }
 }
 
-function buildMatchesFromLineupRows(rows: RawRow[], overrides: Map<string, LineupSide>, includeFantasyProjections: boolean): LineupMatch[] {
+function buildMatchesFromLineupRows(
+  rows: RawRow[],
+  overrides: Map<string, LineupSide>,
+  projectionOverrides: Map<string, number>,
+  includeFantasyProjections: boolean,
+): LineupMatch[] {
   const matches = new Map<string, { base: RawRow; players: LineupPlayer[] }>()
   for (const row of rows) {
     const matchId = text(row.match_id)
     if (!matchId) continue
     const group = matches.get(matchId) ?? { base: row, players: [] }
-    group.players.push(buildPlayer(row, overrides, includeFantasyProjections))
+    group.players.push(buildPlayer(row, overrides, projectionOverrides, includeFantasyProjections))
     matches.set(matchId, group)
   }
 
@@ -646,12 +680,15 @@ export async function fetchUpcomingLineups(options: FetchUpcomingLineupsOptions 
   try {
     const fromDate = getLineupWindowStartInBrisbane()
     const includeFantasyProjections = options.includeFantasyProjections === true
-    const [rows, overrides] = await Promise.all([
+    const [rows, overrides, projectionOverrides] = await Promise.all([
       fetchAllLineupRows(fromDate, includeFantasyProjections),
       fetchSideOverrides().catch(() => new Map<string, LineupSide>()),
+      includeFantasyProjections
+        ? fetchProjectionOverrides().catch(() => new Map<string, number>())
+        : Promise.resolve(new Map<string, number>()),
     ])
 
-    return buildMatchesFromLineupRows(rows, overrides, includeFantasyProjections)
+    return buildMatchesFromLineupRows(rows, overrides, projectionOverrides, includeFantasyProjections)
   } catch (error) {
     console.warn("Unable to fetch upcoming lineups; using empty lineups list.", error)
     return []
@@ -913,7 +950,7 @@ export async function fetchLineupsForRound({
 }): Promise<LineupRoundMatchesResult> {
   try {
     const supabase = createServerSupabaseClient("nrl")
-    const [{ data, error }, lineupRows, overrides, historicalPlayerStats, recentResults, draw2026Data] = await Promise.all([
+    const [{ data, error }, lineupRows, overrides, projectionOverrides, historicalPlayerStats, recentResults, draw2026Data] = await Promise.all([
       supabase
         .from("matches")
         .select(
@@ -959,6 +996,9 @@ export async function fetchLineupsForRound({
         .order("match_date", { ascending: true }),
       fetchLineupRowsForRound(round, year, includeFantasyProjections).catch(() => []),
       fetchSideOverrides().catch(() => new Map<string, LineupSide>()),
+      includeFantasyProjections
+        ? fetchProjectionOverrides().catch(() => new Map<string, number>())
+        : Promise.resolve(new Map<string, number>()),
       fetchHistoricalPlayerStatsForRound(round, year).catch(() => ({
         fantasyTotals: new Map<string, number>(),
         playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
@@ -969,7 +1009,7 @@ export async function fetchLineupsForRound({
 
     if (error) throw new Error(`Supabase fetch nrl.matches round ${round}: ${error.message}`)
 
-    const lineupMatches = buildMatchesFromLineupRows(lineupRows, overrides, includeFantasyProjections)
+    const lineupMatches = buildMatchesFromLineupRows(lineupRows, overrides, projectionOverrides, includeFantasyProjections)
     const lineupsByKey = new Map<string, LineupMatch>()
     for (const match of lineupMatches) {
       const home = match.homeTeam?.team ?? match.match.split(/\s+vs\s+/i)[0]?.trim()

@@ -1266,8 +1266,6 @@ export default async function Home() {
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-2.5 sm:p-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="text-xl font-bold text-white sm:text-3xl">{spotlightFantasyPlayer?.name ?? "Fantasy player"}</h4>
-                      <span className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-white/55">Team: {spotlightTeam ?? "-"}</span>
-                      <span className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1 text-xs text-white/55">Status: {spotlightFantasyPlayer?.status ?? "available"}</span>
                       {spotlightLineupRole?.position ? (
                         <span className="rounded-md border border-emerald-400/35 bg-emerald-400/10 px-2 py-1 text-xs font-semibold text-emerald-300">
                           Lineup: {spotlightLineupRole.position}

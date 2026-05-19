@@ -87,6 +87,16 @@ interface MyTeamChatMessage {
   content: string
 }
 
+function isSavedMyTeam(value: unknown): value is SavedMyTeam {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    "players" in value &&
+    Array.isArray((value as { players?: unknown }).players)
+  )
+}
+
 function readScreenshotFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -702,7 +712,7 @@ function MyTeamAiChatPanel({
                 type="submit"
                 disabled={!draft.trim() || isSending}
                 aria-label="Ask NRL AI"
-                className="absolute bottom-1.5 right-1.5 grid h-7 w-7 place-items-center rounded-full border border-nrl-accent/50 bg-nrl-accent text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.22)] transition-opacity disabled:cursor-not-allowed disabled:opacity-45 lg:bottom-2 lg:right-2 lg:h-8 lg:w-8"
+                className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-nrl-accent/50 bg-nrl-accent text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.22)] transition-opacity disabled:cursor-not-allowed disabled:opacity-45 lg:right-3 lg:h-8 lg:w-8"
               >
                 {isSending ? (
                   <span className="inline-flex items-center gap-0.5">
@@ -1166,23 +1176,83 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   const [isAiPanelPinned, setIsAiPanelPinned] = useState(false)
   const [aiPanelHeight, setAiPanelHeight] = useState(0)
   const [aiPanelFrame, setAiPanelFrame] = useState<{ left: number; width: number } | null>(null)
+  const hasLoadedSavedTeamRef = useRef(false)
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
   const fantasyCoachPlayersById = useMemo(() => new Map(fantasyCoachPlayers.map((player) => [player.id, player])), [fantasyCoachPlayers])
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(MY_TEAM_LOCAL_KEY)
-      if (!saved) return
-      const parsed = JSON.parse(saved) as SavedMyTeam
-      if (Array.isArray(parsed.players)) setTeam(remapSavedTeam(parsed, fantasyPlayers))
-    } catch {
-      window.localStorage.removeItem(MY_TEAM_LOCAL_KEY)
+    let cancelled = false
+
+    const readLocalTeam = () => {
+      try {
+        const saved = window.localStorage.getItem(MY_TEAM_LOCAL_KEY)
+        if (!saved) return null
+        const parsed = JSON.parse(saved) as unknown
+        return isSavedMyTeam(parsed) ? remapSavedTeam(parsed, fantasyPlayers) : null
+      } catch {
+        window.localStorage.removeItem(MY_TEAM_LOCAL_KEY)
+        return null
+      }
+    }
+
+    const loadSavedTeam = async () => {
+      const localTeam = readLocalTeam()
+
+      try {
+        const response = await fetch("/api/user/my-team", { cache: "no-store" })
+        if (cancelled) return
+
+        if (response.status === 401) {
+          if (localTeam) setTeam(localTeam)
+          return
+        }
+
+        const payload = (await response.json().catch(() => null)) as { team?: unknown } | null
+        if (response.ok) {
+          if (isSavedMyTeam(payload?.team)) {
+            const remoteTeam = remapSavedTeam(payload.team, fantasyPlayers)
+            setTeam(remoteTeam)
+            window.localStorage.setItem(MY_TEAM_LOCAL_KEY, JSON.stringify(remoteTeam))
+          } else {
+            setTeam(null)
+            window.localStorage.removeItem(MY_TEAM_LOCAL_KEY)
+          }
+          return
+        }
+
+        if (localTeam) setTeam(localTeam)
+      } catch {
+        if (!cancelled && localTeam) setTeam(localTeam)
+      } finally {
+        if (!cancelled) hasLoadedSavedTeamRef.current = true
+      }
+    }
+
+    void loadSavedTeam()
+
+    return () => {
+      cancelled = true
     }
   }, [fantasyPlayers])
 
   useEffect(() => {
-    if (!team) return
+    if (!team || !hasLoadedSavedTeamRef.current) return
+
     window.localStorage.setItem(MY_TEAM_LOCAL_KEY, JSON.stringify(team))
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => {
+      void fetch("/api/user/my-team", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team }),
+        signal: controller.signal,
+      }).catch(() => null)
+    }, 350)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
   }, [team])
 
   useEffect(() => {
@@ -1308,6 +1378,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   const handleClearTeam = () => {
     setTeam(null)
     window.localStorage.removeItem(MY_TEAM_LOCAL_KEY)
+    void fetch("/api/user/my-team", { method: "DELETE" }).catch(() => null)
   }
 
   const captainValue = team ? String(team.players.findIndex((player) => player.isCaptain)) : "-1"

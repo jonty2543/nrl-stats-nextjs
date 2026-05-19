@@ -4699,14 +4699,6 @@ export function FantasyDashboard({
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1.5 text-[8px] sm:gap-3 sm:text-xs">
-                        {latestLocalRow ? (
-                          <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1 py-0.5 text-nrl-muted sm:px-2 sm:py-1">
-                            Team: {latestLocalRow.Team}
-                          </span>
-                        ) : null}
-                        <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1 py-0.5 text-nrl-muted sm:px-2 sm:py-1">
-                          Status: {selectedFantasyPlayer.status ?? "N/A"}
-                        </span>
                         {selectedLineupRole?.position && lineupsProjections?.source === "lineups" ? (
                           <span className="rounded-md border border-emerald-400/35 bg-emerald-400/10 px-1 py-0.5 font-semibold text-emerald-300 sm:px-2 sm:py-1">
                             Lineup: {selectedLineupRole.position}

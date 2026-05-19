@@ -192,6 +192,7 @@ interface AllPlayersTableRow {
   breakeven: number | null
   weeklyChange: number | null
   relevantOuts: CasualtyWardRecord[]
+  majorByeRoundTags: MajorByeRoundTag[]
   nextMajorByeRound: number | null
   playsNextMajorBye: boolean | null
   originChance: boolean
@@ -291,6 +292,12 @@ const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
   "inline-flex h-5 w-12 items-center justify-center rounded bg-[#263154] text-slate-100"
 const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[3px] select-none"
+
+interface MajorByeRoundTag {
+  round: number
+  plays: boolean | null
+}
+
 const STATIC_LOCKED_PREVIEW_TREND_ROWS = [
   { Year: "2025", Round: 1, Round_Label: "1", Opponent: "BRI", Fantasy: 43, "All Run Metres": 112 },
   { Year: "2025", Round: 2, Round_Label: "2", Opponent: "MEL", Fantasy: 57, "All Run Metres": 138 },
@@ -1254,19 +1261,26 @@ function formatNextMajorByeTag(round: number | null, plays: boolean | null): str
 }
 
 function getFantasyFilterTags({
+  majorByeRoundTags,
   nextMajorByeRound,
   playsNextMajorBye,
   relevantOuts,
   originChance,
 }: {
+  majorByeRoundTags?: MajorByeRoundTag[]
   nextMajorByeRound: number | null
   playsNextMajorBye: boolean | null
   relevantOuts: CasualtyWardRecord[]
   originChance: boolean
 }): string[] {
   const tags: string[] = []
-  const byeTag = formatNextMajorByeTag(nextMajorByeRound, playsNextMajorBye)
-  if (byeTag) tags.push(byeTag)
+  const byeTags =
+    majorByeRoundTags && majorByeRoundTags.length > 0
+      ? majorByeRoundTags
+        .map((tag) => formatNextMajorByeTag(tag.round, tag.plays))
+        .filter((tag): tag is string => Boolean(tag))
+      : [formatNextMajorByeTag(nextMajorByeRound, playsNextMajorBye)].filter((tag): tag is string => Boolean(tag))
+  tags.push(...byeTags)
   if (relevantOuts.length > 0) tags.push(FANTASY_FILTER_TAG_RELEVANT_OUTS)
   if (originChance) tags.push(FANTASY_FILTER_TAG_ORIGIN_CHANCE)
   return tags
@@ -1290,37 +1304,45 @@ function teamPlaysInRound(draw2026Data: Draw2026Data | null | undefined, round: 
 
 function PlayerContextTags({
   relevantOuts,
+  majorByeRoundTags,
   nextMajorByeRound,
   playsNextMajorBye,
   originChance,
   className = "",
 }: {
   relevantOuts: CasualtyWardRecord[]
+  majorByeRoundTags?: MajorByeRoundTag[]
   nextMajorByeRound: number | null
   playsNextMajorBye: boolean | null
   originChance: boolean
   className?: string
 }) {
-  const showByeTag = nextMajorByeRound !== null && playsNextMajorBye !== null
-  if (!showByeTag && !originChance && relevantOuts.length === 0) return null
+  const byeTags =
+    majorByeRoundTags && majorByeRoundTags.length > 0
+      ? majorByeRoundTags.filter((tag) => tag.plays !== null)
+      : nextMajorByeRound !== null && playsNextMajorBye !== null
+        ? [{ round: nextMajorByeRound, plays: playsNextMajorBye }]
+        : []
+  if (byeTags.length === 0 && !originChance && relevantOuts.length === 0) return null
 
   return (
     <div className={`flex min-w-0 flex-wrap items-center gap-1.5 ${className}`}>
-      {showByeTag ? (
+      {byeTags.map((tag) => (
         <span
+          key={tag.round}
           className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
-            playsNextMajorBye
+            tag.plays
               ? "border-emerald-400/35 bg-emerald-400/10 text-slate-100"
               : "border-rose-400/35 bg-rose-400/10 text-slate-100"
           }`}
-          title={playsNextMajorBye ? `Plays in Round ${nextMajorByeRound}` : `Bye in Round ${nextMajorByeRound}`}
+          title={tag.plays ? `Plays in Round ${tag.round}` : `Bye in Round ${tag.round}`}
         >
-          <span aria-hidden="true" className={playsNextMajorBye ? "text-emerald-300" : "text-rose-300"}>
-            {playsNextMajorBye ? "✓" : "✕"}{" "}
+          <span aria-hidden="true" className={tag.plays ? "text-emerald-300" : "text-rose-300"}>
+            {tag.plays ? "✓" : "✕"}{" "}
           </span>
-          Rd{nextMajorByeRound}
+          Rd{tag.round}
         </span>
-      ) : null}
+      ))}
       {relevantOuts.length > 0 ? (
         <span
           className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[8px] font-bold normal-case tracking-wide text-slate-100"
@@ -3222,6 +3244,10 @@ export function FantasyDashboard({
       const nextMajorByeRound = getNextMajorByeRound(projectionRound)
       const byeTeam = lineupRole?.team ?? teamHint ?? imageRow?.team ?? null
       const playsNextMajorBye = teamPlaysInRound(draw2026Data, nextMajorByeRound, byeTeam)
+      const majorByeRoundTags = MAJOR_BYE_ROUNDS.map((round) => ({
+        round,
+        plays: teamPlaysInRound(draw2026Data, round, byeTeam),
+      }))
       const relevantOutRows =
         lineupsProjections?.source === "lineups" && lineupRole?.isOnField && lineupRole.team && lineupRole.position
           ? relevantOutCandidates
@@ -3254,6 +3280,7 @@ export function FantasyDashboard({
           projectionRound
         ),
         relevantOuts: relevantOutRows,
+        majorByeRoundTags,
         nextMajorByeRound,
         playsNextMajorBye,
         originChance,
@@ -3455,8 +3482,10 @@ export function FantasyDashboard({
     let hasRelevantOuts = false
     let hasOriginChance = false
     for (const row of allPlayersTableRows) {
-      const byeTag = formatNextMajorByeTag(row.nextMajorByeRound, row.playsNextMajorBye)
-      if (byeTag) byeOptions.add(byeTag)
+      for (const tag of row.majorByeRoundTags) {
+        const byeTag = formatNextMajorByeTag(tag.round, tag.plays)
+        if (byeTag) byeOptions.add(byeTag)
+      }
       if (row.relevantOuts.length > 0) hasRelevantOuts = true
       if (row.originChance) hasOriginChance = true
     }
@@ -4448,6 +4477,7 @@ export function FantasyDashboard({
                             {showAllPlayersCardTags ? (
                               <PlayerContextTags
                                 relevantOuts={row.relevantOuts}
+                                majorByeRoundTags={row.majorByeRoundTags}
                                 nextMajorByeRound={row.nextMajorByeRound}
                                 playsNextMajorBye={row.playsNextMajorBye}
                                 originChance={row.originChance}
@@ -4684,6 +4714,7 @@ export function FantasyDashboard({
                         {selectedAllPlayersTableRow ? (
                           <PlayerContextTags
                             relevantOuts={[]}
+                            majorByeRoundTags={selectedAllPlayersTableRow.majorByeRoundTags}
                             nextMajorByeRound={selectedAllPlayersTableRow.nextMajorByeRound}
                             playsNextMajorBye={selectedAllPlayersTableRow.playsNextMajorBye}
                             originChance={selectedAllPlayersTableRow.originChance}

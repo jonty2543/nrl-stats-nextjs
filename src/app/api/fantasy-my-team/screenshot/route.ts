@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic"
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 const DEFAULT_MODEL = "gpt-5-mini"
-const MAX_IMAGE_COUNT = 2
+const MAX_IMAGE_COUNT = 3
 const MAX_DATA_URL_LENGTH = 800_000
 
 interface ScreenshotInput {
@@ -67,6 +67,18 @@ function parseJsonObject(text: string): unknown {
   }
 }
 
+function openAiErrorMessage(text: string): string {
+  try {
+    const parsed = JSON.parse(text) as { error?: { message?: unknown } }
+    if (typeof parsed.error?.message === "string" && parsed.error.message.trim()) {
+      return parsed.error.message.trim()
+    }
+  } catch {
+    // Fall back to raw text below.
+  }
+  return text.trim()
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth()
@@ -91,7 +103,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (validImages.length === 0) {
-      return NextResponse.json({ error: "Upload one or two PNG, JPEG, or WebP screenshots." }, { status: 400 })
+      return NextResponse.json({ error: "Upload one to three PNG, JPEG, or WebP screenshots." }, { status: 400 })
     }
 
     const response = await fetch(OPENAI_RESPONSES_URL, {
@@ -105,13 +117,16 @@ export async function POST(request: NextRequest) {
         reasoning: { effort: "low" },
         instructions: [
           "Extract one NRL Fantasy classic My Team squad from screenshots.",
-          "The screenshots may show the top of the team, lower starters, bench, emergencies, and the key.",
+          "The screenshots may show the top of the team, lower starters, bench, emergencies, the key, and a trade screen.",
           "Read the team name, visible round, every visible player name, position row, and markers.",
+          "If a trade screen is included, read total trades remaining, bank remaining, and trades available this week.",
+          "For trades, distinguish the values carefully: in displays like '(15)3' or '(15)3/2', tradesRemaining is 15 and tradesAvailableThisWeek is 3. Ignore the trailing weekly allowance such as '2 this week' or '/2'.",
           "Starting position rows are HOK, MID, EDG, HLF, CTR, and WFB. Bench rows can be INT and EMG.",
           "Use squadRole starter for players on the field, interchange for INT bench players, and emergency for EMG bench players.",
           "Set benchOrder when a visible INT/EMG number appears. Set isCaptain for C, isViceCaptain for V, isBye for BYE, and status uncertain for yellow question mark, injured for red cross/plus, suspended for red dot.",
-          "Return JSON only in this exact shape: {\"teamName\":\"\",\"round\":\"\",\"players\":[{\"name\":\"\",\"slot\":\"HOK\",\"squadRole\":\"starter\",\"benchOrder\":null,\"isCaptain\":false,\"isViceCaptain\":false,\"isBye\":false,\"status\":null}]}",
+          "Return JSON only in this exact shape: {\"teamName\":\"\",\"round\":\"\",\"tradesRemaining\":\"\",\"bankRemaining\":\"\",\"tradesAvailableThisWeek\":\"\",\"players\":[{\"name\":\"\",\"slot\":\"HOK\",\"squadRole\":\"starter\",\"benchOrder\":null,\"isCaptain\":false,\"isViceCaptain\":false,\"isBye\":false,\"status\":null}]}",
           "Keep abbreviated names exactly as visible, for example J. Hughes. Do not include scores, clubs, or marker text in the name.",
+          "Return clean trade values as plain numbers where possible, for example tradesRemaining '15' and tradesAvailableThisWeek '3'. Keep bank values exactly as visible, for example $123k.",
           "Do not invent missing players. If a player is partly hidden and unreadable, omit them.",
         ].join("\n"),
         input: [{
@@ -128,14 +143,15 @@ export async function POST(request: NextRequest) {
             })),
           ],
         }],
-        max_output_tokens: 1800,
+        max_output_tokens: 3000,
       }),
     })
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "")
+      const details = openAiErrorMessage(errorText)
       return NextResponse.json(
-        { error: "Failed to process screenshots.", details: errorText.slice(0, 500) },
+        { error: "Failed to process screenshots.", details: details.slice(0, 500) },
         { status: response.status }
       )
     }

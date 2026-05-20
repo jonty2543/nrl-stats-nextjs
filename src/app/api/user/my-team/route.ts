@@ -20,6 +20,9 @@ interface MyTeamPlayer {
 interface SavedMyTeam {
   teamName: string
   round: string
+  tradesRemaining: string
+  bankRemaining: string
+  tradesAvailableThisWeek: string
   players: MyTeamPlayer[]
 }
 
@@ -55,6 +58,9 @@ function isSavedMyTeam(value: unknown): value is SavedMyTeam {
   return (
     typeof value.teamName === "string" &&
     typeof value.round === "string" &&
+    (typeof value.tradesRemaining === "string" || value.tradesRemaining === undefined) &&
+    (typeof value.bankRemaining === "string" || value.bankRemaining === undefined) &&
+    (typeof value.tradesAvailableThisWeek === "string" || value.tradesAvailableThisWeek === undefined) &&
     Array.isArray(value.players) &&
     value.players.every(isMyTeamPlayer)
   )

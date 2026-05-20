@@ -427,6 +427,48 @@ function playerLabelForPrompt(
   return parts.join(" | ")
 }
 
+function isPromptNonPlayer(
+  player: MyTeamPlayer,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  lineupsProjections: LineupsProjectionSnapshot,
+): boolean {
+  const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) : null
+  if (!fantasyPlayer) return player.isBye || player.status === "injured" || player.status === "suspended"
+  if (effectiveIsBye(player, fantasyPlayersById)) return true
+  if (isFantasyPlayerUnavailableForProjectionFallback(fantasyPlayer)) return true
+  if (player.status === "injured" || player.status === "suspended") return true
+  return getLineupsNamedStatus(player, fantasyPlayersById, lineupsProjections) === false
+}
+
+function promptPlayerName(player: MyTeamPlayer, fantasyPlayersById: Map<number, FantasyPlayerSnapshot>): string {
+  return player.playerId != null ? fantasyPlayersById.get(player.playerId)?.name ?? player.displayName : player.displayName
+}
+
+function buildLoopCandidateSummary(
+  team: SavedMyTeam,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  lineupsProjections: LineupsProjectionSnapshot,
+): string {
+  const benchPlayers = team.players
+    .filter((player) => player.squadRole !== "starter")
+    .sort((a, b) => (a.benchOrder ?? 99) - (b.benchOrder ?? 99))
+  const lines = team.players
+    .filter((player) => player.squadRole === "starter" && isPromptNonPlayer(player, fantasyPlayersById, lineupsProjections))
+    .flatMap((starter) => {
+      const cover = benchPlayers.filter(
+        (candidate) =>
+          !isPromptNonPlayer(candidate, fantasyPlayersById, lineupsProjections) &&
+          playerCanCoverSlot(candidate, starter.slot, fantasyPlayersById),
+      )
+      if (cover.length < 2) return []
+      return [
+        `- Non-playing ${starter.slot} starter ${promptPlayerName(starter, fantasyPlayersById)} can create a starter/INT loop with ${cover.slice(0, 4).map((candidate) => `${promptPlayerName(candidate, fantasyPlayersById)} (${candidate.squadRole}${candidate.benchOrder != null ? ` ${candidate.benchOrder}` : ""})`).join(", ")}.`,
+      ]
+    })
+
+  return lines.length ? `Detected loop candidates:\n${lines.join("\n")}` : ""
+}
+
 function buildMyTeamAiPrompt({
   question,
   team,
@@ -445,6 +487,7 @@ function buildMyTeamAiPrompt({
   const starters = team.players.filter((player) => player.squadRole === "starter")
   const interchange = team.players.filter((player) => player.squadRole === "interchange")
   const emergency = team.players.filter((player) => player.squadRole === "emergency")
+  const loopCandidateSummary = buildLoopCandidateSummary(team, fantasyPlayersById, lineupsProjections)
   const ownedPlayerNames = team.players
     .map((player) => player.playerId != null ? fantasyPlayersById.get(player.playerId)?.name ?? player.displayName : player.displayName)
     .filter(Boolean)
@@ -485,6 +528,7 @@ function buildMyTeamAiPrompt({
       ? "Use internal/live fantasy data where available for projections, breakevens, prices, ownership movement, lineup status, casualty ward, draw and Origin risk. If live data is unavailable, say what you can infer from the supplied team only."
       : "Use internal/live fantasy data where available for prices, ownership movement, recent form, lineup status and draw. Do not use or mention projections, breakevens, casualty ward or Origin context for locked/free users.",
     "Important: live database bye/availability overrides screenshot marker extraction. Do not say a player has a bye or is DNP if the roster line says live database bye flag no, unless a current lineup/casualty tool explicitly confirms they are out. Screenshot bye/DNP markers and yellow question marks can be OCR noise.",
+    "A roster line that says lineups not named is live lineup evidence that the player is not playing. Treat that player as a red-dot/DNP even if the live database bye flag says no.",
     "If a roster line says ignore screenshot bye marker; live database says not bye, treat that player as active/available unless another live tool says otherwise. Do not list that player as missing the round.",
     "When writing priced at values, round to the nearest whole number and do not show pricedAt decimals.",
     "For broad trade questions, actively use the fantasy snapshot tool/data like Find Trades: fetch owned players by playerNames for sell/hold context, then fetch non-owned buy/value candidates. Respect the Pro/free metric rules below.",
@@ -507,8 +551,10 @@ function buildMyTeamAiPrompt({
     "For Top 5 trade-ins, lean heavily on traded-in ownership delta: clearly rising ownership should lift a player up the list when bye coverage and role are sound. Do not bury a strongly traded-in player behind a lower-momentum option unless the lower-momentum player is clearly better on bye availability, role security, or value.",
     "When prices/bank are unknown, avoid pretending you can afford exact moves. Give ranked targets and say affordability needs checking.",
     "Major bye/scoring rule: rounds 12, 15, and 18 only use 13 scoring players. In those rounds, prioritise getting 13 strong active scorers rather than a normal 17.",
-    "Looping rule: a bench/emergency score can be accepted by leaving a non-playing red-dot/DNP player in the scoring side. For a non-playing starter in the 13, cover must be position-compatible from INT/EMG. Emergency players can sub into INT spots. INT loops with EMG can work even when the emergency is not the same position as the non-playing INT.",
-    "Looping practical advice: use an early-playing emergency/bench player as the trial score; if the score is strong, keep the red-dot/DNP setup so the emergency score counts; if the score is poor, swap/trade to an active player before lockout where possible.",
+    "Looping rule: a bench/emergency score can be accepted by leaving a non-playing red-dot/DNP player in the scoring side. For a non-playing starter in the 13, cover must be position-compatible from INT/EMG. During major bye rounds, actively check starter-to-INT loops because the 13 scorers can come from starters and interchange, not just EMG-to-INT.",
+    "Starter/INT loop practical advice: if two active INT/EMG players can cover a non-playing starter's position, put the earlier-playing option in the first relevant INT/bench slot as the trial score. If that score is good, leave the non-playing starter setup so it counts; if not, swap the later-playing cover option into the scoring path before lockout.",
+    "Loop red-dot quality: bye players are the best loop anchors because they do not lock. Injured, suspended, or otherwise red-marked players lock when their NRL team plays, so mention that lockout risk if recommending them as the anchor.",
+    "Do not invent a loop through a player marked lineups not named. A lineups not named player is the red-dot anchor, not the trial score.",
     "Do not overstate certainty about lockouts or substitutions; explain the assumption and the risk clearly.",
     "Do not state the obvious or add throwaway notes. Avoid generic reminders like do not VC a non-playing player, obvious DNP/bye bench lists, or captain-loop caveats unless they directly change the recommended action.",
     "Avoid sections like Quick risks/notes unless the user specifically asks for risks. If there is one critical risk, fold it into the relevant recommendation in one short sentence.",
@@ -524,6 +570,7 @@ function buildMyTeamAiPrompt({
     interchange.map((player) => `- ${playerLabelForPrompt(player, fantasyPlayersById, lineupsProjections, hasFantasyPlotAccess)}`).join("\n") || "- none",
     "Emergencies:",
     emergency.map((player) => `- ${playerLabelForPrompt(player, fantasyPlayersById, lineupsProjections, hasFantasyPlotAccess)}`).join("\n") || "- none",
+    loopCandidateSummary,
     recentHistory ? `Recent chat:\n${recentHistory}` : "",
     `User question: ${question}`,
   ].filter(Boolean).join("\n")

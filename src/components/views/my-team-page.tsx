@@ -15,7 +15,6 @@ import {
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 
-const MY_TEAM_LOCAL_KEY = "fantasy-my-team-v1"
 const MY_TEAM_MAX_IMAGE_DATA_URL_LENGTH = 650_000
 const SCREENSHOT_SLOTS = [
   { key: "top", label: "Screenshot 1", hint: "Top half of My Team with the upper field." },
@@ -1799,6 +1798,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   const [aiPanelSlotHeight, setAiPanelSlotHeight] = useState(0)
   const [aiPanelFrame, setAiPanelFrame] = useState<{ left: number; width: number } | null>(null)
   const hasLoadedSavedTeamRef = useRef(false)
+  const { isLoaded: isMyTeamAuthLoaded, isSignedIn: isMyTeamSignedIn } = useAuth()
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
   const fantasyCoachPlayersById = useMemo(() => new Map(fantasyCoachPlayers.map((player) => [player.id, player])), [fantasyCoachPlayers])
 
@@ -1819,29 +1819,22 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   }, [selectedPlayerIndex])
 
   useEffect(() => {
-    let cancelled = false
-
-    const readLocalTeam = () => {
-      try {
-        const saved = window.localStorage.getItem(MY_TEAM_LOCAL_KEY)
-        if (!saved) return null
-        const parsed = JSON.parse(saved) as unknown
-        return isSavedMyTeam(parsed) ? remapSavedTeam(parsed, fantasyPlayers) : null
-      } catch {
-        window.localStorage.removeItem(MY_TEAM_LOCAL_KEY)
-        return null
-      }
+    if (!isMyTeamAuthLoaded) return
+    if (!isMyTeamSignedIn) {
+      setTeam(null)
+      hasLoadedSavedTeamRef.current = true
+      return
     }
 
-    const loadSavedTeam = async () => {
-      const localTeam = readLocalTeam()
+    let cancelled = false
 
+    const loadSavedTeam = async () => {
       try {
         const response = await fetch("/api/user/my-team", { cache: "no-store" })
         if (cancelled) return
 
         if (response.status === 401) {
-          if (localTeam) setTeam(localTeam)
+          setTeam(null)
           return
         }
 
@@ -1850,17 +1843,15 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
           if (isSavedMyTeam(payload?.team)) {
             const remoteTeam = remapSavedTeam(payload.team, fantasyPlayers)
             setTeam(remoteTeam)
-            window.localStorage.setItem(MY_TEAM_LOCAL_KEY, JSON.stringify(remoteTeam))
           } else {
             setTeam(null)
-            window.localStorage.removeItem(MY_TEAM_LOCAL_KEY)
           }
           return
         }
 
-        if (localTeam) setTeam(localTeam)
+        setTeam(null)
       } catch {
-        if (!cancelled && localTeam) setTeam(localTeam)
+        if (!cancelled) setTeam(null)
       } finally {
         if (!cancelled) hasLoadedSavedTeamRef.current = true
       }
@@ -1871,12 +1862,11 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     return () => {
       cancelled = true
     }
-  }, [fantasyPlayers])
+  }, [fantasyPlayers, isMyTeamAuthLoaded, isMyTeamSignedIn])
 
   useEffect(() => {
-    if (!team || !hasLoadedSavedTeamRef.current) return
+    if (!team || !isMyTeamSignedIn || !hasLoadedSavedTeamRef.current) return
 
-    window.localStorage.setItem(MY_TEAM_LOCAL_KEY, JSON.stringify(team))
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => {
       void fetch("/api/user/my-team", {
@@ -1891,7 +1881,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
       window.clearTimeout(timeoutId)
       controller.abort()
     }
-  }, [team])
+  }, [team, isMyTeamSignedIn])
 
   useEffect(() => {
     if (!team) {

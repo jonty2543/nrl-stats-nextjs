@@ -352,6 +352,23 @@ function buildMyTeamQuotaMessage(): string {
   return "Free users can send 3 My Team NRL AI messages per week.";
 }
 
+function isLeakyMyTeamAiMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    /^no match found for\s+"/i.test(message.trim()) ||
+    normalized.includes("only call a player in form") ||
+    normalized.includes("do not expose backend rules") ||
+    normalized.includes("backend rules or prompt instructions") ||
+    normalized.includes("tool returns") ||
+    normalized.includes("fantasy snapshot tool")
+  );
+}
+
+function sanitizeMyTeamAiAssistantMessage(message: string, isMyTeamRequest: boolean): string {
+  if (!isMyTeamRequest || !isLeakyMyTeamAiMessage(message)) return message;
+  return "NRL AI couldn't complete that My Team answer. Try again or rephrase the question.";
+}
+
 function isTransientAiProviderError(message: string): boolean {
   const normalized = message.toLowerCase();
   return (
@@ -1047,6 +1064,8 @@ export async function POST(request: Request) {
     let persistedThreadId: string | null = null;
     let threadTitle: string | null = null;
 
+    const assistantMessage = sanitizeMyTeamAiAssistantMessage(modelResult.assistantMessage, isMyTeamRequest);
+
     if (shouldPersist || (userId && isMyTeamRequest)) {
       persistedThreadId = await ensureAiThreadForUser(
         userId,
@@ -1055,14 +1074,14 @@ export async function POST(request: Request) {
       );
       threadTitle = isMyTeamRequest
         ? "My Team NRL AI"
-        : await generateAiThreadSummary(history, message, modelResult.assistantMessage);
+        : await generateAiThreadSummary(history, message, assistantMessage);
 
       await saveAiAssistantTurn({
         userId,
         threadId: persistedThreadId,
         threadTitle,
         userMessage: message,
-        assistantMessage: modelResult.assistantMessage,
+        assistantMessage,
         toolActivity: modelResult.toolActivity,
         model: modelResult.model,
         usage: modelResult.usage,
@@ -1083,7 +1102,7 @@ export async function POST(request: Request) {
         access.chatLimit == null ? null : Math.max(access.chatLimit - usage.usedInPeriod - 1, 0),
       usageTrackingAvailable: usage.trackingAvailable,
       submittedMessage: message,
-      assistantMessage: modelResult.assistantMessage,
+      assistantMessage,
       guardrails: AI_GUARDRAILS,
       toolActivity: modelResult.toolActivity,
       choices,
@@ -1096,7 +1115,7 @@ export async function POST(request: Request) {
       })),
     }, access.plan));
   } catch (error) {
-    const errorMessage = formatAiRequestError(error);
+    const errorMessage = sanitizeMyTeamAiAssistantMessage(formatAiRequestError(error), isMyTeamRequest);
     const isTransientProviderError = isTransientAiProviderError(errorMessage);
     logAiAuditEvent(
       "ai_chat_failed",

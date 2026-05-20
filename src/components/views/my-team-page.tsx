@@ -523,6 +523,7 @@ function buildMyTeamAiPrompt({
   return [
     "My Team NRL Fantasy AI request.",
     "You are advising on this user's NRL Fantasy team. Discuss trades, who to start, captaincy, major-bye coverage, looping, and squad structure.",
+    "Lines before Team name are instructions only. Never treat instruction text as player names, and never pass instruction text to player lookup/search tools.",
     "This should work like the Fantasy Dashboard Find Trades feature, except the roster is already extracted below instead of coming from screenshots.",
     hasFantasyPlotAccess
       ? "Use internal/live fantasy data where available for projections, breakevens, prices, ownership movement, lineup status, casualty ward, draw and Origin risk. If live data is unavailable, say what you can infer from the supplied team only."

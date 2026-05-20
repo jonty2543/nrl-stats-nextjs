@@ -805,7 +805,7 @@ function formatFantasySnapshotContext(
     const last3Avg = typeof entry.last3Avg === "number" ? `L3 ${entry.last3Avg.toFixed(1)}` : "L3 unknown";
     const last3AvgNumber = getFantasyNumber(entry, "last3Avg");
     const pricedAtNumber = getFantasyNumber(entry, "pricedAt");
-    const pricedAt = typeof entry.pricedAt === "number" ? `priced at ${entry.pricedAt.toFixed(1)}` : "priced at unknown";
+    const pricedAt = typeof entry.pricedAt === "number" ? `priced at ${entry.pricedAt.toFixed(0)}` : "priced at unknown";
     const projection = typeof entry.projection === "number" ? `projection ${entry.projection.toFixed(1)}` : "projection unknown";
     const projectionNumber = getFantasyNumber(entry, "projection");
     const projectionValueNumber = getFantasyNumber(entry, "projectionVsPricedAt");
@@ -1053,8 +1053,8 @@ function buildFallbackTradeInLines(
           : "";
 
     const details = includeProMetrics
-      ? `${formatFallbackOwnershipDetail(ownershipDelta)}, BE ${breakEven ?? "unknown"}, priced at ${formatFallbackFantasyNumber(pricedAt)}, L3 avg ${formatFallbackFantasyNumber(last3Avg)}, projection vs pricedAt ${formatFallbackSignedNumber(projectionVsPricedAt)}, ${byeDetail}.`
-      : `${formatFallbackOwnershipDetail(ownershipDelta)}, priced at ${formatFallbackFantasyNumber(pricedAt)}, avg ${formatFallbackFantasyNumber(avgPoints)} / L3 ${formatFallbackFantasyNumber(last3Avg)}, ${byeDetail}.`;
+      ? `${formatFallbackOwnershipDetail(ownershipDelta)}, BE ${breakEven ?? "unknown"}, priced at ${formatFallbackFantasyNumber(pricedAt, 0)}, L3 avg ${formatFallbackFantasyNumber(last3Avg)}, projection vs pricedAt ${formatFallbackSignedNumber(projectionVsPricedAt)}, ${byeDetail}.`
+      : `${formatFallbackOwnershipDetail(ownershipDelta)}, priced at ${formatFallbackFantasyNumber(pricedAt, 0)}, avg ${formatFallbackFantasyNumber(avgPoints)} / L3 ${formatFallbackFantasyNumber(last3Avg)}, ${byeDetail}.`;
     return [
       `${index + 1}) ${name} — ${position} — ${priceLabel}${titleProjection} — ${rating}/10`,
       details,
@@ -3585,7 +3585,7 @@ function formatFantasySnapshotLine(entry: Record<string, unknown>, index: number
       : null;
   const avg = typeof entry.avgPoints === "number" ? `avg ${entry.avgPoints.toFixed(1)}` : null;
   const last3 = typeof entry.last3Avg === "number" ? `L3 ${entry.last3Avg.toFixed(1)}` : null;
-  const pricedAt = typeof entry.pricedAt === "number" ? `priced at ${entry.pricedAt.toFixed(1)}` : null;
+  const pricedAt = typeof entry.pricedAt === "number" ? `priced at ${entry.pricedAt.toFixed(0)}` : null;
   const difference =
     typeof entry.projectionVsPricedAt === "number"
       ? `value ${entry.projectionVsPricedAt > 0 ? "+" : ""}${entry.projectionVsPricedAt.toFixed(1)}`
@@ -3783,7 +3783,7 @@ async function tryRunDirectFantasyProjectionValueChat(
       typeof difference === "number"
         ? `${difference > 0 ? "+" : ""}${difference.toFixed(1)}`
         : "-";
-    return `${index + 1}. ${String(entry.name ?? "Unknown")} (${position}) - proj ${projection?.toFixed(1)}, priced at ${pricedAt?.toFixed(1)}, diff ${formattedDifference}, price ${price}`;
+    return `${index + 1}. ${String(entry.name ?? "Unknown")} (${position}) - proj ${projection?.toFixed(1)}, priced at ${pricedAt?.toFixed(0)}, diff ${formattedDifference}, price ${price}`;
   });
 
   return buildAiResult(
@@ -4109,7 +4109,7 @@ async function tryRunDirectFantasyPositionTradeFollowUpChat(
     const price = typeof entry.price === "number" ? formatFantasyPrice(entry.price) : "-";
     const avg = typeof entry.avgPoints === "number" ? `avg ${entry.avgPoints.toFixed(1)}` : null;
     const last3 = typeof entry.last3Avg === "number" ? `L3 ${entry.last3Avg.toFixed(1)}` : null;
-    const pricedAt = typeof entry.pricedAt === "number" ? `priced at ${entry.pricedAt.toFixed(1)}` : null;
+    const pricedAt = typeof entry.pricedAt === "number" ? `priced at ${entry.pricedAt.toFixed(0)}` : null;
     const ownershipDelta =
       typeof entry.ownershipDelta === "number"
         ? `ownership ${entry.ownershipDelta > 0 ? "+" : ""}${entry.ownershipDelta.toFixed(1)}%`
@@ -5078,7 +5078,7 @@ export async function runAiModelChat(
       ]
       : [
         "- This is a free-user Find Trades answer. Keep the same three sections and useful recommendations, but do not use projections, breakevens, projection-vs-pricedAt, casualty ward context, or Origin context as trade reasons.",
-        "- Do not write a Pro note inside the generated answer. The UI already tells users Pro unlocks more informed advice.",
+        "- Put this standalone note immediately before the Top 5 Trade Ins heading: Sign up to Pro to access projections and breakevens. Below is based on ownership movement, price, L3/form and bye coverage.",
         "- Use ownership change, price, pricedAt, season average, L3 average, named-to-play status, and next major bye availability.",
         "- Try to list 3 Sell watch candidates using negative ownership change, weak L3 or season average for the price, injury/unavailability, poor bye coverage, or awkward squad/cash fit. If fewer than 3 visible players have meaningful sell signals, list fewer rather than inventing names.",
         "- If a visible player has negative ownership movement but strong L3 form, useful bye coverage, and no availability issue, list them as Hold / Possible sell with lower urgency rather than a hard sell.",

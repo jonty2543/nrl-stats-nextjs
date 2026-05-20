@@ -1315,14 +1315,35 @@ function matchesRequestedFantasyPlayerName(playerName: string, requestedNames: s
   });
 }
 
+function normalizeDrawTeamKey(team: string): string {
+  const key = normalizeLooseSearchValue(team);
+  const aliases: Record<string, string> = {
+    "canterbury bankstown bulldogs": "bulldogs",
+    "cronulla sutherland sharks": "sharks",
+    "gold coast titans": "titans",
+    "manly warringah sea eagles": "sea eagles",
+    "new zealand": "warriors",
+    "new zealand warriors": "warriors",
+    "north queensland cowboys": "cowboys",
+    nz: "warriors",
+    "nz warriors": "warriors",
+    nzl: "warriors",
+    "parramatta eels": "eels",
+    "south sydney rabbitohs": "rabbitohs",
+    "st george illawarra dragons": "dragons",
+    "sydney roosters": "roosters",
+  };
+  return aliases[key] ?? key;
+}
+
 function teamHasDrawFixture(draw2026Data: Draw2026Data | null, round: number, team: string | null): boolean | null {
   if (!draw2026Data || !team) return null;
-  const teamKey = normalizeLooseSearchValue(team);
+  const teamKey = normalizeDrawTeamKey(team);
   if (!teamKey) return null;
   const roundRows = draw2026Data.rows.filter((row) => row.round === round);
   if (roundRows.length === 0) return null;
   return roundRows.some(
-    (row) => normalizeLooseSearchValue(row.home) === teamKey || normalizeLooseSearchValue(row.away) === teamKey
+    (row) => normalizeDrawTeamKey(row.home) === teamKey || normalizeDrawTeamKey(row.away) === teamKey
   );
 }
 
@@ -2736,6 +2757,8 @@ async function runGetFantasySnapshot(
         ? applyFantasyBreakEvenOffset(breakEvenRaw, player.id, round)
         : null;
       const projectionBaseline = hasAiProDataAccess(access.plan) ? projection : null;
+      const pricedAtRounded =
+        typeof player.pricedAt === "number" && Number.isFinite(player.pricedAt) ? Math.round(player.pricedAt) : null;
       const team = resolveFantasyPlayerTeam(player.name, playerImages);
       const nextMajorByeRound = nextFantasyMajorByeRound(round);
       const playsNextMajorByeRound =
@@ -2751,7 +2774,7 @@ async function runGetFantasySnapshot(
         positions: player.positionLabels,
         position: player.positionLabel,
         price: player.cost,
-        pricedAt: player.pricedAt,
+        pricedAt: pricedAtRounded,
         ownedBy: player.ownedBy,
         ownershipDelta,
         avgPoints: player.avgPoints,
@@ -2768,9 +2791,8 @@ async function runGetFantasySnapshot(
         projectionVsPricedAt:
           typeof projectionBaseline === "number" &&
           Number.isFinite(projectionBaseline) &&
-          typeof player.pricedAt === "number" &&
-          Number.isFinite(player.pricedAt)
-            ? roundToTwoDecimals(projectionBaseline - player.pricedAt)
+          pricedAtRounded != null
+            ? roundToTwoDecimals(projectionBaseline - pricedAtRounded)
             : null,
         breakEven,
       };

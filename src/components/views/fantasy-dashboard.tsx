@@ -4046,16 +4046,20 @@ export function FantasyDashboard({
             <Link
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}
-              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/45 bg-[linear-gradient(135deg,#00f58a_0%,#18c77d_46%,#7c3aed_100%)] px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(0,245,138,0.18)] transition-colors hover:border-violet-200 hover:bg-[linear-gradient(135deg,#22ff9d_0%,#24d28b_46%,#8b5cf6_100%)] xl:order-1 xl:min-h-[64px] xl:py-2"
+              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/55 bg-violet-700 px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(124,58,237,0.24)] transition-colors hover:border-violet-200 hover:bg-violet-600 xl:order-1 xl:min-h-[64px] xl:py-2"
             >
-              <span className="absolute -right-1 -top-2 rounded-full border border-violet-200 bg-violet-700 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-white shadow-[0_8px_18px_rgba(76,29,149,0.38)]">
+              <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+                <span className="absolute -left-2 top-2 h-14 w-36 rounded-full opacity-45 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
+                <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-35 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
+              </span>
+              <span className="absolute -right-1 -top-2 rounded-full border border-emerald-200 bg-nrl-accent px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.28)]">
                 NRL AI
               </span>
-              <span className="inline-flex items-center gap-2 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
+              <span className="relative z-10 inline-flex items-center gap-2 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
                 <PersonIcon className="h-5 w-5" />
                 <span className="text-sm font-black">My Team</span>
               </span>
-              <span className="px-5 text-[10px] font-black leading-tight text-white drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
+              <span className="relative z-10 px-5 text-[10px] font-black leading-tight text-white drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
                 Upload screenshots, save your team and get personalised advice
               </span>
               {isMyTeamPending ? (

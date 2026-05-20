@@ -26,6 +26,7 @@ import {
 
 export const dynamic = "force-dynamic"
 const PLAYER_PAGE_CONTEXT_TIMEOUT_MS = 1500
+const PLAYER_PAGE_LINEUPS_TIMEOUT_MS = 8000
 
 function defaultRecentYears(years: string[], maxYears = 4): string[] {
   return years.slice(0, Math.min(maxYears, years.length))
@@ -46,7 +47,8 @@ function emptyLineupsProjectionSnapshot(): LineupsProjectionSnapshot {
 async function withPlayerPageContextTimeout<T>(
   label: string,
   promise: Promise<T>,
-  fallback: T
+  fallback: T,
+  timeoutMs = PLAYER_PAGE_CONTEXT_TIMEOUT_MS
 ): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   try {
@@ -56,7 +58,7 @@ async function withPlayerPageContextTimeout<T>(
         return fallback
       }),
       new Promise<T>((resolve) => {
-        timeoutId = setTimeout(() => resolve(fallback), PLAYER_PAGE_CONTEXT_TIMEOUT_MS)
+        timeoutId = setTimeout(() => resolve(fallback), timeoutMs)
       }),
     ])
   } finally {
@@ -91,7 +93,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
   const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot, originChances] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
-    withPlayerPageContextTimeout("lineup projections", fetchLineupsProjectionsByPlayerId(), emptyLineupsProjectionSnapshot()),
+    withPlayerPageContextTimeout("lineup projections", fetchLineupsProjectionsByPlayerId(), emptyLineupsProjectionSnapshot(), PLAYER_PAGE_LINEUPS_TIMEOUT_MS),
     fetchAvailableYears(),
     withPlayerPageContextTimeout("2026 draw", loadDraw2026Data(), null),
     withPlayerPageContextTimeout("player images", fetchPlayerImages(), []),
@@ -118,7 +120,10 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
   const initialPlayerStatsYears = preferredPlayerStatsYears.length > 0
     ? preferredPlayerStatsYears
     : initialYears.slice(0, 1)
-  const selectedLineupRole = lineupsProjections.roleByPlayerId.get(selectedPlayer.id) ?? null
+  const selectedLineupRole =
+    lineupsProjections.roleByPlayerId.get(selectedPlayer.id) ??
+    lineupsProjections.roleByPlayerName.get(normaliseLineupPlayerName(selectedPlayer.name)) ??
+    null
   const shouldFetchRelevantOuts =
     lineupsProjections.source === "lineups" &&
     Boolean(selectedLineupRole?.isOnField && selectedLineupRole.team && selectedLineupRole.position)

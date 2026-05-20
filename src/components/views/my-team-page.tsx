@@ -468,7 +468,7 @@ function buildMyTeamAiPrompt({
     : [
       "For free users, do not use projections, breakevens, projection vs priced at, casualty ward context, or Origin context as trade reasons.",
       "If a tool returns projections, breakevens, casualty ward, or Origin fields anyway, ignore those fields and do not show them in the answer.",
-      "Do not write a Pro note inside the generated answer.",
+      "Start broad trade answers with this short note, then continue with useful advice: Sign up to Pro to access projections and breakevens; below is based on ownership movement, price, L3/form and bye coverage.",
       "Try to list 3 Sell watch candidates every time. Use owned squad players only, prioritising negative ownership change, weak L3 or season average for the price, poor bye coverage, or awkward cash/squad fit. If fewer than 3 owned players have meaningful sell signals, list fewer rather than inventing names.",
       "List an owned player in Sell watch when live data shows their ownership delta is -1.0% or worse, their recent form is weak for the price, or they have poor bye coverage. Discuss whether they are a hard sell, possible sell, or hold.",
       "If a player is -1.0% or worse in ownership delta but L3 is sound, bye coverage is useful, and there is no visible availability issue, frame them as Hold / Possible sell rather than a hard sell.",
@@ -1407,13 +1407,15 @@ function PlayerToken({
           &uarr;
         </span>
       ) : null}
-      <span className={`absolute right-[5%] top-[27%] grid h-6 w-6 place-items-center rounded-full border text-[8px] font-black shadow-[0_8px_18px_rgba(10,22,38,0.22)] lg:h-9 lg:w-9 lg:text-xs ${
-        player.isCaptain
-          ? "border-orange-300/80 bg-[#5a2f1d] text-orange-200"
-          : "border-[#c4b5fd]/70 bg-[#31285f] text-[#ede9fe]"
-      }`}>
-        {showProjections ? formatProjection(displayedProjection) : "-"}
-      </span>
+      {showProjections ? (
+        <span className={`absolute right-[5%] top-[27%] grid h-6 w-6 place-items-center rounded-full border text-[8px] font-black shadow-[0_8px_18px_rgba(10,22,38,0.22)] lg:h-9 lg:w-9 lg:text-xs ${
+          player.isCaptain
+            ? "border-orange-300/80 bg-[#5a2f1d] text-orange-200"
+            : "border-[#c4b5fd]/70 bg-[#31285f] text-[#ede9fe]"
+        }`}>
+          {formatProjection(displayedProjection)}
+        </span>
+      ) : null}
       <div className="mt-0.5 flex max-w-full items-center justify-center gap-1 text-[10px] font-black leading-tight text-nrl-text md:text-[11px] lg:mt-1.5 lg:text-sm">
         <Marker player={player} fantasyPlayersById={fantasyPlayersById} lineupsProjections={lineupsProjections} />
         <span className="truncate">{player.displayName}</span>
@@ -1675,15 +1677,17 @@ function TeamBoard({
       <div className="bg-[linear-gradient(135deg,#101936,#123a36)] px-4 py-4 text-center text-2xl font-black italic tracking-wide text-nrl-accent lg:text-2xl">
         {team?.teamName || "My Team"}
       </div>
-      <div className="grid grid-cols-4 border-b border-nrl-border bg-[#111832] text-center">
+      <div className={`grid border-b border-nrl-border bg-[#111832] text-center ${showProjections ? "grid-cols-4" : "grid-cols-3"}`}>
         <div className="min-w-0 px-1 py-2 sm:px-2 sm:py-3">
           <div className="text-[8px] font-bold uppercase leading-tight text-nrl-muted sm:text-[10px] lg:text-xs">Round Score</div>
           <div className="text-base font-black text-nrl-accent sm:text-lg lg:text-xl">0</div>
         </div>
-        <div className="min-w-0 px-1 py-2 sm:px-2 sm:py-3">
-          <div className="text-[8px] font-bold uppercase leading-tight text-nrl-muted sm:text-[10px] lg:text-xs">Projected</div>
-          <div className="text-base font-black text-nrl-accent sm:text-lg lg:text-xl">{showProjections ? formatProjection(projectedScore) : "--"}</div>
-        </div>
+        {showProjections ? (
+          <div className="min-w-0 px-1 py-2 sm:px-2 sm:py-3">
+            <div className="text-[8px] font-bold uppercase leading-tight text-nrl-muted sm:text-[10px] lg:text-xs">Projected</div>
+            <div className="text-base font-black text-nrl-accent sm:text-lg lg:text-xl">{formatProjection(projectedScore)}</div>
+          </div>
+        ) : null}
         <div className="min-w-0 px-1 py-2 sm:px-2 sm:py-3">
           <div className="text-[8px] font-bold uppercase leading-tight text-nrl-muted sm:text-[10px] lg:text-xs">Trades</div>
           <div className="truncate text-base font-black text-nrl-accent sm:text-lg lg:text-xl">

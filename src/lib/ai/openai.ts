@@ -1408,6 +1408,10 @@ function isProjectionRequest(userMessage: string): boolean {
   );
 }
 
+function isMyTeamAiRequest(userMessage: string): boolean {
+  return userMessage.toLowerCase().includes("my team nrl fantasy ai request.");
+}
+
 function isPremiumBettingRequest(userMessage: string): boolean {
   const normalized = userMessage.toLowerCase();
   return (
@@ -4830,7 +4834,7 @@ export async function runAiModelChat(
     return buildAiResult(buildPremiumBettingUpgradeMessage(), [], "policy");
   }
 
-  if (!hasImageInputs && !hasAiProDataAccess(access.plan) && isProjectionRequest(userMessage)) {
+  if (!hasImageInputs && !isMyTeamAiRequest(userMessage) && !hasAiProDataAccess(access.plan) && isProjectionRequest(userMessage)) {
     return buildAiResult(buildProjectionUpgradeMessage(), [], "policy");
   }
 

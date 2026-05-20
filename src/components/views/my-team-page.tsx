@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useAuth } from "@clerk/nextjs"
+import { SignInButton, useAuth } from "@clerk/nextjs"
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { resolvePlayerImage } from "@/components/views/player-comparison"
@@ -825,6 +825,8 @@ function ScreenshotUploadPanel({
   screenshots,
   uploadingSlot,
   isSubmitting,
+  isAuthLoaded,
+  isSignedIn,
   error,
   status,
   isUpdateMode,
@@ -835,6 +837,8 @@ function ScreenshotUploadPanel({
   screenshots: Record<ScreenshotSlot, TeamScreenshot | null>
   uploadingSlot: ScreenshotSlot | null
   isSubmitting: boolean
+  isAuthLoaded: boolean
+  isSignedIn: boolean
   error: string | null
   status: string | null
   isUpdateMode: boolean
@@ -843,6 +847,7 @@ function ScreenshotUploadPanel({
   onClear: () => void
 }) {
   const hasScreenshot = SCREENSHOT_SLOTS.some((slot) => screenshots[slot.key] != null)
+  const showSignInPrompt = isAuthLoaded && !isSignedIn
 
   return (
     <section className="overflow-hidden rounded-xl border border-nrl-accent/35 bg-[linear-gradient(135deg,rgba(0,245,138,0.12),rgba(124,58,237,0.14))]">
@@ -853,25 +858,36 @@ function ScreenshotUploadPanel({
             Upload My Team screenshots plus the trade screen and NRL AI will fill your squad, captain, byes, trades, and bank.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={!hasScreenshot || isSubmitting || uploadingSlot != null}
-          className="inline-flex min-h-11 items-center justify-center rounded-full border border-nrl-accent/50 bg-[linear-gradient(135deg,#00f58a,#8b5cf6)] px-4 py-2 text-sm font-black text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          {isSubmitting ? (
-            <span className="inline-flex items-center gap-1">
-              <span>Filling team</span>
-              {[0, 1, 2].map((dot) => (
-                <span
-                  key={dot}
-                  className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#07131f]"
-                  style={{ animationDelay: `${dot * 120}ms` }}
-                />
-              ))}
-            </span>
-          ) : isUpdateMode ? "Update My Team" : "Autofill My Team"}
-        </button>
+        {showSignInPrompt ? (
+          <SignInButton mode="modal">
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-nrl-accent/50 bg-[linear-gradient(135deg,#00f58a,#8b5cf6)] px-4 py-2 text-sm font-black text-[#07131f] transition-opacity"
+            >
+              Sign in to {isUpdateMode ? "update" : "autofill"}
+            </button>
+          </SignInButton>
+        ) : (
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!hasScreenshot || !isAuthLoaded || isSubmitting || uploadingSlot != null}
+            className="inline-flex min-h-11 items-center justify-center rounded-full border border-nrl-accent/50 bg-[linear-gradient(135deg,#00f58a,#8b5cf6)] px-4 py-2 text-sm font-black text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {isSubmitting ? (
+              <span className="inline-flex items-center gap-1">
+                <span>Filling team</span>
+                {[0, 1, 2].map((dot) => (
+                  <span
+                    key={dot}
+                    className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#07131f]"
+                    style={{ animationDelay: `${dot * 120}ms` }}
+                  />
+                ))}
+              </span>
+            ) : isUpdateMode ? "Update My Team" : "Autofill My Team"}
+          </button>
+        )}
       </div>
 
       <div className="grid gap-3 border-t border-nrl-border/70 bg-nrl-panel/55 p-3 md:grid-cols-3 md:p-4">
@@ -1960,6 +1976,11 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   }
 
   const handleAutofill = async () => {
+    if (!isMyTeamAuthLoaded || !isMyTeamSignedIn) {
+      setError("Sign in to submit screenshots and save your team.")
+      return
+    }
+
     const attachments = SCREENSHOT_SLOTS.map((slot) => screenshots[slot.key]).filter((screenshot): screenshot is TeamScreenshot => screenshot != null)
     if (attachments.length === 0) {
       setError("Upload at least one My Team screenshot first.")
@@ -2199,6 +2220,8 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
           screenshots={screenshots}
           uploadingSlot={uploadingSlot}
           isSubmitting={isSubmitting}
+          isAuthLoaded={isMyTeamAuthLoaded}
+          isSignedIn={Boolean(isMyTeamSignedIn)}
           error={error}
           status={status}
           isUpdateMode={Boolean(team)}

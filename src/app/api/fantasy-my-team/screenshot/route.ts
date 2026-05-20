@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 
 export const dynamic = "force-dynamic"
 
@@ -79,6 +80,11 @@ function openAiErrorMessage(text: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json({ error: "Sign in to submit screenshots." }, { status: 401 })
+    }
+
     const apiKey = getOpenAiApiKey()
     if (!apiKey) {
       return NextResponse.json({ error: "OPENAI_API_KEY is not configured." }, { status: 503 })

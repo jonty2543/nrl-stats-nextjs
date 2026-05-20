@@ -4042,7 +4042,7 @@ export function FantasyDashboard({
         </section>
 
         {showOwnedCards ? (
-          <div className="grid gap-5 xl:grid-cols-4 xl:items-stretch">
+          <div className="grid gap-5 xl:grid-cols-4 xl:items-stretch xl:gap-3">
             <Link
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}

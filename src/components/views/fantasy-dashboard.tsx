@@ -285,6 +285,7 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
   { key: "ownership", label: "Total Ownership" },
 ]
 const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin"
+const FANTASY_DASHBOARD_STATE_STORAGE_KEY = "fantasy-dashboard-ui-state-v1"
 const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
 const PRO_PRICE_LABEL = "$5/month"
 const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
@@ -295,6 +296,21 @@ const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[3px] select-none"
 interface MajorByeRoundTag {
   round: number
   plays: boolean | null
+}
+
+interface FantasyDashboardPersistedState {
+  allPlayersView?: "cards" | "table"
+  allPlayersPositionFilter?: string
+  allPlayersTagFilters?: string[]
+  allPlayersSort?: {
+    column?: AllPlayersSortKey
+    direction?: AllPlayersSortDirection
+  }
+  fantasyAnalyticsMetric?: FantasyAnalyticsMetric
+  fantasyAnalyticsPositionFilter?: string
+  selectedGlobalStatVsFantasyLabel?: StatVsFantasyOptionLabel
+  globalStatVsFantasyPositionFilter?: string
+  fantasyTemplateMode?: FantasyTemplateMode
 }
 
 const STATIC_LOCKED_PREVIEW_TREND_ROWS = [
@@ -450,6 +466,44 @@ const ALL_PLAYERS_MOBILE_SORT_OPTIONS: Array<{ key: AllPlayersSortKey; label: st
   { key: "breakeven", label: "BE", proOnly: true },
   { key: "gamesPlayed", label: "Games" },
 ]
+
+function isAllPlayersSortKey(value: unknown): value is AllPlayersSortKey {
+  return typeof value === "string" && ALL_PLAYERS_BASE_COLUMNS.some((column) => column.key === value)
+}
+
+function isAllPlayersSortDirection(value: unknown): value is AllPlayersSortDirection {
+  return value === "asc" || value === "desc"
+}
+
+function isAllPlayersView(value: unknown): value is "cards" | "table" {
+  return value === "cards" || value === "table"
+}
+
+function isFantasyAnalyticsMetric(value: unknown): value is FantasyAnalyticsMetric {
+  return typeof value === "string" && FANTASY_ANALYTICS_METRICS.some((metric) => metric.key === value)
+}
+
+function isFantasyAnalyticsPosition(value: unknown): value is string {
+  return typeof value === "string" && FANTASY_ANALYTICS_POSITION_OPTIONS.includes(value)
+}
+
+function isStatVsFantasyOptionLabel(value: unknown): value is StatVsFantasyOptionLabel {
+  return typeof value === "string" && STAT_VS_FANTASY_OPTIONS.some((option) => option.label === value)
+}
+
+function isFantasyTemplateMode(value: unknown): value is FantasyTemplateMode {
+  return typeof value === "string" && FANTASY_TEMPLATE_MODES.some((mode) => mode.key === value)
+}
+
+function parseFantasyDashboardPersistedState(raw: string | null): FantasyDashboardPersistedState | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return parsed && typeof parsed === "object" ? parsed : null
+  } catch {
+    return null
+  }
+}
 
 function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
   switch (key) {
@@ -2426,6 +2480,7 @@ export function FantasyDashboard({
   const [isTradeSuggestorSubmitting, setIsTradeSuggestorSubmitting] = useState(false)
   const [hasRequestedAllPlayersStats, setHasRequestedAllPlayersStats] = useState(false)
   const [allPlayersStatsLoadFailed, setAllPlayersStatsLoadFailed] = useState(false)
+  const [dashboardStateHydrated, setDashboardStateHydrated] = useState(false)
   const allPlayersStatsSourceData = useMemo(
     () => hasAllPlayerStatsForYear(allData, ALL_PLAYERS_STATS_YEAR) ? allData : allPlayersStatsData,
     [allData, allPlayersStatsData]
@@ -2444,6 +2499,85 @@ export function FantasyDashboard({
         : null,
     [availableYears, selectedFantasyName]
   )
+
+  useEffect(() => {
+    if (!showOwnedCards) return
+    let saved: FantasyDashboardPersistedState | null = null
+    try {
+      saved = parseFantasyDashboardPersistedState(
+        window.localStorage.getItem(FANTASY_DASHBOARD_STATE_STORAGE_KEY)
+      )
+    } catch {
+      saved = null
+    }
+    if (saved) {
+      if (isAllPlayersView(saved.allPlayersView)) setAllPlayersView(saved.allPlayersView)
+      if (typeof saved.allPlayersPositionFilter === "string") {
+        setAllPlayersPositionFilter(saved.allPlayersPositionFilter)
+      }
+      if (Array.isArray(saved.allPlayersTagFilters)) {
+        setAllPlayersTagFilters(saved.allPlayersTagFilters.filter((tag): tag is string => typeof tag === "string"))
+      }
+      if (
+        saved.allPlayersSort &&
+        isAllPlayersSortKey(saved.allPlayersSort.column) &&
+        isAllPlayersSortDirection(saved.allPlayersSort.direction)
+      ) {
+        setAllPlayersSort({
+          column: saved.allPlayersSort.column,
+          direction: saved.allPlayersSort.direction,
+        })
+      }
+      if (isFantasyAnalyticsMetric(saved.fantasyAnalyticsMetric)) {
+        setFantasyAnalyticsMetric(saved.fantasyAnalyticsMetric)
+      }
+      if (isFantasyAnalyticsPosition(saved.fantasyAnalyticsPositionFilter)) {
+        setFantasyAnalyticsPositionFilter(saved.fantasyAnalyticsPositionFilter)
+      }
+      if (isStatVsFantasyOptionLabel(saved.selectedGlobalStatVsFantasyLabel)) {
+        setSelectedGlobalStatVsFantasyLabel(saved.selectedGlobalStatVsFantasyLabel)
+      }
+      if (isFantasyAnalyticsPosition(saved.globalStatVsFantasyPositionFilter)) {
+        setGlobalStatVsFantasyPositionFilter(saved.globalStatVsFantasyPositionFilter)
+      }
+      if (isFantasyTemplateMode(saved.fantasyTemplateMode)) {
+        setFantasyTemplateMode(saved.fantasyTemplateMode)
+      }
+    }
+    setDashboardStateHydrated(true)
+  }, [showOwnedCards])
+
+  useEffect(() => {
+    if (!showOwnedCards || !dashboardStateHydrated) return
+    const state: FantasyDashboardPersistedState = {
+      allPlayersView,
+      allPlayersPositionFilter,
+      allPlayersTagFilters,
+      allPlayersSort,
+      fantasyAnalyticsMetric,
+      fantasyAnalyticsPositionFilter,
+      selectedGlobalStatVsFantasyLabel,
+      globalStatVsFantasyPositionFilter,
+      fantasyTemplateMode,
+    }
+    try {
+      window.localStorage.setItem(FANTASY_DASHBOARD_STATE_STORAGE_KEY, JSON.stringify(state))
+    } catch {
+      // Ignore dashboard state storage failures.
+    }
+  }, [
+    allPlayersPositionFilter,
+    allPlayersSort,
+    allPlayersTagFilters,
+    allPlayersView,
+    dashboardStateHydrated,
+    fantasyAnalyticsMetric,
+    fantasyAnalyticsPositionFilter,
+    fantasyTemplateMode,
+    globalStatVsFantasyPositionFilter,
+    selectedGlobalStatVsFantasyLabel,
+    showOwnedCards,
+  ])
 
   useEffect(() => {
     if (!isAuthLoaded) return
@@ -3497,6 +3631,15 @@ export function FantasyDashboard({
       ...(hasOriginChance ? [FANTASY_FILTER_TAG_ORIGIN_CHANCE] : []),
     ]
   }, [allPlayersTableRows])
+
+  useEffect(() => {
+    if (!dashboardStateHydrated || allPlayersTagFilters.length === 0) return
+    const availableTags = new Set(allPlayersTagFilterOptions)
+    const validTags = allPlayersTagFilters.filter((tag) => availableTags.has(tag))
+    if (validTags.length !== allPlayersTagFilters.length) {
+      setAllPlayersTagFilters(validTags)
+    }
+  }, [allPlayersTagFilterOptions, allPlayersTagFilters, dashboardStateHydrated])
 
   const availableAllPlayersMobileSortOptions = useMemo(
     () => ALL_PLAYERS_MOBILE_SORT_OPTIONS.filter((option) => hasFantasyPlotAccess || !option.proOnly),

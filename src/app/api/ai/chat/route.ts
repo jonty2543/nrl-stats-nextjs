@@ -5,7 +5,9 @@ import {
   type AiChoiceOption,
   ensureAiThreadForUser,
   getAiUsageForUser,
+  getAiUsageForUserByMessagePrefix,
   loadAiThreadForUser,
+  MY_TEAM_AI_PROMPT_PREFIX,
   saveAiAssistantTurn,
   sanitizeAiMessagesForAccess,
 } from "@/lib/ai/persistence";
@@ -340,6 +342,14 @@ function buildQuotaMessage(
 
 function buildUsageTrackingMessage(): string {
   return "AI message usage tracking is not available right now, so plan-based message limits cannot be enforced safely.";
+}
+
+function isMyTeamAiRequest(message: string): boolean {
+  return message.startsWith(MY_TEAM_AI_PROMPT_PREFIX);
+}
+
+function buildMyTeamQuotaMessage(): string {
+  return "Free users can send 3 My Team NRL AI messages per week.";
 }
 
 function isTransientAiProviderError(message: string): boolean {
@@ -692,6 +702,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as AiChatRequestBody;
   const requestStartedAt = Date.now();
   const message = typeof body.message === "string" ? body.message.trim() : "";
+  const isMyTeamRequest = isMyTeamAiRequest(message);
   const requestedThreadId = typeof body.threadId === "string" ? body.threadId.trim() : "";
   const requestHistory = toRequestHistory(body.history);
   const imageAttachments = toImageAttachments(body.imageAttachments);
@@ -800,6 +811,64 @@ export async function POST(request: Request) {
         })),
       },
       { status: 503 }
+    );
+  }
+
+  const myTeamUsage = access.plan === "free" && userId && isMyTeamRequest
+    ? await getAiUsageForUserByMessagePrefix(userId, MY_TEAM_AI_PROMPT_PREFIX, 3, 7, "week")
+    : null;
+
+  if (myTeamUsage && !myTeamUsage.trackingAvailable) {
+    logAiAuditEvent("my_team_ai_usage_tracking_unavailable", {
+      userId,
+      plan: access.plan,
+    }, "warn");
+    return NextResponse.json(
+      {
+        status: "usage_unavailable",
+        plan: access.plan,
+        chatLimit: myTeamUsage.chatLimit,
+        chatQuotaPeriodLabel: myTeamUsage.quotaPeriodLabel,
+        chatsUsed: myTeamUsage.usedInPeriod,
+        chatsRemaining: myTeamUsage.remainingInPeriod,
+        usageTrackingAvailable: myTeamUsage.trackingAvailable,
+        submittedMessage: message,
+        assistantMessage: buildUsageTrackingMessage(),
+        guardrails: AI_GUARDRAILS,
+        availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+        })),
+      },
+      { status: 503 }
+    );
+  }
+
+  if (myTeamUsage && myTeamUsage.usedInPeriod >= 3) {
+    logAiAuditEvent("my_team_ai_quota_exceeded", {
+      userId,
+      plan: access.plan,
+      usedInPeriod: myTeamUsage.usedInPeriod,
+      chatLimit: myTeamUsage.chatLimit,
+    }, "warn");
+    return NextResponse.json(
+      {
+        status: "quota_exceeded",
+        plan: access.plan,
+        chatLimit: myTeamUsage.chatLimit,
+        chatQuotaPeriodLabel: myTeamUsage.quotaPeriodLabel,
+        chatsUsed: myTeamUsage.usedInPeriod,
+        chatsRemaining: myTeamUsage.remainingInPeriod,
+        usageTrackingAvailable: myTeamUsage.trackingAvailable,
+        submittedMessage: message,
+        assistantMessage: buildMyTeamQuotaMessage(),
+        guardrails: AI_GUARDRAILS,
+        availableTools: AI_TOOL_DEFINITIONS.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+        })),
+      },
+      { status: 429 }
     );
   }
 
@@ -978,13 +1047,15 @@ export async function POST(request: Request) {
     let persistedThreadId: string | null = null;
     let threadTitle: string | null = null;
 
-    if (shouldPersist) {
+    if (shouldPersist || (userId && isMyTeamRequest)) {
       persistedThreadId = await ensureAiThreadForUser(
         userId,
         continuationThreadId,
-        message
+        isMyTeamRequest ? "My Team NRL AI" : message
       );
-      threadTitle = await generateAiThreadSummary(history, message, modelResult.assistantMessage);
+      threadTitle = isMyTeamRequest
+        ? "My Team NRL AI"
+        : await generateAiThreadSummary(history, message, modelResult.assistantMessage);
 
       await saveAiAssistantTurn({
         userId,

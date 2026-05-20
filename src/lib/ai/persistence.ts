@@ -8,6 +8,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/client";
 
 const MAX_THREAD_TITLE_LENGTH = 80;
 const MAX_THREAD_LIST_ITEMS = 20;
+export const MY_TEAM_AI_PROMPT_PREFIX = "My Team NRL Fantasy AI request.";
 
 export interface AiChoiceOption {
   label: string;
@@ -514,6 +515,27 @@ async function countAiMessagesForUserUncached(
     .select("id,ai_threads!inner(clerk_user_id)", { count: "exact", head: true })
     .eq("role", "user")
     .eq("ai_threads.clerk_user_id", userId)
+    .not("content", "like", `${MY_TEAM_AI_PROMPT_PREFIX}%`)
+    .gte("created_at", startIso)
+    .lt("created_at", endIso);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+async function countAiMessagesForUserByPrefixUncached(
+  userId: string,
+  startIso: string,
+  endIso: string,
+  messagePrefix: string
+): Promise<number> {
+  const supabase = getAiSupabaseClient();
+  const { count, error } = await supabase
+    .from("ai_messages")
+    .select("id,ai_threads!inner(clerk_user_id)", { count: "exact", head: true })
+    .eq("role", "user")
+    .eq("ai_threads.clerk_user_id", userId)
+    .like("content", `${messagePrefix}%`)
     .gte("created_at", startIso)
     .lt("created_at", endIso);
 
@@ -526,6 +548,19 @@ function getCachedAiMessageCount(userId: string, startIso: string, endIso: strin
   return unstable_cache(
     () => countAiMessagesForUserUncached(userId, startIso, endIso),
     [`ai-usage-${userId}-${startIso}`],
+    { revalidate: 60, tags: [`ai-usage-${userId}`] }
+  )();
+}
+
+function getCachedAiMessageCountByPrefix(
+  userId: string,
+  startIso: string,
+  endIso: string,
+  messagePrefix: string
+) {
+  return unstable_cache(
+    () => countAiMessagesForUserByPrefixUncached(userId, startIso, endIso, messagePrefix),
+    [`ai-usage-prefix-${userId}-${startIso}-${messagePrefix}`],
     { revalidate: 60, tags: [`ai-usage-${userId}`] }
   )();
 }
@@ -562,6 +597,51 @@ export async function getAiUsageForUser(
     const message = error instanceof Error ? error.message : String(error);
     if (isKnownPersistenceError(message)) {
       console.warn("AI usage counter unavailable.", message);
+      return {
+        chatLimit,
+        quotaPeriodLabel,
+        usedInPeriod: 0,
+        remainingInPeriod: chatLimit,
+        trackingAvailable: false,
+      };
+    }
+
+    throw error;
+  }
+}
+
+export async function getAiUsageForUserByMessagePrefix(
+  userId: string | null | undefined,
+  messagePrefix: string,
+  chatLimit: number,
+  quotaPeriodDays: number,
+  quotaPeriodLabel: string
+): Promise<AiDailyUsageSnapshot> {
+  if (!userId) {
+    return {
+      chatLimit,
+      quotaPeriodLabel,
+      usedInPeriod: 0,
+      remainingInPeriod: chatLimit,
+      trackingAvailable: true,
+    };
+  }
+
+  try {
+    const { startIso, endIso } = getUtcUsageRange(new Date(), quotaPeriodDays);
+    const usedInPeriod = await getCachedAiMessageCountByPrefix(userId, startIso, endIso, messagePrefix);
+
+    return {
+      chatLimit,
+      quotaPeriodLabel,
+      usedInPeriod,
+      remainingInPeriod: Math.max(chatLimit - usedInPeriod, 0),
+      trackingAvailable: true,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isKnownPersistenceError(message)) {
+      console.warn("AI prefixed usage counter unavailable.", message);
       return {
         chatLimit,
         quotaPeriodLabel,

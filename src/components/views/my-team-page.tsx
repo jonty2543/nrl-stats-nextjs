@@ -1861,7 +1861,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   const [aiPanelSlotHeight, setAiPanelSlotHeight] = useState(0)
   const [aiPanelFrame, setAiPanelFrame] = useState<{ left: number; width: number } | null>(null)
   const hasLoadedSavedTeamRef = useRef(false)
-  const { isLoaded: isMyTeamAuthLoaded, isSignedIn: isMyTeamSignedIn } = useAuth()
+  const { getToken: getMyTeamAuthToken, isLoaded: isMyTeamAuthLoaded, isSignedIn: isMyTeamSignedIn } = useAuth()
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
   const fantasyCoachPlayersById = useMemo(() => new Map(fantasyCoachPlayers.map((player) => [player.id, player])), [fantasyCoachPlayers])
 
@@ -1893,7 +1893,12 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
 
     const loadSavedTeam = async () => {
       try {
-        const response = await fetch("/api/user/my-team", { cache: "no-store" })
+        const token = await getMyTeamAuthToken().catch(() => null)
+        const response = await fetch("/api/user/my-team", {
+          cache: "no-store",
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
         if (cancelled) return
 
         if (response.status === 401) {
@@ -1925,26 +1930,40 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     return () => {
       cancelled = true
     }
-  }, [fantasyPlayers, isMyTeamAuthLoaded, isMyTeamSignedIn])
+  }, [fantasyPlayers, getMyTeamAuthToken, isMyTeamAuthLoaded, isMyTeamSignedIn])
 
   useEffect(() => {
     if (!team || !isMyTeamSignedIn || !hasLoadedSavedTeamRef.current) return
 
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => {
-      void fetch("/api/user/my-team", {
+      void (async () => {
+        const token = await getMyTeamAuthToken().catch(() => null)
+        const response = await fetch("/api/user/my-team", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ team }),
         signal: controller.signal,
-      }).catch(() => null)
+        })
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as { error?: string; details?: string } | null
+          throw new Error(payload?.details ?? payload?.error ?? "Unable to save My Team.")
+        }
+      })().catch((caught) => {
+        if (controller.signal.aborted) return
+        setError(caught instanceof Error ? caught.message : "Unable to save My Team.")
+      })
     }, 350)
 
     return () => {
       window.clearTimeout(timeoutId)
       controller.abort()
     }
-  }, [team, isMyTeamSignedIn])
+  }, [getMyTeamAuthToken, team, isMyTeamSignedIn])
 
   useEffect(() => {
     if (!team) {

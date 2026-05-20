@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
-import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 
 export const dynamic = "force-dynamic"
 
@@ -81,11 +79,6 @@ function openAiErrorMessage(text: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth()
-    if (!(await getServerProPlotAccess(userId))) {
-      return NextResponse.json({ error: "Sign up to Pro to use My Team screenshot autofill." }, { status: 403 })
-    }
-
     const apiKey = getOpenAiApiKey()
     if (!apiKey) {
       return NextResponse.json({ error: "OPENAI_API_KEY is not configured." }, { status: 503 })

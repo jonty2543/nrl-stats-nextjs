@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useAuth } from "@clerk/nextjs"
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
-import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { resolvePlayerImage } from "@/components/views/player-comparison"
 import {
@@ -828,7 +827,6 @@ function ScreenshotUploadPanel({
   isSubmitting,
   error,
   status,
-  locked,
   isUpdateMode,
   onScreenshotChange,
   onSubmit,
@@ -839,7 +837,6 @@ function ScreenshotUploadPanel({
   isSubmitting: boolean
   error: string | null
   status: string | null
-  locked: boolean
   isUpdateMode: boolean
   onScreenshotChange: (slot: ScreenshotSlot, files: FileList | null) => void
   onSubmit: () => void
@@ -859,7 +856,7 @@ function ScreenshotUploadPanel({
         <button
           type="button"
           onClick={onSubmit}
-          disabled={locked || !hasScreenshot || isSubmitting || uploadingSlot != null}
+          disabled={!hasScreenshot || isSubmitting || uploadingSlot != null}
           className="inline-flex min-h-11 items-center justify-center rounded-full border border-nrl-accent/50 bg-[linear-gradient(135deg,#00f58a,#8b5cf6)] px-4 py-2 text-sm font-black text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
         >
           {isSubmitting ? (
@@ -890,7 +887,7 @@ function ScreenshotUploadPanel({
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 className="sr-only"
-                disabled={locked || isSubmitting}
+                disabled={isSubmitting}
                 onChange={(event) => {
                   onScreenshotChange(slot.key, event.currentTarget.files)
                   event.currentTarget.value = ""
@@ -918,14 +915,9 @@ function ScreenshotUploadPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-nrl-border/70 px-3 py-2 text-xs md:px-4">
         <div className={error ? "text-rose-200" : "text-nrl-muted"}>
-          {locked ? "Pro access is required for screenshot autofill." : error ?? status ?? (hasScreenshot ? "Ready to fill from screenshots." : "Upload screenshots to build or update your team.")}
+          {error ?? status ?? (hasScreenshot ? "Ready to fill from screenshots." : "Upload screenshots to build or update your team.")}
         </div>
         <div className="flex items-center gap-2">
-          {locked ? (
-            <BillingPageLink className="rounded-md border border-nrl-accent/40 px-2 py-1 text-[11px] font-semibold text-nrl-accent">
-              Pro $5/month
-            </BillingPageLink>
-          ) : null}
           {hasScreenshot ? (
             <button
               type="button"
@@ -2209,7 +2201,6 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
           isSubmitting={isSubmitting}
           error={error}
           status={status}
-          locked={locked}
           isUpdateMode={Boolean(team)}
           onScreenshotChange={(slot, files) => {
             void handleScreenshotChange(slot, files)

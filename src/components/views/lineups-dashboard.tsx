@@ -88,7 +88,7 @@ const BOOKIE_LOGOS: Record<string, string> = {
 
 const BLUE_GRADIENT_BORDER_STYLE: CSSProperties = {
   background:
-    "linear-gradient(180deg, rgba(28,35,62,0.98), rgba(28,35,62,0.98)) padding-box, linear-gradient(90deg, rgba(147,197,253,0.68), rgba(59,130,246,0.34) 18%, rgba(226,239,255,0.58) 50%, rgba(59,130,246,0.34) 82%, rgba(147,197,253,0.68)) border-box",
+    "linear-gradient(180deg, rgba(28,35,62,0.98), rgba(28,35,62,0.98)) padding-box, linear-gradient(rgba(96,165,250,0.46), rgba(96,165,250,0.46)) border-box",
 }
 
 const MATCH_CARD_TEXTURE_STYLE: CSSProperties = {
@@ -2082,7 +2082,7 @@ function LineupCard({
 
   return (
     <details
-      className="group relative origin-top overflow-visible rounded-lg border border-transparent shadow-[0_24px_54px_rgba(0,0,0,0.48),0_0_38px_rgba(96,165,250,0.18)] transform-gpu [transform:perspective(1100px)_rotateX(3.2deg)_scaleY(0.965)]"
+      className="group relative origin-top overflow-hidden rounded-lg border border-transparent shadow-[0_24px_54px_rgba(0,0,0,0.48)] transform-gpu [transform:perspective(1100px)_rotateX(3.2deg)_scaleY(0.965)]"
       style={BLUE_GRADIENT_BORDER_STYLE}
     >
       <span
@@ -2120,7 +2120,7 @@ function LineupCard({
             <TeamBadge team={match.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
         </div>
-        <span className="absolute bottom-0 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 translate-y-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text">
+        <span className="absolute bottom-1 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text">
           <span className="sr-only">Toggle match details</span>
           <svg
             viewBox="0 0 16 16"
@@ -2133,7 +2133,7 @@ function LineupCard({
         </span>
       </summary>
 
-      <div className="relative z-[1] px-2 pb-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-[linear-gradient(90deg,transparent,rgba(191,219,254,0.5),rgba(59,130,246,0.18),transparent)] sm:px-3">
+      <div className="relative z-[1] border-t border-blue-300/30 px-2 pb-3 sm:px-3">
         <div className="pt-5" />
         <LiveTryScorersStrip match={match} liveMatch={displayLiveMatch} />
         {availableDetailViews.length > 1 ? (

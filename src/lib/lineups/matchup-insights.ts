@@ -31,7 +31,7 @@ export type PlayerTryHistory = Record<string, Array<{ team: string; opponent: st
 
 type CandidateInsight = MatchupInsight & {
   score: number
-  family?: "win-record" | "try-scorer"
+  family?: "win-record" | "try-scorer" | "edge-mismatch" | "kick-target"
 }
 
 export interface GenerateMatchupInsightsInput {
@@ -48,16 +48,25 @@ const SEVERITY_SCORE: Record<MatchupInsightSeverity, number> = {
   low: 1,
 }
 
-const PRIORITY_CATEGORY_QUOTAS: Array<{ category: MatchupInsightCategory; quota: number }> = [
-  { category: "Stats", quota: 4 },
-  { category: "Betting", quota: 3 },
-  { category: "Fantasy", quota: 2 },
-]
+const MAX_INSIGHTS_PER_CATEGORY = 3
 
 const FANTASY_POSITION_GROUPS: Array<{ label: "halves" | "middle"; slots: InsightSlot[]; threshold: number }> = [
   { label: "halves", slots: ["FE", "HLF"], threshold: 18 },
   { label: "middle", slots: ["PR", "LK"], threshold: 20 },
 ]
+
+const EDGE_MISMATCH_PAIRS: Array<{ home: InsightSlot; away: InsightSlot }> = [
+  { home: "LW", away: "RW" },
+  { home: "LC", away: "RC" },
+  { home: "FE", away: "R2R" },
+  { home: "L2R", away: "HLF" },
+  { home: "HLF", away: "L2R" },
+  { home: "R2R", away: "FE" },
+  { home: "RC", away: "LC" },
+  { home: "RW", away: "LW" },
+]
+
+const KICK_TARGET_SLOTS: InsightSlot[] = ["FB", "LW", "RW"]
 
 function normaliseKey(value: string | null | undefined): string {
   return String(value ?? "")
@@ -129,20 +138,14 @@ function rankedInsights(insights: CandidateInsight[]): CandidateInsight[] {
 function selectStrongestInsights(insights: CandidateInsight[], maxInsights: number): CandidateInsight[] {
   const ranked = rankedInsights(insights)
   const selected: CandidateInsight[] = []
-  const selectedSet = new Set<CandidateInsight>()
-
-  for (const { category, quota } of PRIORITY_CATEGORY_QUOTAS) {
-    for (const insight of ranked.filter((candidate) => candidate.category === category).slice(0, quota)) {
-      if (selected.length >= maxInsights) break
-      selected.push(insight)
-      selectedSet.add(insight)
-    }
-  }
+  const categoryCounts = new Map<MatchupInsightCategory, number>()
 
   for (const insight of ranked) {
     if (selected.length >= maxInsights) break
-    if (selectedSet.has(insight)) continue
+    const count = categoryCounts.get(insight.category) ?? 0
+    if (count >= MAX_INSIGHTS_PER_CATEGORY) continue
     selected.push(insight)
+    categoryCounts.set(insight.category, count + 1)
   }
 
   return selected.sort((a, b) => b.score - a.score)
@@ -150,6 +153,8 @@ function selectStrongestInsights(insights: CandidateInsight[], maxInsights: numb
 
 function limitInsightFamilies(insights: CandidateInsight[]): CandidateInsight[] {
   const limits: Partial<Record<NonNullable<CandidateInsight["family"]>, number>> = {
+    "edge-mismatch": 2,
+    "kick-target": 2,
     "try-scorer": 2,
     "win-record": 2,
   }
@@ -266,6 +271,10 @@ function playersForSlots(team: LineupTeam | null, slots: InsightSlot[]): LineupP
   })
 }
 
+function playerForSlot(team: LineupTeam | null, slot: InsightSlot): LineupPlayer | null {
+  return namedPlayers(team).find((player) => insightSlot(player) === slot) ?? null
+}
+
 function addPositionGroupInsight(insights: CandidateInsight[], match: LineupMatch) {
   const groups = [
     ...FANTASY_POSITION_GROUPS.map((group) => ({
@@ -303,6 +312,110 @@ function addPositionGroupInsight(insights: CandidateInsight[], match: LineupMatc
         confidence: severity === "high" ? 0.8 : 0.72,
       },
       80 + Math.round(diff)
+    )
+  }
+}
+
+function addEdgeMissedTackleMismatchInsights(
+  insights: CandidateInsight[],
+  match: LineupMatch,
+  playerAverages?: PlayerAverages
+) {
+  const candidates = EDGE_MISMATCH_PAIRS
+    .flatMap((pair) => {
+      const homePlayer = playerForSlot(match.homeTeam, pair.home)
+      const awayPlayer = playerForSlot(match.awayTeam, pair.away)
+      if (!homePlayer || !awayPlayer) return []
+
+      return [
+        { attacker: homePlayer, defender: awayPlayer },
+        { attacker: awayPlayer, defender: homePlayer },
+      ]
+    })
+    .map(({ attacker, defender }) => {
+      const tackleBreaks = averageValue(playerAverages, attacker, "Tackle Breaks")
+      const missedTackles = averageValue(playerAverages, defender, "Missed Tackles")
+      if (tackleBreaks == null || missedTackles == null) return null
+
+      const mismatchScore = tackleBreaks + missedTackles
+      if (tackleBreaks < 3 || missedTackles < 4) return null
+
+      return {
+        attacker,
+        defender,
+        tackleBreaks,
+        missedTackles,
+        mismatchScore,
+        severity: mismatchScore >= 8 || tackleBreaks >= 4 || missedTackles >= 5 ? "high" : "medium",
+      }
+    })
+    .filter((candidate): candidate is {
+      attacker: LineupPlayer
+      defender: LineupPlayer
+      tackleBreaks: number
+      missedTackles: number
+      mismatchScore: number
+      severity: MatchupInsightSeverity
+    } => Boolean(candidate))
+    .sort((a, b) => b.mismatchScore - a.mismatchScore)
+    .slice(0, 2)
+
+  for (const candidate of candidates) {
+    addInsight(
+      insights,
+      {
+        category: "Matchup",
+        severity: candidate.severity,
+        title: `${playerLabel(candidate.attacker)} vs ${playerLabel(candidate.defender)} is a defensive mismatch.`,
+        description: `${fullPlayerLabel(candidate.attacker)} averages ${candidate.tackleBreaks.toFixed(1)} tackle breaks per game while ${fullPlayerLabel(candidate.defender)} misses ${candidate.missedTackles.toFixed(1)} tackles per game.`,
+        confidence: candidate.severity === "high" ? 0.78 : 0.7,
+      },
+      Math.round(candidate.mismatchScore * 14),
+      "edge-mismatch"
+    )
+  }
+}
+
+function addKickTargetInsights(
+  insights: CandidateInsight[],
+  match: LineupMatch,
+  playerAverages?: PlayerAverages
+) {
+  const candidates = [match.homeTeam, match.awayTeam]
+    .flatMap((team) => namedPlayers(team))
+    .map((player) => {
+      const slot = insightSlot(player)
+      if (!slot || !KICK_TARGET_SLOTS.includes(slot)) return null
+
+      const errors = averageValue(playerAverages, player, "Errors")
+      if (errors == null || errors < 1.8) return null
+
+      return {
+        player,
+        errors,
+        severity: errors >= 2.3 ? "high" : "medium",
+      }
+    })
+    .filter((candidate): candidate is {
+      player: LineupPlayer
+      errors: number
+      severity: MatchupInsightSeverity
+    } => Boolean(candidate))
+    .sort((a, b) => b.errors - a.errors)
+    .slice(0, 2)
+
+  for (const candidate of candidates) {
+    addInsight(
+      insights,
+      {
+        category: "Matchup",
+        severity: candidate.severity,
+        title: `${fullPlayerLabel(candidate.player)} will be a kick target`,
+        description: `${fullPlayerLabel(candidate.player)} averages ${candidate.errors.toFixed(1)} errors per game from a back-three role.`,
+        confidence: candidate.severity === "high" ? 0.74 : 0.66,
+      },
+      Math.round(candidate.errors * 24),
+      "kick-target"
     )
   }
 }
@@ -389,6 +502,83 @@ function addTeamRecordTrendInsights(insights: CandidateInsight[], match: LineupM
   insights.push(...recordInsights.sort((a, b) => b.score - a.score).slice(0, 2))
 }
 
+function countWins(results: NonNullable<LineupMatch["homeRecentResults"]>, team: LineupTeam | null): number {
+  return results.filter((result) => resultTeamWon(result, team)).length
+}
+
+function addFallbackContextInsights(insights: CandidateInsight[], match: LineupMatch) {
+  if (insights.length >= 4) return
+
+  const headToHead = uniqueRecentResults(match.recentHeadToHead ?? []).slice(0, 10)
+  if (headToHead.length >= 3) {
+    const homeWins = countWins(headToHead, match.homeTeam)
+    const awayWins = countWins(headToHead, match.awayTeam)
+    const leader = homeWins === awayWins ? null : homeWins > awayWins ? match.homeTeam : match.awayTeam
+    const leaderWins = Math.max(homeWins, awayWins)
+
+    addInsight(
+      insights,
+      {
+        category: "Stats",
+        severity: "medium",
+        title: leader
+          ? `${teamLabel(leader)} edge the recent head-to-head.`
+          : `${teamLabel(match.homeTeam)} and ${teamLabel(match.awayTeam)} split the recent head-to-head.`,
+        description: leader
+          ? `${teamLabel(leader)} have won ${leaderWins} of the last ${headToHead.length} games between the two sides.`
+          : `The last ${headToHead.length} games between the two sides are split ${homeWins}-${awayWins}.`,
+        confidence: 0.62,
+      },
+      42
+    )
+  }
+
+  if (insights.length >= 4) return
+
+  const homeRecent = uniqueRecentResults(match.homeRecentResults ?? []).slice(0, 5)
+  const awayRecent = uniqueRecentResults(match.awayRecentResults ?? []).slice(0, 5)
+  if (homeRecent.length >= 3 && awayRecent.length >= 3) {
+    const homeWins = countWins(homeRecent, match.homeTeam)
+    const awayWins = countWins(awayRecent, match.awayTeam)
+    const leader = homeWins === awayWins ? null : homeWins > awayWins ? match.homeTeam : match.awayTeam
+
+    addInsight(
+      insights,
+      {
+        category: "Stats",
+        severity: "medium",
+        title: leader ? `${teamLabel(leader)} bring the stronger recent form.` : "Recent form is evenly matched.",
+        description: `${teamLabel(match.homeTeam)} have won ${homeWins} of their last ${homeRecent.length}; ${teamLabel(match.awayTeam)} have won ${awayWins} of their last ${awayRecent.length}.`,
+        confidence: 0.6,
+      },
+      36
+    )
+  }
+
+  if (insights.length >= 4) return
+
+  const combinedRecent = uniqueRecentResults([
+    ...(match.recentHeadToHead ?? []),
+    ...(match.homeRecentResults ?? []),
+    ...(match.awayRecentResults ?? []),
+  ]).slice(0, 10)
+  if (combinedRecent.length >= 5) {
+    const averageTotal = combinedRecent.reduce((total, result) => total + resultTotal(result), 0) / combinedRecent.length
+
+    addInsight(
+      insights,
+      {
+        category: "Stats",
+        severity: "medium",
+        title: "Recent games give a scoring baseline.",
+        description: `The last ${combinedRecent.length} relevant recent games average ${averageTotal.toFixed(1)} total points.`,
+        confidence: 0.58,
+      },
+      30
+    )
+  }
+}
+
 function addMatchTotalPointsTrendInsight(insights: CandidateInsight[], match: LineupMatch) {
   const line = 50.5
   const combinedRecent = uniqueRecentResults([
@@ -468,21 +658,25 @@ function addPlayerTryMarketTrendInsights(
       tries: averageValue(playerAverages, entry.player, "Tries"),
       odds: tryscorerOdds[normaliseKey(entry.player.player)] ?? null,
     }))
+    .map((entry) => {
+      const price = entry.odds?.bestPrice
+      const impliedProbability = price != null && price > 0 ? 1 / price : null
+      const valueEdge = entry.tries != null && impliedProbability != null ? entry.tries - impliedProbability : null
+      return { ...entry, impliedProbability, valueEdge }
+    })
     .filter((entry): entry is {
       player: LineupPlayer
       team: LineupTeam | null
       slot: InsightSlot | null
       tries: number
       odds: LineupTryscorerOdds
+      impliedProbability: number
+      valueEdge: number
     } => {
-      return entry.tries != null && entry.tries >= 0.35 && entry.odds?.bestPrice != null && entry.odds.bestPrice <= 3.75
+      return entry.tries != null && entry.odds?.bestPrice != null && entry.impliedProbability != null && entry.valueEdge != null && entry.valueEdge >= 0.1
     })
     .sort((a, b) => {
-      const aPrice = a.odds.bestPrice ?? 99
-      const bPrice = b.odds.bestPrice ?? 99
-      const aScore = a.tries * 80 + Math.max(0, 4.5 - aPrice) * 14
-      const bScore = b.tries * 80 + Math.max(0, 4.5 - bPrice) * 14
-      return bScore - aScore
+      return b.valueEdge - a.valueEdge
     })
     .slice(0, 3)
 
@@ -494,12 +688,12 @@ function addPlayerTryMarketTrendInsights(
       insights,
       {
         category: "Betting",
-        severity: candidate.tries >= 0.7 || price <= 2.2 ? "high" : "medium",
-        title: `${fullPlayerLabel(candidate.player)} is a live try-scoring chance.`,
-        description: `${fullPlayerLabel(candidate.player)} averages ${candidate.tries.toFixed(1)} tries per game this season and is listed at ${price.toFixed(2)} in the anytime tryscorer market.`,
-        confidence: candidate.tries >= 0.7 || price <= 2.2 ? 0.76 : 0.68,
+        severity: candidate.valueEdge >= 0.18 ? "high" : "medium",
+        title: `${fullPlayerLabel(candidate.player)} is potentially paying overs in the try market.`,
+        description: `${fullPlayerLabel(candidate.player)} averages ${candidate.tries.toFixed(1)} tries per game against an implied anytime try probability of ${(candidate.impliedProbability * 100).toFixed(1)}% at ${price.toFixed(2)}.`,
+        confidence: candidate.valueEdge >= 0.18 ? 0.76 : 0.68,
       },
-      Math.round(candidate.tries * 44 + Math.max(0, 4.5 - price) * 10),
+      Math.round(candidate.valueEdge * 120),
       "try-scorer"
     )
   }
@@ -618,12 +812,15 @@ export function generateMatchupInsights({
   const insights: CandidateInsight[] = []
 
   addPositionGroupInsight(insights, match)
+  addEdgeMissedTackleMismatchInsights(insights, match, playerAverages)
+  addKickTargetInsights(insights, match, playerAverages)
   addTeamRecordTrendInsights(insights, match)
   addPlayerTryRunInsights(insights, match, playerTryHistory)
   addMatchTotalPointsTrendInsight(insights, match)
   addTeamPointsTrendInsights(insights, match)
   addPlayerTryMarketTrendInsights(insights, match, tryscorerOdds, playerAverages)
   addTryscorerInsight(insights, match, tryscorerOdds)
+  addFallbackContextInsights(insights, match)
 
   return shuffledInsights(selectStrongestInsights(limitInsightFamilies(insights), Math.max(0, maxInsights)), matchShuffleSeed(match))
     .map((insight) => {

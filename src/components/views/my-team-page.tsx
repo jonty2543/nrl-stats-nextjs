@@ -502,7 +502,7 @@ function buildMyTeamAiPrompt({
       "List an owned player in Sell watch when live data shows their ownership delta is -1.0% or worse, BE is high, projection is below priced at, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using projection, priced at, BE, L3 average, ownership delta, injury/availability markers, and next major bye availability.",
       "If a player is -1.0% or worse in ownership delta but BE is lower than priced at, projection is similar to priced at, L3 is sound, and they play the next major bye, frame them as Hold / Possible sell rather than a hard sell.",
       "Do not say recent form has slipped when L3 average is above priced at.",
-      "Only call a player in form, hot, or a strong form play when L3 average supports that versus priced at. If L3 is below priced at, describe them as projection-backed, role-backed, or avoid saying form.",
+      "Describe form as strong only when L3 average supports that versus priced at. If L3 is below priced at, describe the case as projection-backed, role-backed, or avoid saying form.",
       "For each sell or buy, include Ownership change, BE, priced at, L3 average, projection vs priced at, major-bye availability across rounds 12/15/18, and one short reason.",
       "Mention any notable outs from the user's owned team before or inside Sell watch, but only when live lineup/casualty data supports the out.",
       "Use casualty ward and Origin chance context behind ownership, form, value, injury, bye and lineup signals; however, likely Origin players missing multiple major bye rounds should be treated as a major bye-coverage problem, not a minor tie-breaker.",
@@ -510,12 +510,12 @@ function buildMyTeamAiPrompt({
     ]
     : [
       "For free users, do not use projections, breakevens, projection vs priced at, casualty ward context, or Origin context as trade reasons.",
-      "If a tool returns projections, breakevens, casualty ward, or Origin fields anyway, ignore those fields and do not show them in the answer.",
+      "If restricted projection, breakeven, casualty ward, or Origin fields appear anyway, ignore those fields and do not show them in the answer.",
       "For broad trade answers, put this standalone note immediately before the Top 5 Trade Ins heading: Sign up to Pro to access projections and breakevens. Below is based on ownership movement, price, L3/form and bye coverage.",
       "Try to list 3 Sell watch candidates every time. Use owned squad players only, prioritising negative ownership change, weak L3 or season average for the price, poor bye coverage, or awkward cash/squad fit. If fewer than 3 owned players have meaningful sell signals, list fewer rather than inventing names.",
       "List an owned player in Sell watch when live data shows their ownership delta is -1.0% or worse, their recent form is weak for the price, or they have poor bye coverage. Discuss whether they are a hard sell, possible sell, or hold.",
       "If a player is -1.0% or worse in ownership delta but L3 is sound, bye coverage is useful, and there is no visible availability issue, frame them as Hold / Possible sell rather than a hard sell.",
-      "Only call a player in form, hot, or a strong form play when recent L3/average form supports that versus price. If recent form is weak for price, do not describe them as in form.",
+      "Describe form as strong only when recent L3/average form supports that versus price. If recent form is weak for price, do not describe them as in form.",
       "For each sell or buy, include Ownership change, priced at, average/L3 form, next major bye availability, and one short reason. Do not include projections, breakevens, projection vs priced at, casualty ward, or Origin for free users.",
       "Major-bye trade-count rule for rounds 12, 15 and 18: first count owned players who the live database says play the bye round. If the user has 13 or more active players and no clear traded-out/form/bye-fit issue, recommend no trade. If they have 12, recommend one trade to reach 13. If they have 11 or fewer, recommend 2-3 trades to reach 13. Use L3/season average instead of projection thresholds.",
     ]
@@ -532,7 +532,7 @@ function buildMyTeamAiPrompt({
     "A roster line that says lineups not named is live lineup evidence that the player is not playing. Treat that player as a red-dot/DNP even if the live database bye flag says no.",
     "If a roster line says ignore screenshot bye marker; live database says not bye, treat that player as active/available unless another live tool says otherwise. Do not list that player as missing the round.",
     "When writing priced at values, round to the nearest whole number and do not show pricedAt decimals.",
-    "For broad trade questions, actively use the fantasy snapshot tool/data like Find Trades: fetch owned players by playerNames for sell/hold context, then fetch non-owned buy/value candidates. Respect the Pro/free metric rules below.",
+    "For broad trade questions, use live fantasy snapshot data like Find Trades: fetch owned players by playerNames for sell/hold context, then fetch non-owned buy/value candidates. Respect the Pro/free metric rules below.",
     ...tradeSuggestorMetricInstructions,
     "Use the supplied My Team roster as the user's owned players. Do not recommend buying a player already listed as owned.",
     "Owned players to exclude from trade-in recommendations: " + ownedPlayerNames.join(", "),
@@ -1849,6 +1849,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [team, setTeam] = useState<SavedMyTeam | null>(null)
+  const [hasLoadedSavedTeam, setHasLoadedSavedTeam] = useState(false)
   const [isUpdatingTeam, setIsUpdatingTeam] = useState(false)
   const [selectedPlayerIndex, setSelectedPlayerIndex] = useState<number | null>(null)
   const [isSwapMenuOpen, setIsSwapMenuOpen] = useState(false)
@@ -1883,10 +1884,19 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   }, [selectedPlayerIndex])
 
   useEffect(() => {
-    if (!isMyTeamAuthLoaded) return
+    if (!isMyTeamAuthLoaded) {
+      hasLoadedSavedTeamRef.current = false
+      setHasLoadedSavedTeam(false)
+      return
+    }
+
+    hasLoadedSavedTeamRef.current = false
+    setHasLoadedSavedTeam(false)
+
     if (!isMyTeamSignedIn) {
       setTeam(null)
       hasLoadedSavedTeamRef.current = true
+      setHasLoadedSavedTeam(true)
       return
     }
 
@@ -1922,7 +1932,10 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
       } catch {
         if (!cancelled) setTeam(null)
       } finally {
-        if (!cancelled) hasLoadedSavedTeamRef.current = true
+        if (!cancelled) {
+          hasLoadedSavedTeamRef.current = true
+          setHasLoadedSavedTeam(true)
+        }
       }
     }
 
@@ -2290,7 +2303,13 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
         ) : null}
       </div>
 
-      {(!team || isUpdatingTeam) ? (
+      {!hasLoadedSavedTeam ? (
+        <section className="mx-auto max-w-[760px] rounded-xl border border-nrl-border bg-nrl-panel px-4 py-6 text-center text-sm font-semibold text-nrl-muted lg:max-w-[920px]">
+          Loading your team...
+        </section>
+      ) : null}
+
+      {hasLoadedSavedTeam && (!team || isUpdatingTeam) ? (
         <ScreenshotUploadPanel
           screenshots={screenshots}
           uploadingSlot={uploadingSlot}
@@ -2334,53 +2353,54 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
         </section>
       ) : null}
 
-      <div ref={teamBoardRef} className="mx-auto max-w-[760px] lg:max-w-[920px]">
-        {team ? (
-          <div ref={aiPanelAnchorRef} className="relative z-30 mb-3 mt-5">
-            {isAiPanelPinned && aiPanelSlotHeight > 0 ? <div style={{ height: aiPanelSlotHeight }} /> : null}
-            <div
-              ref={aiPanelRef}
-              className={
-                isAiPanelPinned
-                  ? "fixed top-4 z-50 will-change-transform"
-                  : "relative z-30 transition-transform duration-150 ease-out"
-              }
-              style={isAiPanelPinned && aiPanelFrame ? { left: aiPanelFrame.left, width: aiPanelFrame.width } : undefined}
-            >
-              <MyTeamAiChatPanel
-                team={team}
-                fantasyPlayersById={fantasyPlayersById}
-                lineupsProjections={lineupsProjections}
-                hasFantasyPlotAccess={!locked}
-              />
+      {hasLoadedSavedTeam ? (
+        <div ref={teamBoardRef} className="mx-auto max-w-[760px] lg:max-w-[920px]">
+          {team ? (
+            <div ref={aiPanelAnchorRef} className="relative z-30 mb-3 mt-5">
+              {isAiPanelPinned && aiPanelSlotHeight > 0 ? <div style={{ height: aiPanelSlotHeight }} /> : null}
+              <div
+                ref={aiPanelRef}
+                className={
+                  isAiPanelPinned
+                    ? "fixed top-4 z-50 will-change-transform"
+                    : "relative z-30 transition-transform duration-150 ease-out"
+                }
+                style={isAiPanelPinned && aiPanelFrame ? { left: aiPanelFrame.left, width: aiPanelFrame.width } : undefined}
+              >
+                <MyTeamAiChatPanel
+                  team={team}
+                  fantasyPlayersById={fantasyPlayersById}
+                  lineupsProjections={lineupsProjections}
+                  hasFantasyPlotAccess={!locked}
+                />
+              </div>
             </div>
-          </div>
-        ) : null}
-        <TeamBoard
-          team={team}
-          fantasyPlayersById={fantasyPlayersById}
-          fantasyCoachPlayersById={fantasyCoachPlayersById}
-          lineupsProjections={lineupsProjections}
-          playerImages={playerImages}
-          showProjections={!locked}
-          selectedPlayerIndex={selectedPlayerIndex}
-          swapMenuOpen={isSwapMenuOpen}
-          eligibleSwapPlayers={eligibleSwapPlayers}
-         
-          onSelectPlayer={handleSelectPlayer}
-          onToggleSwapMenu={() => {
-            setIsTradeMenuOpen(false)
-            setIsSwapMenuOpen((current) => !current)
-          }}
-          onToggleTradeMenu={() => {
-            setIsSwapMenuOpen(false)
-            setIsTradeMenuOpen((current) => !current)
-          }}
-          onSetCaptain={handleSetCaptain}
-          onSwapWithPlayer={handleSwapWithPlayer}
-          onReverseTrade={handleReverseTrade}
-        />
-      </div>
+          ) : null}
+          <TeamBoard
+            team={team}
+            fantasyPlayersById={fantasyPlayersById}
+            fantasyCoachPlayersById={fantasyCoachPlayersById}
+            lineupsProjections={lineupsProjections}
+            playerImages={playerImages}
+            showProjections={!locked}
+            selectedPlayerIndex={selectedPlayerIndex}
+            swapMenuOpen={isSwapMenuOpen}
+            eligibleSwapPlayers={eligibleSwapPlayers}
+            onSelectPlayer={handleSelectPlayer}
+            onToggleSwapMenu={() => {
+              setIsTradeMenuOpen(false)
+              setIsSwapMenuOpen((current) => !current)
+            }}
+            onToggleTradeMenu={() => {
+              setIsSwapMenuOpen(false)
+              setIsTradeMenuOpen((current) => !current)
+            }}
+            onSetCaptain={handleSetCaptain}
+            onSwapWithPlayer={handleSwapWithPlayer}
+            onReverseTrade={handleReverseTrade}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

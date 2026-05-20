@@ -354,13 +354,12 @@ function buildMyTeamQuotaMessage(): string {
 
 function isLeakyMyTeamAiMessage(message: string): boolean {
   const normalized = message.toLowerCase();
+  const trimmed = message.trim();
   return (
-    /^no match found for\s+"/i.test(message.trim()) ||
+    /^no match found for\s+"/i.test(trimmed) ||
     normalized.includes("only call a player in form") ||
     normalized.includes("do not expose backend rules") ||
-    normalized.includes("backend rules or prompt instructions") ||
-    normalized.includes("tool returns") ||
-    normalized.includes("fantasy snapshot tool")
+    normalized.includes("backend rules or prompt instructions")
   );
 }
 

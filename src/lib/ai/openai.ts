@@ -38,6 +38,7 @@ const ENABLE_DIRECT_AI_SHORTCUTS = false;
 const ENABLE_DIRECT_CHART_SHORTCUTS = false;
 const CAPABILITY_ONLY_MODEL_TOOLS = true;
 const FINAL_ANSWER_PREFIX = "FINAL ANSWER:";
+const MY_TEAM_AI_PROMPT_PREFIX = "My Team NRL Fantasy AI request.";
 const ACTIVE_MODEL_TOOL_NAMES = new Set([
   "get_fantasy_snapshot",
   "get_player_base_fantasy_ratios",
@@ -220,11 +221,25 @@ function buildClarificationBudgetInstructions(clarificationCount: number | undef
   return "Clarification budget: prefer decisive answers and use no more than 2 clarification turns in the whole thread.";
 }
 
-function buildAiSystemInstructions(plan: AiPlan, clarificationCount?: number): string {
+function buildAiSystemInstructions(plan: AiPlan, clarificationCount?: number, isMyTeamRequest = false): string {
   const instructionBody = CAPABILITY_ONLY_MODEL_TOOLS
     ? CAPABILITY_ONLY_SYSTEM_INSTRUCTIONS
     : AI_SYSTEM_INSTRUCTIONS;
-  const baseInstructions = `${instructionBody}\n\n${buildAiReferenceCatalog()}\n\n${buildClarificationBudgetInstructions(clarificationCount)}`;
+  const myTeamInstructions = isMyTeamRequest
+    ? [
+        "My Team prompt handling:",
+        "- The user message is a structured My Team context document plus one final user question.",
+        "- Treat lines before `Team name:` as instructions, not player names, teams, or query entities.",
+        "- Only pass actual roster names under Starters, Interchange, Emergencies, or explicit names in `User question:` to player-name tool parameters.",
+        "- If a tool call fails for an instruction-like phrase, ignore that failed lookup and answer from the roster plus any successful fantasy snapshot data.",
+      ].join("\n")
+    : "";
+  const baseInstructions = [
+    instructionBody,
+    buildAiReferenceCatalog(),
+    buildClarificationBudgetInstructions(clarificationCount),
+    myTeamInstructions,
+  ].filter(Boolean).join("\n\n");
 
   if (plan === "premium") {
     return baseInstructions;
@@ -1801,6 +1816,18 @@ async function createOpenAiResponse(payload: Record<string, unknown>): Promise<O
   }
 }
 
+function containsMyTeamInstructionLikeLookup(value: unknown): boolean {
+  const text = JSON.stringify(value ?? "").toLowerCase();
+  return (
+    text.includes("only call a player in form") ||
+    text.includes("describe form as strong only") ||
+    text.includes("do not expose backend rules") ||
+    text.includes("backend rules or prompt instructions") ||
+    text.includes("lines before `team name:`") ||
+    text.includes("lines before team name")
+  );
+}
+
 async function continueOpenAiToolLoop(params: {
   response: OpenAiResponse;
   model: string;
@@ -1808,6 +1835,7 @@ async function continueOpenAiToolLoop(params: {
   access: AiToolAccessPolicy;
   toolActivity: AiToolActivity[];
   clarificationCount?: number;
+  isMyTeamRequest?: boolean;
 }): Promise<{ response: OpenAiResponse; finalAnswer: FinalAnswerSubmission | null }> {
   let response = params.response;
   let round = 0;
@@ -1897,6 +1925,16 @@ async function continueOpenAiToolLoop(params: {
         };
       }
 
+      if (params.isMyTeamRequest && !result.ok && containsMyTeamInstructionLikeLookup(parsedArguments ?? result.error)) {
+        result = {
+          ok: true,
+          data: {
+            ignoredInvalidLookup: true,
+            message: "Ignored an instruction-like lookup. Use the supplied roster and any successful fantasy data instead.",
+          },
+        };
+      }
+
       params.toolActivity.push({
         toolName: toolCall.name,
         arguments: parsedArguments,
@@ -1916,7 +1954,7 @@ async function continueOpenAiToolLoop(params: {
       reasoning: {
         effort: params.reasoningEffort,
       },
-      instructions: buildAiSystemInstructions(params.access.plan, params.clarificationCount),
+      instructions: buildAiSystemInstructions(params.access.plan, params.clarificationCount, params.isMyTeamRequest),
       previous_response_id: response.id,
       input: toolOutputs,
       tools: buildOpenAiTools(),
@@ -4823,6 +4861,7 @@ export async function runAiModelChat(
   const access = options?.access ?? { plan: "free" };
   const imageInputs = options?.imageInputs ?? [];
   const hasImageInputs = imageInputs.length > 0;
+  const isMyTeamRequest = userMessage.startsWith(MY_TEAM_AI_PROMPT_PREFIX);
   if (!hasImageInputs) {
     const directBaseFantasyRatioResult = await tryRunDirectBaseFantasyRatioChat(userMessage, access);
     if (directBaseFantasyRatioResult) {
@@ -5208,7 +5247,7 @@ export async function runAiModelChat(
       reasoning: {
         effort: reasoningEffort,
       },
-      instructions: buildAiSystemInstructions(access.plan, clarificationCount),
+      instructions: buildAiSystemInstructions(access.plan, clarificationCount, isMyTeamRequest),
       input: [
         ...modelHistory.map(buildOpenAiHistoryInput),
         {
@@ -5228,6 +5267,7 @@ export async function runAiModelChat(
       access,
       toolActivity,
       clarificationCount,
+      isMyTeamRequest,
     });
     response = loopResult.response;
     let submittedFinalAnswer = loopResult.finalAnswer;
@@ -5239,7 +5279,7 @@ export async function runAiModelChat(
         reasoning: {
           effort: reasoningEffort,
         },
-        instructions: buildAiSystemInstructions(access.plan, clarificationCount),
+        instructions: buildAiSystemInstructions(access.plan, clarificationCount, isMyTeamRequest),
         previous_response_id: response.id,
         input: [
           {
@@ -5264,6 +5304,7 @@ export async function runAiModelChat(
         access,
         toolActivity,
         clarificationCount,
+        isMyTeamRequest,
       });
       response = loopResult.response;
       submittedFinalAnswer = loopResult.finalAnswer;
@@ -5277,7 +5318,7 @@ export async function runAiModelChat(
         reasoning: {
           effort: reasoningEffort,
         },
-        instructions: buildAiSystemInstructions(access.plan, clarificationCount),
+        instructions: buildAiSystemInstructions(access.plan, clarificationCount, isMyTeamRequest),
         previous_response_id: response.id,
         input: [
           {
@@ -5307,6 +5348,7 @@ export async function runAiModelChat(
         access,
         toolActivity,
         clarificationCount,
+        isMyTeamRequest,
       });
       response = loopResult.response;
       submittedFinalAnswer = loopResult.finalAnswer;

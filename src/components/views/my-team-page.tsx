@@ -32,6 +32,7 @@ const STARTER_ROWS = [
 const MY_TEAM_MAJOR_BYE_ROUNDS = [12, 15, 18] as const
 const MY_TEAM_PROJECTION_ROUNDS = Array.from({ length: 19 }, (_, index) => index + 1)
 const MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS = [12, 13, 15, 16, 18, 19] as const
+const MY_TEAM_AI_ENABLED = false
 const FANTASY_SQUAD_ID_TO_TEAM: Record<number, string> = {
   500001: "Roosters",
   500002: "Sea Eagles",
@@ -877,7 +878,7 @@ function MyTeamAiChatPanel({
   ]
 
   return (
-    <section className="overflow-hidden rounded-xl border border-nrl-border/65 bg-nrl-panel/38 shadow-[0_18px_48px_rgba(2,6,23,0.28)] backdrop-blur-[2px]">
+    <section className="overflow-hidden rounded-xl border border-nrl-border/70 bg-[#111832]/62 shadow-[0_18px_48px_rgba(2,6,23,0.34)] backdrop-blur-[2px]">
       <button
         type="button"
         onClick={() => {
@@ -887,7 +888,7 @@ function MyTeamAiChatPanel({
           }
           setIsMinimized((value) => !value)
         }}
-        className={`flex w-full items-center justify-between gap-3 bg-[#111832]/36 text-left transition-colors hover:bg-[#151e3d]/48 ${
+        className={`flex w-full items-center justify-between gap-3 bg-[#111832]/58 text-left transition-colors hover:bg-[#151e3d]/72 ${
           onClose ? "px-4 py-4" : "px-4 py-3 lg:px-6 lg:py-4"
         } ${
           isMinimized ? "" : "border-b border-nrl-border"
@@ -929,7 +930,7 @@ function MyTeamAiChatPanel({
             </div>
           </div>
 
-          <div className="space-y-4 px-4 py-4 lg:px-6 lg:py-5">
+          <div className="space-y-4 bg-[#111832]/52 px-4 py-4 lg:px-6 lg:py-5">
             {messages.length > 0 || isSending ? (
               <div ref={chatScrollRef} className="max-h-80 space-y-4 overflow-y-auto pr-1">
                 {messages.map((message, index) => (
@@ -937,8 +938,8 @@ function MyTeamAiChatPanel({
                     key={`${message.role}-${index}`}
                     className={`rounded-lg border px-3 py-2 text-sm leading-6 ${
                       message.role === "user"
-                        ? "ml-auto max-w-[88%] border-nrl-accent/30 bg-nrl-accent/10 text-nrl-text"
-                        : "mr-auto max-w-[94%] border-nrl-border/70 bg-[#101936]/52 text-nrl-text"
+                        ? "ml-auto max-w-[88%] border-nrl-accent/35 bg-[#123f3a]/62 text-nrl-text"
+                        : "mr-auto max-w-[94%] border-nrl-border/75 bg-[#101936]/70 text-nrl-text"
                     }`}
                   >
                     {message.role === "assistant" ? <FormattedAiMessage content={message.content} /> : message.content}
@@ -962,7 +963,7 @@ function MyTeamAiChatPanel({
                 onChange={(event) => setDraft(event.target.value)}
                 rows={1}
                 placeholder="Ask about a trade, loop, captaincy or who to play..."
-                className="min-h-10 w-full resize-none overflow-hidden whitespace-nowrap rounded-xl border border-nrl-border/70 bg-[#0e1530]/52 py-2.5 pl-3 pr-12 text-[10px] leading-5 text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent min-[380px]:text-[11px] sm:text-sm lg:min-h-12 lg:py-3 lg:pl-4 lg:pr-14 lg:text-base"
+                className="min-h-10 w-full resize-none overflow-hidden whitespace-nowrap rounded-xl border border-nrl-border/75 bg-[#0e1530]/68 py-2.5 pl-3 pr-12 text-[10px] leading-5 text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent min-[380px]:text-[11px] sm:text-sm lg:min-h-12 lg:py-3 lg:pl-4 lg:pr-14 lg:text-base"
               />
               <button
                 type="submit"
@@ -988,6 +989,32 @@ function MyTeamAiChatPanel({
           </div>
         </>
       ) : null}
+    </section>
+  )
+}
+
+function MyTeamAiComingSoonPanel({ onClose }: { onClose: () => void }) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-nrl-border/70 bg-[#111832]/64 shadow-[0_18px_48px_rgba(2,6,23,0.34)] backdrop-blur-[2px]">
+      <button
+        type="button"
+        onClick={onClose}
+        className="flex w-full items-center justify-between gap-3 bg-[#111832]/58 px-4 py-4 text-left transition-colors hover:bg-[#151e3d]/72"
+        aria-label="Close NRL AI coming soon"
+      >
+        <span className="inline-flex items-center gap-2">
+          <span className="grid h-10 w-10 place-items-center rounded-full border border-pink-200/35 bg-[linear-gradient(135deg,#1687ff_0%,#8257ff_48%,#ff4ea0_100%)] text-white shadow-[0_10px_24px_rgba(23,41,140,0.35)]">
+            <MagicAiIcon className="h-5 w-5" />
+          </span>
+          <span className="block text-xs font-black uppercase tracking-[0.18em] text-nrl-accent lg:text-sm">NRL AI</span>
+        </span>
+        <span className="text-lg font-black leading-none text-nrl-muted lg:text-2xl">-</span>
+      </button>
+      <div className="border-t border-nrl-border/70 bg-[#111832]/52 px-4 py-5 lg:px-6">
+        <div className="rounded-xl border border-nrl-border/75 bg-[#0e1530]/68 px-4 py-4 text-sm font-semibold text-nrl-text">
+          Coming soon.
+        </div>
+      </div>
     </section>
   )
 }
@@ -2268,13 +2295,17 @@ function TeamBoard({
               onClick={onCloseAiChat}
             />
             <div className="absolute inset-x-0 top-0 z-[60] px-0 text-left not-italic tracking-normal sm:px-3">
-              <MyTeamAiChatPanel
-                team={team as SavedMyTeam}
-                fantasyPlayersById={fantasyPlayersById}
-                lineupsProjections={lineupsProjections}
-                hasFantasyPlotAccess={hasFantasyPlotAccess}
-                onClose={onCloseAiChat}
-              />
+              {MY_TEAM_AI_ENABLED ? (
+                <MyTeamAiChatPanel
+                  team={team as SavedMyTeam}
+                  fantasyPlayersById={fantasyPlayersById}
+                  lineupsProjections={lineupsProjections}
+                  hasFantasyPlotAccess={hasFantasyPlotAccess}
+                  onClose={onCloseAiChat}
+                />
+              ) : (
+                <MyTeamAiComingSoonPanel onClose={onCloseAiChat} />
+              )}
             </div>
           </>
         ) : null}

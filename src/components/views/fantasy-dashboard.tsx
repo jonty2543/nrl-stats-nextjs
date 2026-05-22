@@ -291,7 +291,7 @@ const PRO_PRICE_LABEL = "$5/month"
 const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
   "inline-flex h-5 w-12 items-center justify-center rounded bg-[#263154] text-slate-100"
-const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[3px] select-none"
+const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[7px] opacity-60 select-none"
 
 interface MajorByeRoundTag {
   round: number
@@ -1313,6 +1313,15 @@ function formatNextMajorByeTag(round: number | null, plays: boolean | null): str
   return `${plays ? "✓" : "✕"} Rd${round}`
 }
 
+function filterFutureMajorByeRoundTags(
+  tags: MajorByeRoundTag[] | undefined,
+  nextMajorByeRound: number | null,
+): MajorByeRoundTag[] {
+  if (!tags?.length) return []
+  if (nextMajorByeRound == null) return []
+  return tags.filter((tag) => tag.round >= nextMajorByeRound)
+}
+
 function getFantasyFilterTags({
   majorByeRoundTags,
   nextMajorByeRound,
@@ -1325,9 +1334,10 @@ function getFantasyFilterTags({
   originChance: boolean
 }): string[] {
   const tags: string[] = []
+  const futureMajorByeRoundTags = filterFutureMajorByeRoundTags(majorByeRoundTags, nextMajorByeRound)
   const byeTags =
-    majorByeRoundTags && majorByeRoundTags.length > 0
-      ? majorByeRoundTags
+    futureMajorByeRoundTags.length > 0
+      ? futureMajorByeRoundTags
         .map((tag) => formatNextMajorByeTag(tag.round, tag.plays))
         .filter((tag): tag is string => Boolean(tag))
       : [formatNextMajorByeTag(nextMajorByeRound, playsNextMajorBye)].filter((tag): tag is string => Boolean(tag))
@@ -1386,9 +1396,10 @@ function PlayerContextTags({
   originChance: boolean
   className?: string
 }) {
+  const futureMajorByeRoundTags = filterFutureMajorByeRoundTags(majorByeRoundTags, nextMajorByeRound)
   const byeTags =
-    majorByeRoundTags && majorByeRoundTags.length > 0
-      ? majorByeRoundTags.filter((tag) => tag.plays !== null)
+    futureMajorByeRoundTags.length > 0
+      ? futureMajorByeRoundTags.filter((tag) => tag.plays !== null)
       : nextMajorByeRound !== null && playsNextMajorBye !== null
         ? [{ round: nextMajorByeRound, plays: playsNextMajorBye }]
         : []
@@ -2365,7 +2376,7 @@ function MetricCard({
         {label}
       </div>
       <div
-        className={`${compact ? mobileTight ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${blurValue ? "select-none blur-[3px]" : ""
+        className={`${compact ? mobileTight ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${blurValue ? "select-none blur-[8px] opacity-60" : ""
           }`}
         aria-hidden={blurValue || undefined}
       >
@@ -3383,10 +3394,12 @@ export function FantasyDashboard({
       const nextMajorByeRound = getNextMajorByeRound(projectionRound)
       const byeTeam = lineupRole?.team ?? teamHint ?? imageRow?.team ?? null
       const playsNextMajorBye = teamPlaysInRound(draw2026Data, nextMajorByeRound, byeTeam)
-      const majorByeRoundTags = MAJOR_BYE_ROUNDS.map((round) => ({
-        round,
-        plays: teamPlaysInRound(draw2026Data, round, byeTeam),
-      }))
+      const majorByeRoundTags = MAJOR_BYE_ROUNDS
+        .filter((round) => nextMajorByeRound != null && round >= nextMajorByeRound)
+        .map((round) => ({
+          round,
+          plays: teamPlaysInRound(draw2026Data, round, byeTeam),
+        }))
       const relevantOutRows =
         lineupsProjections?.source === "lineups" && lineupRole?.isOnField && lineupRole.team && lineupRole.position
           ? relevantOutCandidates
@@ -3620,7 +3633,7 @@ export function FantasyDashboard({
     const byeOptions = new Set<string>()
     let hasOriginChance = false
     for (const row of allPlayersTableRows) {
-      for (const tag of row.majorByeRoundTags) {
+      for (const tag of filterFutureMajorByeRoundTags(row.majorByeRoundTags, row.nextMajorByeRound)) {
         const byeTag = formatNextMajorByeTag(tag.round, tag.plays)
         if (byeTag) byeOptions.add(byeTag)
       }

@@ -1280,10 +1280,13 @@ function getMajorRoundAvailabilityBadges(
   playerImages: PlayerImageRecord[],
   draw2026Data: Draw2026Data | null,
   originPlayerNames: Set<string>,
+  currentRound: number | null,
 ): RoundAvailabilityBadge[] {
-  return MY_TEAM_MAJOR_BYE_ROUNDS.map((round) =>
-    getMajorRoundAvailability(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames),
-  )
+  return MY_TEAM_MAJOR_BYE_ROUNDS
+    .filter((round) => currentRound == null || round >= currentRound)
+    .map((round) =>
+      getMajorRoundAvailability(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames),
+    )
 }
 
 function isAvailableForProjectionRound(
@@ -2103,7 +2106,11 @@ function TeamBoard({
         .filter(({ index }) => projectedLineup.scoringIndexes.has(index))
   const projectedScore = scoringSide
     .reduce((sum, entry) => sum + (effectiveProjectionForPlayer(entry.player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections) ?? 0), 0)
-  const currentRoundNumber = Number.parseInt(team?.round ?? "", 10)
+  const screenshotRoundNumber = Number.parseInt(team?.round ?? "", 10)
+  const appRoundNumber = typeof lineupsProjections.round === "number" && Number.isFinite(lineupsProjections.round)
+    ? lineupsProjections.round
+    : screenshotRoundNumber
+  const currentRoundNumber = appRoundNumber
   const currentMajorRound: MyTeamMajorByeRound | null = MY_TEAM_MAJOR_BYE_ROUNDS.includes(currentRoundNumber as MyTeamMajorByeRound)
     ? currentRoundNumber as MyTeamMajorByeRound
     : null
@@ -2131,13 +2138,16 @@ function TeamBoard({
   }
   const availabilityForPlayer = (player: MyTeamPlayer | null) =>
     player
-      ? getMajorRoundAvailabilityBadges(player, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
+      ? getMajorRoundAvailabilityBadges(player, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames, currentRoundForHeader)
       : []
   const availableHeaderRounds = MY_TEAM_PROJECTION_ROUNDS.filter((round) => round >= (currentRoundForHeader ?? 1))
   const showRoundProjections = showProjections && selectedProjectionRound == null
   const activeHeaderIsMajorRound = activeHeaderRound != null && MY_TEAM_MAJOR_BYE_ROUNDS.includes(activeHeaderRound as MyTeamMajorByeRound)
   const playingTarget = activeHeaderIsMajorRound ? 13 : 17
-  const availabilitySummaryRounds = MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS.filter((round) => round >= (currentRoundForHeader ?? 1))
+  const availabilitySummaryRounds =
+    team && players.length > 0
+      ? MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS.filter((round) => round >= (currentRoundForHeader ?? 1))
+      : []
   const availabilitySummary = availabilitySummaryRounds.map((round) => {
     const target = MY_TEAM_MAJOR_BYE_ROUNDS.includes(round as MyTeamMajorByeRound) ? 13 : 17
     const availableCount = players.filter((player) => {

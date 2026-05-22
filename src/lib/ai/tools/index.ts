@@ -1352,6 +1352,12 @@ function nextFantasyMajorByeRound(round: number | null): number | null {
   return FANTASY_MAJOR_BYE_ROUNDS.find((byeRound) => byeRound >= round) ?? null;
 }
 
+function futureFantasyMajorByeRounds(round: number | null): number[] {
+  const nextMajorByeRound = nextFantasyMajorByeRound(round);
+  if (nextMajorByeRound == null) return [];
+  return FANTASY_MAJOR_BYE_ROUNDS.filter((byeRound) => byeRound >= nextMajorByeRound);
+}
+
 function getFantasyLastThreeAverage(scoreHistory: Record<string, number>): number | null {
   const scores = Object.entries(scoreHistory)
     .map(([round, score]) => ({ round: Number.parseInt(round, 10), score }))
@@ -2763,7 +2769,7 @@ async function runGetFantasySnapshot(
       const nextMajorByeRound = nextFantasyMajorByeRound(round);
       const playsNextMajorByeRound =
         nextMajorByeRound != null ? teamHasDrawFixture(draw2026Data, nextMajorByeRound, team) : null;
-      const unavailableMajorByeRounds = FANTASY_MAJOR_BYE_ROUNDS.filter(
+      const unavailableMajorByeRounds = futureFantasyMajorByeRounds(round).filter(
         (byeRound) => teamHasDrawFixture(draw2026Data, byeRound, team) === false
       );
 
@@ -2847,7 +2853,7 @@ async function runGetFantasySnapshot(
       availableRounds,
       drawContext: {
         season: 2026,
-        majorByeRounds: FANTASY_MAJOR_BYE_ROUNDS,
+        majorByeRounds: futureFantasyMajorByeRounds(effectiveRound ?? lineupsProjections.round ?? fallbackRound),
       },
       sortBy: parsed.sortBy ?? "ownership_delta_desc",
       requireOwnershipRise: parsed.requireOwnershipRise ?? false,

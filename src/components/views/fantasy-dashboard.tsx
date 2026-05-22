@@ -4066,7 +4066,7 @@ export function FantasyDashboard({
                 <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-35 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
               </span>
               <span className="absolute -right-1 -top-2 rounded-full border border-emerald-200 bg-nrl-accent px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.28)]">
-                NRL AI
+                New
               </span>
               <span className="relative z-10 inline-flex items-center gap-2 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
                 <PersonIcon className="h-5 w-5" />

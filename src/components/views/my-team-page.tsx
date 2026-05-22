@@ -5,6 +5,7 @@ import { SignInButton, useAuth } from "@clerk/nextjs"
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { resolvePlayerImage } from "@/components/views/player-comparison"
+import type { Draw2026Data } from "@/lib/draw/types"
 import {
   getFantasyCoachRoundMetrics,
   type FantasyCoachPlayerSnapshot,
@@ -12,7 +13,7 @@ import {
   type LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
-import type { PlayerImageRecord } from "@/lib/supabase/queries"
+import type { OriginChanceRecord, PlayerImageRecord } from "@/lib/supabase/queries"
 
 const MY_TEAM_MAX_IMAGE_DATA_URL_LENGTH = 650_000
 const SCREENSHOT_SLOTS = [
@@ -28,6 +29,28 @@ const STARTER_ROWS = [
   { slot: "CTR", count: 2 },
   { slot: "WFB", count: 3 },
 ] as const
+const MY_TEAM_MAJOR_BYE_ROUNDS = [12, 15, 18] as const
+const MY_TEAM_PROJECTION_ROUNDS = Array.from({ length: 19 }, (_, index) => index + 1)
+const MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS = [12, 13, 15, 16, 18, 19] as const
+const FANTASY_SQUAD_ID_TO_TEAM: Record<number, string> = {
+  500001: "Roosters",
+  500002: "Sea Eagles",
+  500003: "Knights",
+  500004: "Titans",
+  500005: "Rabbitohs",
+  500010: "Bulldogs",
+  500011: "Broncos",
+  500012: "Cowboys",
+  500013: "Raiders",
+  500014: "Panthers",
+  500021: "Storm",
+  500022: "Dragons",
+  500023: "Wests Tigers",
+  500028: "Sharks",
+  500031: "Eels",
+  500032: "Warriors",
+  500723: "Dolphins",
+}
 
 type ScreenshotSlot = (typeof SCREENSHOT_SLOTS)[number]["key"]
 type SquadRole = "starter" | "interchange" | "emergency"
@@ -90,6 +113,8 @@ interface MyTeamPageProps {
   fantasyCoachPlayers: FantasyCoachPlayerSnapshot[]
   lineupsProjections: LineupsProjectionSnapshot
   playerImages: PlayerImageRecord[]
+  draw2026Data: Draw2026Data | null
+  originChances: OriginChanceRecord[]
   locked: boolean
 }
 
@@ -110,6 +135,17 @@ interface TradeCandidate {
   breakEven: number | null
   projection: number | null
   affordable: boolean
+}
+
+type MyTeamMajorByeRound = (typeof MY_TEAM_MAJOR_BYE_ROUNDS)[number]
+type MyTeamProjectionRound = number
+
+interface RoundAvailabilityBadge {
+  round: MyTeamMajorByeRound
+  available: boolean
+  reason: string
+  isBye: boolean
+  isOriginRisk: boolean
 }
 
 type TeamDropTarget =
@@ -191,6 +227,43 @@ function normalisePlayerLookupValue(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim()
 }
 
+function normaliseTeamKey(value: string | null | undefined): string {
+  const key = String(value ?? "")
+    .replace(/-/g, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+  const aliases: Record<string, string> = {
+    "canterbury bankstown bulldogs": "bulldogs",
+    "cronulla sutherland sharks": "sharks",
+    "gold coast titans": "titans",
+    "manly warringah sea eagles": "sea eagles",
+    "new zealand": "warriors",
+    "new zealand warriors": "warriors",
+    nz: "warriors",
+    "nz warriors": "warriors",
+    nzl: "warriors",
+    "north queensland cowboys": "cowboys",
+    "parramatta eels": "eels",
+    "south sydney rabbitohs": "rabbitohs",
+    "st george illawarra dragons": "dragons",
+    "sydney roosters": "roosters",
+    tigers: "wests tigers",
+  }
+  return aliases[key] ?? key
+}
+
+function teamPlaysInRound(draw2026Data: Draw2026Data | null | undefined, round: number, team: string | null): boolean | null {
+  if (!draw2026Data?.rows.length || !team) return null
+  const teamKey = normaliseTeamKey(team)
+  if (!teamKey) return null
+  const roundRows = draw2026Data.rows.filter((row) => row.round === round)
+  if (roundRows.length === 0) return null
+  return roundRows.some(
+    (row) => normaliseTeamKey(row.home) === teamKey || normaliseTeamKey(row.away) === teamKey,
+  )
+}
+
 function playerNameSignature(value: string): { initial: string; surname: string; full: string } {
   const full = normalisePlayerLookupValue(value)
   const abbreviated = full.match(/^([a-z])\s+(.+)$/)
@@ -200,6 +273,41 @@ function playerNameSignature(value: string): { initial: string; surname: string;
   const parts = full.split(" ").filter(Boolean)
   const first = parts[0] ?? ""
   return { initial: first.slice(0, 1), surname: parts.slice(1).join(""), full }
+}
+
+function fantasyNamesMatch(left: string, right: string): boolean {
+  return fantasyPlayerNameMatches(left, right) || fantasyPlayerNameMatches(right, left)
+}
+
+function playerDisplayNameForLookup(
+  player: MyTeamPlayer,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+): string {
+  return player.playerId != null ? fantasyPlayersById.get(player.playerId)?.name ?? player.displayName : player.displayName
+}
+
+function resolveMyTeamPlayerTeam(
+  player: MyTeamPlayer,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  playerImages: PlayerImageRecord[],
+): string | null {
+  const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) ?? null : null
+  if (fantasyPlayer?.squadId != null) {
+    return FANTASY_SQUAD_ID_TO_TEAM[fantasyPlayer.squadId] ?? null
+  }
+  const playerName = playerDisplayNameForLookup(player, fantasyPlayersById)
+  const match = playerImages.find((row) => row.team && fantasyNamesMatch(row.player, playerName))
+  return match?.team ?? null
+}
+
+function isOriginChancePlayer(
+  player: MyTeamPlayer,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  originPlayerNames: Set<string>,
+): boolean {
+  if (originPlayerNames.size === 0) return false
+  const playerName = playerDisplayNameForLookup(player, fantasyPlayersById)
+  return [...originPlayerNames].some((originName) => fantasyNamesMatch(originName, playerName))
 }
 
 function fantasyPlayerNameMatches(extractedName: string, playerName: string): boolean {
@@ -687,11 +795,13 @@ function MyTeamAiChatPanel({
   fantasyPlayersById,
   lineupsProjections,
   hasFantasyPlotAccess,
+  onClose,
 }: {
   team: SavedMyTeam
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
   lineupsProjections: LineupsProjectionSnapshot
   hasFantasyPlotAccess: boolean
+  onClose?: () => void
 }) {
   const [messages, setMessages] = useState<MyTeamChatMessage[]>([])
   const [draft, setDraft] = useState("")
@@ -767,24 +877,33 @@ function MyTeamAiChatPanel({
   ]
 
   return (
-    <section className="overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel/95 shadow-[0_18px_48px_rgba(2,6,23,0.34)] backdrop-blur">
+    <section className="overflow-hidden rounded-xl border border-nrl-border/65 bg-nrl-panel/38 shadow-[0_18px_48px_rgba(2,6,23,0.28)] backdrop-blur-[2px]">
       <button
         type="button"
-        onClick={() => setIsMinimized((value) => !value)}
-        className={`flex w-full items-center justify-between gap-3 bg-[#111832] px-4 py-3 text-left transition-colors hover:bg-[#151e3d] lg:px-6 lg:py-4 ${
+        onClick={() => {
+          if (onClose) {
+            onClose()
+            return
+          }
+          setIsMinimized((value) => !value)
+        }}
+        className={`flex w-full items-center justify-between gap-3 bg-[#111832]/36 text-left transition-colors hover:bg-[#151e3d]/48 ${
+          onClose ? "px-4 py-4" : "px-4 py-3 lg:px-6 lg:py-4"
+        } ${
           isMinimized ? "" : "border-b border-nrl-border"
         }`}
         aria-expanded={!isMinimized}
       >
         <span className="inline-flex items-center gap-2">
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-nrl-accent/15 text-nrl-accent lg:h-9 lg:w-9">
-            <MagicAiIcon className="h-4 w-4 lg:h-5 lg:w-5" />
+          <span className={`grid place-items-center rounded-full ${
+            onClose
+              ? "h-10 w-10 border border-pink-200/35 bg-[linear-gradient(135deg,#1687ff_0%,#8257ff_48%,#ff4ea0_100%)] text-white shadow-[0_10px_24px_rgba(23,41,140,0.35)]"
+              : "h-7 w-7 bg-nrl-accent/15 text-nrl-accent lg:h-9 lg:w-9"
+          }`}>
+            <MagicAiIcon className={onClose ? "h-5 w-5" : "h-4 w-4 lg:h-5 lg:w-5"} />
           </span>
           <span>
             <span className="block text-xs font-black uppercase tracking-[0.18em] text-nrl-accent lg:text-sm">NRL AI</span>
-            <span className="block text-[11px] font-semibold text-nrl-muted lg:text-sm">
-              Trades, captaincy, loops
-            </span>
           </span>
         </span>
         <span className="text-lg font-black leading-none text-nrl-muted lg:text-2xl">{isMinimized ? "+" : "-"}</span>
@@ -819,7 +938,7 @@ function MyTeamAiChatPanel({
                     className={`rounded-lg border px-3 py-2 text-sm leading-6 ${
                       message.role === "user"
                         ? "ml-auto max-w-[88%] border-nrl-accent/30 bg-nrl-accent/10 text-nrl-text"
-                        : "mr-auto max-w-[94%] border-nrl-border bg-[#101936] text-nrl-text"
+                        : "mr-auto max-w-[94%] border-nrl-border/70 bg-[#101936]/52 text-nrl-text"
                     }`}
                   >
                     {message.role === "assistant" ? <FormattedAiMessage content={message.content} /> : message.content}
@@ -843,7 +962,7 @@ function MyTeamAiChatPanel({
                 onChange={(event) => setDraft(event.target.value)}
                 rows={1}
                 placeholder="Ask about a trade, loop, captaincy or who to play..."
-                className="min-h-10 w-full resize-none overflow-hidden whitespace-nowrap rounded-xl border border-nrl-border bg-[#0e1530] py-2.5 pl-3 pr-12 text-[10px] leading-5 text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent min-[380px]:text-[11px] sm:text-sm lg:min-h-12 lg:py-3 lg:pl-4 lg:pr-14 lg:text-base"
+                className="min-h-10 w-full resize-none overflow-hidden whitespace-nowrap rounded-xl border border-nrl-border/70 bg-[#0e1530]/52 py-2.5 pl-3 pr-12 text-[10px] leading-5 text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent min-[380px]:text-[11px] sm:text-sm lg:min-h-12 lg:py-3 lg:pl-4 lg:pr-14 lg:text-base"
               />
               <button
                 type="submit"
@@ -1077,15 +1196,37 @@ function getLineupsNamedStatus(
   )
 }
 
+function playerHasCurrentUnavailableStatus(
+  player: MyTeamPlayer,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+): boolean {
+  const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) ?? null : null
+  const liveStatus = fantasyPlayer?.status?.trim().toLowerCase() ?? ""
+  return (
+    player.status === "injured" ||
+    player.status === "suspended" ||
+    liveStatus.includes("injur") ||
+    liveStatus.includes("suspend") ||
+    liveStatus.includes("not-playing") ||
+    liveStatus.includes("not playing") ||
+    liveStatus === "out"
+  )
+}
+
 function Marker({
   player,
   fantasyPlayersById,
   lineupsProjections,
+  override,
 }: {
   player: MyTeamPlayer
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
   lineupsProjections: LineupsProjectionSnapshot
+  override?: "available" | "unavailable" | "bye" | null
 }) {
+  if (override === "available") return <span className="grid h-4 w-4 place-items-center rounded-full bg-[#51b847] text-[10px] font-black text-white">✓</span>
+  if (override === "unavailable") return <span className="grid h-4 w-4 place-items-center rounded-full bg-[#e54848] text-[10px] font-black text-white">×</span>
+  if (override === "bye") return <span className="grid h-4 w-4 place-items-center rounded-full bg-black"><span className="h-1.5 w-1.5 bg-white" /></span>
   if (player.status === "injured") return <span className="grid h-4 w-4 place-items-center rounded-full bg-red-500 text-[10px] font-black text-white">+</span>
   if (player.status === "suspended") return <span className="h-3.5 w-3.5 rounded-full bg-red-500 ring-2 ring-white" />
   if (effectiveIsBye(player, fantasyPlayersById)) return <span className="grid h-4 w-4 place-items-center rounded-full bg-black"><span className="h-1.5 w-1.5 bg-white" /></span>
@@ -1094,6 +1235,185 @@ function Marker({
   if (namedStatus === false) return <span className="grid h-4 w-4 place-items-center rounded-full bg-[#e54848] text-[10px] font-black text-white">×</span>
   if (player.status === "uncertain") return <span className="grid h-4 w-4 place-items-center rounded-full bg-[#d6cc13] text-[10px] font-black text-white">?</span>
   return null
+}
+
+function getRoundAvailability(
+  player: MyTeamPlayer,
+  round: MyTeamProjectionRound,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  playerImages: PlayerImageRecord[],
+  draw2026Data: Draw2026Data | null,
+  originPlayerNames: Set<string>,
+): Omit<RoundAvailabilityBadge, "round"> {
+  const team = resolveMyTeamPlayerTeam(player, fantasyPlayersById, playerImages)
+  const playsRound = teamPlaysInRound(draw2026Data, round, team)
+
+  if (
+    MY_TEAM_MAJOR_BYE_ROUNDS.includes(round as MyTeamMajorByeRound) &&
+    isOriginChancePlayer(player, fantasyPlayersById, originPlayerNames)
+  ) {
+    return { available: false, reason: "Origin risk", isBye: false, isOriginRisk: true }
+  }
+
+  if (playsRound === false) return { available: false, reason: team ? `${team} bye Rd${round}` : `Bye Rd${round}`, isBye: true, isOriginRisk: false }
+  if (playsRound === true) return { available: true, reason: team ? `${team} play Rd${round}` : `Plays Rd${round}`, isBye: false, isOriginRisk: false }
+  return { available: false, reason: "Unknown draw", isBye: false, isOriginRisk: false }
+}
+
+function getMajorRoundAvailability(
+  player: MyTeamPlayer,
+  round: MyTeamMajorByeRound,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  playerImages: PlayerImageRecord[],
+  draw2026Data: Draw2026Data | null,
+  originPlayerNames: Set<string>,
+): RoundAvailabilityBadge {
+  return {
+    round,
+    ...getRoundAvailability(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames),
+  }
+}
+
+function getMajorRoundAvailabilityBadges(
+  player: MyTeamPlayer,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  playerImages: PlayerImageRecord[],
+  draw2026Data: Draw2026Data | null,
+  originPlayerNames: Set<string>,
+): RoundAvailabilityBadge[] {
+  return MY_TEAM_MAJOR_BYE_ROUNDS.map((round) =>
+    getMajorRoundAvailability(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames),
+  )
+}
+
+function isAvailableForProjectionRound(
+  player: MyTeamPlayer,
+  round: MyTeamProjectionRound,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  playerImages: PlayerImageRecord[],
+  draw2026Data: Draw2026Data | null,
+  originPlayerNames: Set<string>,
+): boolean {
+  return getRoundAvailability(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames).available
+}
+
+function playerPriceForSort(
+  player: MyTeamPlayer,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+): number {
+  return player.playerId != null ? fantasyPlayersById.get(player.playerId)?.cost ?? 0 : 0
+}
+
+function buildMajorRoundDisplayLineup(
+  players: MyTeamPlayer[],
+  round: MyTeamProjectionRound | null,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+  playerImages: PlayerImageRecord[],
+  draw2026Data: Draw2026Data | null,
+  originPlayerNames: Set<string>,
+) {
+  const startersBySlot = new Map<string, IndexedMyTeamPlayer[]>()
+  for (const row of STARTER_ROWS) startersBySlot.set(row.slot, [])
+
+  if (round == null) {
+    players.forEach((player, index) => {
+      if (player.squadRole !== "starter") return
+      const slot = STARTER_ROWS.some((row) => row.slot === player.slot) ? player.slot : ""
+      if (!slot) return
+      startersBySlot.get(slot)?.push({ player, index })
+    })
+    const benchPlayers = players
+      .map((player, index) => ({ player, index }))
+      .filter(({ player }) => player.squadRole !== "starter")
+      .sort((a, b) => (a.player.benchOrder ?? 99) - (b.player.benchOrder ?? 99))
+    return {
+      startersBySlot,
+      benchPlayers,
+      scoringIndexes: new Set<number>(),
+    }
+  }
+
+  const indexedPlayers = players.map((player, index) => ({ player, index }))
+  const usedIndexes = new Set<number>()
+  const scoringIndexes = new Set<number>()
+  const activeScore = ({ player, index }: IndexedMyTeamPlayer) => {
+    const active = isAvailableForProjectionRound(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames) ? 1 : 0
+    const originalStarter = player.squadRole === "starter" ? 0.4 : 0
+    const price = playerPriceForSort(player, fantasyPlayersById)
+    return active * 1000 + price / 1000 + originalStarter - index / 10000
+  }
+
+  const starterRowsByScarcity = [...STARTER_ROWS].sort((left, right) => {
+    const leftCandidates = indexedPlayers.filter(({ player }) =>
+      isAvailableForProjectionRound(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames) &&
+      playerCanCoverSlot(player, left.slot, fantasyPlayersById),
+    ).length
+    const rightCandidates = indexedPlayers.filter(({ player }) =>
+      isAvailableForProjectionRound(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames) &&
+      playerCanCoverSlot(player, right.slot, fantasyPlayersById),
+    ).length
+    if (leftCandidates !== rightCandidates) return leftCandidates - rightCandidates
+    return STARTER_ROWS.findIndex((row) => row.slot === left.slot) - STARTER_ROWS.findIndex((row) => row.slot === right.slot)
+  })
+
+  for (const row of starterRowsByScarcity) {
+    const slotEntries: IndexedMyTeamPlayer[] = []
+    for (let cellIndex = 0; cellIndex < row.count; cellIndex += 1) {
+      const activeCover = indexedPlayers
+        .filter(({ player, index }) =>
+          !usedIndexes.has(index) &&
+          isAvailableForProjectionRound(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames) &&
+          playerCanCoverSlot(player, row.slot, fantasyPlayersById),
+        )
+        .sort((a, b) => activeScore(b) - activeScore(a))[0]
+      const fallbackStarter = indexedPlayers
+        .filter(({ player, index }) => !usedIndexes.has(index) && playerCanCoverSlot(player, row.slot, fantasyPlayersById))
+        .sort((a, b) => activeScore(b) - activeScore(a))[0]
+      const entry = activeCover ?? fallbackStarter ?? null
+      if (!entry) continue
+      const entryAvailable = isAvailableForProjectionRound(entry.player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
+      usedIndexes.add(entry.index)
+      if (entryAvailable) scoringIndexes.add(entry.index)
+      slotEntries.push({
+        index: entry.index,
+        player: { ...entry.player, squadRole: "starter", slot: row.slot, benchOrder: null },
+      })
+    }
+    startersBySlot.set(row.slot, slotEntries)
+  }
+
+  const remaining = indexedPlayers
+    .filter(({ index }) => !usedIndexes.has(index))
+    .sort((a, b) => {
+      const aAvailable = isAvailableForProjectionRound(a.player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
+      const bAvailable = isAvailableForProjectionRound(b.player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
+      if (aAvailable !== bAvailable) return aAvailable ? -1 : 1
+      const priceDelta = playerPriceForSort(b.player, fantasyPlayersById) - playerPriceForSort(a.player, fantasyPlayersById)
+      if (priceDelta !== 0) return priceDelta
+      return (a.player.benchOrder ?? 99) - (b.player.benchOrder ?? 99)
+    })
+
+  const benchPlayers = remaining.slice(0, 8).map((entry, benchIndex) => {
+    const isAvailable = isAvailableForProjectionRound(entry.player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
+    const isInterchange = benchIndex < 4 && isAvailable
+    const squadRole: SquadRole = isInterchange ? "interchange" : "emergency"
+    if (isInterchange) scoringIndexes.add(entry.index)
+    return {
+      index: entry.index,
+      player: {
+        ...entry.player,
+        squadRole,
+        slot: isInterchange ? "INT" : "EMG",
+        benchOrder: benchIndex + 1,
+      },
+    }
+  })
+
+  return {
+    startersBySlot,
+    benchPlayers,
+    scoringIndexes,
+  }
 }
 
 function projectionForPlayer(
@@ -1120,6 +1440,17 @@ function effectiveProjectionForPlayer(
   const projection = projectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
   if (projection == null) return null
   return player.isCaptain ? projection * 2 : projection
+}
+
+function actualScoreForPlayerRound(
+  player: MyTeamPlayer,
+  round: MyTeamProjectionRound | null,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+): number | null {
+  if (round == null || player.playerId == null) return null
+  const fantasyPlayer = fantasyPlayersById.get(player.playerId)
+  const score = fantasyPlayer?.scoreHistory?.[String(round)]
+  return typeof score === "number" && Number.isFinite(score) ? score : null
 }
 
 function playerCanCoverSlot(
@@ -1395,8 +1726,12 @@ function PlayerToken({
   playerImages,
   bench = false,
   showProjections = false,
+  scoreRound = null,
+  showCaptainStyling = true,
   selected = false,
   swapMenuOpen = false,
+  majorRoundAvailability = [],
+  markerOverride = null,
   eligibleSwapPlayers,
   onSelectPlayer,
   onToggleSwapMenu,
@@ -1413,8 +1748,12 @@ function PlayerToken({
   playerImages: PlayerImageRecord[]
   bench?: boolean
   showProjections?: boolean
+  scoreRound?: MyTeamProjectionRound | null
+  showCaptainStyling?: boolean
   selected?: boolean
   swapMenuOpen?: boolean
+  majorRoundAvailability?: RoundAvailabilityBadge[]
+  markerOverride?: "available" | "unavailable" | "bye" | null
   eligibleSwapPlayers: IndexedMyTeamPlayer[]
   onSelectPlayer: (playerIndex: number) => void
   onToggleSwapMenu: () => void
@@ -1432,13 +1771,16 @@ function PlayerToken({
     )
   }
 
-  const ring = player.isCaptain
+  const ring = showCaptainStyling && player.isCaptain
     ? "border-[#f07b2d]"
     : bench
       ? player.squadRole === "emergency" ? "border-[#f16161]" : "border-[#a85db5]"
       : "border-[#f1f3f5]"
-  const displayedProjection = showProjections ? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections) : null
   const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) ?? null : null
+  const actualScore = showProjections ? actualScoreForPlayerRound(player, scoreRound, fantasyPlayersById) : null
+  const displayedProjection = showProjections
+    ? actualScore ?? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
+    : null
 
   const content = (
     <>
@@ -1461,7 +1803,9 @@ function PlayerToken({
       ) : null}
       {showProjections ? (
         <span className={`absolute right-[5%] top-[27%] grid h-6 w-6 place-items-center rounded-full border text-[8px] font-black shadow-[0_8px_18px_rgba(10,22,38,0.22)] lg:h-9 lg:w-9 lg:text-xs ${
-          player.isCaptain
+          actualScore != null
+            ? "border-emerald-200/80 bg-[#159a5a] text-white"
+            : showCaptainStyling && player.isCaptain
             ? "border-orange-300/80 bg-[#5a2f1d] text-orange-200"
             : "border-[#c4b5fd]/70 bg-[#31285f] text-[#ede9fe]"
         }`}>
@@ -1469,9 +1813,26 @@ function PlayerToken({
         </span>
       ) : null}
       <div className="mt-0.5 flex max-w-full items-center justify-center gap-1 text-[10px] font-black leading-tight text-nrl-text md:text-[11px] lg:mt-1.5 lg:text-sm">
-        <Marker player={player} fantasyPlayersById={fantasyPlayersById} lineupsProjections={lineupsProjections} />
+        <Marker player={player} fantasyPlayersById={fantasyPlayersById} lineupsProjections={lineupsProjections} override={markerOverride} />
         <span className="truncate">{player.displayName}</span>
       </div>
+      {majorRoundAvailability.length > 0 ? (
+        <div className="mt-1 flex max-w-full justify-center gap-0.5 lg:gap-1">
+          {majorRoundAvailability.map((badge) => (
+            <span
+              key={badge.round}
+              title={badge.reason}
+              className={`rounded px-1 py-0.5 text-[7px] font-black uppercase leading-none text-white lg:text-[8px] ${
+                badge.isOriginRisk
+                  ? "bg-[linear-gradient(135deg,#7b1734,#1f5ca8)]"
+                  : badge.available ? "bg-[#159a5a]" : "bg-[#c43b4b]"
+              }`}
+            >
+              R{badge.round}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </>
   )
 
@@ -1513,13 +1874,15 @@ function PlayerToken({
               Trade
             </button>
           )}
-          <button
-            type="button"
-            onClick={onSetCaptain}
-            className="block w-full rounded-md px-2.5 py-2 text-left text-xs font-bold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
-          >
-            Captain
-          </button>
+          {showCaptainStyling ? (
+            <button
+              type="button"
+              onClick={onSetCaptain}
+              className="block w-full rounded-md px-2.5 py-2 text-left text-xs font-bold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
+            >
+              Captain
+            </button>
+          ) : null}
           {fantasyPlayer ? (
             <Link
               href={`/dashboard/fantasy/${encodeURIComponent(fantasyPlayerSlug(fantasyPlayer.name))}?from=my-team`}
@@ -1675,6 +2038,10 @@ function TeamBoard({
   fantasyCoachPlayersById,
   lineupsProjections,
   playerImages,
+  draw2026Data,
+  originPlayerNames,
+  selectedProjectionRound,
+  onSelectedProjectionRoundChange,
   showProjections,
   selectedPlayerIndex,
   swapMenuOpen,
@@ -1685,12 +2052,20 @@ function TeamBoard({
   onSetCaptain,
   onSwapWithPlayer,
   onReverseTrade,
+  isAiChatOpen,
+  onOpenAiChat,
+  onCloseAiChat,
+  hasFantasyPlotAccess,
 }: {
   team: SavedMyTeam | null
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>
   fantasyCoachPlayersById: Map<number, FantasyCoachPlayerSnapshot>
   lineupsProjections: LineupsProjectionSnapshot
   playerImages: PlayerImageRecord[]
+  draw2026Data: Draw2026Data | null
+  originPlayerNames: Set<string>
+  selectedProjectionRound: MyTeamProjectionRound | null
+  onSelectedProjectionRoundChange: (round: MyTeamProjectionRound | null) => void
   showProjections: boolean
   selectedPlayerIndex: number | null
   swapMenuOpen: boolean
@@ -1698,43 +2073,209 @@ function TeamBoard({
   onSelectPlayer: (playerIndex: number) => void
   onToggleSwapMenu: () => void
   onToggleTradeMenu: () => void
-  onSetCaptain: () => void
+  onSetCaptain: (playerIndex: number) => void
   onSwapWithPlayer: (targetIndex: number) => void
   onReverseTrade: () => void
+  isAiChatOpen: boolean
+  onOpenAiChat: () => void
+  onCloseAiChat: () => void
+  hasFantasyPlotAccess: boolean
 }) {
   const players = team?.players ?? []
-  const startersBySlot = new Map<string, IndexedMyTeamPlayer[]>()
-  for (const row of STARTER_ROWS) startersBySlot.set(row.slot, [])
-  players.forEach((player, index) => {
-    if (player.squadRole !== "starter") return
-    const slot = STARTER_ROWS.some((row) => row.slot === player.slot) ? player.slot : ""
-    if (!slot) return
-    startersBySlot.get(slot)?.push({ player, index })
-  })
-  const scoringSide = buildProjectedScoringSide(
+  const projectedLineup = buildMajorRoundDisplayLineup(
     players,
+    selectedProjectionRound,
     fantasyPlayersById,
-    fantasyCoachPlayersById,
-    lineupsProjections,
+    playerImages,
+    draw2026Data,
+    originPlayerNames,
   )
-  const benchPlayers = players
-    .map((player, index) => ({ player, index }))
-    .filter(({ player }) => player.squadRole !== "starter")
-    .sort((a, b) => (a.player.benchOrder ?? 99) - (b.player.benchOrder ?? 99))
+  const { startersBySlot, benchPlayers } = projectedLineup
+  const scoringSide = selectedProjectionRound == null
+    ? buildProjectedScoringSide(
+        players,
+        fantasyPlayersById,
+        fantasyCoachPlayersById,
+        lineupsProjections,
+      )
+    : players
+        .map((player, index) => ({ player, index }))
+        .filter(({ index }) => projectedLineup.scoringIndexes.has(index))
   const projectedScore = scoringSide
     .reduce((sum, entry) => sum + (effectiveProjectionForPlayer(entry.player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections) ?? 0), 0)
+  const currentRoundNumber = Number.parseInt(team?.round ?? "", 10)
+  const currentMajorRound: MyTeamMajorByeRound | null = MY_TEAM_MAJOR_BYE_ROUNDS.includes(currentRoundNumber as MyTeamMajorByeRound)
+    ? currentRoundNumber as MyTeamMajorByeRound
+    : null
+  const currentRoundForHeader = Number.isFinite(currentRoundNumber) && currentRoundNumber >= 1 && currentRoundNumber <= 19
+    ? currentRoundNumber
+    : null
+  const activeHeaderRound = selectedProjectionRound ?? currentRoundForHeader ?? currentMajorRound
+  const actualRoundScore = activeHeaderRound == null
+    ? 0
+    : scoringSide.reduce((sum, entry) => sum + (actualScoreForPlayerRound(entry.player, activeHeaderRound, fantasyPlayersById) ?? 0), 0)
+  const showCaptainStyling = selectedProjectionRound == null
+  const markerOverrideForIndex = (index: number | null): "available" | "unavailable" | "bye" | null => {
+    if (activeHeaderRound == null || index == null) return null
+    const player = players[index]
+    if (!player) return null
+    if (actualScoreForPlayerRound(player, activeHeaderRound, fantasyPlayersById) != null) return "available"
+    const availability = getRoundAvailability(player, activeHeaderRound, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
+    if (availability.isBye) return "bye"
+    if (activeHeaderRound === currentRoundForHeader && playerHasCurrentUnavailableStatus(player, fantasyPlayersById)) return "unavailable"
+    const namedStatus = activeHeaderRound === currentRoundForHeader
+      ? getLineupsNamedStatus(player, fantasyPlayersById, lineupsProjections)
+      : null
+    if (namedStatus === false) return "unavailable"
+    return availability.available ? "available" : "unavailable"
+  }
+  const availabilityForPlayer = (player: MyTeamPlayer | null) =>
+    player
+      ? getMajorRoundAvailabilityBadges(player, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
+      : []
+  const availableHeaderRounds = MY_TEAM_PROJECTION_ROUNDS.filter((round) => round >= (currentRoundForHeader ?? 1))
+  const showRoundProjections = showProjections && selectedProjectionRound == null
+  const activeHeaderIsMajorRound = activeHeaderRound != null && MY_TEAM_MAJOR_BYE_ROUNDS.includes(activeHeaderRound as MyTeamMajorByeRound)
+  const playingTarget = activeHeaderIsMajorRound ? 13 : 17
+  const availabilitySummaryRounds = MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS.filter((round) => round >= (currentRoundForHeader ?? 1))
+  const availabilitySummary = availabilitySummaryRounds.map((round) => {
+    const target = MY_TEAM_MAJOR_BYE_ROUNDS.includes(round as MyTeamMajorByeRound) ? 13 : 17
+    const availableCount = players.filter((player) => {
+      if (actualScoreForPlayerRound(player, round, fantasyPlayersById) != null) return true
+      const availability = getRoundAvailability(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
+      if (!availability.available) return false
+      if (round === currentRoundForHeader && playerHasCurrentUnavailableStatus(player, fantasyPlayersById)) return false
+      const namedStatus = round === currentRoundForHeader ? getLineupsNamedStatus(player, fantasyPlayersById, lineupsProjections) : null
+      return namedStatus !== false
+    }).length
+    return { round, availableCount: Math.min(availableCount, target), target }
+  })
+  const projectedStarterEntries = [...startersBySlot.values()].flat()
+  const projectedIntEntries = benchPlayers.slice(0, 4)
+  const selectedRoundPlayingCount = selectedProjectionRound == null
+    ? Math.min(
+        playingTarget,
+        players.filter((player) =>
+          !isNonPlayingForProjection(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections),
+        ).length,
+      )
+    : Math.min(
+        playingTarget,
+        [
+          ...projectedStarterEntries,
+          ...(activeHeaderIsMajorRound ? [] : projectedIntEntries),
+        ].filter(({ player }) =>
+          isAvailableForProjectionRound(player, selectedProjectionRound, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames),
+        ).length,
+      )
+  const activeRoundRef = useRef<HTMLButtonElement | null>(null)
+  const roundStripDragRef = useRef<{ pointerId: number | null; startX: number; scrollLeft: number; didDrag: boolean } | null>(null)
+  const roundStripSnapTimeoutRef = useRef<number | null>(null)
+  const selectHeaderRound = (round: MyTeamProjectionRound) => {
+    if (roundStripSnapTimeoutRef.current != null) {
+      window.clearTimeout(roundStripSnapTimeoutRef.current)
+    }
+    onSelectedProjectionRoundChange(round === currentRoundForHeader ? null : round)
+  }
+  const snapRoundStripToMiddle = (strip: HTMLDivElement) => {
+    if (roundStripSnapTimeoutRef.current != null) {
+      window.clearTimeout(roundStripSnapTimeoutRef.current)
+    }
+
+    roundStripSnapTimeoutRef.current = window.setTimeout(() => {
+      const stripRect = strip.getBoundingClientRect()
+      const stripCenter = stripRect.left + stripRect.width / 2
+      let closestRound: MyTeamProjectionRound | null = null
+      let closestDistance = Number.POSITIVE_INFINITY
+      for (const child of Array.from(strip.querySelectorAll<HTMLButtonElement>("[data-my-team-round]"))) {
+        const childRect = child.getBoundingClientRect()
+        const childCenter = childRect.left + childRect.width / 2
+        const distance = Math.abs(childCenter - stripCenter)
+        const round = Number.parseInt(child.dataset.myTeamRound ?? "", 10)
+        if (Number.isFinite(round) && distance < closestDistance) {
+          closestDistance = distance
+          closestRound = round
+        }
+      }
+      if (closestRound != null) selectHeaderRound(closestRound)
+    }, 90)
+  }
+
+  useEffect(() => {
+    activeRoundRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })
+  }, [activeHeaderRound])
+
+  useEffect(() => () => {
+    if (roundStripSnapTimeoutRef.current != null) {
+      window.clearTimeout(roundStripSnapTimeoutRef.current)
+    }
+  }, [])
 
   return (
     <section className="rounded-xl border border-nrl-border bg-nrl-panel text-nrl-text shadow-[0_18px_48px_rgba(2,6,23,0.28)]">
-      <div className="bg-[linear-gradient(135deg,#101936,#123a36)] px-4 py-4 text-center text-2xl font-black italic tracking-wide text-nrl-accent lg:text-2xl">
-        {team?.teamName || "My Team"}
+      {availabilitySummary.length > 0 ? (
+        <div className="grid grid-cols-6 gap-px border-b border-nrl-border bg-nrl-border text-center">
+          {availabilitySummary.map(({ round, availableCount, target }) => {
+            const missing = Math.max(0, target - availableCount)
+            const countColour = missing === 0
+              ? "text-nrl-accent"
+              : missing <= 2
+                ? "text-[#9af06a]"
+                : missing <= 5
+                  ? "text-[#f6b73c]"
+                  : "text-[#f16161]"
+            return (
+            <button
+              key={round}
+              type="button"
+              onClick={() => selectHeaderRound(round)}
+              className="min-w-0 bg-[#101936] px-1 py-2 transition-colors hover:bg-[#14203f] sm:px-2"
+            >
+              <div className="text-[8px] font-black uppercase tracking-[0.12em] text-nrl-muted">R{round}</div>
+              <div className={`text-[11px] font-black leading-tight sm:text-sm lg:text-base ${countColour}`}>{availableCount}/{target}</div>
+            </button>
+          )})}
+        </div>
+      ) : null}
+      <div className="relative flex min-h-[72px] items-center justify-center bg-[linear-gradient(135deg,#101936,#123a36)] px-16 py-4 text-center text-2xl font-black italic tracking-wide text-nrl-accent lg:text-2xl">
+        {team ? (
+          <button
+            type="button"
+            onClick={onOpenAiChat}
+            className={`absolute left-4 top-1/2 z-40 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-pink-200/35 bg-[linear-gradient(135deg,#1687ff_0%,#8257ff_48%,#ff4ea0_100%)] text-white shadow-[0_14px_34px_rgba(23,41,140,0.42)] transition-transform duration-200 ease-out hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-200/80 ${isAiChatOpen ? "opacity-0" : ""}`}
+            aria-label="Open NRL AI"
+            aria-expanded={isAiChatOpen}
+          >
+            <MagicAiIcon className="h-5 w-5" />
+          </button>
+        ) : null}
+        {team && isAiChatOpen ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-50 cursor-default bg-transparent"
+              aria-label="Close NRL AI"
+              onClick={onCloseAiChat}
+            />
+            <div className="absolute inset-x-0 top-0 z-[60] px-0 text-left not-italic tracking-normal sm:px-3">
+              <MyTeamAiChatPanel
+                team={team as SavedMyTeam}
+                fantasyPlayersById={fantasyPlayersById}
+                lineupsProjections={lineupsProjections}
+                hasFantasyPlotAccess={hasFantasyPlotAccess}
+                onClose={onCloseAiChat}
+              />
+            </div>
+          </>
+        ) : null}
+        <span className="truncate">{team?.teamName || "My Team"}</span>
       </div>
-      <div className={`grid border-b border-nrl-border bg-[#111832] text-center ${showProjections ? "grid-cols-4" : "grid-cols-3"}`}>
+      <div className={`grid border-b border-nrl-border bg-[#111832] text-center ${showRoundProjections ? "grid-cols-5" : "grid-cols-4"}`}>
         <div className="min-w-0 px-1 py-2 sm:px-2 sm:py-3">
           <div className="text-[8px] font-bold uppercase leading-tight text-nrl-muted sm:text-[10px] lg:text-xs">Round Score</div>
-          <div className="text-base font-black text-nrl-accent sm:text-lg lg:text-xl">0</div>
+          <div className="text-base font-black text-nrl-accent sm:text-lg lg:text-xl">{formatProjection(actualRoundScore)}</div>
         </div>
-        {showProjections ? (
+        {showRoundProjections ? (
           <div className="min-w-0 px-1 py-2 sm:px-2 sm:py-3">
             <div className="text-[8px] font-bold uppercase leading-tight text-nrl-muted sm:text-[10px] lg:text-xs">Projected</div>
             <div className="text-base font-black text-nrl-accent sm:text-lg lg:text-xl">{formatProjection(projectedScore)}</div>
@@ -1750,9 +2291,72 @@ function TeamBoard({
           <div className="text-[8px] font-bold uppercase leading-tight text-nrl-muted sm:text-[10px] lg:text-xs">Bank</div>
           <div className="truncate text-base font-black text-nrl-accent sm:text-lg lg:text-xl">{formatTeamMetaValue(team?.bankRemaining ?? "")}</div>
         </div>
+        <div className="min-w-0 px-1 py-2 sm:px-2 sm:py-3">
+          <div className="text-[8px] font-bold uppercase leading-tight text-nrl-muted sm:text-[10px] lg:text-xs">Playing</div>
+          <div className="truncate text-base font-black text-nrl-accent sm:text-lg lg:text-xl">{selectedRoundPlayingCount}/{playingTarget}</div>
+        </div>
       </div>
-      <div className="border-b border-nrl-border bg-[#111832] px-4 py-3 text-center text-lg font-black text-nrl-text lg:py-4 lg:text-2xl">
-        {team?.round ? `Round ${team.round}` : "Round"}
+      <div className="relative border-b border-nrl-border bg-[#111832] text-center shadow-[0_12px_22px_rgba(2,6,23,0.22)]">
+        <div
+          className="flex snap-x snap-mandatory cursor-grab items-center gap-8 overflow-x-auto overscroll-x-contain scroll-smooth px-[42%] py-4 text-xs font-black active:cursor-grabbing sm:gap-14 sm:text-base lg:gap-20 lg:text-xl [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
+          onScroll={(event) => {
+            if (roundStripDragRef.current) return
+            snapRoundStripToMiddle(event.currentTarget)
+          }}
+          onPointerDown={(event) => {
+            const target = event.currentTarget
+            if (roundStripSnapTimeoutRef.current != null) {
+              window.clearTimeout(roundStripSnapTimeoutRef.current)
+            }
+            roundStripDragRef.current = {
+              pointerId: event.pointerId,
+              startX: event.clientX,
+              scrollLeft: target.scrollLeft,
+              didDrag: false,
+            }
+            target.setPointerCapture(event.pointerId)
+          }}
+          onPointerMove={(event) => {
+            const drag = roundStripDragRef.current
+            if (!drag || drag.pointerId !== event.pointerId) return
+            if (Math.abs(event.clientX - drag.startX) > 4) drag.didDrag = true
+            event.currentTarget.scrollLeft = drag.scrollLeft - (event.clientX - drag.startX)
+          }}
+          onPointerUp={(event) => {
+            const drag = roundStripDragRef.current
+            if (drag?.pointerId === event.pointerId) {
+              roundStripDragRef.current = null
+              event.currentTarget.releasePointerCapture(event.pointerId)
+              if (drag.didDrag) snapRoundStripToMiddle(event.currentTarget)
+            }
+          }}
+          onPointerCancel={(event) => {
+            roundStripDragRef.current = null
+            snapRoundStripToMiddle(event.currentTarget)
+          }}
+        >
+          {availableHeaderRounds.map((round) => (
+            <button
+              key={round}
+              ref={activeHeaderRound === round ? activeRoundRef : null}
+              type="button"
+              data-my-team-round={round}
+              onClick={() => selectHeaderRound(round)}
+              className={`shrink-0 snap-center py-1 transition-colors ${
+                activeHeaderRound === round
+                  ? "text-nrl-text"
+                  : "text-nrl-muted/35 hover:text-nrl-muted/70"
+              }`}
+            >
+              Round {round}
+            </button>
+          ))}
+        </div>
+        {activeHeaderRound != null ? (
+          <span
+            className="absolute bottom-[-1.05rem] left-1/2 h-0 w-0 -translate-x-1/2 border-x-[1.05rem] border-t-[1.05rem] border-x-transparent border-t-[#111832] drop-shadow-[0_8px_7px_rgba(2,6,23,0.36)]"
+          />
+        ) : null}
       </div>
       <div className="relative bg-[radial-gradient(circle_at_top,rgba(0,245,138,0.14),transparent_40%),radial-gradient(circle_at_50%_48%,rgba(241,243,245,0.08),transparent_38%),linear-gradient(180deg,#101936,#080d21)] px-3 pb-4 pt-2 lg:px-12 lg:pb-7 lg:pt-4">
         <div className="absolute inset-x-[8%] top-0 bottom-0 skew-x-[-4deg] rounded-b-[2rem] bg-[linear-gradient(180deg,rgba(241,243,245,0.26),rgba(241,243,245,0.13)_42%,rgba(241,243,245,0.07))] shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_26px_62px_rgba(2,6,23,0.58),inset_0_18px_42px_rgba(255,255,255,0.08),inset_0_-28px_48px_rgba(2,6,23,0.22)]" />
@@ -1766,13 +2370,13 @@ function TeamBoard({
                   {row.count === 1 ? (
                     <>
                       <div />
-                      <PlayerToken player={cells[0]?.player ?? null} playerIndex={cells[0]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showProjections} selected={cells[0]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={onSetCaptain} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
+                      <PlayerToken player={cells[0]?.player ?? null} playerIndex={cells[0]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showRoundProjections} scoreRound={activeHeaderRound} showCaptainStyling={showCaptainStyling} selected={cells[0]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} majorRoundAvailability={availabilityForPlayer(cells[0]?.player ?? null)} markerOverride={markerOverrideForIndex(cells[0]?.index ?? null)} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={() => cells[0]?.index != null ? onSetCaptain(cells[0].index) : undefined} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
                       <div />
                     </>
                   ) : row.count === 2 ? (
                     <>
-                      <PlayerToken player={cells[0]?.player ?? null} playerIndex={cells[0]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showProjections} selected={cells[0]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={onSetCaptain} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
-                      <PlayerToken player={cells[1]?.player ?? null} playerIndex={cells[1]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showProjections} selected={cells[1]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={onSetCaptain} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
+                      <PlayerToken player={cells[0]?.player ?? null} playerIndex={cells[0]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showRoundProjections} scoreRound={activeHeaderRound} showCaptainStyling={showCaptainStyling} selected={cells[0]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} majorRoundAvailability={availabilityForPlayer(cells[0]?.player ?? null)} markerOverride={markerOverrideForIndex(cells[0]?.index ?? null)} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={() => cells[0]?.index != null ? onSetCaptain(cells[0].index) : undefined} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
+                      <PlayerToken player={cells[1]?.player ?? null} playerIndex={cells[1]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showRoundProjections} scoreRound={activeHeaderRound} showCaptainStyling={showCaptainStyling} selected={cells[1]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} majorRoundAvailability={availabilityForPlayer(cells[1]?.player ?? null)} markerOverride={markerOverrideForIndex(cells[1]?.index ?? null)} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={() => cells[1]?.index != null ? onSetCaptain(cells[1].index) : undefined} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
                     </>
                   ) : (
                     cells.map((entry, index) => (
@@ -1784,13 +2388,17 @@ function TeamBoard({
                         fantasyCoachPlayersById={fantasyCoachPlayersById}
                         lineupsProjections={lineupsProjections}
                         playerImages={playerImages}
-                        showProjections={showProjections}
+                        showProjections={showRoundProjections}
+                        scoreRound={activeHeaderRound}
+                        showCaptainStyling={showCaptainStyling}
                         selected={entry?.index === selectedPlayerIndex}
                         swapMenuOpen={swapMenuOpen}
+                        majorRoundAvailability={availabilityForPlayer(entry?.player ?? null)}
+                        markerOverride={markerOverrideForIndex(entry?.index ?? null)}
                         eligibleSwapPlayers={eligibleSwapPlayers}
                         onSelectPlayer={onSelectPlayer}
                         onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu}
-                        onSetCaptain={onSetCaptain}
+                        onSetCaptain={() => entry?.index != null ? onSetCaptain(entry.index) : undefined}
                         onSwapWithPlayer={onSwapWithPlayer}
                         onReverseTrade={onReverseTrade}
                       />
@@ -1816,13 +2424,17 @@ function TeamBoard({
               lineupsProjections={lineupsProjections}
               playerImages={playerImages}
               bench
-              showProjections={showProjections}
+              showProjections={showRoundProjections}
+              scoreRound={activeHeaderRound}
+              showCaptainStyling={showCaptainStyling}
               selected={benchPlayers[index]?.index === selectedPlayerIndex}
               swapMenuOpen={swapMenuOpen}
+              majorRoundAvailability={availabilityForPlayer(benchPlayers[index]?.player ?? null)}
+              markerOverride={markerOverrideForIndex(benchPlayers[index]?.index ?? null)}
               eligibleSwapPlayers={eligibleSwapPlayers}
               onSelectPlayer={onSelectPlayer}
               onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu}
-              onSetCaptain={onSetCaptain}
+              onSetCaptain={() => benchPlayers[index]?.index != null ? onSetCaptain(benchPlayers[index].index) : undefined}
               onSwapWithPlayer={onSwapWithPlayer}
               onReverseTrade={onReverseTrade}
             />
@@ -1842,7 +2454,7 @@ function TeamBoard({
   )
 }
 
-export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProjections, playerImages, locked }: MyTeamPageProps) {
+export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProjections, playerImages, draw2026Data, originChances, locked }: MyTeamPageProps) {
   const [screenshots, setScreenshots] = useState<Record<ScreenshotSlot, TeamScreenshot | null>>({ top: null, bottom: null, trades: null })
   const [uploadingSlot, setUploadingSlot] = useState<ScreenshotSlot | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -1855,17 +2467,18 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   const [isSwapMenuOpen, setIsSwapMenuOpen] = useState(false)
   const [isTradeMenuOpen, setIsTradeMenuOpen] = useState(false)
   const [isBackPending, setIsBackPending] = useState(false)
-  const aiPanelAnchorRef = useRef<HTMLDivElement | null>(null)
-  const aiPanelRef = useRef<HTMLDivElement | null>(null)
+  const [selectedProjectionRound, setSelectedProjectionRound] = useState<MyTeamProjectionRound | null>(null)
   const teamBoardRef = useRef<HTMLDivElement | null>(null)
   const tradeOverlayRef = useRef<HTMLDivElement | null>(null)
-  const [isAiPanelPinned, setIsAiPanelPinned] = useState(false)
-  const [aiPanelSlotHeight, setAiPanelSlotHeight] = useState(0)
-  const [aiPanelFrame, setAiPanelFrame] = useState<{ left: number; width: number } | null>(null)
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false)
   const hasLoadedSavedTeamRef = useRef(false)
   const { getToken: getMyTeamAuthToken, isLoaded: isMyTeamAuthLoaded, isSignedIn: isMyTeamSignedIn } = useAuth()
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
   const fantasyCoachPlayersById = useMemo(() => new Map(fantasyCoachPlayers.map((player) => [player.id, player])), [fantasyCoachPlayers])
+  const originPlayerNames = useMemo(
+    () => new Set(originChances.map((row) => row.player).filter(Boolean)),
+    [originChances],
+  )
 
   useEffect(() => {
     if (selectedPlayerIndex == null) return
@@ -1979,68 +2592,6 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     }
   }, [getMyTeamAuthToken, team, isMyTeamSignedIn])
 
-  useEffect(() => {
-    if (!team) {
-      setIsAiPanelPinned(false)
-      setAiPanelSlotHeight(0)
-      setAiPanelFrame(null)
-      return
-    }
-
-    let frame = 0
-
-    const updateAiPanelSlotHeight = () => {
-      if (isAiPanelPinned) return
-      const panel = aiPanelRef.current
-      if (!panel) return
-      setAiPanelSlotHeight((current) => {
-        const next = panel.offsetHeight
-        return Math.abs(current - next) > 1 ? next : current
-      })
-    }
-
-    const updateAiPanelFrame = () => {
-      const anchor = aiPanelAnchorRef.current
-      if (!anchor) return
-      const rect = anchor.getBoundingClientRect()
-      setAiPanelFrame((current) => {
-        const next = { left: rect.left, width: rect.width }
-        if (current && Math.abs(current.left - next.left) <= 1 && Math.abs(current.width - next.width) <= 1) return current
-        return next
-      })
-    }
-
-    const updateAiPanelPin = () => {
-      window.cancelAnimationFrame(frame)
-      frame = window.requestAnimationFrame(() => {
-        const anchor = aiPanelAnchorRef.current
-        if (!anchor) return
-        updateAiPanelSlotHeight()
-        updateAiPanelFrame()
-        const shouldPin = anchor.getBoundingClientRect().top <= 16
-        setIsAiPanelPinned((current) => current !== shouldPin ? shouldPin : current)
-      })
-    }
-
-    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateAiPanelSlotHeight) : null
-    if (aiPanelRef.current) resizeObserver?.observe(aiPanelRef.current)
-    updateAiPanelSlotHeight()
-    updateAiPanelFrame()
-    updateAiPanelPin()
-    window.addEventListener("scroll", updateAiPanelPin, { passive: true })
-    document.addEventListener("scroll", updateAiPanelPin, { passive: true, capture: true })
-    window.addEventListener("resize", updateAiPanelFrame)
-    window.addEventListener("resize", updateAiPanelPin)
-    return () => {
-      window.cancelAnimationFrame(frame)
-      resizeObserver?.disconnect()
-      window.removeEventListener("scroll", updateAiPanelPin)
-      document.removeEventListener("scroll", updateAiPanelPin, true)
-      window.removeEventListener("resize", updateAiPanelFrame)
-      window.removeEventListener("resize", updateAiPanelPin)
-    }
-  }, [team, isAiPanelPinned])
-
   const handleScreenshotChange = async (slot: ScreenshotSlot, files: FileList | null) => {
     const file = files?.[0]
     if (!file) return
@@ -2117,6 +2668,12 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     setStatus(null)
   }
 
+  const handleCancelUpdateTeam = () => {
+    setIsUpdatingTeam(false)
+    setError(null)
+    setStatus(null)
+  }
+
   const eligibleSwapPlayers = team && selectedPlayerIndex != null
     ? team.players
       .map((player, index) => ({ player, index }))
@@ -2145,20 +2702,6 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     setStatus(null)
   }
 
-  const handleSetCaptain = () => {
-    if (!team || selectedPlayerIndex == null) return
-    setTeam({
-      ...team,
-      players: team.players.map((player, index) => ({
-        ...player,
-        isCaptain: index === selectedPlayerIndex,
-        isViceCaptain: false,
-      })),
-    })
-    setError(null)
-    setStatus(`${team.players[selectedPlayerIndex]?.displayName ?? "Player"} set as captain.`)
-  }
-
   const handleSwapWithPlayer = (targetIndex: number) => {
     if (!team || selectedPlayerIndex == null) return
     const targetPlayer = team.players[targetIndex]
@@ -2171,8 +2714,27 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     }
     if (!result.team) return
     setError(null)
-    setStatus(`${team.players[selectedPlayerIndex]?.displayName ?? "Player"} swapped with ${targetPlayer.displayName}.`)
+    setStatus(null)
     setTeam(result.team)
+    setIsSwapMenuOpen(false)
+    setIsTradeMenuOpen(false)
+  }
+
+  const handleSetCaptain = (captainIndex: number) => {
+    if (!team) return
+    const captain = team.players[captainIndex]
+    if (!captain) return
+    setTeam({
+      ...team,
+      players: team.players.map((player, index) => ({
+        ...player,
+        isCaptain: index === captainIndex,
+        isViceCaptain: false,
+      })),
+    })
+    setError(null)
+    setStatus(null)
+    setSelectedPlayerIndex(null)
     setIsSwapMenuOpen(false)
     setIsTradeMenuOpen(false)
   }
@@ -2226,7 +2788,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
       players: nextPlayers,
     })
     setError(null)
-    setStatus(`${outgoingPlayer.displayName} traded to ${incomingPlayer.name}.`)
+    setStatus(null)
     setIsTradeMenuOpen(false)
     setIsSwapMenuOpen(false)
   }
@@ -2274,7 +2836,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
       players: nextPlayers,
     })
     setError(null)
-    setStatus(`${currentPlayer.displayName} reversed to ${restoredPlayer.displayName}.`)
+    setStatus(null)
     setIsTradeMenuOpen(false)
     setIsSwapMenuOpen(false)
   }
@@ -2295,10 +2857,10 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
         {team ? (
           <button
             type="button"
-            onClick={handleUpdateTeam}
+            onClick={isUpdatingTeam ? handleCancelUpdateTeam : handleUpdateTeam}
             className="rounded-md border border-nrl-border bg-nrl-panel px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:text-nrl-accent"
           >
-            Update team
+            {isUpdatingTeam ? "Cancel update" : "Update team"}
           </button>
         ) : null}
       </div>
@@ -2343,45 +2905,24 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
         />
       ) : null}
 
-      {team && (error || status) ? (
+      {team && error ? (
         <section className="mx-auto max-w-[760px] rounded-xl border border-nrl-border bg-nrl-panel px-4 py-3 lg:max-w-[920px] lg:px-6 lg:py-4">
-          {error || status ? (
-            <div className={`text-xs font-semibold ${error ? "text-rose-200" : "text-nrl-muted"}`}>
-              {error ?? status}
-            </div>
-          ) : null}
+          <div className="text-xs font-semibold text-rose-200">{error}</div>
         </section>
       ) : null}
 
       {hasLoadedSavedTeam ? (
-        <div ref={teamBoardRef} className="mx-auto max-w-[760px] lg:max-w-[920px]">
-          {team ? (
-            <div ref={aiPanelAnchorRef} className="relative z-30 mb-3 mt-5">
-              {isAiPanelPinned && aiPanelSlotHeight > 0 ? <div style={{ height: aiPanelSlotHeight }} /> : null}
-              <div
-                ref={aiPanelRef}
-                className={
-                  isAiPanelPinned
-                    ? "fixed top-4 z-50 will-change-transform"
-                    : "relative z-30 transition-transform duration-150 ease-out"
-                }
-                style={isAiPanelPinned && aiPanelFrame ? { left: aiPanelFrame.left, width: aiPanelFrame.width } : undefined}
-              >
-                <MyTeamAiChatPanel
-                  team={team}
-                  fantasyPlayersById={fantasyPlayersById}
-                  lineupsProjections={lineupsProjections}
-                  hasFantasyPlotAccess={!locked}
-                />
-              </div>
-            </div>
-          ) : null}
+        <div ref={teamBoardRef} className="relative mx-auto max-w-[760px] lg:max-w-[920px]">
           <TeamBoard
             team={team}
             fantasyPlayersById={fantasyPlayersById}
             fantasyCoachPlayersById={fantasyCoachPlayersById}
             lineupsProjections={lineupsProjections}
             playerImages={playerImages}
+            draw2026Data={draw2026Data}
+            originPlayerNames={originPlayerNames}
+            selectedProjectionRound={selectedProjectionRound}
+            onSelectedProjectionRoundChange={setSelectedProjectionRound}
             showProjections={!locked}
             selectedPlayerIndex={selectedPlayerIndex}
             swapMenuOpen={isSwapMenuOpen}
@@ -2398,6 +2939,10 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
             onSetCaptain={handleSetCaptain}
             onSwapWithPlayer={handleSwapWithPlayer}
             onReverseTrade={handleReverseTrade}
+            isAiChatOpen={isAiChatOpen}
+            onOpenAiChat={() => setIsAiChatOpen(true)}
+            onCloseAiChat={() => setIsAiChatOpen(false)}
+            hasFantasyPlotAccess={!locked}
           />
         </div>
       ) : null}

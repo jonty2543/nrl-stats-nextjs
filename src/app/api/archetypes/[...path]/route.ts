@@ -13,6 +13,7 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 const APP_FONT_STACK = "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+const ARCHETYPES_ARTICLE_PATH = "/dashboard/articles/nrl-archetypes-understanding-player-roles-beyond-position";
 
 interface ArchetypesRouteContext {
   params: Promise<{
@@ -40,6 +41,10 @@ function styleIndexHtml(html: string): string {
     .replaceAll("--gray: #1E2742;", "--gray: #1e2542;")
     .replaceAll("--card-bg: #151E3F;", "--card-bg: #161c32;")
     .replaceAll("--border-color: #2A3B6E;", "--border-color: #2a3356;")
+    .replace(
+      "How Archetypes Are Built Using Machine Learning",
+      `<a href="${ARCHETYPES_ARTICLE_PATH}" target="_top" onclick="event.stopPropagation()">NRL Archetypes: Understanding Player Roles Beyond Position</a>`
+    )
     .replace(
       "</style>",
       `
@@ -115,6 +120,15 @@ function styleIndexHtml(html: string): string {
         .description,
         .ml-section p {
             color: #c7d0e6;
+        }
+
+        .ml-title a {
+            color: #00f58a;
+            text-decoration: none;
+        }
+
+        .ml-title a:hover {
+            color: #f5f7ff;
         }
     </style>`
     );

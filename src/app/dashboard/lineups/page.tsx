@@ -9,12 +9,15 @@ import {
   fetchUpcomingSportsbetH2HOdds,
   fetchUpcomingTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
+import { fetchLineupWeatherForecasts } from "@/lib/lineups/weather"
 import { fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
 import type { PlayerStat } from "@/lib/data/types"
 import type { PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type { LineupLiveMatch, LineupMatch, LineupRoundOption } from "@/lib/lineups/nrl-lineups"
 
 export const dynamic = "force-dynamic"
+
+const LINEUPS_PAGE_FETCH_TIMEOUT_MS = 2500
 
 const AVERAGE_KEYS = [
   "Tries",
@@ -34,6 +37,26 @@ const AVERAGE_KEYS = [
 
 type AverageKey = (typeof AVERAGE_KEYS)[number]
 type PositionBaselineKey = "FB" | "W" | "C" | "FE" | "HLF" | "HK" | "PR" | "2RF" | "LK"
+
+function withFallback<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeout = setTimeout(() => {
+      console.warn(`${label} timed out; using fallback.`)
+      resolve(fallback)
+    }, LINEUPS_PAGE_FETCH_TIMEOUT_MS)
+  })
+
+  return Promise.race([
+    promise.catch((error) => {
+      console.warn(`${label} failed; using fallback.`, error)
+      return fallback
+    }),
+    timeoutPromise,
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
+}
 
 function normaliseName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
@@ -160,6 +183,10 @@ function hasLiveData(liveMatch: LineupLiveMatch | null | undefined): boolean {
   )
 }
 
+function isDrawFallbackMatch(match: LineupMatch): boolean {
+  return match.matchId.startsWith("draw-2026-")
+}
+
 interface LineupsPageProps {
   searchParams: Promise<{
     round?: string
@@ -213,11 +240,11 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const playerStatYears = Array.from({ length: 5 }, (_, index) => String(year - index))
   const [roundOptions, teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStatsHistory] = await Promise.all([
     fetchLineupRoundOptions(year),
-    fetchTeamLogos(),
-    fetchUpcomingTryscorerOdds(),
-    fetchUpcomingSportsbetH2HOdds(),
-    fetchCasualtyWardOuts(),
-    fetchPlayerStats(playerStatYears),
+    withFallback(fetchTeamLogos(), {}, "Lineups team logos"),
+    withFallback(fetchUpcomingTryscorerOdds(), {}, "Lineups tryscorer odds"),
+    withFallback(fetchUpcomingSportsbetH2HOdds(), {}, "Lineups H2H odds"),
+    withFallback(fetchCasualtyWardOuts(), {}, "Lineups casualty ward"),
+    withFallback(fetchPlayerStats(playerStatYears), [], "Lineups player stats"),
   ])
   const playerStatsCurrentYear = playerStatsHistory.filter((row) => String(row.Year) === String(year))
   const selectedRound = roundOptions.find((option) => option.value === params.round)?.value ?? currentRoundOption(roundOptions)?.value ?? "Round 1"
@@ -226,13 +253,17 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
     year,
     includeFantasyProjections: hasProAccess,
   })
-  const liveMatches = await fetchLiveLineupData(matches.map((match) => match.matchId))
-  const visibleMatches = matches.filter((match) => match.homeTeam?.players.length || match.awayTeam?.players.length || matchStats[match.matchId] || !isPastMatch(match) || hasLiveData(liveMatches[match.matchId]))
+  const [liveMatches, weatherForecasts] = await Promise.all([
+    withFallback(fetchLiveLineupData(matches.map((match) => match.matchId)), {}, "Lineups live data"),
+    withFallback(fetchLineupWeatherForecasts(matches), {}, "Lineups weather"),
+  ])
+  const visibleMatches = matches.filter((match) => match.homeTeam?.players.length || match.awayTeam?.players.length || matchStats[match.matchId] || isDrawFallbackMatch(match) || !isPastMatch(match) || hasLiveData(liveMatches[match.matchId]))
 
   return (
     <LineupsDashboard
       matches={visibleMatches}
       liveMatches={liveMatches}
+      weatherForecasts={weatherForecasts}
       matchStats={matchStats}
       roundOptions={roundOptions}
       selectedRound={selectedRound}

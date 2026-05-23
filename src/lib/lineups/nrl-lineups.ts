@@ -202,6 +202,7 @@ export interface LineupLiveMatch {
 type RawRow = Record<string, unknown>
 
 const PAGE_SIZE = 1000
+const LINEUPS_FETCH_TIMEOUT_MS = 2000
 const LINEUP_SELECT_BASE = [
   "match_id",
   "match_date",
@@ -256,6 +257,26 @@ function booleanValue(value: unknown): boolean {
 function recordValue(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>
   return {}
+}
+
+function withTimeout<T>(promise: PromiseLike<T>, fallback: T, timeoutMs: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeout = setTimeout(() => {
+      console.warn(`${label} timed out; using fallback.`)
+      resolve(fallback)
+    }, timeoutMs)
+  })
+
+  return Promise.race([
+    Promise.resolve(promise).catch((error) => {
+      console.warn(`${label} failed; using fallback.`, error)
+      return fallback
+    }),
+    timeoutPromise,
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
 }
 
 function normaliseSide(value: unknown): LineupSide | null {
@@ -698,20 +719,24 @@ export async function fetchUpcomingLineups(options: FetchUpcomingLineupsOptions 
 export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane()): Promise<LineupRoundOption[]> {
   try {
     const supabase = createServerSupabaseClient("nrl")
-    const [{ data, error }, draw2026Data] = await Promise.all([
+    const draw2026DataPromise = year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} })
+    const { data, error } = await withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
       supabase
         .from("matches")
         .select("round,round_number,match_date")
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
-        .order("match_date", { ascending: true }),
-      year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} }),
-    ])
+        .order("match_date", { ascending: true }) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
+      { data: null, error: null },
+      LINEUPS_FETCH_TIMEOUT_MS,
+      `Supabase fetch nrl.matches round options for ${year}`
+    )
+    const draw2026Data = await draw2026DataPromise
 
-    if (error || !data) return []
+    if (error) console.warn(`Unable to fetch nrl.matches round options for ${year}; using local draw fallback where available.`, error)
 
     const options = new Map<string, LineupRoundOption>()
-    for (const row of data as unknown as RawRow[]) {
+    for (const row of (data ?? []) as unknown as RawRow[]) {
       const round = text(row.round)
       const matchDate = text(row.match_date).slice(0, 10)
       if (!round || !matchDate) continue
@@ -951,7 +976,8 @@ export async function fetchLineupsForRound({
   try {
     const supabase = createServerSupabaseClient("nrl")
     const [{ data, error }, lineupRows, overrides, projectionOverrides, historicalPlayerStats, recentResults, draw2026Data] = await Promise.all([
-      supabase
+      withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
+        supabase
         .from("matches")
         .select(
           [
@@ -993,21 +1019,30 @@ export async function fetchLineupsForRound({
         .eq("round", round)
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
-        .order("match_date", { ascending: true }),
-      fetchLineupRowsForRound(round, year, includeFantasyProjections).catch(() => []),
-      fetchSideOverrides().catch(() => new Map<string, LineupSide>()),
+        .order("match_date", { ascending: true }) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
+        { data: null, error: null },
+        LINEUPS_FETCH_TIMEOUT_MS,
+        `Supabase fetch nrl.matches round ${round}`
+      ),
+      withTimeout(fetchLineupRowsForRound(round, year, includeFantasyProjections), [], LINEUPS_FETCH_TIMEOUT_MS, `Supabase fetch nrl.lineups round ${round}`),
+      withTimeout(fetchSideOverrides(), new Map<string, LineupSide>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup side overrides"),
       includeFantasyProjections
-        ? fetchProjectionOverrides().catch(() => new Map<string, number>())
+        ? withTimeout(fetchProjectionOverrides(), new Map<string, number>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup projection overrides")
         : Promise.resolve(new Map<string, number>()),
-      fetchHistoricalPlayerStatsForRound(round, year).catch(() => ({
-        fantasyTotals: new Map<string, number>(),
-        playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
-      })),
-      fetchRecentMatchResults(year).catch(() => []),
+      withTimeout(
+        fetchHistoricalPlayerStatsForRound(round, year),
+        {
+          fantasyTotals: new Map<string, number>(),
+          playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
+        },
+        LINEUPS_FETCH_TIMEOUT_MS,
+        `Supabase fetch historical player stats for ${round}`
+      ),
+      withTimeout(fetchRecentMatchResults(year), [], LINEUPS_FETCH_TIMEOUT_MS, `Supabase fetch recent match results for ${year}`),
       year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} }),
     ])
 
-    if (error) throw new Error(`Supabase fetch nrl.matches round ${round}: ${error.message}`)
+    if (error) console.warn(`Unable to fetch nrl.matches round ${round}; using lineup/draw fallback where available.`, error)
 
     const lineupMatches = buildMatchesFromLineupRows(lineupRows, overrides, projectionOverrides, includeFantasyProjections)
     const lineupsByKey = new Map<string, LineupMatch>()

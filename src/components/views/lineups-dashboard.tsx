@@ -18,10 +18,12 @@ import type {
   LineupTeamMatchStats,
   LineupTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
+import type { LineupWeatherForecast } from "@/lib/lineups/weather"
 
 interface LineupsDashboardProps {
   matches: LineupMatch[]
   liveMatches: Record<string, LineupLiveMatch>
+  weatherForecasts: Record<string, LineupWeatherForecast>
   matchStats: Record<string, LineupMatchStats>
   roundOptions: LineupRoundOption[]
   selectedRound: string
@@ -761,7 +763,37 @@ function LiveStatusIcon({ type, compact = false }: { type: "off" | "on"; compact
   )
 }
 
-function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: LineupLiveMatch | null }) {
+function formatWeatherNumber(value: number | null, suffix: string, maximumFractionDigits = 0): string | null {
+  if (value == null || !Number.isFinite(value)) return null
+  return `${value.toLocaleString("en-AU", { maximumFractionDigits })}${suffix}`
+}
+
+function MatchWeather({ forecast }: { forecast: LineupWeatherForecast | null }) {
+  if (!forecast) return null
+
+  const temperature = formatWeatherNumber(forecast.temperatureC, "C")
+  const rainChance = formatWeatherNumber(forecast.precipitationProbabilityPct, "% rain")
+  const wind = formatWeatherNumber(forecast.windKmh, " km/h wind")
+  const items = [forecast.condition, temperature, rainChance, wind].filter(Boolean)
+  if (items.length === 0) return null
+
+  return (
+    <div className="mx-auto mt-2 flex max-w-[58vw] flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[9px] font-bold uppercase tracking-wide text-sky-100/90 sm:max-w-[420px] sm:text-[10px]">
+      <span className="inline-block h-1.5 w-1.5 rounded-full bg-sky-300 shadow-[0_0_10px_rgba(125,211,252,0.8)]" aria-hidden="true" />
+      <span>{items.join(" · ")}</span>
+    </div>
+  )
+}
+
+function LiveScoreHeader({
+  match,
+  liveMatch,
+  weatherForecast,
+}: {
+  match: LineupMatch
+  liveMatch: LineupLiveMatch | null
+  weatherForecast: LineupWeatherForecast | null
+}) {
   const state = liveMatch?.state
   const clock = formatGameClock(state?.gameSeconds ?? state?.liveSeconds)
   const score = matchScore(match, liveMatch)
@@ -800,6 +832,7 @@ function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: 
       <div className="mx-auto mt-1 max-w-[40vw] truncate text-[10px] text-nrl-muted sm:max-w-[360px] sm:text-[11px]">
         {formatMatchDateTime(match)}{match.venue ? ` · ${match.venue}` : ""}
       </div>
+      <MatchWeather forecast={weatherForecast} />
     </div>
   )
 }
@@ -1080,6 +1113,14 @@ function PregameMatchStatsPreview({ match, teamLogos }: { match: LineupMatch; te
   )
 }
 
+function FixtureOnlyPanel() {
+  return (
+    <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
+      Team lists are unavailable for this game while live lineup data is offline.
+    </div>
+  )
+}
+
 function MatchStatsPanel({
   match,
   liveMatch,
@@ -1097,8 +1138,10 @@ function MatchStatsPanel({
   const home = sumLiveStats(liveMatch, match.homeTeam, baseHome)
   const away = sumLiveStats(liveMatch, match.awayTeam, baseAway)
   const isPregame = !hasMatchStarted(liveMatch) && match.homeScore == null && match.awayScore == null
+  const isFixtureOnly = match.matchId.startsWith("draw-2026-")
 
   if (!home || !away) {
+    if (isFixtureOnly) return <FixtureOnlyPanel />
     if (isPregame) return <PregameMatchStatsPreview match={match} teamLogos={teamLogos} />
     return (
       <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
@@ -1997,6 +2040,7 @@ function LineupCard({
   matchIndex,
   liveMatch,
   matchStats,
+  weatherForecast,
   teamLogos,
   displayMode,
   onDisplayModeChange,
@@ -2012,6 +2056,7 @@ function LineupCard({
   matchIndex: number
   liveMatch: LineupLiveMatch | null
   matchStats: LineupMatchStats | null
+  weatherForecast: LineupWeatherForecast | null
   teamLogos: Record<string, string>
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
@@ -2036,6 +2081,7 @@ function LineupCard({
   const awayTeamForDisplay =
     match.awayTeam ? { ...match.awayTeam, players: awayPlayers } : historicalTeamFromStats(matchStats, matchStats?.away, "Away", awayPlayers)
   const hasLineupData = homePlayers.length > 0 || awayPlayers.length > 0
+  const isFixtureOnly = match.matchId.startsWith("draw-2026-") && !hasLineupData && matchStats == null
   const [selectedPlayer, setSelectedPlayer] = useState<LineupPlayer | null>(null)
   const [detailView, setDetailView] = useState<LineupDetailView>(hasLineupData ? "lineup" : "stats")
   const availableDetailViews: LineupDetailView[] = hasLineupData ? ["lineup", "stats"] : ["stats"]
@@ -2115,7 +2161,7 @@ function LineupCard({
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={match.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
-          <LiveScoreHeader match={match} liveMatch={displayLiveMatch} />
+          <LiveScoreHeader match={match} liveMatch={displayLiveMatch} weatherForecast={weatherForecast} />
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={match.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
@@ -2220,9 +2266,11 @@ function LineupCard({
             />
           </>
         ) : (
-          <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
-            No lineup data available for this game.
-          </div>
+          isFixtureOnly ? <FixtureOnlyPanel /> : (
+            <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
+              No lineup data available for this game.
+            </div>
+          )
         )}
       </div>
       <PlayerStatsDialog selection={selectedPlayerStats} onClose={() => setSelectedPlayer(null)} />
@@ -2264,6 +2312,7 @@ function RoundSelector({
 export function LineupsDashboard({
   matches,
   liveMatches,
+  weatherForecasts,
   matchStats,
   roundOptions,
   selectedRound,
@@ -2309,6 +2358,7 @@ export function LineupsDashboard({
                   matchIndex={matchIndexById.get(match.matchId) ?? 0}
                   liveMatch={liveMatches[match.matchId] ?? null}
                   matchStats={matchStats[match.matchId] ?? null}
+                  weatherForecast={weatherForecasts[match.matchId] ?? null}
                   teamLogos={teamLogos}
                   displayMode={displayMode}
                   onDisplayModeChange={setDisplayMode}
@@ -2324,7 +2374,11 @@ export function LineupsDashboard({
             </section>
           ))}
         </div>
-      ) : null}
+      ) : (
+        <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-6 text-sm text-nrl-muted">
+          No lineups are available for this round yet.
+        </div>
+      )}
     </div>
   )
 }

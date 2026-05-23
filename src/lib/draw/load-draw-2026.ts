@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/client"
 import type { Draw2026Data, Draw2026Row } from "./types"
 
 const PAGE_SIZE = 1000
+const DRAW_LOGO_TIMEOUT_MS = 1500
 
 function normaliseTeamKey(value: unknown): string {
   return String(value ?? "")
@@ -81,10 +82,18 @@ async function loadDraw2026DataUncached(): Promise<Draw2026Data> {
   const drawPath = path.join(process.cwd(), "data", "draw_2026.csv")
   const [csvRaw, teamLogos] = await Promise.all([
     readFile(drawPath, "utf8"),
-    fetchTeamLogosFromSupabase().catch((error) => {
-      console.warn("Unable to load team logos for draw data.", error)
-      return {}
-    }),
+    Promise.race([
+      fetchTeamLogosFromSupabase().catch((error) => {
+        console.warn("Unable to load team logos for draw data.", error)
+        return {}
+      }),
+      new Promise<Record<string, string>>((resolve) => {
+        setTimeout(() => {
+          console.warn("Draw team logos timed out; using empty logo map.")
+          resolve({})
+        }, DRAW_LOGO_TIMEOUT_MS)
+      }),
+    ]),
   ])
 
   return {

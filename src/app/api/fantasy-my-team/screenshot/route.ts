@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
 
 export const dynamic = "force-dynamic"
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 const DEFAULT_MODEL = "gpt-5-mini"
 const MAX_IMAGE_COUNT = 3
-const MAX_DATA_URL_LENGTH = 800_000
+const MAX_DATA_URL_LENGTH = 1_900_000
 
 interface ScreenshotInput {
   name?: unknown
   dataUrl?: unknown
+}
+
+interface ValidScreenshotInput {
+  name: string
+  dataUrl: string
 }
 
 interface OpenAiResponseOutputContent {
@@ -78,13 +82,72 @@ function openAiErrorMessage(text: string): string {
   return text.trim()
 }
 
+function hasExtractedPlayers(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false
+  const players = (value as { players?: unknown }).players
+  return Array.isArray(players) && players.length > 0
+}
+
+async function requestScreenshotExtraction(
+  apiKey: string,
+  validImages: ValidScreenshotInput[],
+  retryEmptyPlayers: boolean,
+): Promise<{ response: Response; extracted?: unknown }> {
+  const response = await fetch(OPENAI_RESPONSES_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: getOpenAiModel(),
+      reasoning: { effort: retryEmptyPlayers ? "medium" : "low" },
+      instructions: [
+        "Extract one NRL Fantasy classic My Team squad from screenshots.",
+        "The screenshots may show the top of the team, lower starters, bench, emergencies, the key, and a trade screen.",
+        "Read the team name, visible round, every visible player name, position row, and markers.",
+        "Player names are the labels directly under the circular player photos. They are often abbreviated, for example O. Pascoe, S. Utoikamanu, or R. Couchman.",
+        "If any player labels are visible, include them. Do not return an empty players array unless there are no readable player labels in any uploaded My Team screenshot.",
+        retryEmptyPlayers
+          ? "The previous pass found no players. Re-check the small text labels under each player image and extract any readable abbreviations. A partial abbreviated name is better than returning no players."
+          : "",
+        "If a trade screen is included, read total trades remaining, bank remaining, and trades available this week.",
+        "For trades, distinguish the values carefully: in displays like '(15)3' or '(15)3/2', tradesRemaining is 15 and tradesAvailableThisWeek is 3. Ignore the trailing weekly allowance such as '2 this week' or '/2'.",
+        "Starting position rows are HOK, MID, EDG, HLF, CTR, and WFB. Bench rows can be INT and EMG.",
+        "Use squadRole starter for players on the field, interchange for INT bench players, and emergency for EMG bench players.",
+        "Set benchOrder when a visible INT/EMG number appears. Set isCaptain for C, isViceCaptain for V, isBye for BYE, and status uncertain for yellow question mark, injured for red cross/plus, suspended for red dot.",
+        "Return JSON only in this exact shape: {\"teamName\":\"\",\"round\":\"\",\"tradesRemaining\":\"\",\"bankRemaining\":\"\",\"tradesAvailableThisWeek\":\"\",\"players\":[{\"name\":\"\",\"slot\":\"HOK\",\"squadRole\":\"starter\",\"benchOrder\":null,\"isCaptain\":false,\"isViceCaptain\":false,\"isBye\":false,\"status\":null}]}",
+        "Keep abbreviated names exactly as visible, for example J. Hughes. Do not include scores, clubs, or marker text in the name.",
+        "Return clean trade values as plain numbers where possible, for example tradesRemaining '15' and tradesAvailableThisWeek '3'. Keep bank values exactly as visible, for example $123k.",
+        "Do not invent missing players. If a player label is partly truncated but the visible text is still readable, include the visible abbreviated label exactly as shown.",
+      ].filter(Boolean).join("\n"),
+      input: [{
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: retryEmptyPlayers
+              ? "Retry extraction. Focus only on visible player-name labels under the player photos and return JSON only."
+              : "Extract the NRL Fantasy My Team squad from these screenshots as JSON only.",
+          },
+          ...validImages.map((image) => ({
+            type: "input_image",
+            image_url: image.dataUrl,
+            detail: "high",
+          })),
+        ],
+      }],
+      max_output_tokens: 3000,
+    }),
+  })
+
+  if (!response.ok) return { response }
+  const payload = (await response.json()) as OpenAiResponsePayload
+  return { response, extracted: parseJsonObject(extractAssistantText(payload)) }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Sign in to submit screenshots." }, { status: 401 })
-    }
-
     const apiKey = getOpenAiApiKey()
     if (!apiKey) {
       return NextResponse.json({ error: "OPENAI_API_KEY is not configured." }, { status: 503 })
@@ -105,59 +168,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Upload one to three PNG, JPEG, or WebP screenshots." }, { status: 400 })
     }
 
-    const response = await fetch(OPENAI_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: getOpenAiModel(),
-        reasoning: { effort: "low" },
-        instructions: [
-          "Extract one NRL Fantasy classic My Team squad from screenshots.",
-          "The screenshots may show the top of the team, lower starters, bench, emergencies, the key, and a trade screen.",
-          "Read the team name, visible round, every visible player name, position row, and markers.",
-          "If a trade screen is included, read total trades remaining, bank remaining, and trades available this week.",
-          "For trades, distinguish the values carefully: in displays like '(15)3' or '(15)3/2', tradesRemaining is 15 and tradesAvailableThisWeek is 3. Ignore the trailing weekly allowance such as '2 this week' or '/2'.",
-          "Starting position rows are HOK, MID, EDG, HLF, CTR, and WFB. Bench rows can be INT and EMG.",
-          "Use squadRole starter for players on the field, interchange for INT bench players, and emergency for EMG bench players.",
-          "Set benchOrder when a visible INT/EMG number appears. Set isCaptain for C, isViceCaptain for V, isBye for BYE, and status uncertain for yellow question mark, injured for red cross/plus, suspended for red dot.",
-          "Return JSON only in this exact shape: {\"teamName\":\"\",\"round\":\"\",\"tradesRemaining\":\"\",\"bankRemaining\":\"\",\"tradesAvailableThisWeek\":\"\",\"players\":[{\"name\":\"\",\"slot\":\"HOK\",\"squadRole\":\"starter\",\"benchOrder\":null,\"isCaptain\":false,\"isViceCaptain\":false,\"isBye\":false,\"status\":null}]}",
-          "Keep abbreviated names exactly as visible, for example J. Hughes. Do not include scores, clubs, or marker text in the name.",
-          "Return clean trade values as plain numbers where possible, for example tradesRemaining '15' and tradesAvailableThisWeek '3'. Keep bank values exactly as visible, for example $123k.",
-          "Do not invent missing players. If a player is partly hidden and unreadable, omit them.",
-        ].join("\n"),
-        input: [{
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: "Extract the NRL Fantasy My Team squad from these screenshots as JSON only.",
-            },
-            ...validImages.map((image) => ({
-              type: "input_image",
-              image_url: image.dataUrl,
-              detail: "high",
-            })),
-          ],
-        }],
-        max_output_tokens: 3000,
-      }),
-    })
+    let extraction = await requestScreenshotExtraction(apiKey, validImages, false)
+    if (extraction.response.ok && !hasExtractedPlayers(extraction.extracted)) {
+      extraction = await requestScreenshotExtraction(apiKey, validImages, true)
+    }
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "")
+    if (!extraction.response.ok) {
+      const errorText = await extraction.response.text().catch(() => "")
       const details = openAiErrorMessage(errorText)
       return NextResponse.json(
         { error: "Failed to process screenshots.", details: details.slice(0, 500) },
-        { status: response.status }
+        { status: extraction.response.status }
       )
     }
 
-    const payload = (await response.json()) as OpenAiResponsePayload
-    const extracted = parseJsonObject(extractAssistantText(payload))
-    return NextResponse.json({ extracted })
+    return NextResponse.json({ extracted: extraction.extracted })
   } catch (error) {
     console.error("Error extracting fantasy My Team screenshots:", error)
     return NextResponse.json(

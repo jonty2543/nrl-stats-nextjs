@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { SignInButton, useAuth } from "@clerk/nextjs"
+import { useAuth } from "@clerk/nextjs"
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { resolvePlayerImage } from "@/components/views/player-comparison"
@@ -15,7 +15,7 @@ import {
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import type { OriginChanceRecord, PlayerImageRecord } from "@/lib/supabase/queries"
 
-const MY_TEAM_MAX_IMAGE_DATA_URL_LENGTH = 650_000
+const MY_TEAM_MAX_IMAGE_DATA_URL_LENGTH = 1_800_000
 const SCREENSHOT_SLOTS = [
   { key: "top", label: "Screenshot 1", hint: "Top half of My Team with the upper field." },
   { key: "bottom", label: "Screenshot 2", hint: "Scroll down and capture the lower field plus bench." },
@@ -195,7 +195,7 @@ async function buildTeamScreenshot(file: File, slot: ScreenshotSlot): Promise<Te
   const canvasContext = canvas.getContext("2d")
   if (!canvasContext) throw new Error("Unable to process image.")
 
-  let scale = Math.min(1, 900 / image.naturalWidth)
+  let scale = Math.min(1, 1200 / image.naturalWidth)
   let dataUrl = ""
   for (const widthScale of [1, 0.82, 0.68, 0.54, 0.42]) {
     const width = Math.max(1, Math.round(image.naturalWidth * scale * widthScale))
@@ -1023,8 +1023,6 @@ function ScreenshotUploadPanel({
   screenshots,
   uploadingSlot,
   isSubmitting,
-  isAuthLoaded,
-  isSignedIn,
   error,
   status,
   isUpdateMode,
@@ -1035,8 +1033,6 @@ function ScreenshotUploadPanel({
   screenshots: Record<ScreenshotSlot, TeamScreenshot | null>
   uploadingSlot: ScreenshotSlot | null
   isSubmitting: boolean
-  isAuthLoaded: boolean
-  isSignedIn: boolean
   error: string | null
   status: string | null
   isUpdateMode: boolean
@@ -1045,7 +1041,6 @@ function ScreenshotUploadPanel({
   onClear: () => void
 }) {
   const hasScreenshot = SCREENSHOT_SLOTS.some((slot) => screenshots[slot.key] != null)
-  const showSignInPrompt = isAuthLoaded && !isSignedIn
 
   return (
     <section className="overflow-hidden rounded-xl border border-nrl-accent/35 bg-[linear-gradient(135deg,rgba(0,245,138,0.12),rgba(124,58,237,0.14))]">
@@ -1056,36 +1051,25 @@ function ScreenshotUploadPanel({
             Upload My Team screenshots plus the trade screen and NRL AI will fill your squad, captain, byes, trades, and bank.
           </p>
         </div>
-        {showSignInPrompt ? (
-          <SignInButton mode="modal">
-            <button
-              type="button"
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-nrl-accent/50 bg-[linear-gradient(135deg,#00f58a,#8b5cf6)] px-4 py-2 text-sm font-black text-[#07131f] transition-opacity"
-            >
-              Sign in to {isUpdateMode ? "update" : "autofill"}
-            </button>
-          </SignInButton>
-        ) : (
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!hasScreenshot || !isAuthLoaded || isSubmitting || uploadingSlot != null}
-            className="inline-flex min-h-11 items-center justify-center rounded-full border border-nrl-accent/50 bg-[linear-gradient(135deg,#00f58a,#8b5cf6)] px-4 py-2 text-sm font-black text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            {isSubmitting ? (
-              <span className="inline-flex items-center gap-1">
-                <span>Filling team</span>
-                {[0, 1, 2].map((dot) => (
-                  <span
-                    key={dot}
-                    className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#07131f]"
-                    style={{ animationDelay: `${dot * 120}ms` }}
-                  />
-                ))}
-              </span>
-            ) : isUpdateMode ? "Update My Team" : "Autofill My Team"}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={!hasScreenshot || isSubmitting || uploadingSlot != null}
+          className="inline-flex min-h-11 items-center justify-center rounded-full border border-nrl-accent/50 bg-[linear-gradient(135deg,#00f58a,#8b5cf6)] px-4 py-2 text-sm font-black text-[#07131f] transition-opacity disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {isSubmitting ? (
+            <span className="inline-flex items-center gap-1">
+              <span>Filling team</span>
+              {[0, 1, 2].map((dot) => (
+                <span
+                  key={dot}
+                  className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#07131f]"
+                  style={{ animationDelay: `${dot * 120}ms` }}
+                />
+              ))}
+            </span>
+          ) : isUpdateMode ? "Update My Team" : "Autofill My Team"}
+        </button>
       </div>
 
       <div className="grid gap-3 border-t border-nrl-border/70 bg-nrl-panel/55 p-3 md:grid-cols-3 md:p-4">
@@ -1807,10 +1791,12 @@ function PlayerToken({
       ? player.squadRole === "emergency" ? "border-[#f16161]" : "border-[#a85db5]"
       : "border-[#f1f3f5]"
   const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) ?? null : null
-  const actualScore = showProjections ? actualScoreForPlayerRound(player, scoreRound, fantasyPlayersById) : null
-  const displayedProjection = showProjections
-    ? actualScore ?? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
-    : null
+  const actualScore = actualScoreForPlayerRound(player, scoreRound, fantasyPlayersById)
+  const displayedProjection = actualScore ?? (
+    showProjections
+      ? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
+      : null
+  )
 
   const content = (
     <>
@@ -1831,7 +1817,7 @@ function PlayerToken({
           &uarr;
         </span>
       ) : null}
-      {showProjections ? (
+      {actualScore != null || showProjections ? (
         <span className={`absolute right-[5%] top-[27%] grid h-6 w-6 place-items-center rounded-full border text-[8px] font-black shadow-[0_8px_18px_rgba(10,22,38,0.22)] lg:h-9 lg:w-9 lg:text-xs ${
           actualScore != null
             ? "border-emerald-200/80 bg-[#159a5a] text-white"
@@ -2042,7 +2028,7 @@ function TradeOverlay({
               </div>
               <div className="text-sm font-bold">{formatPrice(candidate.price)}</div>
               <div className="text-sm font-bold">{formatProjection(candidate.last3)}</div>
-              <div className="text-sm font-bold">{formatProjection(candidate.breakEven)}</div>
+              <div className="text-sm font-bold">{showProjections ? formatProjection(candidate.breakEven) : "-"}</div>
               <div className="text-sm font-bold">{showProjections ? formatProjection(candidate.projection) : "-"}</div>
               <button
                 type="button"
@@ -2513,6 +2499,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   const tradeOverlayRef = useRef<HTMLDivElement | null>(null)
   const [isAiChatOpen, setIsAiChatOpen] = useState(false)
   const hasLoadedSavedTeamRef = useRef(false)
+  const wasSignedInRef = useRef(false)
   const { getToken: getMyTeamAuthToken, isLoaded: isMyTeamAuthLoaded, isSignedIn: isMyTeamSignedIn } = useAuth()
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
   const fantasyCoachPlayersById = useMemo(() => new Map(fantasyCoachPlayers.map((player) => [player.id, player])), [fantasyCoachPlayers])
@@ -2548,12 +2535,16 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     setHasLoadedSavedTeam(false)
 
     if (!isMyTeamSignedIn) {
-      setTeam(null)
+      if (wasSignedInRef.current) {
+        setTeam(null)
+      }
+      wasSignedInRef.current = false
       hasLoadedSavedTeamRef.current = true
       setHasLoadedSavedTeam(true)
       return
     }
 
+    wasSignedInRef.current = true
     let cancelled = false
 
     const loadSavedTeam = async () => {
@@ -2656,11 +2647,6 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   }
 
   const handleAutofill = async () => {
-    if (!isMyTeamAuthLoaded || !isMyTeamSignedIn) {
-      setError("Sign in to submit screenshots and save your team.")
-      return
-    }
-
     const attachments = SCREENSHOT_SLOTS.map((slot) => screenshots[slot.key]).filter((screenshot): screenshot is TeamScreenshot => screenshot != null)
     if (attachments.length === 0) {
       setError("Upload at least one My Team screenshot first.")
@@ -2687,6 +2673,9 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
       }
 
       const nextTeam = resolveExtractedTeam(payload?.extracted ?? {}, fantasyPlayers)
+      if (nextTeam.players.length === 0) {
+        throw new Error("Could not find any players in those screenshots. Try uploading clearer My Team screenshots.")
+      }
       setTeam(nextTeam)
       setIsUpdatingTeam(false)
       setSelectedPlayerIndex(null)
@@ -2917,8 +2906,6 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
           screenshots={screenshots}
           uploadingSlot={uploadingSlot}
           isSubmitting={isSubmitting}
-          isAuthLoaded={isMyTeamAuthLoaded}
-          isSignedIn={Boolean(isMyTeamSignedIn)}
           error={error}
           status={status}
           isUpdateMode={Boolean(team)}

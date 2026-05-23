@@ -2436,9 +2436,7 @@ export function FantasyDashboard({
   const [teammateLookupRows, setTeammateLookupRows] = useState<TeammateLookupRow[]>([])
   const [isLoadingStats, setIsLoadingStats] = useState(false)
   const [preloadedSelectedPlayerAllYearsKey, setPreloadedSelectedPlayerAllYearsKey] = useState<string | null>(null)
-  const [selectedFantasyName, setSelectedFantasyName] = useState(
-    initialSelectedFantasyName ?? fantasyPlayers[0]?.name ?? ""
-  )
+  const [selectedFantasyName, setSelectedFantasyName] = useState(initialSelectedFantasyName ?? "")
   const [finalsMode, setFinalsMode] = useState<"Yes" | "No">("Yes")
   const [opponentFilter, setOpponentFilter] = useState("All Opponents")
   const [positionFilter, setPositionFilter] = useState("All Positions")
@@ -4041,19 +4039,6 @@ export function FantasyDashboard({
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <section className="rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
-          <div className="max-w-2xl">
-            <SearchableSelect
-              label=""
-              value={selectedFantasyName}
-              options={playerSearchOptions}
-              onChange={navigateToPlayer}
-              placeholder="Search player..."
-              showLoadingOnType
-            />
-          </div>
-        </section>
-
         {showOwnedCards ? (
           <div className="grid gap-5 xl:grid-cols-4 xl:items-stretch xl:gap-3">
             <Link
@@ -4081,22 +4066,19 @@ export function FantasyDashboard({
                 </span>
               ) : null}
             </Link>
-            <div className="grid grid-cols-8 items-center gap-4 xl:contents">
+            <div className={`grid items-center gap-2 sm:gap-3 xl:contents ${fantasyProjectionArticle ? "grid-cols-3" : "grid-cols-2"}`}>
               <Link
                 href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
                 onClick={() => setIsFantasyAnalyticsPending(true)}
-                className={`relative col-span-8 flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] xl:order-2 xl:col-span-1 xl:min-h-[64px] xl:py-2 ${
+                className={`relative flex min-h-[44px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-2 py-1.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] sm:min-h-[52px] sm:px-4 xl:order-2 xl:col-span-1 xl:min-h-[64px] xl:py-2 ${
                   showFantasyAnalytics
                     ? "border-nrl-accent bg-[#20284a]"
                     : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
                 }`}
               >
-                <span className="inline-flex items-center gap-2 text-sm font-bold">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold leading-tight sm:text-sm">
                   <TrendGraphIcon className="h-4 w-4 text-nrl-accent" />
                   Find Value
-                </span>
-                <span className="px-5 text-[10px] font-black leading-tight text-nrl-muted">
-                  Projections vs price, stat trends & template teams
                 </span>
                 {isFantasyAnalyticsPending ? (
                   <span className="absolute inset-x-5 bottom-2 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
@@ -4104,19 +4086,16 @@ export function FantasyDashboard({
                   </span>
                 ) : null}
               </Link>
-              <div className="group col-span-5 self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1.5 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))] xl:order-3 xl:col-span-1">
+              <div className="group self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))] sm:p-1.5 xl:order-3 xl:col-span-1">
                 {hasFantasyPlotAccess ? (
                   <Link
                     href="/dashboard/fantasy/draft"
                     onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative inline-flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center leading-tight text-white transition-colors hover:text-white group-hover:bg-[#29335f] xl:min-h-[52px]"
+                    className="relative inline-flex h-full min-h-[36px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-2 py-1.5 text-center leading-tight text-white transition-colors hover:text-white group-hover:bg-[#29335f] sm:min-h-[44px] sm:px-4 xl:min-h-[52px]"
                   >
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold sm:gap-1.5 sm:text-[11px]">
                       <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
                       Draft / H2H Odds
-                    </span>
-                    <span className="px-3 text-[10px] font-black leading-tight text-nrl-muted">
-                      See how likely you are to win your matchup
                     </span>
                     {isFantasyDraftPending ? (
                       <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
@@ -4128,14 +4107,11 @@ export function FantasyDashboard({
                   <Link
                     href="/dashboard/fantasy/draft"
                     onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative flex h-full min-h-[60px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-4 py-2 text-center transition-colors group-hover:bg-[#29335f] xl:min-h-[52px]"
+                    className="relative flex h-full min-h-[36px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-2 py-1.5 text-center transition-colors group-hover:bg-[#29335f] sm:min-h-[44px] sm:px-4 xl:min-h-[52px]"
                   >
-                    <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold leading-tight text-white">
+                    <div className="inline-flex items-center gap-1 text-[10px] font-semibold leading-tight text-white sm:gap-1.5 sm:text-[11px]">
                       <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
                       Draft / H2H Odds
-                    </div>
-                    <div className="px-3 text-[10px] font-black leading-tight text-nrl-muted">
-                      See how likely you are to win your matchup
                     </div>
                     {isFantasyDraftPending ? (
                       <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
@@ -4149,7 +4125,7 @@ export function FantasyDashboard({
                 <Link
                   href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
                   aria-label={`Read ${fantasyProjectionArticle.title}`}
-                  className="group relative col-span-3 flex min-h-[68px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 xl:order-4 xl:col-span-1 xl:min-h-[64px]"
+                  className="group relative flex min-h-[44px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:order-4 xl:col-span-1 xl:min-h-[64px]"
                 >
                   <div className={`absolute inset-0 grid ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                     {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
@@ -4166,16 +4142,16 @@ export function FantasyDashboard({
                     ))}
                   </div>
                   <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.95),rgba(14,19,48,0.74),rgba(14,19,48,0.45))]" />
-                  <div className="relative flex h-full min-h-[68px] w-full items-center justify-between gap-3 px-5 py-2.5 xl:min-h-[64px] xl:py-2">
+                  <div className="relative flex h-full min-h-[44px] w-full items-center justify-between gap-2 px-3 py-1.5 sm:min-h-[52px] sm:px-4 xl:min-h-[64px] xl:gap-3 xl:px-5 xl:py-2">
                     <div className="min-w-0">
                       <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent">
                         Article
                       </div>
-                      <div className="mt-1 overflow-hidden text-[10px] font-bold uppercase leading-tight tracking-[0.1em] text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                      <div className="mt-0.5 overflow-hidden text-[8px] font-bold uppercase leading-tight tracking-[0.08em] text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:1] sm:text-[9px] xl:mt-1 xl:text-[10px] xl:[-webkit-line-clamp:2]">
                         {fantasyProjectionArticle.title}
                       </div>
                     </div>
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel-2/80 text-base text-nrl-text">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel-2/80 text-sm text-nrl-text sm:h-7 sm:w-7 sm:text-base">
                       →
                     </span>
                   </div>
@@ -4184,6 +4160,7 @@ export function FantasyDashboard({
             </div>
           </div>
         ) : null}
+
       </div>
 
       {showOwnedCards && showFantasyAnalytics ? (
@@ -4513,6 +4490,16 @@ export function FantasyDashboard({
               >
                 {allPlayersSort.direction === "asc" ? "↑" : "↓"}
               </button>
+            </div>
+            <div className="mt-2 max-w-2xl">
+              <SearchableSelect
+                label=""
+                value={selectedFantasyName}
+                options={playerSearchOptions}
+                onChange={navigateToPlayer}
+                placeholder="Search player..."
+                showLoadingOnType
+              />
             </div>
           </div>
           <div className={`${allPlayersView === "cards" ? "grid" : "hidden"} max-h-[760px] grid-cols-1 gap-2 overflow-y-auto p-2.5`}>

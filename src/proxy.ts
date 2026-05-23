@@ -12,6 +12,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/stripe/webhook(.*)",
   "/api/admin/rebuild-public-player-stats(.*)",
   "/api/admin/capture-fantasy-ownership-snapshot(.*)",
+  "/api/archetypes(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
 ]);

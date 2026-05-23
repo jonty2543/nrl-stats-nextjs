@@ -29,6 +29,7 @@ export function ToolNav({ className }: ToolNavProps) {
     pathname === "/dashboard" ||
     pathname.startsWith("/dashboard/players") ||
     pathname.startsWith("/dashboard/teams") ||
+    pathname.startsWith("/dashboard/archetypes") ||
     pathname.startsWith("/dashboard/leaders");
   const displayedPendingArticleCount = isLoaded && userId ? pendingArticleCount : 0;
 

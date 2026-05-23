@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 const tabs = [
   { label: "Players", href: "/dashboard/players" },
   { label: "Teams", href: "/dashboard/teams" },
+  { label: "Archetypes", href: "/dashboard/archetypes" },
   { label: "Leaders", href: "/dashboard/leaders" },
 ];
 
@@ -18,6 +19,7 @@ export function TabNav() {
     pathname === "/dashboard" ||
     pathname.startsWith("/dashboard/players") ||
     pathname.startsWith("/dashboard/teams") ||
+    pathname.startsWith("/dashboard/archetypes") ||
     pathname.startsWith("/dashboard/leaders");
 
   useEffect(() => {

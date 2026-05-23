@@ -25,53 +25,61 @@ export function StatsTable({ rows, showLabel = true }: StatsTableProps) {
   const hideLabelCol = labels.size <= 1;
 
   return (
-    <table className="w-full border-collapse">
-      <thead>
-        <tr>
-          {showLabel && !hideLabelCol && (
-            <th className="p-1 text-left text-[0.75rem] text-nrl-muted border-b border-nrl-border">
-              Player
-            </th>
-          )}
-          <th className="p-1 text-left text-[0.75rem] text-nrl-muted border-b border-nrl-border">
-            Stat
-          </th>
-          <th className="p-1 text-right text-[0.75rem] text-nrl-muted border-b border-nrl-border">
-            Average
-          </th>
-          <th className="p-1 text-right text-[0.75rem] text-nrl-muted border-b border-nrl-border">
-            Median
-          </th>
-          <th className="p-1 text-right text-[0.75rem] text-nrl-muted border-b border-nrl-border">
-            Min
-          </th>
-          <th className="p-1 text-right text-[0.75rem] text-nrl-muted border-b border-nrl-border">
-            Max
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {sortedRows.map((row, i) => (
-          <tr key={i}>
-            {showLabel && !hideLabelCol && (
-              <td className="p-1 text-[0.75rem] text-nrl-text">{row.label}</td>
-            )}
-            <td className="p-1 text-[0.75rem] text-nrl-text">{row.stat}</td>
-            <td className="p-1 text-right text-[0.75rem] text-nrl-text">
-              {row.avg.toFixed(2)}
-            </td>
-            <td className="p-1 text-right text-[0.75rem] text-nrl-text">
-              {row.med.toFixed(2)}
-            </td>
-            <td className="p-1 text-right text-[0.75rem] text-nrl-text">
-              {row.min.toFixed(2)}
-            </td>
-            <td className="p-1 text-right text-[0.75rem] text-nrl-text">
-              {row.max.toFixed(2)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[34rem] border-collapse">
+          <thead className="bg-nrl-panel-2">
+            <tr>
+              {showLabel && !hideLabelCol && (
+                <th className="border-b border-nrl-border px-3 py-2 text-left text-[0.68rem] font-bold uppercase tracking-wide text-nrl-muted">
+                  Player
+                </th>
+              )}
+              <th className="border-b border-nrl-border px-3 py-2 text-left text-[0.68rem] font-bold uppercase tracking-wide text-nrl-muted">
+                Stat
+              </th>
+              <th className="border-b border-nrl-border px-3 py-2 text-right text-[0.68rem] font-bold uppercase tracking-wide text-nrl-muted">
+                Avg
+              </th>
+              <th className="border-b border-nrl-border px-3 py-2 text-right text-[0.68rem] font-bold uppercase tracking-wide text-nrl-muted">
+                Median
+              </th>
+              <th className="border-b border-nrl-border px-3 py-2 text-right text-[0.68rem] font-bold uppercase tracking-wide text-nrl-muted">
+                Low
+              </th>
+              <th className="border-b border-nrl-border px-3 py-2 text-right text-[0.68rem] font-bold uppercase tracking-wide text-nrl-muted">
+                High
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedRows.map((row, i) => (
+              <tr key={`${row.label}-${row.stat}-${i}`} className="odd:bg-white/[0.015]">
+                {showLabel && !hideLabelCol && (
+                  <td className="border-t border-nrl-border/60 px-3 py-2 text-[0.75rem] font-medium text-nrl-text">
+                    {row.label}
+                  </td>
+                )}
+                <td className="border-t border-nrl-border/60 px-3 py-2 text-[0.75rem] text-nrl-text">
+                  {row.stat}
+                </td>
+                <td className="border-t border-nrl-border/60 px-3 py-2 text-right text-[0.75rem] font-semibold text-nrl-text">
+                  {row.avg.toFixed(1)}
+                </td>
+                <td className="border-t border-nrl-border/60 px-3 py-2 text-right text-[0.75rem] text-nrl-text">
+                  {row.med.toFixed(1)}
+                </td>
+                <td className="border-t border-nrl-border/60 px-3 py-2 text-right text-[0.75rem] text-nrl-muted">
+                  {row.min.toFixed(1)}
+                </td>
+                <td className="border-t border-nrl-border/60 px-3 py-2 text-right text-[0.75rem] text-nrl-muted">
+                  {row.max.toFixed(1)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

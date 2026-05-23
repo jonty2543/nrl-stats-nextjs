@@ -31,7 +31,6 @@ import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-t
 import { PillRadio } from "@/components/ui/pill-radio";
 import { Select } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { SectionDivider } from "@/components/ui/section-divider";
 import { hasProPlotAccess } from "@/lib/access/pro-access";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
@@ -68,6 +67,7 @@ interface PlayerStatsTableRow {
 const DEFAULT_PLAYER_1_CANDIDATES = ["Nathan Cleary"];
 const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
 const DEFAULT_STATS_TABLE_YEAR = "2026";
+const PLAYER_COMPARISON_STATE_STORAGE_KEY = "nrl-stats:player-comparison-state:v1";
 
 const PLAYER_STATS_TABLE_COLUMNS = PLAYER_STATS;
 const PLAYER_STATS_TABLE_BASE_COLUMNS: Array<{
@@ -92,6 +92,37 @@ const MINUTES_FILTER_OPTIONS = [
   "70 Mins",
   "80 Mins",
 ] as const;
+const FINALS_MODE_OPTIONS = ["Yes", "No"] as const;
+
+interface PersistedPlayerComparisonState {
+  version: 1;
+  selectedYears: string[];
+  statsTableYears: string[];
+  statsTablePosition: string;
+  statsTableTeam: string;
+  statsTableSort: {
+    column: PlayerStatsTableSortKey;
+    direction: PlayerStatsTableSortDirection;
+  };
+  statsTableValueMode: PlayerStatsTableValueMode;
+  finalsMode: string;
+  minutesOverFilter: string;
+  minutesUnderFilter: string;
+  percentileScope: "Position" | "All Players";
+  player1: string;
+  player2: string;
+  player1Position: string;
+  player2Position: string;
+  teammate1: string;
+  teammate2: string;
+  teammate1Position: string;
+  teammate2Position: string;
+  teammateMode1: "both" | "with" | "without";
+  teammateMode2: "both" | "with" | "without";
+  stat1: string;
+  stat2: string;
+  wwYear: string;
+}
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number") {
@@ -136,6 +167,32 @@ function parseMinutesFilterOption(value: string): number {
   if (!value || value === "Any") return 0;
   const n = Number.parseInt(value, 10);
   return Number.isFinite(n) ? n : 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readString(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function readPersistedPlayerComparisonState(): Partial<PersistedPlayerComparisonState> | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(PLAYER_COMPARISON_STATE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || parsed.version !== 1) return null;
+    return parsed as Partial<PersistedPlayerComparisonState>;
+  } catch {
+    return null;
+  }
 }
 
 function normalisePersonName(value: string): string {
@@ -651,12 +708,14 @@ export function SimplePlayerPhotoTile({
   priority = false,
   className,
   imageHeightClass,
+  showName = true,
 }: {
   playerName: string;
   imageRow: PlayerImageRecord | null;
   priority?: boolean;
   className?: string;
   imageHeightClass?: string;
+  showName?: boolean;
 }) {
   const imageCandidates = useMemo(() => buildPlayerImageCandidates(imageRow), [imageRow]);
   const imageCandidatesKey = imageCandidates.join("|");
@@ -702,9 +761,11 @@ export function SimplePlayerPhotoTile({
           </div>
         )}
       </div>
-      <div className="border-t border-[#1d3a63] px-2.5 py-2 text-center sm:px-4 sm:py-3">
-        <div className="truncate text-[12px] font-semibold text-white sm:text-sm">{playerName || "No player selected"}</div>
-      </div>
+      {showName ? (
+        <div className="border-t border-[#1d3a63] px-2.5 py-2 text-center sm:px-4 sm:py-3">
+          <div className="truncate text-[12px] font-semibold text-white sm:text-sm">{playerName || "No player selected"}</div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -781,8 +842,20 @@ export function PlayerComparison({
     if (validDefaultYears.length > 0) return validDefaultYears;
     return unlockedYears.slice(0, 1);
   }, [defaultYears, unlockedYears]);
+  const loadedYears = useMemo(
+    () => new Set(allData.map((row) => String(row.Year ?? ""))),
+    [allData]
+  );
   const [selectedYears, setSelectedYears] = useState<string[]>(initialYears);
   const [statsTableYears, setStatsTableYears] = useState<string[]>(initialYears);
+  const hasLoadedSelectedYears = useMemo(
+    () => selectedYears.every((year) => loadedYears.has(year)),
+    [loadedYears, selectedYears]
+  );
+  const hasLoadedStatsTableYears = useMemo(
+    () => statsTableYears.every((year) => loadedYears.has(year)),
+    [loadedYears, statsTableYears]
+  );
   const [statsTablePosition, setStatsTablePosition] = useState("All Positions");
   const [statsTableTeam, setStatsTableTeam] = useState("All Teams");
   const [statsTableSort, setStatsTableSort] = useState<{
@@ -800,11 +873,6 @@ export function PlayerComparison({
   const ensureAtLeastOneUnlockedYear = useCallback(
     (years: string[]) => (years.length > 0 ? years : unlockedYears.slice(0, 1)),
     [unlockedYears]
-  );
-
-  const loadedYears = useMemo(
-    () => new Set(allData.map((row) => String(row.Year ?? ""))),
-    [allData]
   );
 
   const loadYears = useCallback(async (years: string[]) => {
@@ -996,6 +1064,199 @@ export function PlayerComparison({
   const [stat1, setStat1] = useState("All Run Metres");
   const [stat2, setStat2] = useState("Kicking Metres");
   const [wwYear, setWwYear] = useState(selectedYears[0] ?? "");
+  const [hasRestoredStatsState, setHasRestoredStatsState] = useState(false);
+
+  useEffect(() => {
+    if (hasRestoredStatsState || unlockedYears.length === 0) return;
+
+    const saved = readPersistedPlayerComparisonState();
+    if (saved) {
+      const validSelectedYears = filterUnlockedYears(readStringArray(saved.selectedYears));
+      const validStatsTableYears = filterUnlockedYears(readStringArray(saved.statsTableYears));
+      const sortColumn = saved.statsTableSort?.column;
+      const sortDirection = saved.statsTableSort?.direction;
+      const validSortColumns = new Set<string>([
+        ...PLAYER_STATS_TABLE_BASE_COLUMNS.map((column) => column.key),
+        ...PLAYER_STATS_TABLE_COLUMNS.map((stat) => `stat:${stat}`),
+      ]);
+
+      if (validSelectedYears.length > 0) {
+        setSelectedYears(ensureAtLeastOneUnlockedYear(validSelectedYears));
+      }
+      if (validStatsTableYears.length > 0) {
+        setStatsTableYears(ensureAtLeastOneUnlockedYear(validStatsTableYears));
+      }
+      if (typeof saved.statsTablePosition === "string") setStatsTablePosition(saved.statsTablePosition);
+      if (typeof saved.statsTableTeam === "string") setStatsTableTeam(saved.statsTableTeam);
+      if (
+        typeof sortColumn === "string" &&
+        validSortColumns.has(sortColumn) &&
+        (sortDirection === "asc" || sortDirection === "desc")
+      ) {
+        setStatsTableSort({
+          column: sortColumn as PlayerStatsTableSortKey,
+          direction: sortDirection,
+        });
+      }
+      if (saved.statsTableValueMode === "Average" || saved.statsTableValueMode === "Total") {
+        setStatsTableValueMode(saved.statsTableValueMode);
+      }
+      if (FINALS_MODE_OPTIONS.includes(saved.finalsMode as (typeof FINALS_MODE_OPTIONS)[number])) {
+        setFinalsMode(saved.finalsMode as (typeof FINALS_MODE_OPTIONS)[number]);
+      }
+      if (MINUTES_FILTER_OPTIONS.includes(saved.minutesOverFilter as (typeof MINUTES_FILTER_OPTIONS)[number])) {
+        setMinutesOverFilter(saved.minutesOverFilter as (typeof MINUTES_FILTER_OPTIONS)[number]);
+      }
+      if (MINUTES_FILTER_OPTIONS.includes(saved.minutesUnderFilter as (typeof MINUTES_FILTER_OPTIONS)[number])) {
+        setMinutesUnderFilter(saved.minutesUnderFilter as (typeof MINUTES_FILTER_OPTIONS)[number]);
+      }
+      if (saved.percentileScope === "Position" || saved.percentileScope === "All Players") {
+        setPercentileScope(saved.percentileScope);
+      }
+
+      setPlayer1(readString(saved.player1, ""));
+      setPlayer2(readString(saved.player2, ""));
+      setPlayer1Position(readString(saved.player1Position, "All"));
+      setPlayer2Position(readString(saved.player2Position, "All"));
+      setTeammate1(readString(saved.teammate1, "None"));
+      setTeammate2(readString(saved.teammate2, "None"));
+      setTeammate1Position(readString(saved.teammate1Position, "All"));
+      setTeammate2Position(readString(saved.teammate2Position, "All"));
+      if (saved.teammateMode1 === "both" || saved.teammateMode1 === "with" || saved.teammateMode1 === "without") {
+        setTeammateMode1(saved.teammateMode1);
+      }
+      if (saved.teammateMode2 === "both" || saved.teammateMode2 === "with" || saved.teammateMode2 === "without") {
+        setTeammateMode2(saved.teammateMode2);
+      }
+      setStat1(readString(saved.stat1, "All Run Metres"));
+      setStat2(readString(saved.stat2, "Kicking Metres"));
+      setWwYear(readString(saved.wwYear, selectedYears[0] ?? ""));
+    }
+
+    setHasRestoredStatsState(true);
+  }, [
+    ensureAtLeastOneUnlockedYear,
+    filterUnlockedYears,
+    hasRestoredStatsState,
+    selectedYears,
+    unlockedYears,
+  ]);
+
+  useEffect(() => {
+    if (!hasRestoredStatsState || !hasLoadedStatsTableYears) return;
+
+    if (statsTablePosition !== "All Positions" && !statsTablePositionOptions.includes(statsTablePosition)) {
+      setStatsTablePosition("All Positions");
+    }
+    if (statsTableTeam !== "All Teams" && !statsTableTeamOptions.includes(statsTableTeam)) {
+      setStatsTableTeam("All Teams");
+    }
+  }, [
+    hasLoadedStatsTableYears,
+    hasRestoredStatsState,
+    statsTablePosition,
+    statsTablePositionOptions,
+    statsTableTeam,
+    statsTableTeamOptions,
+  ]);
+
+  useEffect(() => {
+    if (!hasRestoredStatsState || !hasLoadedSelectedYears || statList.length === 0) return;
+
+    if (!statList.includes(stat1)) {
+      setStat1(statList[0] ?? "All Run Metres");
+    }
+    if (stat2 !== "None" && !statList.includes(stat2)) {
+      setStat2("None");
+    }
+  }, [hasLoadedSelectedYears, hasRestoredStatsState, stat1, stat2, statList]);
+
+  useEffect(() => {
+    if (!hasRestoredStatsState || !hasLoadedSelectedYears) return;
+
+    const validPositions = ["All", ...positions];
+    if (!validPositions.includes(player1Position)) setPlayer1Position("All");
+    if (!validPositions.includes(player2Position)) setPlayer2Position("All");
+    if (!validPositions.includes(teammate1Position)) setTeammate1Position("All");
+    if (!validPositions.includes(teammate2Position)) setTeammate2Position("All");
+  }, [
+    hasLoadedSelectedYears,
+    hasRestoredStatsState,
+    player1Position,
+    player2Position,
+    positions,
+    teammate1Position,
+    teammate2Position,
+  ]);
+
+  useEffect(() => {
+    if (!hasRestoredStatsState) return;
+    if (!selectedYears.includes(wwYear)) {
+      setWwYear(selectedYears[0] ?? "");
+    }
+  }, [hasRestoredStatsState, selectedYears, wwYear]);
+
+  useEffect(() => {
+    if (!hasRestoredStatsState || typeof window === "undefined") return;
+
+    const state: PersistedPlayerComparisonState = {
+      version: 1,
+      selectedYears,
+      statsTableYears,
+      statsTablePosition,
+      statsTableTeam,
+      statsTableSort,
+      statsTableValueMode,
+      finalsMode,
+      minutesOverFilter,
+      minutesUnderFilter,
+      percentileScope,
+      player1,
+      player2,
+      player1Position,
+      player2Position,
+      teammate1,
+      teammate2,
+      teammate1Position,
+      teammate2Position,
+      teammateMode1,
+      teammateMode2,
+      stat1,
+      stat2,
+      wwYear,
+    };
+
+    try {
+      window.localStorage.setItem(PLAYER_COMPARISON_STATE_STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      // Ignore storage errors such as private browsing quota failures.
+    }
+  }, [
+    finalsMode,
+    hasRestoredStatsState,
+    minutesOverFilter,
+    minutesUnderFilter,
+    percentileScope,
+    player1,
+    player1Position,
+    player2,
+    player2Position,
+    selectedYears,
+    stat1,
+    stat2,
+    statsTablePosition,
+    statsTableSort,
+    statsTableTeam,
+    statsTableValueMode,
+    statsTableYears,
+    teammate1,
+    teammate1Position,
+    teammate2,
+    teammate2Position,
+    teammateMode1,
+    teammateMode2,
+    wwYear,
+  ]);
 
   useEffect(() => {
     if (selectedYears.length > 0 || unlockedYears.length === 0) return;
@@ -1099,7 +1360,21 @@ export function PlayerComparison({
   const hasLoadedData = allData.length > 0;
 
   useEffect(() => {
-    if (!hasLoadedData) return;
+    if (!hasRestoredStatsState || !hasLoadedSelectedYears) return;
+    if (teammate1 !== "None" && !tm1Options.includes(teammate1)) {
+      setTeammate1("None");
+      setTeammate1Position("All");
+      setTeammateMode1("both");
+    }
+    if (teammate2 !== "None" && !tm2Options.includes(teammate2)) {
+      setTeammate2("None");
+      setTeammate2Position("All");
+      setTeammateMode2("both");
+    }
+  }, [hasLoadedSelectedYears, hasRestoredStatsState, teammate1, teammate2, tm1Options, tm2Options]);
+
+  useEffect(() => {
+    if (!hasRestoredStatsState || !hasLoadedData || !hasLoadedSelectedYears) return;
     const findPreferredPlayer = (options: string[], candidates: string[], exclude?: string) => {
       for (const candidate of candidates) {
         const exact = options.find(
@@ -1131,7 +1406,15 @@ export function PlayerComparison({
     if (nextPlayer2 !== player2) {
       setPlayer2(nextPlayer2);
     }
-  }, [hasLoadedData, p1PlayerOptions, p2PlayerOptions, player1, player2]);
+  }, [
+    hasLoadedData,
+    hasLoadedSelectedYears,
+    hasRestoredStatsState,
+    p1PlayerOptions,
+    p2PlayerOptions,
+    player1,
+    player2,
+  ]);
 
   const handleTeammate1Change = useCallback((value: string) => {
     setTeammate1(value);
@@ -1716,7 +1999,7 @@ export function PlayerComparison({
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "name" ? "w-44 min-w-44 max-w-44 lg:left-[3.25rem] lg:z-[3]" : ""} ${column.key === "position" ? "w-[88px] min-w-[88px] max-w-[88px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "name" ? "left-[3.25rem] z-[3] w-44 min-w-44 max-w-44" : ""} ${column.key === "position" ? "w-[88px] min-w-[88px] max-w-[88px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -1771,7 +2054,7 @@ export function PlayerComparison({
                             <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} />
                           </div>
                         </td>
-                      <td className="w-44 min-w-44 max-w-44 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-xs font-semibold text-nrl-text lg:sticky lg:left-[3.25rem] lg:z-[1]">
+                      <td className="sticky left-[3.25rem] z-[1] w-44 min-w-44 max-w-44 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-xs font-semibold text-nrl-text">
                         <span className="block min-w-0 truncate" title={row.name}>{row.name}</span>
                       </td>
                       <td className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-muted">
@@ -1960,49 +2243,45 @@ export function PlayerComparison({
           </div>
 
           <div className="mt-6 border-t border-nrl-border pt-4">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
-              Summary & Filtered Charts
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                  Comparison Snapshot
+                </div>
+                <div className="mt-1 text-sm font-semibold text-nrl-text">
+                  {hasTwoPlayers ? `${effectiveP1Label} vs ${player2Label}` : effectiveP1Label}
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <div className="flex h-full flex-col">
-                {entities.map((e, i) => (
-                  <div key={e.name}>
-                    {i > 0 && <SectionDivider />}
-                    <ProfileCard name={e.name} rows={e.rows} entity="player" />
-                  </div>
-                ))}
-                <SectionDivider />
-                <div
-                  className={`mt-2 grid items-center justify-items-center gap-3 ${
-                    hasTwoPlayers ? "grid-cols-2" : "grid-cols-1"
-                  }`}
-                >
-                  <div
-                    className={`flex h-full w-full items-center justify-center ${
-                      hasTwoPlayers ? "" : "mx-auto max-w-[14rem] xl:max-w-[16rem]"
-                    }`}
-                  >
-                    <SimplePlayerPhotoTile
-                      playerName={effectiveP1}
-                      imageRow={p1CardImage}
-                      priority
-                    />
-                  </div>
-                  {hasTwoPlayers ? (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <SimplePlayerPhotoTile
-                        playerName={player2}
-                        imageRow={p2CardImage}
-                        priority
-                      />
-                    </div>
-                  ) : null}
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <div className="rounded-lg border border-nrl-border bg-nrl-panel p-3">
+                <div className={`grid gap-3 ${hasTwoPlayers ? "md:grid-cols-2 xl:grid-cols-1" : ""}`}>
+                  {entities.map((e, i) => {
+                    const imageRow = i === 0 ? p1CardImage : p2CardImage;
+                    const playerName = i === 0 ? effectiveP1 : player2;
+
+                    return (
+                      <div
+                        key={e.name}
+                        className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-center gap-3 rounded-lg border border-nrl-border/70 bg-nrl-panel-2/45 p-2.5"
+                      >
+                        <SimplePlayerPhotoTile
+                          playerName={playerName}
+                          imageRow={imageRow}
+                          priority
+                          showName={false}
+                          className="max-w-[5.25rem] rounded-lg shadow-none"
+                          imageHeightClass="h-[5.75rem]"
+                        />
+                        <ProfileCard name={e.name} rows={e.rows} entity="player" />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-3">
                 <StatsTable rows={summaryRows} />
-                <SectionDivider />
                 <PercentileRanks
                   results={percentileResults}
                   single={!hasTwoPlayers}
@@ -2010,7 +2289,6 @@ export function PlayerComparison({
                   percentileScope={percentileScope}
                   onPercentileScopeChange={setPercentileScope}
                 />
-                <SectionDivider />
                 <RecentForm results={recentFormResults} single={!hasTwoPlayers} />
               </div>
             </div>

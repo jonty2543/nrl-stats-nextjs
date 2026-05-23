@@ -11,7 +11,7 @@ export function ProfileCard({ name, rows, entity }: ProfileCardProps) {
   if (rows.length === 0) return null;
 
   const games = rows.length;
-  let detail: string;
+  let details: string[];
 
   if (entity === "player") {
     const playerRows = rows as PlayerStat[];
@@ -24,19 +24,28 @@ export function ProfileCard({ name, rows, entity }: ProfileCardProps) {
     const team = [...teamCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "\u2014";
     const position = [...posCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "\u2014";
     const avgMins = mean(playerRows.map((r) => r["Mins Played"]));
-    detail = `${team} \u2022 ${position} \u2022 ${games} games \u2022 ${avgMins.toFixed(0)} avg mins`;
+    details = [team, position, `${games} games`, `${avgMins.toFixed(0)} avg mins`];
   } else {
     const teamRows = rows as TeamStat[];
     const avgPts = mean(teamRows.map((r) => r.Points));
-    detail = `${games} matches \u2022 ${avgPts.toFixed(1)} avg pts`;
+    details = [`${games} matches`, `${avgPts.toFixed(1)} avg pts`];
   }
 
   return (
-    <div className="mb-1">
-      <div className="text-sm font-bold uppercase tracking-wide text-chart-primary">
+    <div className="min-w-0">
+      <div className="truncate text-sm font-bold uppercase tracking-wide text-chart-primary">
         {name}
       </div>
-      <div className="text-[0.72rem] text-nrl-muted mt-0.5">{detail}</div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {details.map((detail) => (
+          <span
+            key={detail}
+            className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[0.68rem] font-semibold text-nrl-muted"
+          >
+            {detail}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

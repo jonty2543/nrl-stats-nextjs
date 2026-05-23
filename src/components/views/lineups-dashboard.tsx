@@ -2090,7 +2090,7 @@ function LineupCard({
         className="pointer-events-none absolute inset-px rounded-[calc(0.5rem-1px)] opacity-70 transition-opacity group-open:opacity-0"
         style={MATCH_CARD_TEXTURE_STYLE}
       />
-      <summary className="relative z-[1] cursor-pointer list-none px-3 py-3 marker:hidden sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
+      <summary className="relative z-[1] cursor-pointer list-none px-3 pb-8 pt-3 marker:hidden sm:px-5 sm:pb-9 sm:pt-4 [&::-webkit-details-marker]:hidden">
         {homeLogo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -2120,7 +2120,7 @@ function LineupCard({
             <TeamBadge team={match.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
         </div>
-        <span className="absolute bottom-1 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text">
+        <span className="absolute bottom-2 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text">
           <span className="sr-only">Toggle match details</span>
           <svg
             viewBox="0 0 16 16"

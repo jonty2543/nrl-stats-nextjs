@@ -768,6 +768,17 @@ function formatWeatherNumber(value: number | null, suffix: string, maximumFracti
   return `${value.toLocaleString("en-AU", { maximumFractionDigits })}${suffix}`
 }
 
+function weatherConditionEmoji(condition: string): string {
+  const value = condition.toLowerCase()
+  if (value.includes("storm")) return "⛈️"
+  if (value.includes("rain") || value.includes("drizzle")) return "🌧️"
+  if (value.includes("snow")) return "❄️"
+  if (value.includes("fog")) return "🌫️"
+  if (value.includes("cloud")) return "☁️"
+  if (value.includes("clear")) return "☀️"
+  return "🌤️"
+}
+
 function MatchWeather({ forecast }: { forecast: LineupWeatherForecast | null }) {
   if (!forecast) return null
 
@@ -778,8 +789,10 @@ function MatchWeather({ forecast }: { forecast: LineupWeatherForecast | null }) 
   if (items.length === 0) return null
 
   return (
-    <div className="mx-auto mt-2 flex max-w-[58vw] flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[9px] font-bold uppercase tracking-wide text-sky-100/90 sm:max-w-[420px] sm:text-[10px]">
-      <span className="inline-block h-1.5 w-1.5 rounded-full bg-sky-300 shadow-[0_0_10px_rgba(125,211,252,0.8)]" aria-hidden="true" />
+    <div className="mx-auto mt-1.5 flex max-w-[62vw] flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[9px] font-bold uppercase tracking-wide text-sky-100/90 sm:max-w-[520px] sm:text-[10px]">
+      <span className="text-sm leading-none sm:text-base" aria-hidden="true">
+        {weatherConditionEmoji(forecast.condition)}
+      </span>
       <span>{items.join(" · ")}</span>
     </div>
   )
@@ -828,8 +841,8 @@ function LiveScoreHeader({
           vs
         </div>
       )}
-      <div className="mt-5 text-[9px] font-bold uppercase tracking-wide text-nrl-accent sm:text-[10px]">{match.round}</div>
-      <div className="mx-auto mt-1 max-w-[40vw] truncate text-[10px] text-nrl-muted sm:max-w-[360px] sm:text-[11px]">
+      <div className="mt-2 text-[9px] font-bold uppercase tracking-wide text-nrl-accent sm:mt-2.5 sm:text-[10px]">{match.round}</div>
+      <div className="mx-auto mt-0.5 max-w-[56vw] truncate text-[10px] text-nrl-muted sm:max-w-[520px] sm:text-[11px]">
         {formatMatchDateTime(match)}{match.venue ? ` · ${match.venue}` : ""}
       </div>
       <MatchWeather forecast={weatherForecast} />

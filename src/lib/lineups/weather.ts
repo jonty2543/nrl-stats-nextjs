@@ -126,6 +126,10 @@ function forecastDaysForKickoff(kickoff: Date): number | null {
   return days
 }
 
+function hasKickoffPassed(kickoff: Date, now = new Date()): boolean {
+  return kickoff.getTime() <= now.getTime()
+}
+
 function nearestHourlyIndex(times: unknown[] | undefined, kickoff: Date): number | null {
   if (!times?.length) return null
   let bestIndex: number | null = null
@@ -152,6 +156,7 @@ async function fetchWeatherForMatch(match: LineupMatch): Promise<LineupWeatherFo
 
   const kickoff = new Date(match.kickoffUtc)
   if (!Number.isFinite(kickoff.getTime())) return null
+  if (hasKickoffPassed(kickoff)) return null
 
   const forecastDays = forecastDaysForKickoff(kickoff)
   if (!forecastDays) return null

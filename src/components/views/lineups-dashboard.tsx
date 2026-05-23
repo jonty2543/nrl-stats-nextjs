@@ -599,31 +599,6 @@ function sportsbetOddsForTeam(
   return null
 }
 
-function formatKickoff(value: string | null): string {
-  if (!value) return "TBC"
-  return new Intl.DateTimeFormat("en-AU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "Australia/Brisbane",
-  }).format(new Date(value))
-}
-
-function formatMatchDateTime(match: LineupMatch): string {
-  if (match.kickoffUtc) return formatKickoff(match.kickoffUtc)
-  if (!match.matchDate) return "TBC"
-  const date = new Date(`${match.matchDate.slice(0, 10)}T00:00:00+10:00`)
-  if (Number.isNaN(date.getTime())) return match.matchDate
-  return new Intl.DateTimeFormat("en-AU", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "Australia/Brisbane",
-  }).format(date)
-}
-
 function matchDateKey(match: LineupMatch): string {
   if (match.matchDate) return match.matchDate
   if (!match.kickoffUtc) return "tbc"
@@ -645,6 +620,22 @@ function formatMatchDateHeader(dateKey: string): string {
     month: "long",
     timeZone: "Australia/Brisbane",
   }).format(date)
+}
+
+function formatCardDate(match: LineupMatch): string {
+  return formatMatchDateHeader(matchDateKey(match)).toUpperCase()
+}
+
+function formatKickoffTime(value: string | null): string {
+  if (!value) return "TBC"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "TBC"
+  return new Intl.DateTimeFormat("en-AU", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Australia/Brisbane",
+  }).format(date).replace(/\s/g, "")
 }
 
 function normaliseImageUrl(value: string | null): string | null {
@@ -789,7 +780,7 @@ function MatchWeather({ forecast }: { forecast: LineupWeatherForecast | null }) 
   if (items.length === 0) return null
 
   return (
-    <div className="mx-auto mt-1.5 flex max-w-[62vw] flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[9px] font-bold uppercase tracking-wide text-sky-100/90 sm:max-w-[520px] sm:text-[10px]">
+    <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[9px] font-bold uppercase tracking-wide text-sky-100/90 sm:justify-end sm:text-[10px]">
       <span className="text-sm leading-none sm:text-base" aria-hidden="true">
         {weatherConditionEmoji(forecast.condition)}
       </span>
@@ -798,15 +789,22 @@ function MatchWeather({ forecast }: { forecast: LineupWeatherForecast | null }) 
   )
 }
 
-function LiveScoreHeader({
-  match,
-  liveMatch,
-  weatherForecast,
-}: {
-  match: LineupMatch
-  liveMatch: LineupLiveMatch | null
-  weatherForecast: LineupWeatherForecast | null
-}) {
+function MatchMetaBand({ match, weatherForecast }: { match: LineupMatch; weatherForecast: LineupWeatherForecast | null }) {
+  if (!match.venue && !weatherForecast) return null
+
+  return (
+    <div className="relative z-[1] mt-4 grid gap-2 border-t border-blue-300/20 pt-3 text-center sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:text-left">
+      <div className="min-w-0 truncate text-[10px] font-medium text-nrl-muted sm:text-[11px]">
+        {match.venue ?? ""}
+      </div>
+      <div className="min-w-0 sm:text-right">
+        <MatchWeather forecast={weatherForecast} />
+      </div>
+    </div>
+  )
+}
+
+function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: LineupLiveMatch | null }) {
   const state = liveMatch?.state
   const clock = formatGameClock(state?.gameSeconds ?? state?.liveSeconds)
   const score = matchScore(match, liveMatch)
@@ -837,15 +835,15 @@ function LiveScoreHeader({
           </div>
         </>
       ) : (
-        <div className="mx-auto inline-flex rounded-full border border-nrl-border bg-nrl-panel px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-nrl-accent">
-          vs
-        </div>
+        <>
+          <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
+            {formatKickoffTime(match.kickoffUtc)}
+          </div>
+          <div className="mt-3 inline-flex self-center rounded-full border border-nrl-border bg-nrl-panel px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-nrl-accent sm:text-[10px]">
+            {match.round}
+          </div>
+        </>
       )}
-      <div className="mt-2 text-[9px] font-bold uppercase tracking-wide text-nrl-accent sm:mt-2.5 sm:text-[10px]">{match.round}</div>
-      <div className="mx-auto mt-0.5 max-w-[56vw] truncate text-[10px] text-nrl-muted sm:max-w-[520px] sm:text-[11px]">
-        {formatMatchDateTime(match)}{match.venue ? ` · ${match.venue}` : ""}
-      </div>
-      <MatchWeather forecast={weatherForecast} />
     </div>
   )
 }
@@ -2170,15 +2168,19 @@ function LineupCard({
             loading="lazy"
           />
         ) : null}
+        <div className="relative z-[1] pb-2 text-center text-[10px] font-bold uppercase tracking-[0.28em] text-nrl-muted sm:text-xs">
+          {match.round} · {formatCardDate(match)}
+        </div>
         <div className="relative z-[1] mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.5rem,auto)_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_minmax(0,1fr)] sm:gap-6">
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={match.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
-          <LiveScoreHeader match={match} liveMatch={displayLiveMatch} weatherForecast={weatherForecast} />
+          <LiveScoreHeader match={match} liveMatch={displayLiveMatch} />
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={match.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
         </div>
+        <MatchMetaBand match={match} weatherForecast={weatherForecast} />
         <span className="absolute bottom-2 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text">
           <span className="sr-only">Toggle match details</span>
           <svg

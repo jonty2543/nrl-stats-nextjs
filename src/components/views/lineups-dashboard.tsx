@@ -780,7 +780,7 @@ function MatchWeather({ forecast }: { forecast: LineupWeatherForecast | null }) 
   if (items.length === 0) return null
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[9px] font-bold uppercase tracking-wide text-sky-100/90 sm:justify-end sm:text-[10px]">
+    <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-right text-[9px] font-bold uppercase tracking-wide text-sky-100/90 sm:text-[10px]">
       <span className="text-sm leading-none sm:text-base" aria-hidden="true">
         {weatherConditionEmoji(forecast.condition)}
       </span>
@@ -793,11 +793,11 @@ function MatchMetaBand({ match, weatherForecast }: { match: LineupMatch; weather
   if (!match.venue && !weatherForecast) return null
 
   return (
-    <div className="relative z-[1] mt-4 grid gap-2 border-t border-blue-300/20 pt-3 text-center sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:text-left">
+    <div className="relative z-[1] mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 border-t border-blue-300/20 pt-3 text-left">
       <div className="min-w-0 truncate text-[10px] font-medium text-nrl-muted sm:text-[11px]">
         {match.venue ?? ""}
       </div>
-      <div className="min-w-0 sm:text-right">
+      <div className="min-w-0 text-right">
         <MatchWeather forecast={weatherForecast} />
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
+import { fetchApprovedArticleLinks } from "@/lib/articles";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,56 @@ const CONTENT_TYPES: Record<string, string> = {
 
 const APP_FONT_STACK = "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
 const ARCHETYPES_ARTICLE_PATH = "/dashboard/articles/nrl-archetypes-understanding-player-roles-beyond-position";
+
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+async function getArchetypesArticleImages(): Promise<string[]> {
+  try {
+    const articles = await fetchApprovedArticleLinks();
+    const article = articles.find((item) => item.slug === "nrl-archetypes-understanding-player-roles-beyond-position");
+    return article?.imageUrls.slice(0, 2) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function buildArchetypesArticleLink(imageUrls: string[]): string {
+  const media = imageUrls.length > 0
+    ? `
+            <span class="article-link-media ${imageUrls.length > 1 ? "is-split" : ""}" aria-hidden="true">
+                ${imageUrls
+                  .map((url) => `
+                <span class="article-link-image-wrap">
+                    <img src="${escapeAttribute(url)}" alt="" loading="lazy" decoding="async" />
+                </span>`)
+                  .join("")}
+            </span>`
+    : "";
+
+  return `
+        <a
+            class="article-link-card"
+            href="${ARCHETYPES_ARTICLE_PATH}"
+            target="_top"
+            aria-label="Read NRL Archetypes: Understanding Player Roles Beyond Position"
+        >
+            ${media}
+            <span class="article-link-bg" aria-hidden="true"></span>
+            <span class="article-link-content">
+                <span class="article-link-copy">
+                    <span class="article-link-eyebrow">Article</span>
+                    <span class="article-link-title">NRL Archetypes: Understanding Player Roles Beyond Position</span>
+                </span>
+                <span class="article-link-arrow" aria-hidden="true">→</span>
+            </span>
+        </a>`;
+}
 
 interface ArchetypesRouteContext {
   params: Promise<{
@@ -33,7 +84,7 @@ function resolveArchetypePath(parts: string[] | undefined): string | null {
   return resolvedPath;
 }
 
-function styleIndexHtml(html: string): string {
+function styleIndexHtml(html: string, articleImageUrls: string[]): string {
   return html
     .replaceAll("--navy: #0A1128;", "--navy: #0b1020;")
     .replaceAll("--lime: #C9FF00;", "--lime: #00f58a;")
@@ -42,8 +93,8 @@ function styleIndexHtml(html: string): string {
     .replaceAll("--card-bg: #151E3F;", "--card-bg: #161c32;")
     .replaceAll("--border-color: #2A3B6E;", "--border-color: #2a3356;")
     .replace(
-      "How Archetypes Are Built Using Machine Learning",
-      `<a href="${ARCHETYPES_ARTICLE_PATH}" target="_top" onclick="event.stopPropagation()">NRL Archetypes: Understanding Player Roles Beyond Position</a>`
+      /<div class="ml-explanation" id="mlDropdown">[\s\S]*?<\/div>\s*(?=<div class="tabs" id="positionTabs">)/,
+      buildArchetypesArticleLink(articleImageUrls)
     )
     .replace(
       "</style>",
@@ -122,13 +173,114 @@ function styleIndexHtml(html: string): string {
             color: #c7d0e6;
         }
 
-        .ml-title a {
-            color: #00f58a;
+        .article-link-card {
+            position: relative;
+            display: flex;
+            min-height: 58px;
+            width: 100%;
+            overflow: hidden;
+            border: 1px solid rgba(123, 92, 255, 0.22);
+            border-radius: 999px;
+            background: rgba(32, 40, 74, 0.8);
+            color: #fff;
             text-decoration: none;
+            box-shadow: 0 8px 18px rgba(8, 10, 18, 0.16);
+            transition: border-color 0.18s ease;
+            margin-bottom: 1.25rem;
         }
 
-        .ml-title a:hover {
-            color: #f5f7ff;
+        .article-link-card:hover {
+            border-color: rgba(0, 245, 138, 0.55);
+        }
+
+        .article-link-bg {
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(90deg, rgba(14, 19, 48, 0.92), rgba(14, 19, 48, 0.78), rgba(14, 19, 48, 0.56)),
+                radial-gradient(circle at 20% 30%, rgba(0, 245, 138, 0.18), transparent 26%),
+                radial-gradient(circle at 78% 45%, rgba(123, 92, 255, 0.22), transparent 32%),
+                #20284a;
+        }
+
+        .article-link-media {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+
+        .article-link-media.is-split {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .article-link-image-wrap {
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .article-link-image-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.45;
+            transition: transform 0.3s ease;
+        }
+
+        .article-link-card:hover .article-link-image-wrap img {
+            transform: scale(1.03);
+        }
+
+        .article-link-content {
+            position: relative;
+            display: flex;
+            min-height: 58px;
+            width: 100%;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.55rem 1rem;
+        }
+
+        .article-link-copy {
+            min-width: 0;
+        }
+
+        .article-link-eyebrow,
+        .article-link-title {
+            display: block;
+            text-transform: uppercase;
+        }
+
+        .article-link-eyebrow {
+            color: rgba(0, 245, 138, 0.8);
+            font-size: 8px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            line-height: 1;
+        }
+
+        .article-link-title {
+            margin-top: 0.25rem;
+            color: rgba(255, 255, 255, 0.86);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            line-height: 1.25;
+        }
+
+        .article-link-arrow {
+            display: grid;
+            width: 1.5rem;
+            height: 1.5rem;
+            flex-shrink: 0;
+            place-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 999px;
+            background: rgba(30, 37, 66, 0.72);
+            color: rgba(245, 247, 255, 0.85);
+            font-size: 0.9rem;
+            line-height: 1;
         }
     </style>`
     );
@@ -182,8 +334,8 @@ function stylePlotHtml(html: string): string {
     );
 }
 
-function styleHtml(filePath: string, html: string): string {
-  return path.basename(filePath) === "index.html" ? styleIndexHtml(html) : stylePlotHtml(html);
+function styleHtml(filePath: string, html: string, articleImageUrls: string[] = []): string {
+  return path.basename(filePath) === "index.html" ? styleIndexHtml(html, articleImageUrls) : stylePlotHtml(html);
 }
 
 export async function GET(_request: Request, context: ArchetypesRouteContext) {
@@ -198,7 +350,8 @@ export async function GET(_request: Request, context: ArchetypesRouteContext) {
     const extension = path.extname(filePath);
     const contentType = CONTENT_TYPES[extension] ?? "application/octet-stream";
     const file = await readFile(filePath);
-    const body = extension === ".html" ? styleHtml(filePath, file.toString("utf8")) : file;
+    const articleImageUrls = path.basename(filePath) === "index.html" ? await getArchetypesArticleImages() : [];
+    const body = extension === ".html" ? styleHtml(filePath, file.toString("utf8"), articleImageUrls) : file;
 
     return new NextResponse(body, {
       headers: {

@@ -305,38 +305,48 @@ function compareGroupsByKickoff(
   return a.match.localeCompare(b.match);
 }
 
+const NRL_TEAM_LOGO_ALIAS_GROUPS: string[][] = [
+  ["brisbane broncos", "broncos"],
+  ["canberra raiders", "raiders"],
+  ["canterbury bankstown bulldogs", "canterbury bulldogs", "bulldogs"],
+  ["cronulla sutherland sharks", "cronulla sharks", "sharks"],
+  ["dolphins", "the dolphins"],
+  ["gold coast titans", "titans"],
+  ["manly warringah sea eagles", "manly sea eagles", "sea eagles", "manly"],
+  ["melbourne storm", "storm"],
+  ["newcastle knights", "knights"],
+  ["new zealand warriors", "nz warriors", "warriors"],
+  ["north queensland cowboys", "nth queensland cowboys", "north qld cowboys", "cowboys"],
+  ["parramatta eels", "eels"],
+  ["penrith panthers", "panthers"],
+  ["south sydney rabbitohs", "rabbitohs", "souths"],
+  ["st george illawarra dragons", "st george dragons", "st george", "dragons"],
+  ["sydney roosters", "eastern suburbs roosters", "roosters"],
+  ["wests tigers", "west tigers", "tigers"],
+];
+
+function teamLogoAliasKeys(value: string | null | undefined): string[] {
+  const key = normaliseLookupKey(stripSelectionLineSuffix(value ?? ""));
+  if (!key) return [];
+
+  const group = NRL_TEAM_LOGO_ALIAS_GROUPS.find((aliases) =>
+    aliases.some((alias) => normaliseLookupKey(alias) === key)
+  );
+  if (!group) return [key];
+
+  return [...new Set(group.map((alias) => normaliseLookupKey(alias)).filter(Boolean))];
+}
+
 function resolveTeamLogoUrl(teamName: string | null | undefined, teamLogos: Record<string, string>): string | null {
-  const key = normaliseLookupKey(teamName);
-  if (!key) return null;
-  if (teamLogos[key]) return teamLogos[key];
-
-  const aliases: Record<string, string[]> = {
-    broncos: ["brisbane broncos"],
-    bulldogs: ["canterbury bulldogs", "canterbury bankstown bulldogs"],
-    raiders: ["canberra raiders"],
-    sharks: ["cronulla sharks", "cronulla sutherland sharks"],
-    titans: ["gold coast titans"],
-    "sea eagles": ["manly sea eagles", "manly warringah sea eagles"],
-    storm: ["melbourne storm"],
-    knights: ["newcastle knights"],
-    cowboys: ["north queensland cowboys", "nth queensland cowboys", "north qld cowboys"],
-    "nth queensland cowboys": ["north queensland cowboys", "cowboys", "north qld cowboys"],
-    "north qld cowboys": ["north queensland cowboys", "nth queensland cowboys", "cowboys"],
-    eels: ["parramatta eels"],
-    panthers: ["penrith panthers"],
-    rabbitohs: ["south sydney rabbitohs"],
-    dragons: ["st george illawarra dragons", "st george dragons"],
-    roosters: ["sydney roosters", "eastern suburbs roosters"],
-    warriors: ["new zealand warriors"],
-    tigers: ["wests tigers"],
-    dolphins: ["the dolphins", "dolphins"],
-  };
-
-  for (const alias of aliases[key] ?? []) {
-    if (teamLogos[alias]) return teamLogos[alias];
+  const keys = teamLogoAliasKeys(teamName);
+  if (keys.length === 0) return null;
+  for (const key of keys) {
+    if (teamLogos[key]) return teamLogos[key];
   }
 
-  return Object.entries(teamLogos).find(([logoKey]) => logoKey.endsWith(` ${key}`) || logoKey.includes(key))?.[1] ?? null;
+  return Object.entries(teamLogos).find(([logoKey]) =>
+    keys.some((key) => logoKey === key || logoKey.endsWith(` ${key}`) || logoKey.includes(key))
+  )?.[1] ?? null;
 }
 
 function stripSelectionLineSuffix(selection: string): string {
@@ -3091,6 +3101,7 @@ function MarketSection({
                             <button
                               type="button"
                               disabled={!canOpenMobileBet}
+                              aria-label="Add bet"
                               onClick={() => {
                                 if (!canOpenMobileBet || oddsValue == null) return;
                                 setMobileBetSlip({
@@ -3111,7 +3122,7 @@ function MarketSection({
                                   : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                               }`}
                             >
-                              Add
+                              +
                             </button>
                           ) : (
                             <BillingPageLink className="shrink-0 rounded border border-nrl-border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted opacity-75 transition-colors hover:border-nrl-accent hover:text-nrl-text">

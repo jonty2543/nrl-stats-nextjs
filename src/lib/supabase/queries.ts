@@ -89,6 +89,38 @@ function normaliseTeamKey(value: unknown): string {
     .trim();
 }
 
+const NRL_TEAM_LOGO_ALIAS_GROUPS: string[][] = [
+  ["brisbane broncos", "broncos"],
+  ["canberra raiders", "raiders"],
+  ["canterbury bankstown bulldogs", "canterbury bulldogs", "bulldogs"],
+  ["cronulla sutherland sharks", "cronulla sharks", "sharks"],
+  ["dolphins", "the dolphins"],
+  ["gold coast titans", "titans"],
+  ["manly warringah sea eagles", "manly sea eagles", "sea eagles", "manly"],
+  ["melbourne storm", "storm"],
+  ["newcastle knights", "knights"],
+  ["new zealand warriors", "nz warriors", "warriors"],
+  ["north queensland cowboys", "nth queensland cowboys", "north qld cowboys", "cowboys"],
+  ["parramatta eels", "eels"],
+  ["penrith panthers", "panthers"],
+  ["south sydney rabbitohs", "rabbitohs", "souths"],
+  ["st george illawarra dragons", "st george dragons", "st george", "dragons"],
+  ["sydney roosters", "eastern suburbs roosters", "roosters"],
+  ["wests tigers", "west tigers", "tigers"],
+];
+
+function teamLogoAliasKeys(value: unknown): string[] {
+  const key = normaliseTeamKey(value);
+  if (!key) return [];
+
+  const group = NRL_TEAM_LOGO_ALIAS_GROUPS.find((aliases) =>
+    aliases.some((alias) => normaliseTeamKey(alias) === key)
+  );
+  if (!group) return [key];
+
+  return [...new Set(group.map((alias) => normaliseTeamKey(alias)).filter(Boolean))];
+}
+
 function normalisePlayerAliasKey(value: string): string {
   return value
     .toLowerCase()
@@ -1758,9 +1790,6 @@ export async function fetchTeamLogosFromSupabase(): Promise<Record<string, strin
   const logos = new Map<string, string>();
 
   for (const row of raw) {
-    const teamKey = normaliseTeamKey(row.team);
-    if (!teamKey) continue;
-
     const candidates = [
       row.short_side_logo_url,
       row.side_logo_url,
@@ -1771,8 +1800,24 @@ export async function fetchTeamLogosFromSupabase(): Promise<Record<string, strin
       (value): value is string => typeof value === "string" && value.trim().length > 0
     )?.trim();
 
-    if (logoUrl && !logos.has(teamKey)) {
-      logos.set(teamKey, logoUrl);
+    if (!logoUrl) continue;
+
+    const teamNameCandidates = [
+      row.team,
+      row.team_name,
+      row.name,
+      row.display_name,
+      row.full_name,
+      row.short_name,
+      row.club,
+      row.nickname,
+      row.abbreviation,
+    ];
+
+    for (const teamKey of teamNameCandidates.flatMap(teamLogoAliasKeys)) {
+      if (!logos.has(teamKey)) {
+        logos.set(teamKey, logoUrl);
+      }
     }
   }
 

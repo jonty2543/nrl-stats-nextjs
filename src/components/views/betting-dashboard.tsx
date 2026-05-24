@@ -2340,7 +2340,6 @@ function BestBetsHero({
     stake: number;
   } | null>(null);
   const queueViewportRef = useRef<HTMLDivElement | null>(null);
-  const queuePauseUntilRef = useRef(0);
   const isArbitrage = category === "arbitrage";
   const ratedModelBets = useMemo(
     () => [...modelBets].sort((a, b) => {
@@ -2359,8 +2358,6 @@ function BestBetsHero({
   const activeItems = isArbitrage ? ratedArbitrageBets : ratedModelBets;
   const featuredItem = activeItems[0] ?? null;
   const queueItems = activeItems.slice(1);
-  const queueCycleItems = queueItems.length > 1 ? [...queueItems, ...queueItems] : queueItems;
-  const shouldAnimateQueue = queueItems.length > 2;
   const activeTheme = isArbitrage
     ? {
         label: "Arbitrage",
@@ -2392,41 +2389,10 @@ function BestBetsHero({
 
   const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
     setCategory(nextCategory);
-    queuePauseUntilRef.current = Date.now() + 1200;
     window.requestAnimationFrame(() => {
       if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
     });
   };
-
-  const pauseQueueTicker = () => {
-    queuePauseUntilRef.current = Date.now() + 3500;
-  };
-
-  useEffect(() => {
-    const viewport = queueViewportRef.current;
-    if (!viewport || !shouldAnimateQueue) return undefined;
-
-    let frameId = 0;
-    let lastFrameMs = performance.now();
-
-    const tick = (nowMs: number) => {
-      const deltaMs = nowMs - lastFrameMs;
-      lastFrameMs = nowMs;
-
-      if (Date.now() > queuePauseUntilRef.current) {
-        viewport.scrollTop += deltaMs * 0.014;
-        const loopPoint = viewport.scrollHeight / 2;
-        if (loopPoint > 0 && viewport.scrollTop >= loopPoint) {
-          viewport.scrollTop -= loopPoint;
-        }
-      }
-
-      frameId = window.requestAnimationFrame(tick);
-    };
-
-    frameId = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frameId);
-  }, [category, shouldAnimateQueue]);
 
   return (
     <section className="overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)]">
@@ -2633,14 +2599,9 @@ function BestBetsHero({
               <div className="relative rounded-lg border border-white/8 bg-[#0f1732]/70">
                 <div
                   ref={queueViewportRef}
-                  onFocus={pauseQueueTicker}
-                  onMouseEnter={pauseQueueTicker}
-                  onPointerDown={pauseQueueTicker}
-                  onTouchStart={pauseQueueTicker}
-                  onWheel={pauseQueueTicker}
                   className={`max-h-[176px] space-y-1.5 overflow-y-auto overscroll-contain p-2 pr-1 [scrollbar-color:rgba(148,163,184,0.32)_transparent] ${!canAccessPremium ? "pointer-events-none select-none blur-[5px]" : ""}`}
                 >
-                {queueCycleItems.map((item, cycleIndex) => {
+                {queueItems.map((item) => {
                   const isLocked = !canAccessPremium;
                   const rowContent = (
                     <div className={`flex min-h-[38px] items-center justify-between gap-3 rounded-md border border-white/8 bg-nrl-panel/72 px-2.5 py-1.5 text-left transition-colors ${canAccessPremium ? "hover:border-white/20" : ""}`}>
@@ -2721,11 +2682,11 @@ function BestBetsHero({
                   );
 
                   return isLocked ? (
-                    <div key={`${item.id}-${cycleIndex}`} className="relative overflow-hidden rounded-md">
+                    <div key={item.id} className="relative overflow-hidden rounded-md">
                       {rowContent}
                     </div>
                   ) : (
-                    <div key={`${item.id}-${cycleIndex}`} className="block w-full">
+                    <div key={item.id} className="block w-full">
                       {rowContent}
                     </div>
                   );

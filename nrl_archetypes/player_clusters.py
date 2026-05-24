@@ -16,11 +16,11 @@ from scipy.spatial.distance import cdist
 
 # --- Configuration ---
 
-SUPABASE_URL = "https://glrzwxpxkckxaogpkwmn.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdscnp3eHB4a2NreGFvZ3Brd21uIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjA3OTU3NiwiZXhwIjoyMDcxNjU1NTc2fQ.YOF9ryJbhBoKKHT0n4eZDMGrR9dczR8INHVs_By4vRU"
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(f.SUPABASE_URL, f.SUPABASE_KEY)
 
 YEARS_TO_PROCESS = [2023, 2024, 2025, 2026]
+ARCHETYPE_TABLE = "player_archetypes"
+UPSERT_BATCH_SIZE = 500
 
 class PositionConfig:
     def __init__(self, name, features1, features2, features3, pc_names, n_clusters, labels, descriptions, min_games=5, profiles=None):
@@ -306,6 +306,7 @@ def load_and_process_data():
     
     agg_dict = {
         'games': ('match_date', 'nunique'),
+        'total_minutes': ('mins_played', 'sum'),
         'position': ('position', lambda s: s.mode().iloc[0] if not s.mode().empty else s.iloc[0]),
         'pass_run_ratio': ('passes_to_run_ratio', 'mean'),
         'tackle_efficiency': ('tackle_efficiency', 'mean'),
@@ -444,8 +445,84 @@ def train_models(training_agg, configs):
 
 # --- Generation ---
 
+def export_position_name(config):
+    return 'Edge' if config.name == '2nd Row' else config.name
+
+
+def json_number(value, digits=None):
+    if value is None or pd.isna(value):
+        return None
+
+    if isinstance(value, (np.integer,)):
+        return int(value)
+
+    if isinstance(value, (np.floating, float)):
+        value = float(value)
+        if not np.isfinite(value):
+            return None
+        return round(value, digits) if digits is not None else value
+
+    if isinstance(value, (int,)):
+        return int(value)
+
+    return value
+
+
+def build_stat_map(row, features, suffix="", digits=3):
+    out = {}
+    for feature in features:
+        key = f"{feature}{suffix}"
+        value = json_number(row.get(key), digits)
+        if value is not None:
+            out[feature] = value
+    return out
+
+
+def build_player_archetype_record(row, config, features):
+    return {
+        "player": str(row["player"]),
+        "year": int(row["year"]),
+        "position": export_position_name(config),
+        "source_position": config.name,
+        "archetype": str(row["cluster_name"]),
+        "cluster_id": int(row["cluster"]),
+        "games": int(row["games"]),
+        "minutes": json_number(row.get("mins_played"), 2),
+        "total_minutes": json_number(row.get("total_minutes"), 2),
+        "pc1": json_number(row.get("pc1"), 4),
+        "pc2": json_number(row.get("pc2"), 4),
+        "pc3": json_number(row.get("pc3"), 4),
+        "pc1_name": config.pc_names[0],
+        "pc2_name": config.pc_names[1],
+        "pc3_name": config.pc_names[2],
+        "centroid_distance": json_number(row.get("centroid_distance"), 4),
+        "second_centroid_distance": json_number(row.get("second_centroid_distance"), 4),
+        "confidence": json_number(row.get("confidence"), 4),
+        "key_stats": build_stat_map(row, features),
+        "key_stat_percentiles": build_stat_map(row, features, suffix="_percentile", digits=2),
+    }
+
+
+def upsert_player_archetypes(records):
+    if not records:
+        print("\nNo player archetype rows to upsert.")
+        return
+
+    print(f"\nUpserting {len(records)} rows to nrl.{ARCHETYPE_TABLE}...")
+    for start in range(0, len(records), UPSERT_BATCH_SIZE):
+        batch = records[start:start + UPSERT_BATCH_SIZE]
+        (
+            supabase
+            .schema("nrl")
+            .table(ARCHETYPE_TABLE)
+            .upsert(batch, on_conflict="player,year,position")
+            .execute()
+        )
+    print(f"Upserted {len(records)} rows to nrl.{ARCHETYPE_TABLE}.")
+
 def generate_outputs(training_agg, models, configs):
     full_cluster_data_export = {}
+    player_archetype_records = []
     
     # Only process "All" as requested by user
     process_years = ["All"]
@@ -490,6 +567,20 @@ def generate_outputs(training_agg, models, configs):
             
             # Predict Clusters
             df['cluster'] = model_data['kmeans'].predict(X_scaled)
+
+            distances = model_data['kmeans'].transform(X_scaled)
+            assigned_clusters = df['cluster'].to_numpy(dtype=int)
+            nearest_distances = distances[np.arange(len(df)), assigned_clusters]
+            second_distances = np.partition(distances, 1, axis=1)[:, 1] if config.n_clusters > 1 else np.full(len(df), np.nan)
+            confidence = np.where(
+                second_distances > 0,
+                np.clip((second_distances - nearest_distances) / second_distances, 0, 1),
+                1,
+            )
+
+            df['centroid_distance'] = nearest_distances
+            df['second_centroid_distance'] = second_distances
+            df['confidence'] = confidence
             
             # Map Labels
             df['cluster_name'] = df['cluster'].map(model_data['label_map'])
@@ -499,10 +590,21 @@ def generate_outputs(training_agg, models, configs):
                 X_sub = df[pc_info['features']].fillna(0)
                 X_sub_scaled = pc_info['scaler'].transform(X_sub)
                 df[pc_key] = pc_info['model'].transform(X_sub_scaled)
+
+            percentile_features = sorted(all_features)
+            percentile_df = df.groupby('year')[percentile_features].rank(pct=True, method='average') * 100
+            for feature in percentile_features:
+                df[f'{feature}_percentile'] = percentile_df[feature]
+
+            if year == "All":
+                player_archetype_records.extend(
+                    build_player_archetype_record(row, config, percentile_features)
+                    for _, row in df.iterrows()
+                )
                 
             # Prepare Export Data
             # Use 'Edge' instead of '2nd Row' for export key if needed, but config name is used
-            export_name = 'Edge' if config.name == '2nd Row' else config.name
+            export_name = export_position_name(config)
             
             position_data = {
                 "archetypes": [],
@@ -813,7 +915,7 @@ def generate_outputs(training_agg, models, configs):
             
         full_cluster_data_export[str(year)] = cluster_data_export
         
-    return full_cluster_data_export
+    return full_cluster_data_export, player_archetype_records
 
 # --- Main Execution ---
 
@@ -825,7 +927,7 @@ if __name__ == "__main__":
     models = train_models(training_agg, POSITION_CONFIGS)
     
     # 3. Generate Outputs (Per Year)
-    full_data = generate_outputs(training_agg, models, POSITION_CONFIGS)
+    full_data, player_archetype_records = generate_outputs(training_agg, models, POSITION_CONFIGS)
     
     # 4. Save JSON
     with open('nrl_cluster_data.json', 'w') as f:
@@ -835,3 +937,6 @@ if __name__ == "__main__":
     with open('nrl_cluster_data.js', 'w') as f:
         f.write(f"const clusterData = {json.dumps(full_data, indent=4)};")
     print("Exported cluster data to nrl_cluster_data.js")
+
+    # 5. Upsert player-level archetype outputs
+    upsert_player_archetypes(player_archetype_records)

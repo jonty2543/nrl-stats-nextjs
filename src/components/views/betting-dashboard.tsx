@@ -525,10 +525,6 @@ function betStatusIconLabel(status: TrackedBetStatus): string {
   return "•";
 }
 
-function betProfitClass(): string {
-  return "text-nrl-text";
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -1977,7 +1973,7 @@ export function BettingDashboard({
                                 </div>
                               </div>
                               <div className="shrink-0 text-right">
-                                <div className={`text-sm font-bold tabular-nums ${betProfitClass(bet.profit)}`}>
+                                <div className="text-sm font-bold text-nrl-text tabular-nums">
                                   {bet.profit == null ? "-" : formatMoney(bet.profit)}
                                 </div>
                                 <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">{bet.status}</div>
@@ -2022,7 +2018,7 @@ export function BettingDashboard({
                               </div>
                               <div>
                                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Profit</div>
-                                <div className={`mt-1 flex h-8 items-center rounded-md border border-white/8 bg-[#0e1530] px-2 font-semibold tabular-nums ${betProfitClass(bet.profit)}`}>
+                                <div className="mt-1 flex h-8 items-center rounded-md border border-white/8 bg-[#0e1530] px-2 font-semibold text-nrl-text tabular-nums">
                                   {bet.profit == null ? "-" : formatMoney(bet.profit)}
                                 </div>
                               </div>

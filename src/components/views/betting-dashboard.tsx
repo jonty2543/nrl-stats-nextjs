@@ -2333,7 +2333,6 @@ function BestBetsHero({
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
-  const [focusedIndex, setFocusedIndex] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [bestBetSlip, setBestBetSlip] = useState<{
     bet: BestBetCandidate;
@@ -2358,11 +2357,8 @@ function BestBetsHero({
     [arbitrageBets]
   );
   const activeItems = isArbitrage ? ratedArbitrageBets : ratedModelBets;
-  const boundedFocusedIndex = Math.min(focusedIndex, Math.max(activeItems.length - 1, 0));
-  const featuredItem = activeItems[boundedFocusedIndex] ?? null;
-  const queueItems = activeItems
-    .map((item, index) => ({ item, index }))
-    .filter(({ index }) => index !== boundedFocusedIndex);
+  const featuredItem = activeItems[0] ?? null;
+  const queueItems = activeItems.slice(1);
   const queueCycleItems = queueItems.length > 1 ? [...queueItems, ...queueItems] : queueItems;
   const shouldAnimateQueue = queueItems.length > 2;
   const activeTheme = isArbitrage
@@ -2396,7 +2392,6 @@ function BestBetsHero({
 
   const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
     setCategory(nextCategory);
-    setFocusedIndex(0);
     queuePauseUntilRef.current = Date.now() + 1200;
     window.requestAnimationFrame(() => {
       if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
@@ -2431,7 +2426,7 @@ function BestBetsHero({
 
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [boundedFocusedIndex, category, shouldAnimateQueue]);
+  }, [category, shouldAnimateQueue]);
 
   return (
     <section className="overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)]">
@@ -2645,7 +2640,7 @@ function BestBetsHero({
                   onWheel={pauseQueueTicker}
                   className={`max-h-[176px] space-y-1.5 overflow-y-auto overscroll-contain p-2 pr-1 [scrollbar-color:rgba(148,163,184,0.32)_transparent] ${!canAccessPremium ? "pointer-events-none select-none blur-[5px]" : ""}`}
                 >
-                {queueCycleItems.map(({ item, index }, cycleIndex) => {
+                {queueCycleItems.map((item, cycleIndex) => {
                   const isLocked = !canAccessPremium;
                   const rowContent = (
                     <div className={`flex min-h-[38px] items-center justify-between gap-3 rounded-md border border-white/8 bg-nrl-panel/72 px-2.5 py-1.5 text-left transition-colors ${canAccessPremium ? "hover:border-white/20" : ""}`}>
@@ -2730,17 +2725,9 @@ function BestBetsHero({
                       {rowContent}
                     </div>
                   ) : (
-                    <button
-                      key={`${item.id}-${cycleIndex}`}
-                      type="button"
-                      onClick={() => {
-                        pauseQueueTicker();
-                        setFocusedIndex(index);
-                      }}
-                      className="block w-full cursor-pointer"
-                    >
+                    <div key={`${item.id}-${cycleIndex}`} className="block w-full">
                       {rowContent}
-                    </button>
+                    </div>
                   );
                 })}
                 </div>

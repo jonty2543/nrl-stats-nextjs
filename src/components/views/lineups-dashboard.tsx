@@ -780,12 +780,12 @@ function MatchWeather({ forecast }: { forecast: LineupWeatherForecast | null }) 
   if (items.length === 0) return null
 
   return (
-    <div className="flex min-w-0 flex-nowrap items-center justify-center gap-x-1.5 whitespace-nowrap text-center text-[8px] font-bold uppercase tracking-[0.04em] text-sky-100/90 sm:gap-x-2 sm:text-[10px]">
+    <span className="inline-flex min-w-0 flex-nowrap items-center justify-center gap-x-1.5 whitespace-nowrap text-center text-[8px] font-bold uppercase tracking-[0.04em] text-sky-100/90 sm:gap-x-2 sm:text-[10px]">
       <span className="flex-none text-xs leading-none sm:text-base" aria-hidden="true">
         {weatherConditionEmoji(forecast.condition)}
       </span>
       <span className="min-w-0">{items.join(" · ")}</span>
-    </div>
+    </span>
   )
 }
 
@@ -793,20 +793,19 @@ function MatchMetaBand({ match, weatherForecast }: { match: LineupMatch; weather
   const hasVenue = Boolean(match.venue)
   const hasWeather = Boolean(weatherForecast)
   if (!hasVenue && !hasWeather) return null
-  const singleItemClass = hasVenue !== hasWeather ? "col-span-2" : ""
 
   return (
-    <div className="relative z-[1] mt-4 grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.35fr)] items-center gap-3 border-t border-blue-300/20 pt-3 text-center">
-      {hasVenue ? (
-        <div className={`min-w-0 truncate text-[10px] font-medium text-nrl-muted sm:text-[11px] ${singleItemClass}`}>
-          {match.venue}
-        </div>
-      ) : null}
-      {hasWeather ? (
-        <div className={`min-w-0 ${singleItemClass}`}>
+    <div className="relative z-[1] mx-auto mt-4 max-w-4xl border-t border-blue-300/20 pt-3 text-center">
+      <div className="flex min-w-0 flex-nowrap items-center justify-center gap-x-1.5 text-[10px] font-medium text-nrl-muted sm:text-[11px]">
+        {hasVenue ? (
+          <span className="min-w-0 truncate">
+            {match.venue}{hasWeather ? "," : ""}
+          </span>
+        ) : null}
+        {hasWeather ? (
           <MatchWeather forecast={weatherForecast} />
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   )
 }

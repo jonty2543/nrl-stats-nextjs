@@ -1593,11 +1593,11 @@ export function BettingDashboard({
   );
   const trackerChart = useMemo(() => {
     const width = 640;
-    const height = 128;
+    const height = 154;
     const paddingLeft = 44;
     const paddingRight = 8;
-    const paddingTop = 10;
-    const paddingBottom = 20;
+    const paddingTop = 18;
+    const paddingBottom = 30;
     let runningProfit = 0;
     const values = [0];
     [...bets]
@@ -1615,19 +1615,51 @@ export function BettingDashboard({
     const chartTop = paddingTop;
     const chartBottom = height - paddingBottom;
     const valueToY = (value: number) => chartBottom - ((value - minValue) / range) * (chartBottom - chartTop);
-    const points = values.map((value, index) => {
+    const chartPoints = values.map((value, index) => {
       const x = values.length === 1
         ? chartLeft
         : chartLeft + (index / (values.length - 1)) * (chartRight - chartLeft);
       const y = valueToY(value);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
+      return { value, x, y };
     });
     const zeroY = valueToY(0);
+    const lineSegments: Array<{ points: string; stroke: string }> = [];
+    for (let index = 1; index < chartPoints.length; index += 1) {
+      const previous = chartPoints[index - 1];
+      const current = chartPoints[index];
+      if (previous.value < 0 && current.value < 0) {
+        lineSegments.push({
+          points: `${previous.x.toFixed(1)},${previous.y.toFixed(1)} ${current.x.toFixed(1)},${current.y.toFixed(1)}`,
+          stroke: "#fca5a5",
+        });
+        continue;
+      }
+      if (previous.value >= 0 && current.value >= 0) {
+        lineSegments.push({
+          points: `${previous.x.toFixed(1)},${previous.y.toFixed(1)} ${current.x.toFixed(1)},${current.y.toFixed(1)}`,
+          stroke: "#00f58a",
+        });
+        continue;
+      }
+
+      const crossingRatio = (0 - previous.value) / (current.value - previous.value);
+      const crossingX = previous.x + (current.x - previous.x) * crossingRatio;
+      const crossing = `${crossingX.toFixed(1)},${zeroY.toFixed(1)}`;
+      lineSegments.push({
+        points: `${previous.x.toFixed(1)},${previous.y.toFixed(1)} ${crossing}`,
+        stroke: previous.value < 0 ? "#fca5a5" : "#00f58a",
+      });
+      lineSegments.push({
+        points: `${crossing} ${current.x.toFixed(1)},${current.y.toFixed(1)}`,
+        stroke: current.value < 0 ? "#fca5a5" : "#00f58a",
+      });
+    }
+    const points = chartPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`);
 
     return {
       width,
       height,
-      linePoints: points.join(" "),
+      lineSegments,
       areaPoints: `${points.join(" ")} ${chartRight},${chartBottom} ${chartLeft},${chartBottom}`,
       chartLeft,
       chartRight,
@@ -1870,7 +1902,7 @@ export function BettingDashboard({
                     </div>
                     <div className="rounded-md border border-white/8 bg-white/[0.03] px-2.5 py-2">
                       <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Total Profit</div>
-                      <div className="mt-1 text-sm font-semibold text-nrl-text tabular-nums">
+                      <div className={`mt-1 text-sm font-semibold tabular-nums ${profitLoss < 0 ? "text-red-300" : profitLoss > 0 ? "text-emerald-300" : "text-nrl-text"}`}>
                         {formatMoney(profitLoss)}
                       </div>
                     </div>
@@ -1887,7 +1919,7 @@ export function BettingDashboard({
                     {formatMoney(profitLoss)}
                   </div>
                 </div>
-                <svg viewBox={`0 0 ${trackerChart.width} ${trackerChart.height}`} className="h-32 w-full overflow-visible" preserveAspectRatio="none" role="img" aria-label="Bet tracker profit line chart">
+                <svg viewBox={`0 0 ${trackerChart.width} ${trackerChart.height}`} className="h-36 w-full overflow-visible md:h-44" preserveAspectRatio="none" role="img" aria-label="Bet tracker profit line chart">
                   <defs>
                     <linearGradient id="tracker-profit-fill" x1="0" x2="0" y1="0" y2="1">
                       <stop offset="0%" stopColor="rgba(0,245,138,0.22)" />
@@ -1928,7 +1960,17 @@ export function BettingDashboard({
                   <line x1={trackerChart.chartLeft} x2={trackerChart.chartLeft} y1={trackerChart.chartTop} y2={trackerChart.chartBottom} stroke="rgba(148,163,184,0.22)" />
                   <line x1={trackerChart.chartLeft} x2={trackerChart.chartRight} y1={trackerChart.chartBottom} y2={trackerChart.chartBottom} stroke="rgba(148,163,184,0.22)" />
                   <polygon points={trackerChart.areaPoints} fill="url(#tracker-profit-fill)" />
-                  <polyline points={trackerChart.linePoints} fill="none" stroke="#00f58a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  {trackerChart.lineSegments.map((segment, index) => (
+                    <polyline
+                      key={`${segment.points}-${index}`}
+                      points={segment.points}
+                      fill="none"
+                      stroke={segment.stroke}
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ))}
                   <text x={trackerChart.chartLeft} y={trackerChart.height - 4} textAnchor="start" className="fill-nrl-muted text-[8px] font-semibold">Start</text>
                   <text x={trackerChart.chartRight} y={trackerChart.height - 4} textAnchor="end" className="fill-nrl-muted text-[8px] font-semibold">Latest</text>
                 </svg>

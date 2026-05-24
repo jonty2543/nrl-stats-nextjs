@@ -14,7 +14,15 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 const APP_FONT_STACK = "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-const ARCHETYPES_ARTICLE_PATH = "/dashboard/articles/nrl-archetypes-understanding-player-roles-beyond-position";
+const ARCHETYPES_ARTICLE_TITLE = "NRL Archetypes: Understanding Player Roles Beyond Position";
+const ARCHETYPES_ARTICLE_SLUG = "nrl-archetypes-understanding-player-roles-beyond-position";
+const ARTICLES_PATH = "/dashboard/articles";
+
+interface ArchetypesArticleLink {
+  href: string;
+  imageUrls: string[];
+  title: string;
+}
 
 function escapeAttribute(value: string): string {
   return value
@@ -24,21 +32,52 @@ function escapeAttribute(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-async function getArchetypesArticleImages(): Promise<string[]> {
+function normaliseTitle(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+async function getArchetypesArticleLink(): Promise<ArchetypesArticleLink> {
   try {
     const articles = await fetchApprovedArticleLinks();
-    const article = articles.find((item) => item.slug === "nrl-archetypes-understanding-player-roles-beyond-position");
-    return article?.imageUrls.slice(0, 2) ?? [];
+    const expectedTitle = normaliseTitle(ARCHETYPES_ARTICLE_TITLE);
+    const article =
+      articles.find((item) => item.slug === ARCHETYPES_ARTICLE_SLUG) ??
+      articles.find((item) => normaliseTitle(item.title) === expectedTitle) ??
+      articles.find((item) => {
+        const title = normaliseTitle(item.title);
+        return title.includes("archetype") && title.includes("position");
+      });
+
+    if (!article) {
+      return {
+        href: ARTICLES_PATH,
+        imageUrls: [],
+        title: ARCHETYPES_ARTICLE_TITLE,
+      };
+    }
+
+    return {
+      href: `${ARTICLES_PATH}/${article.slug}`,
+      imageUrls: article.imageUrls.slice(0, 2),
+      title: article.title,
+    };
   } catch {
-    return [];
+    return {
+      href: ARTICLES_PATH,
+      imageUrls: [],
+      title: ARCHETYPES_ARTICLE_TITLE,
+    };
   }
 }
 
-function buildArchetypesArticleLink(imageUrls: string[]): string {
-  const media = imageUrls.length > 0
+function buildArchetypesArticleLink(articleLink: ArchetypesArticleLink): string {
+  const media = articleLink.imageUrls.length > 0
     ? `
-            <span class="article-link-media ${imageUrls.length > 1 ? "is-split" : ""}" aria-hidden="true">
-                ${imageUrls
+            <span class="article-link-media ${articleLink.imageUrls.length > 1 ? "is-split" : ""}" aria-hidden="true">
+                ${articleLink.imageUrls
                   .map((url) => `
                 <span class="article-link-image-wrap">
                     <img src="${escapeAttribute(url)}" alt="" loading="lazy" decoding="async" />
@@ -50,16 +89,16 @@ function buildArchetypesArticleLink(imageUrls: string[]): string {
   return `
         <a
             class="article-link-card"
-            href="${ARCHETYPES_ARTICLE_PATH}"
+            href="${escapeAttribute(articleLink.href)}"
             target="_top"
-            aria-label="Read NRL Archetypes: Understanding Player Roles Beyond Position"
+            aria-label="Read ${escapeAttribute(articleLink.title)}"
         >
             ${media}
             <span class="article-link-bg" aria-hidden="true"></span>
             <span class="article-link-content">
                 <span class="article-link-copy">
                     <span class="article-link-eyebrow">Article</span>
-                    <span class="article-link-title">NRL Archetypes: Understanding Player Roles Beyond Position</span>
+                    <span class="article-link-title">${escapeAttribute(articleLink.title)}</span>
                 </span>
                 <span class="article-link-arrow" aria-hidden="true">→</span>
             </span>
@@ -84,7 +123,7 @@ function resolveArchetypePath(parts: string[] | undefined): string | null {
   return resolvedPath;
 }
 
-function styleIndexHtml(html: string, articleImageUrls: string[]): string {
+function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): string {
   return html
     .replaceAll("--navy: #0A1128;", "--navy: #0b1020;")
     .replaceAll("--lime: #C9FF00;", "--lime: #00f58a;")
@@ -94,7 +133,7 @@ function styleIndexHtml(html: string, articleImageUrls: string[]): string {
     .replaceAll("--border-color: #2A3B6E;", "--border-color: #2a3356;")
     .replace(
       /<div class="ml-explanation" id="mlDropdown">[\s\S]*?<\/div>\s*(?=<div class="tabs" id="positionTabs">)/,
-      buildArchetypesArticleLink(articleImageUrls)
+      buildArchetypesArticleLink(articleLink)
     )
     .replace(
       "</style>",
@@ -334,8 +373,8 @@ function stylePlotHtml(html: string): string {
     );
 }
 
-function styleHtml(filePath: string, html: string, articleImageUrls: string[] = []): string {
-  return path.basename(filePath) === "index.html" ? styleIndexHtml(html, articleImageUrls) : stylePlotHtml(html);
+function styleHtml(filePath: string, html: string, articleLink?: ArchetypesArticleLink): string {
+  return path.basename(filePath) === "index.html" && articleLink ? styleIndexHtml(html, articleLink) : stylePlotHtml(html);
 }
 
 export async function GET(_request: Request, context: ArchetypesRouteContext) {
@@ -350,8 +389,8 @@ export async function GET(_request: Request, context: ArchetypesRouteContext) {
     const extension = path.extname(filePath);
     const contentType = CONTENT_TYPES[extension] ?? "application/octet-stream";
     const file = await readFile(filePath);
-    const articleImageUrls = path.basename(filePath) === "index.html" ? await getArchetypesArticleImages() : [];
-    const body = extension === ".html" ? styleHtml(filePath, file.toString("utf8"), articleImageUrls) : file;
+    const articleLink = path.basename(filePath) === "index.html" ? await getArchetypesArticleLink() : undefined;
+    const body = extension === ".html" ? styleHtml(filePath, file.toString("utf8"), articleLink) : file;
 
     return new NextResponse(body, {
       headers: {

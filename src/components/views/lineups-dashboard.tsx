@@ -780,26 +780,33 @@ function MatchWeather({ forecast }: { forecast: LineupWeatherForecast | null }) 
   if (items.length === 0) return null
 
   return (
-    <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-right text-[9px] font-bold uppercase tracking-wide text-sky-100/90 sm:text-[10px]">
-      <span className="text-sm leading-none sm:text-base" aria-hidden="true">
+    <div className="flex min-w-0 flex-nowrap items-center justify-center gap-x-1.5 whitespace-nowrap text-center text-[8px] font-bold uppercase tracking-[0.04em] text-sky-100/90 sm:gap-x-2 sm:text-[10px]">
+      <span className="flex-none text-xs leading-none sm:text-base" aria-hidden="true">
         {weatherConditionEmoji(forecast.condition)}
       </span>
-      <span>{items.join(" · ")}</span>
+      <span className="min-w-0">{items.join(" · ")}</span>
     </div>
   )
 }
 
 function MatchMetaBand({ match, weatherForecast }: { match: LineupMatch; weatherForecast: LineupWeatherForecast | null }) {
-  if (!match.venue && !weatherForecast) return null
+  const hasVenue = Boolean(match.venue)
+  const hasWeather = Boolean(weatherForecast)
+  if (!hasVenue && !hasWeather) return null
+  const singleItemClass = hasVenue !== hasWeather ? "col-span-2" : ""
 
   return (
-    <div className="relative z-[1] mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 border-t border-blue-300/20 pt-3 text-left">
-      <div className="min-w-0 truncate text-[10px] font-medium text-nrl-muted sm:text-[11px]">
-        {match.venue ?? ""}
-      </div>
-      <div className="min-w-0 text-right">
-        <MatchWeather forecast={weatherForecast} />
-      </div>
+    <div className="relative z-[1] mt-4 grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.35fr)] items-center gap-3 border-t border-blue-300/20 pt-3 text-center">
+      {hasVenue ? (
+        <div className={`min-w-0 truncate text-[10px] font-medium text-nrl-muted sm:text-[11px] ${singleItemClass}`}>
+          {match.venue}
+        </div>
+      ) : null}
+      {hasWeather ? (
+        <div className={`min-w-0 ${singleItemClass}`}>
+          <MatchWeather forecast={weatherForecast} />
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1503,9 +1510,9 @@ function slotPosition(
 function SportsbetOddsPill({ odds }: { odds: LineupSportsbetOdds }) {
   return (
     <div className="mt-0.5 flex justify-center">
-      <span className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-nrl-panel/75 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-nrl-text sm:text-[11px]">
+      <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-nrl-panel/75 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-nrl-text sm:text-[10px]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={BOOKIE_LOGOS.Sportsbet} alt="Sportsbet" className="h-3 w-auto object-contain" loading="lazy" />
+        <img src={BOOKIE_LOGOS.Sportsbet} alt="Sportsbet" className="h-2.5 w-auto object-contain sm:h-3" loading="lazy" />
         <span>{odds.price.toFixed(2)}</span>
       </span>
     </div>
@@ -1526,9 +1533,9 @@ function TeamBadge({
   const fullName = team?.teamName ?? team?.team ?? "TBC"
 
   return (
-    <div className="flex min-h-[7.5rem] w-[6.5rem] min-w-0 max-w-full flex-col items-center justify-center gap-1 px-2 py-1.5 text-center sm:min-h-[8.5rem] sm:w-[7.5rem] sm:px-2.5">
+    <div className="flex min-h-[6.5rem] w-[5.75rem] min-w-0 max-w-full -translate-y-1 flex-col items-center justify-start gap-0.5 px-2 py-1 text-center sm:min-h-[7.5rem] sm:w-[6.75rem] sm:-translate-y-1.5 sm:px-2.5">
       {logo ? (
-        <div className="relative grid h-20 w-20 place-items-center sm:h-24 sm:w-24">
+        <div className="relative grid h-16 w-16 place-items-center sm:h-20 sm:w-20">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logo}
@@ -1539,8 +1546,8 @@ function TeamBadge({
         </div>
       ) : null}
       <div className="w-full min-w-0">
-        <div className="truncate text-xs font-bold text-nrl-text sm:hidden">{shortName}</div>
-        <div className="hidden truncate text-sm font-bold text-nrl-text sm:block">{fullName}</div>
+        <div className="truncate text-[11px] font-bold text-nrl-text sm:hidden">{shortName}</div>
+        <div className="hidden truncate text-xs font-bold text-nrl-text sm:block">{fullName}</div>
         {sportsbetOdds ? <SportsbetOddsPill odds={sportsbetOdds} /> : null}
       </div>
     </div>
@@ -2147,7 +2154,7 @@ function LineupCard({
         className="pointer-events-none absolute inset-px rounded-[calc(0.5rem-1px)] opacity-70 transition-opacity group-open:opacity-0"
         style={MATCH_CARD_TEXTURE_STYLE}
       />
-      <summary className="relative z-[1] cursor-pointer list-none px-3 pb-8 pt-3 marker:hidden sm:px-5 sm:pb-9 sm:pt-4 [&::-webkit-details-marker]:hidden">
+      <summary className="relative z-[1] cursor-pointer list-none px-3 pb-11 pt-3 marker:hidden sm:px-5 sm:pb-12 sm:pt-4 [&::-webkit-details-marker]:hidden">
         {homeLogo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -2181,7 +2188,7 @@ function LineupCard({
           </div>
         </div>
         <MatchMetaBand match={match} weatherForecast={weatherForecast} />
-        <span className="absolute bottom-2 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text">
+        <span className="absolute bottom-3 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text sm:bottom-3.5">
           <span className="sr-only">Toggle match details</span>
           <svg
             viewBox="0 0 16 16"

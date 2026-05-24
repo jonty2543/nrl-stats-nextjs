@@ -319,7 +319,9 @@ function resolveTeamLogoUrl(teamName: string | null | undefined, teamLogos: Reco
     "sea eagles": ["manly sea eagles", "manly warringah sea eagles"],
     storm: ["melbourne storm"],
     knights: ["newcastle knights"],
-    cowboys: ["north queensland cowboys"],
+    cowboys: ["north queensland cowboys", "nth queensland cowboys", "north qld cowboys"],
+    "nth queensland cowboys": ["north queensland cowboys", "cowboys", "north qld cowboys"],
+    "north qld cowboys": ["north queensland cowboys", "nth queensland cowboys", "cowboys"],
     eels: ["parramatta eels"],
     panthers: ["penrith panthers"],
     rabbitohs: ["south sydney rabbitohs"],
@@ -335,6 +337,10 @@ function resolveTeamLogoUrl(teamName: string | null | undefined, teamLogos: Reco
   }
 
   return Object.entries(teamLogos).find(([logoKey]) => logoKey.endsWith(` ${key}`) || logoKey.includes(key))?.[1] ?? null;
+}
+
+function stripSelectionLineSuffix(selection: string): string {
+  return selection.trim().replace(/\s+[+-]?\d+(?:\.\d+)?\s*$/, "").trim();
 }
 
 function TeamLogoImage({
@@ -401,9 +407,10 @@ function BettingTeamLogos({
   teamLogos: Record<string, string>;
   className?: string;
 }) {
-  const selectionLogoUrl = market !== "Total" ? resolveTeamLogoUrl(selection, teamLogos) : null;
+  const teamSelection = stripSelectionLineSuffix(selection);
+  const selectionLogoUrl = market !== "Total" ? resolveTeamLogoUrl(teamSelection, teamLogos) : null;
   if (selectionLogoUrl) {
-    return <TeamLogoImage teamName={selection} teamLogos={teamLogos} className={className} />;
+    return <TeamLogoImage teamName={teamSelection} teamLogos={teamLogos} className={className} />;
   }
 
   return <MatchLogoCluster match={match} teamLogos={teamLogos} className={className} />;
@@ -518,9 +525,8 @@ function betStatusIconLabel(status: TrackedBetStatus): string {
   return "•";
 }
 
-function betProfitClass(profit: number | null): string {
-  if (profit == null) return "text-nrl-text";
-  return profit < 0 ? "text-red-500" : "text-nrl-accent";
+function betProfitClass(): string {
+  return "text-nrl-text";
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1570,14 +1576,22 @@ export function BettingDashboard({
   const profitLoss = bets.reduce((sum, bet) => sum + (bet.profit ?? 0), 0);
   const profitMargin = totalStake > 0 ? (profitLoss / totalStake) * 100 : null;
   const trackerBankroll = bankroll + profitLoss;
+  const roiRingPct = Math.max(0, Math.min(100, Math.abs(profitMargin ?? 0)));
+  const roiRingDegrees = roiRingPct * 3.6;
+  const roiRingBackground = profitMargin != null && profitMargin < 0
+    ? `conic-gradient(rgba(148,163,184,0.22) 0deg ${360 - roiRingDegrees}deg, #fca5a5 ${360 - roiRingDegrees}deg 360deg)`
+    : `conic-gradient(#38bdf8 0deg ${roiRingDegrees}deg, rgba(148,163,184,0.22) 0)`;
   const sortedBets = useMemo(
     () => [...bets].sort((a, b) => b.placedAt.localeCompare(a.placedAt)),
     [bets]
   );
   const trackerChart = useMemo(() => {
-    const width = 320;
-    const height = 88;
-    const padding = 8;
+    const width = 640;
+    const height = 128;
+    const paddingLeft = 44;
+    const paddingRight = 8;
+    const paddingTop = 10;
+    const paddingBottom = 20;
     let runningProfit = 0;
     const values = [0];
     [...bets]
@@ -1590,19 +1604,35 @@ export function BettingDashboard({
     const minValue = Math.min(...values);
     const maxValue = Math.max(...values);
     const range = maxValue - minValue || 1;
+    const chartLeft = paddingLeft;
+    const chartRight = width - paddingRight;
+    const chartTop = paddingTop;
+    const chartBottom = height - paddingBottom;
+    const valueToY = (value: number) => chartBottom - ((value - minValue) / range) * (chartBottom - chartTop);
     const points = values.map((value, index) => {
       const x = values.length === 1
-        ? padding
-        : padding + (index / (values.length - 1)) * (width - padding * 2);
-      const y = height - padding - ((value - minValue) / range) * (height - padding * 2);
+        ? chartLeft
+        : chartLeft + (index / (values.length - 1)) * (chartRight - chartLeft);
+      const y = valueToY(value);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
+    const zeroY = valueToY(0);
 
     return {
       width,
       height,
       linePoints: points.join(" "),
-      areaPoints: `${points.join(" ")} ${width - padding},${height - padding} ${padding},${height - padding}`,
+      areaPoints: `${points.join(" ")} ${chartRight},${chartBottom} ${chartLeft},${chartBottom}`,
+      chartLeft,
+      chartRight,
+      chartTop,
+      chartBottom,
+      zeroY,
+      yLabels: [
+        { label: formatMoney(maxValue), y: chartTop },
+        { label: formatMoney(0), y: zeroY },
+        { label: formatMoney(minValue), y: chartBottom },
+      ],
     };
   }, [bets]);
   const stakingPreferencesLoading = !isLoaded || !preferencesHydrated;
@@ -1806,12 +1836,12 @@ export function BettingDashboard({
                 <div className="grid place-items-center">
                   <div
                     className="grid h-28 w-28 place-items-center rounded-full p-2 sm:h-32 sm:w-32 sm:p-2.5"
-                    style={{ background: `conic-gradient(#38bdf8 ${Math.max(0, Math.min(100, Math.abs(profitMargin ?? 0)))}%, rgba(148,163,184,0.22) 0)` }}
+                    style={{ background: roiRingBackground }}
                   >
                     <div className="grid h-full w-full place-items-center rounded-full bg-[#111936] text-center">
                       <div>
                         <div className="text-[9px] font-bold uppercase text-nrl-muted">ROI</div>
-                        <div className={`text-xl font-bold tabular-nums ${profitMargin != null && profitMargin < 0 ? "text-red-300" : "text-white"}`}>
+                        <div className="text-xl font-bold text-white tabular-nums">
                           {profitMargin == null ? "-" : `${profitMargin > 0 ? "+" : ""}${profitMargin.toFixed(1)}%`}
                         </div>
                         <div className="text-[9px] text-nrl-muted">{formatStakeMoney(totalStake)} staked</div>
@@ -1834,7 +1864,7 @@ export function BettingDashboard({
                     </div>
                     <div className="rounded-md border border-white/8 bg-white/[0.03] px-2.5 py-2">
                       <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Total Profit</div>
-                      <div className={`mt-1 text-sm font-semibold tabular-nums ${profitLoss >= 0 ? "text-nrl-accent" : "text-red-500"}`}>
+                      <div className="mt-1 text-sm font-semibold text-nrl-text tabular-nums">
                         {formatMoney(profitLoss)}
                       </div>
                     </div>
@@ -1847,30 +1877,54 @@ export function BettingDashboard({
               <div className="mt-5 rounded-lg border border-white/8 bg-[#0f1732]/70 px-3 py-3">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Performance</div>
-                  <div className={`text-xs font-semibold tabular-nums ${profitLoss >= 0 ? "text-nrl-accent" : "text-red-500"}`}>
+                  <div className="text-xs font-semibold text-nrl-text tabular-nums">
                     {formatMoney(profitLoss)}
                   </div>
                 </div>
-                <svg viewBox={`0 0 ${trackerChart.width} ${trackerChart.height}`} className="h-24 w-full overflow-visible" role="img" aria-label="Bet tracker profit line chart">
+                <svg viewBox={`0 0 ${trackerChart.width} ${trackerChart.height}`} className="h-32 w-full overflow-visible" preserveAspectRatio="none" role="img" aria-label="Bet tracker profit line chart">
                   <defs>
                     <linearGradient id="tracker-profit-fill" x1="0" x2="0" y1="0" y2="1">
                       <stop offset="0%" stopColor="rgba(0,245,138,0.22)" />
                       <stop offset="100%" stopColor="rgba(0,245,138,0)" />
                     </linearGradient>
                   </defs>
+                  {trackerChart.yLabels.map(({ label, y }) => (
+                    <g key={`${label}-${y}`}>
+                      <text
+                        x={trackerChart.chartLeft - 7}
+                        y={y + 3}
+                        textAnchor="end"
+                        className="fill-nrl-muted text-[8px] font-semibold"
+                      >
+                        {label}
+                      </text>
+                      <line
+                        x1={trackerChart.chartLeft}
+                        x2={trackerChart.chartRight}
+                        y1={y}
+                        y2={y}
+                        stroke={Math.abs(y - trackerChart.zeroY) < 0.1 ? "rgba(148,163,184,0.28)" : "rgba(148,163,184,0.14)"}
+                        strokeDasharray={Math.abs(y - trackerChart.zeroY) < 0.1 ? "0" : "3 4"}
+                      />
+                    </g>
+                  ))}
                   {[0.25, 0.5, 0.75].map((ratio) => (
                     <line
                       key={ratio}
-                      x1="8"
-                      x2={trackerChart.width - 8}
-                      y1={trackerChart.height * ratio}
-                      y2={trackerChart.height * ratio}
+                      x1={trackerChart.chartLeft + ((trackerChart.chartRight - trackerChart.chartLeft) * ratio)}
+                      x2={trackerChart.chartLeft + ((trackerChart.chartRight - trackerChart.chartLeft) * ratio)}
+                      y1={trackerChart.chartTop}
+                      y2={trackerChart.chartBottom}
                       stroke="rgba(148,163,184,0.14)"
                       strokeDasharray="3 4"
                     />
                   ))}
+                  <line x1={trackerChart.chartLeft} x2={trackerChart.chartLeft} y1={trackerChart.chartTop} y2={trackerChart.chartBottom} stroke="rgba(148,163,184,0.22)" />
+                  <line x1={trackerChart.chartLeft} x2={trackerChart.chartRight} y1={trackerChart.chartBottom} y2={trackerChart.chartBottom} stroke="rgba(148,163,184,0.22)" />
                   <polygon points={trackerChart.areaPoints} fill="url(#tracker-profit-fill)" />
                   <polyline points={trackerChart.linePoints} fill="none" stroke="#00f58a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  <text x={trackerChart.chartLeft} y={trackerChart.height - 4} textAnchor="start" className="fill-nrl-muted text-[8px] font-semibold">Start</text>
+                  <text x={trackerChart.chartRight} y={trackerChart.height - 4} textAnchor="end" className="fill-nrl-muted text-[8px] font-semibold">Latest</text>
                 </svg>
               </div>
             ) : null}
@@ -1987,9 +2041,11 @@ export function BettingDashboard({
                               <button
                                 type="button"
                                 onClick={() => void handleDeleteBet(bet.id)}
-                                className="h-8 cursor-pointer rounded-md border border-red-500/35 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-red-400 transition-colors hover:bg-red-500/10"
+                                aria-label="Delete bet"
+                                title="Delete bet"
+                                className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-red-500/35 text-sm text-red-400 transition-colors hover:bg-red-500/10"
                               >
-                                Delete
+                                🗑️
                               </button>
                             </div>
                           </article>

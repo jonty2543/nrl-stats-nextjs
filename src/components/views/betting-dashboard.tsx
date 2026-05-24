@@ -478,6 +478,50 @@ function formatDateLabel(value: string): string {
   });
 }
 
+function eventStartMs(
+  event: Pick<EventGroup, "date" | "match">,
+  kickoffsByMatch: Record<string, string>
+): number | null {
+  const kickoffKey = buildMatchKickoffKey(event.date, event.match);
+  const kickoff = kickoffKey ? kickoffsByMatch[kickoffKey] : null;
+  const kickoffMs = kickoff ? Date.parse(kickoff) : NaN;
+  if (Number.isFinite(kickoffMs)) return kickoffMs;
+
+  const dateEndMs = Date.parse(`${event.date}T23:59:59`);
+  if (Number.isFinite(dateEndMs)) return dateEndMs;
+
+  return null;
+}
+
+function formatEventCountdown(
+  event: Pick<EventGroup, "date" | "match">,
+  kickoffsByMatch: Record<string, string>,
+  nowMs: number
+): string {
+  const startMs = eventStartMs(event, kickoffsByMatch);
+  if (startMs == null) return formatDateLabel(event.date);
+
+  const remainingMs = startMs - nowMs;
+  if (remainingMs <= 0) return "Live";
+
+  const minuteMs = 60 * 1000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+
+  if (remainingMs < dayMs) {
+    const hours = Math.floor(remainingMs / hourMs);
+    const minutes = Math.max(0, Math.floor((remainingMs % hourMs) / minuteMs));
+    return `${hours}:${minutes.toString().padStart(2, "0")} til event`;
+  }
+
+  const days = Math.ceil(remainingMs / dayMs);
+  return `${days}d til event`;
+}
+
+function formatBestBetScore(score: number): string {
+  return `${(clamp(score, 0, 1) * 10).toFixed(1)}/10`;
+}
+
 function createBookieRecord<T>(factory: () => T): Record<BettingBookie, T> {
   return {
     Sportsbet: factory(),
@@ -1467,6 +1511,7 @@ export function BettingDashboard({
         modelBets={bestBets}
         arbitrageBets={arbitrageBets}
         canAccessPremium={hasPremiumBettingAccess}
+        tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
         onAddBet={handleAddBet}
       />
 
@@ -1972,15 +2017,18 @@ function BestBetsHero({
   modelBets,
   arbitrageBets,
   canAccessPremium,
+  tryscorerKickoffsByMatch,
   onAddBet,
 }: {
   modelBets: BestBetCandidate[];
   arbitrageBets: ArbitrageCandidate[];
   canAccessPremium: boolean;
+  tryscorerKickoffsByMatch: Record<string, string>;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [bestBetSlip, setBestBetSlip] = useState<{
     bet: BestBetCandidate;
     odds: number;
@@ -2020,6 +2068,11 @@ function BestBetsHero({
     && bestBetSlip.odds > 1
     && Number.isFinite(bestBetSlip.stake)
     && bestBetSlip.stake > 0;
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
     setCategory(nextCategory);
@@ -2108,6 +2161,9 @@ function BestBetsHero({
                   <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
                     {isArbitrage ? "H2H" : (featuredItem as BestBetCandidate).market}
                   </span>
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                    {formatEventCountdown(featuredItem, tryscorerKickoffsByMatch, nowMs)}
+                  </span>
                 </div>
                 <div className="mt-2 text-xl font-semibold leading-tight text-white sm:text-2xl">
                   {isArbitrage ? (featuredItem as ArbitrageCandidate).match : (featuredItem as BestBetCandidate).selectionLabel}
@@ -2119,6 +2175,11 @@ function BestBetsHero({
                 </div>
               </div>
               <div className="shrink-0 text-right">
+                {!isArbitrage ? (
+                  <div className="mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                    Score <span className="text-nrl-text">{formatBestBetScore((featuredItem as BestBetCandidate).score)}</span>
+                  </div>
+                ) : null}
                 <div className={`text-3xl font-bold leading-none sm:text-4xl ${activeTheme.metric}`}>
                   {isArbitrage
                     ? `+${(featuredItem as ArbitrageCandidate).returnPct.toFixed(2)}%`
@@ -2254,6 +2315,9 @@ function BestBetsHero({
                           <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
                             {isArbitrage ? "H2H" : isLocked ? "Locked" : (item as BestBetCandidate).market}
                           </span>
+                          <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                            {formatEventCountdown(item, tryscorerKickoffsByMatch, nowMs)}
+                          </span>
                         </div>
                         <div className="mt-0.5 truncate text-xs font-semibold text-white">
                           {isLocked
@@ -2287,6 +2351,11 @@ function BestBetsHero({
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
+                        {!isLocked && !isArbitrage ? (
+                          <div className="mb-1 text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                            {formatBestBetScore((item as BestBetCandidate).score)}
+                          </div>
+                        ) : null}
                         <div className={`text-base font-bold leading-none ${isLocked ? "text-nrl-muted" : activeTheme.metric}`}>
                           {isLocked
                             ? isArbitrage ? "ARB" : "+EV"

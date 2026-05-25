@@ -641,12 +641,19 @@ function toFiniteProjectionNumber(value: unknown): number | null {
   return null
 }
 
+function parseRoundNumber(value: unknown): number | null {
+  const match = String(value ?? "").match(/\d+/)
+  if (!match) return null
+  const round = Number.parseInt(match[0], 10)
+  return Number.isFinite(round) ? round : null
+}
+
 async function fetchLineupUnawareProjectionSnapshot(cutoffUtc: string): Promise<LineupsProjectionSnapshot> {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .schema("nrl")
     .from("lineup_unaware_fantasy_projections")
-    .select("player, team, assumed_jersey, assumed_position, projection, model_projection, kickoff_utc")
+    .select("round, player, team, assumed_jersey, assumed_position, projection, model_projection, kickoff_utc")
     .gte("kickoff_utc", cutoffUtc)
     .order("kickoff_utc", { ascending: true })
 
@@ -663,6 +670,7 @@ async function fetchLineupUnawareProjectionSnapshot(cutoffUtc: string): Promise<
         const kickoffMs = Date.parse(String(row.kickoff_utc ?? ""))
         return Number.isFinite(kickoffMs) && kickoffMs >= firstKickoffMs && kickoffMs < firstKickoffMs + 6 * ONE_DAY_MS
       })
+  snapshot.round = parseRoundNumber(roundRows[0]?.round)
 
   for (const row of roundRows) {
     const nameKey = normaliseProjectionPlayerName(row.player)
@@ -712,9 +720,7 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
 
     if (!roundLabel) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
 
-    // Parse the integer out of labels like "9", "Round 9", "Round 9 - 2026"
-    const roundNumMatch = roundLabel.match(/\d+/)
-    const round = roundNumMatch ? Number.parseInt(roundNumMatch[0], 10) : null
+    const round = parseRoundNumber(roundLabel)
 
     const { data, error } = await supabase
       .schema("nrl")

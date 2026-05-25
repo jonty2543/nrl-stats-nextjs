@@ -1189,7 +1189,6 @@ function modelProjectionForFantasyPlayer(
   }
 
   if (lineupsProjections.source === "lineup_unaware") {
-    if (isFantasyPlayerUnavailableForProjectionFallback(fantasyPlayer)) return null
     return (
       lineupsProjections.projectionByPlayerId.get(fantasyPlayer.id) ??
       lineupsProjections.projectionByPlayerName.get(playerNameKey) ??

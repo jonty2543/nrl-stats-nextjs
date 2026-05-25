@@ -983,8 +983,12 @@ function normaliseProjectionPlayerName(value: string | null | undefined): string
   return key
 }
 
-function isFantasyPlayerUnavailableForFallback(player: FantasyPlayerSnapshot): boolean {
+function isFantasyPlayerUnavailableForFallback(
+  player: FantasyPlayerSnapshot,
+  casualtyWardPlayerNames?: Set<string>
+): boolean {
   if (player.isBye) return true
+  if (casualtyWardPlayerNames?.has(normaliseProjectionPlayerName(player.name))) return true
   const status = player.status?.trim().toLowerCase()
   return Boolean(
     status &&
@@ -995,16 +999,24 @@ function isFantasyPlayerUnavailableForFallback(player: FantasyPlayerSnapshot): b
 function resolveFantasyProjectionForLineups(
   player: FantasyPlayerSnapshot,
   lineupsProjections: LineupsProjectionSnapshot | undefined,
-  coachProjection: number | null
+  coachProjection: number | null,
+  casualtyWardPlayerNames?: Set<string>
 ): number | null {
   const playerNameKey = normaliseProjectionPlayerName(player.name)
+  const fallbackProjection =
+    lineupsProjections?.projectionByPlayerId.get(player.id) ??
+    lineupsProjections?.projectionByPlayerName.get(playerNameKey) ??
+    coachProjection ??
+    player.projectedAvg ??
+    player.avgPoints ??
+    null
 
   if (lineupsProjections?.source === "lineups") {
     const isNamed =
       lineupsProjections.roleByPlayerId.has(player.id) ||
       lineupsProjections.roleByPlayerName.has(playerNameKey)
 
-    if (!isNamed) return 0
+    if (!isNamed) return null
 
     return (
       lineupsProjections.projectionByPlayerId.get(player.id) ??
@@ -1014,28 +1026,12 @@ function resolveFantasyProjectionForLineups(
   }
 
   if (lineupsProjections?.source === "lineup_unaware") {
-    if (isFantasyPlayerUnavailableForFallback(player)) return null
-    return (
-      lineupsProjections.projectionByPlayerId.get(player.id) ??
-      lineupsProjections.projectionByPlayerName.get(playerNameKey) ??
-      coachProjection ??
-      player.projectedAvg ??
-      player.avgPoints ??
-      null
-    )
+    if (isFantasyPlayerUnavailableForFallback(player, casualtyWardPlayerNames)) return null
+    return fallbackProjection
   }
 
-  const fallbackProjection = lineupsProjections?.projectionByPlayerName.get(playerNameKey) ?? null
-  return (
-    lineupsProjections?.projectionByPlayerId.get(player.id) ??
-    (fallbackProjection != null
-      ? isFantasyPlayerUnavailableForFallback(player) ? 0 : fallbackProjection
-      : null) ??
-    coachProjection ??
-    player.projectedAvg ??
-    player.avgPoints ??
-    0
-  )
+  if (isFantasyPlayerUnavailableForFallback(player, casualtyWardPlayerNames)) return null
+  return fallbackProjection
 }
 
 function averageNumbers(values: Array<number | null>): number | null {
@@ -3702,6 +3698,14 @@ export function FantasyDashboard({
     () => new Set(originChances.map((row) => normaliseProjectionPlayerName(row.player)).filter(Boolean)),
     [originChances]
   )
+  const casualtyWardPlayerNames = useMemo(
+    () => new Set(
+      [...casualtyWardRows, ...relevantOuts, ...relevantOutCandidates]
+        .map((row) => normaliseProjectionPlayerName(row.player))
+        .filter(Boolean)
+    ),
+    [casualtyWardRows, relevantOutCandidates, relevantOuts]
+  )
 
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
     const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
@@ -3745,11 +3749,12 @@ export function FantasyDashboard({
       const rawProjection = resolveFantasyProjectionForLineups(
         player,
         lineupsProjections,
-        coachMetrics.projection
+        coachMetrics.projection,
+        casualtyWardPlayerNames
       )
       const pricedAt = player.pricedAt
       const originChance = originChancePlayerNames.has(normaliseProjectionPlayerName(player.name))
-      const projection = player.isBye ? 0 : rawProjection
+      const projection = rawProjection
       const value = projection != null && pricedAt != null ? projection - pricedAt : null
       const lineupRole =
         lineupsProjections?.roleByPlayerId.get(player.id) ??
@@ -3803,7 +3808,7 @@ export function FantasyDashboard({
         gamesPlayed: playerRows.length || player.gamesPlayed || 0,
       }
     })
-  }, [allPlayersStatsSourceData, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
+  }, [allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
 
   const selectedAllPlayersTableRow = useMemo(
     () => selectedFantasyPlayer
@@ -4048,10 +4053,11 @@ export function FantasyDashboard({
       return resolveFantasyProjectionForLineups(
         selectedFantasyPlayer,
         lineupsProjections,
-        selectedFantasyCoachMetrics.projection
+        selectedFantasyCoachMetrics.projection,
+        casualtyWardPlayerNames
       )
     },
-    [lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyPlayer]
+    [casualtyWardPlayerNames, lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyPlayer]
   )
   const selectedProjectionBand = useMemo(
     () => {

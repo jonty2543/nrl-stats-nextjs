@@ -860,6 +860,73 @@ function currentRoundOption(options) {
   return options.find((option) => option.startDate >= today) ?? options.findLast((option) => option.startDate <= today) ?? options[0] ?? null;
 }
 
+function matchMergeKey(matchDate, homeTeam, awayTeam) {
+  return [String(matchDate ?? "").slice(0, 10), teamGroup(homeTeam), teamGroup(awayTeam)].join("|");
+}
+
+function matchTeams(match) {
+  const home = match.homeTeam?.team ?? String(match.match ?? "").split(/\s+vs\s+/i)[0]?.trim();
+  const away = match.awayTeam?.team ?? String(match.match ?? "").split(/\s+vs\s+/i)[1]?.trim();
+  return { home, away };
+}
+
+function resultIncludesTeam(result, team) {
+  const key = teamGroup(team);
+  return Boolean(key && (teamGroup(result.homeTeam) === key || teamGroup(result.awayTeam) === key));
+}
+
+function resultIncludesMatchup(result, homeTeam, awayTeam) {
+  return resultIncludesTeam(result, homeTeam) && resultIncludesTeam(result, awayTeam);
+}
+
+function resultBeforeMatch(result, matchDate) {
+  const resultDate = String(result.matchDate ?? "").slice(0, 10);
+  const currentDate = String(matchDate ?? "").slice(0, 10);
+  return Boolean(resultDate && currentDate && resultDate < currentDate);
+}
+
+function addRecentResults(match, results) {
+  const { home, away } = matchTeams(match);
+  if (!home || !away) return match;
+  const previousResults = results.filter((result) => resultBeforeMatch(result, match.matchDate));
+  return {
+    ...match,
+    recentHeadToHead: previousResults.filter((result) => resultIncludesMatchup(result, home, away)).slice(0, 30),
+    homeRecentResults: previousResults.filter((result) => resultIncludesTeam(result, home)).slice(0, 30),
+    awayRecentResults: previousResults.filter((result) => resultIncludesTeam(result, away)).slice(0, 30),
+  };
+}
+
+async function fetchRecentMatchResultsSummary(supabase, year) {
+  const rows = await fetchAllRows(
+    supabase,
+    "matches",
+    "match_date,round,team,opponent_team,score,opponent_score,is_home",
+    (query) => query.lt("match_date", `${year + 1}-01-01`).not("score", "is", null).not("opponent_score", "is", null).order("match_date", { ascending: false })
+  );
+  const results = new Map();
+  for (const row of rows) {
+    const matchDate = text(row.match_date);
+    const team = text(row.team);
+    const opponent = text(row.opponent_team);
+    const score = toNum(row.score);
+    const opponentScore = toNum(row.opponent_score);
+    if (!matchDate || !team || !opponent || score == null || opponentScore == null) continue;
+    const isHome = booleanValue(row.is_home);
+    const result = {
+      matchDate,
+      round: nullableText(row.round),
+      homeTeam: isHome ? team : opponent,
+      awayTeam: isHome ? opponent : team,
+      homeScore: isHome ? score : opponentScore,
+      awayScore: isHome ? opponentScore : score,
+    };
+    const key = [matchDate.slice(0, 10), teamGroup(result.homeTeam), teamGroup(result.awayTeam)].sort().join("|");
+    results.set(key, result);
+  }
+  return [...results.values()];
+}
+
 async function fetchLineupRoundOptionsSummary(supabase, year) {
   const rows = await fetchAllRows(
     supabase,
@@ -963,6 +1030,54 @@ async function fetchLineupMatchesSummary(supabase, round, year) {
       awayTeam: teamFromPlayers(awayPlayers, "Away"),
     };
   });
+}
+
+async function fetchFixtureMatchesSummary(supabase, round, year) {
+  const rows = await fetchAllRows(
+    supabase,
+    "matches",
+    "url,match_date,round,team,opponent_team,is_home,score,opponent_score",
+    (query) => query.eq("round", round).gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("match_date", { ascending: true })
+  );
+  return rows
+    .filter((row) => booleanValue(row.is_home))
+    .map((row) => {
+      const matchDate = text(row.match_date);
+      const homeTeam = text(row.team);
+      const awayTeam = text(row.opponent_team);
+      const matchId = matchMergeKey(matchDate, homeTeam, awayTeam);
+      return {
+        matchId,
+        matchDate,
+        kickoffUtc: null,
+        round: text(row.round) || round,
+        venue: null,
+        match: `${homeTeam} vs ${awayTeam}`,
+        matchUrl: nullableText(row.url),
+        homeTeam: { team: homeTeam, teamName: homeTeam, teamId: null, teamType: "Home", players: [] },
+        awayTeam: { team: awayTeam, teamName: awayTeam, teamId: null, teamType: "Away", players: [] },
+        homeScore: toNum(row.score),
+        awayScore: toNum(row.opponent_score),
+      };
+    })
+    .filter((match) => match.matchDate && match.homeTeam.team && match.awayTeam.team);
+}
+
+function mergeFixtureAndLineupMatches(fixtureMatches, lineupMatches) {
+  const byKey = new Map();
+  for (const match of fixtureMatches) {
+    const { home, away } = matchTeams(match);
+    if (!home || !away) continue;
+    byKey.set(matchMergeKey(match.matchDate, home, away), match);
+  }
+  for (const match of lineupMatches) {
+    const { home, away } = matchTeams(match);
+    if (!home || !away) continue;
+    const key = matchMergeKey(match.matchDate, home, away);
+    const fixture = byKey.get(key);
+    byKey.set(key, fixture ? { ...fixture, ...match, homeScore: fixture.homeScore, awayScore: fixture.awayScore } : match);
+  }
+  return [...byKey.values()].sort((a, b) => a.matchDate.localeCompare(b.matchDate) || String(a.kickoffUtc ?? "").localeCompare(String(b.kickoffUtc ?? "")));
 }
 
 async function fetchLineupsSummaryTeamLogos(supabase) {
@@ -1116,11 +1231,21 @@ async function main() {
       console.warn("Unable to fetch lineups matches for page summary.", error);
       return [];
     }),
+    fetchFixtureMatchesSummary(supabaseNrl, lineupsRound.value, currentYear).catch((error) => {
+      console.warn("Unable to fetch fixture matches for lineups page summary.", error);
+      return [];
+    }),
+    fetchRecentMatchResultsSummary(supabaseNrl, currentYear).catch((error) => {
+      console.warn("Unable to fetch recent results for lineups page summary.", error);
+      return [];
+    }),
     fetchLineupsSummaryTeamLogos(supabaseNrl).catch(() => ({})),
     fetchLineupsSummaryTryscorerOdds(supabasePublic, today).catch(() => ({})),
     fetchLineupsSummarySportsbetOdds(supabasePublic, today).catch(() => ({})),
     fetchLineupsSummaryCasualtyOuts(supabaseNrl).catch(() => ({})),
-  ]).then(([matches, lineupsTeamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts]) => matches.length === 0 ? null : {
+  ]).then(([lineupMatches, fixtureMatches, recentResults, lineupsTeamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts]) => {
+    const matches = mergeFixtureAndLineupMatches(fixtureMatches, lineupMatches).map((match) => addRecentResults(match, recentResults));
+    return matches.length === 0 ? null : {
     year: currentYear,
     round: lineupsRound.value,
     round_options: lineupsRoundOptions,
@@ -1134,6 +1259,7 @@ async function main() {
     position_ppm_baselines: buildLineupsPositionPpmBaselines(playerStats2026),
     player_try_history: playerTryHistory,
     updated_at: new Date().toISOString(),
+    };
   }) : null;
   for (const player of fantasyPlayers) {
     const localRows = findLocalRows(player.name, statsByName);

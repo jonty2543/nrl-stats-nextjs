@@ -204,13 +204,24 @@ function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | n
   )
 }
 
-function lineupsSummaryHasRecentResults(summary: Awaited<ReturnType<typeof fetchLineupsPageSummary>>): boolean {
+function lineupsSummarySupportsAccess(
+  summary: Awaited<ReturnType<typeof fetchLineupsPageSummary>>,
+  hasProAccess: boolean
+): boolean {
   if (!summary || summary.matches.length === 0) return false
-  return summary.matches.some((match) =>
+  const hasRecentResults = summary.matches.some((match) =>
     Array.isArray(match.homeRecentResults) ||
     Array.isArray(match.awayRecentResults) ||
     Array.isArray(match.recentHeadToHead)
   )
+  if (!hasRecentResults) return false
+  if (!hasProAccess) return true
+
+  const players = summary.matches.flatMap((match) => [
+    ...(match.homeTeam?.players ?? []),
+    ...(match.awayTeam?.players ?? []),
+  ])
+  return players.length === 0 || players.some((player) => typeof player.fantasyProjection === "number")
 }
 
 export default async function LineupsPage({ searchParams }: LineupsPageProps) {
@@ -220,8 +231,8 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const year = currentYearInBrisbane()
   const roundOptions = await fetchLineupRoundOptions(year)
   const selectedRound = roundOptions.find((option) => option.value === params.round)?.value ?? currentRoundOption(roundOptions)?.value ?? "Round 1"
-  const rawSummary = hasProAccess ? null : await withFallback(fetchLineupsPageSummary(year, selectedRound), null, "Lineups page summary")
-  const summary = lineupsSummaryHasRecentResults(rawSummary) ? rawSummary : null
+  const rawSummary = await withFallback(fetchLineupsPageSummary(year, selectedRound), null, "Lineups page summary")
+  const summary = lineupsSummarySupportsAccess(rawSummary, hasProAccess) ? rawSummary : null
   const fallbackData = summary ? null : await (async () => {
     const [teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStatsCurrentYear, playerTryHistory, lineupRound] = await Promise.all([
       withFallback(fetchTeamLogos(), {}, "Lineups team logos"),

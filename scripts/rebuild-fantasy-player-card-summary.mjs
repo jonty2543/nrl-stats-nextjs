@@ -979,15 +979,34 @@ async function fetchLineupMatchesSummary(supabase, round, year) {
       "is_on_field",
       "head_image",
       "body_image",
+      "model_projection",
     ].join(","),
     (query) => query.eq("round", round).gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("match_date", { ascending: true }).order("number", { ascending: true })
   );
+  const matchIds = [...new Set(rows.map((row) => text(row.match_id)).filter(Boolean))];
+  const playerIds = [...new Set(rows.map((row) => text(row.player_id)).filter(Boolean))];
+  const overrideByKey = new Map();
+  if (matchIds.length > 0 && playerIds.length > 0) {
+    const { data: overrides, error } = await supabase
+      .from("fantasy_projection_overrides")
+      .select("match_id,player_id,projection_override_points")
+      .in("match_id", matchIds)
+      .in("player_id", playerIds);
+    if (!error) {
+      for (const row of overrides ?? []) {
+        const delta = toNum(row.projection_override_points);
+        if (delta != null) overrideByKey.set(`${row.match_id ?? ""}:${row.player_id ?? ""}`, delta);
+      }
+    }
+  }
   const byMatch = new Map();
   for (const row of rows) {
     const matchId = text(row.match_id);
     if (!matchId) continue;
     const group = byMatch.get(matchId) ?? { base: row, players: [] };
     const number = toNum(row.number);
+    const modelProjection = toNum(row.model_projection);
+    const projectionDelta = overrideByKey.get(`${row.match_id ?? ""}:${row.player_id ?? ""}`) ?? 0;
     group.players.push({
       matchId,
       team: text(row.team),
@@ -1002,7 +1021,11 @@ async function fetchLineupMatchesSummary(supabase, round, year) {
       isOnField: booleanValue(row.is_on_field),
       headImage: nullableText(row.head_image),
       bodyImage: nullableText(row.body_image),
-      fantasyProjection: null,
+      fantasyProjection: isZeroProjectionPosition(row.position)
+        ? 0
+        : modelProjection == null
+          ? null
+          : modelProjection + projectionDelta,
       side: nominalSide(number),
       sideSource: "nominal",
     });

@@ -29,5 +29,5 @@ create index if not exists lineups_page_summary_updated_at_idx
   on summary.lineups_page_summary (updated_at desc);
 
 grant usage on schema summary to anon, authenticated, service_role;
-grant select on table summary.lineups_page_summary to anon, authenticated;
+revoke select on table summary.lineups_page_summary from anon, authenticated;
 grant select, insert, update, delete on table summary.lineups_page_summary to service_role;

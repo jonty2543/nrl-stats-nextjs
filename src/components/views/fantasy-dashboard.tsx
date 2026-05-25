@@ -1018,6 +1018,9 @@ function resolveFantasyProjectionForLineups(
     return (
       lineupsProjections.projectionByPlayerId.get(player.id) ??
       lineupsProjections.projectionByPlayerName.get(playerNameKey) ??
+      coachProjection ??
+      player.projectedAvg ??
+      player.avgPoints ??
       null
     )
   }
@@ -1030,6 +1033,7 @@ function resolveFantasyProjectionForLineups(
       : null) ??
     coachProjection ??
     player.projectedAvg ??
+    player.avgPoints ??
     0
   )
 }
@@ -3745,7 +3749,7 @@ export function FantasyDashboard({
       )
       const pricedAt = player.pricedAt
       const originChance = originChancePlayerNames.has(normaliseProjectionPlayerName(player.name))
-      const projection = player.isBye || originChance ? null : rawProjection
+      const projection = player.isBye ? 0 : rawProjection
       const value = projection != null && pricedAt != null ? projection - pricedAt : null
       const lineupRole =
         lineupsProjections?.roleByPlayerId.get(player.id) ??
@@ -4898,14 +4902,14 @@ export function FantasyDashboard({
                   {
                     key: "projection",
                     label: "Proj",
-                    value: formatTableNumber(row.projection),
+                    value: formatTableNumber(row.projection, 0),
                     valueClassName: "text-nrl-text",
                     locked: true,
                   },
                   {
                     key: "value",
                     label: "Value",
-                    value: formatSignedTableNumber(row.value),
+                    value: formatSignedTableNumber(row.value, 0),
                     valueClassName: getFantasyValueClass(row.value),
                     locked: true,
                   },
@@ -5162,14 +5166,14 @@ export function FantasyDashboard({
                       <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : "inline-block"}>
                           <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
-                          {formatTableNumber(row.projection)}
+                          {formatTableNumber(row.projection, 0)}
                           </span>
                         </span>
                       </td>
                       <td className={`w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${hasFantasyPlotAccess ? getFantasyValueClass(row.value) : "text-nrl-text"}`}>
                         <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("value")}`}>
                           <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
-                          {formatSignedTableNumber(row.value)}
+                          {formatSignedTableNumber(row.value, 0)}
                           </span>
                         </span>
                       </td>

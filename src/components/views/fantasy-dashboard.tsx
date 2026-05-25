@@ -5594,7 +5594,7 @@ export function FantasyDashboard({
                   </div>
                 </div>
                 <div className={analysisLocked ? "select-none" : undefined}>
-                  <div className="mb-5 grid grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
+                  <div className="mx-auto mb-5 grid w-full grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
                     {selectedProjectionBand ? (
                       <ProjectionBandMetricCard
                         label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}

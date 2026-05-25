@@ -674,7 +674,7 @@ function buildFallbackFantasyPlayersFromStats(rowsByName: Map<string, PlayerStat
       avgPoints: averageNumbers(fantasyScores),
       projectedAvg: null,
       gamesPlayed: rows.length,
-      totalPoints: fantasyScores.reduce((sum, value) => sum + (value ?? 0), 0),
+      totalPoints: fantasyScores.reduce<number>((sum, value) => sum + (value ?? 0), 0),
       tog: null,
       be: null,
       pricedAt: null,

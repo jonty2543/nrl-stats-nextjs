@@ -2495,6 +2495,7 @@ function MetricCard({
   mobileTight = false,
   center = false,
   prominentValue = false,
+  alignWithRangeMetric = false,
 }: {
   label: string
   value: string
@@ -2504,9 +2505,10 @@ function MetricCard({
   mobileTight?: boolean
   center?: boolean
   prominentValue?: boolean
+  alignWithRangeMetric?: boolean
 }) {
   const valueSizeClass = prominentValue
-    ? "mt-1 text-[1.35rem] leading-none tracking-tight sm:text-[1.7rem]"
+    ? `${alignWithRangeMetric ? "mt-[2.15rem] sm:mt-[2.25rem]" : "mt-1"} text-[1.35rem] leading-none tracking-tight sm:text-[1.7rem]`
     : compact
       ? mobileTight
         ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none"
@@ -5486,6 +5488,7 @@ export function FantasyDashboard({
                       blurValue={analysisLocked}
                       center
                       prominentValue
+                      alignWithRangeMetric={Boolean(selectedProjectionBand)}
                     />
                   </div>
                   <div className="relative mx-auto w-full max-w-[43rem]">

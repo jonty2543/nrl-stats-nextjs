@@ -304,6 +304,7 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
 ]
 const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin"
 const FANTASY_DASHBOARD_STATE_STORAGE_KEY = "fantasy-dashboard-ui-state-v1"
+const FANTASY_DASHBOARD_STATE_TTL_MS = 30 * 60 * 1000
 const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
 const PRO_PRICE_LABEL = "$5/month"
 const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
@@ -523,7 +524,13 @@ function parseFantasyDashboardPersistedState(raw: string | null): FantasyDashboa
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>
-    return parsed && typeof parsed === "object" ? parsed : null
+    if (!parsed || typeof parsed !== "object") return null
+
+    const updatedAt = typeof parsed.updatedAt === "number" ? parsed.updatedAt : null
+    if (!updatedAt || Date.now() - updatedAt > FANTASY_DASHBOARD_STATE_TTL_MS) return null
+
+    const state = parsed.state
+    return state && typeof state === "object" ? state as FantasyDashboardPersistedState : null
   } catch {
     return null
   }
@@ -2963,9 +2970,11 @@ export function FantasyDashboard({
     if (!showOwnedCards) return
     let saved: FantasyDashboardPersistedState | null = null
     try {
+      window.localStorage.removeItem(FANTASY_DASHBOARD_STATE_STORAGE_KEY)
       saved = parseFantasyDashboardPersistedState(
-        window.localStorage.getItem(FANTASY_DASHBOARD_STATE_STORAGE_KEY)
+        window.sessionStorage.getItem(FANTASY_DASHBOARD_STATE_STORAGE_KEY)
       )
+      if (!saved) window.sessionStorage.removeItem(FANTASY_DASHBOARD_STATE_STORAGE_KEY)
     } catch {
       saved = null
     }
@@ -3020,7 +3029,10 @@ export function FantasyDashboard({
       fantasyTemplateMode,
     }
     try {
-      window.localStorage.setItem(FANTASY_DASHBOARD_STATE_STORAGE_KEY, JSON.stringify(state))
+      window.sessionStorage.setItem(
+        FANTASY_DASHBOARD_STATE_STORAGE_KEY,
+        JSON.stringify({ state, updatedAt: Date.now() })
+      )
     } catch {
       // Ignore dashboard state storage failures.
     }
@@ -3830,8 +3842,12 @@ export function FantasyDashboard({
           ...player,
           cost: precomputedRow.price ?? player.cost,
           ownedBy: precomputedRow.ownedBy ?? player.ownedBy,
-          positionLabel: precomputedRow.position ?? player.positionLabel,
-          positionLabels: precomputedRow.position ? [precomputedRow.position] : player.positionLabels,
+          positionLabel: player.positionLabel || precomputedRow.position || "POS",
+          positionLabels: player.positionLabels.length > 0
+            ? player.positionLabels
+            : precomputedRow.position
+              ? [precomputedRow.position]
+              : player.positionLabels,
           pricedAt: precomputedRow.pricedAt ?? player.pricedAt,
           be: precomputedRow.breakeven ?? player.be,
           gamesPlayed: precomputedRow.gamesPlayed ?? player.gamesPlayed,

@@ -1,9 +1,9 @@
--- nrl schema: precomputed fantasy dashboard player-card values
+-- summary schema: precomputed fantasy dashboard player-card values
 -- Run in Supabase SQL editor, then populate from the fantasy/player-stats pipeline.
 
-create schema if not exists nrl;
+create schema if not exists summary;
 
-create table if not exists nrl.fantasy_player_card_summary (
+create table if not exists summary.fantasy_player_card_summary (
   player_id integer primary key,
   player text not null,
   local_name text,
@@ -27,13 +27,14 @@ create table if not exists nrl.fantasy_player_card_summary (
 );
 
 create index if not exists fantasy_player_card_summary_player_idx
-  on nrl.fantasy_player_card_summary (player);
+  on summary.fantasy_player_card_summary (player);
 
 create index if not exists fantasy_player_card_summary_position_idx
-  on nrl.fantasy_player_card_summary (position);
+  on summary.fantasy_player_card_summary (position);
 
 create index if not exists fantasy_player_card_summary_updated_at_idx
-  on nrl.fantasy_player_card_summary (updated_at desc);
+  on summary.fantasy_player_card_summary (updated_at desc);
 
-grant usage on schema nrl to service_role;
-grant select, insert, update, delete on table nrl.fantasy_player_card_summary to service_role;
+grant usage on schema summary to anon, authenticated, service_role;
+grant select on table summary.fantasy_player_card_summary to anon, authenticated;
+grant select, insert, update, delete on table summary.fantasy_player_card_summary to service_role;

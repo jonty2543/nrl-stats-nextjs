@@ -17,6 +17,7 @@ import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchAvailableYears,
   fetchCasualtyWardForPlayer,
+  fetchFantasyPlayerCardSummaries,
   fetchFantasyPlayerStatsForYears,
   fetchOriginChances,
   fetchPlayerImages,
@@ -91,7 +92,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, projectionSigmas, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot, originChances] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, projectionSigmas, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot, originChances, precomputedAllPlayersRows] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     withPlayerPageContextTimeout("lineup projections", fetchLineupsProjectionsByPlayerId(), emptyLineupsProjectionSnapshot(), PLAYER_PAGE_LINEUPS_TIMEOUT_MS),
@@ -102,6 +103,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
     withPlayerPageContextTimeout("team logos", fetchTeamLogos(), {}),
     withPlayerPageContextTimeout("ownership baseline", fetchLatestFantasyOwnershipBaselineSnapshot(), null),
     withPlayerPageContextTimeout("Origin chances", fetchOriginChances(), []),
+    withPlayerPageContextTimeout("fantasy player card summaries", fetchFantasyPlayerCardSummaries(), []),
   ])
 
   const selectedPlayer = fantasyPlayers.find(
@@ -111,6 +113,9 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
   if (!selectedPlayer) {
     notFound()
   }
+  const selectedPrecomputedRow = precomputedAllPlayersRows.find((row) =>
+    row.playerId === selectedPlayer.id || fantasyPlayerSlug(row.player) === decodeURIComponent(playerSlug)
+  ) ?? null
 
   const unlockedYears = canAccessLoginSeason
     ? availableYears
@@ -167,6 +172,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
         availableYears={unlockedYears}
         defaultYears={initialPlayerStatsYears}
         initialPlayerStats={initialPlayerStats}
+        precomputedAllPlayersRows={selectedPrecomputedRow ? [selectedPrecomputedRow] : []}
         canAccessLoginSeason={canAccessLoginSeason}
         canBypassPlotGate={canBypassPlotGate}
         draw2026Data={draw2026Data}
@@ -174,7 +180,6 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
         teamLogos={teamLogos}
         initialSelectedFantasyName={selectedPlayer.name}
         showOwnedCards={false}
-        preloadSelectedPlayerAllYears
         showPlayerComments
         playerRouteBasePath="/dashboard/fantasy"
         ownershipBaselineSnapshot={ownershipBaselineSnapshot}

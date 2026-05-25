@@ -3257,7 +3257,7 @@ export function FantasyDashboard({
       void loadTeammateLookupRows(nextYears)
       return
     }
-    const selectedPlayerStatsName = preloadSelectedPlayerAllYears ? selectedFantasyName : undefined
+    const selectedPlayerStatsName = showPlayerDetails && selectedFantasyName ? selectedFantasyName : undefined
     setIsLoadingStats(true)
     try {
       const res = await fetch(playerStatsApiUrl(nextYears, selectedPlayerStatsName))
@@ -3285,6 +3285,7 @@ export function FantasyDashboard({
     preloadSelectedPlayerAllYears,
     selectedFantasyName,
     selectedPlayerAllYearsKey,
+    showPlayerDetails,
   ])
 
   const selectedFantasyPlayer = useMemo(
@@ -3930,6 +3931,7 @@ export function FantasyDashboard({
       : null,
     [allPlayersTableRows, selectedFantasyPlayer]
   )
+  const selectedDisplayFantasyPlayer = selectedAllPlayersTableRow?.player ?? selectedFantasyPlayer
 
   const fantasyAnalyticsPoints = useMemo<FantasyAnalyticsPoint[]>(
     () =>
@@ -4164,13 +4166,15 @@ export function FantasyDashboard({
 
   const selectedOwnershipDelta = useMemo(
     () =>
-      selectedFantasyPlayer
+      selectedAllPlayersTableRow?.weeklyChange ??
+      (selectedFantasyPlayer
         ? (ownershipDeltaByPlayerId.get(selectedFantasyPlayer.id) ?? null)
-        : null,
-    [ownershipDeltaByPlayerId, selectedFantasyPlayer]
+        : null),
+    [ownershipDeltaByPlayerId, selectedAllPlayersTableRow, selectedFantasyPlayer]
   )
   const selectedAdjustedProjection = useMemo(
     () => {
+      if (selectedAllPlayersTableRow?.projection != null) return selectedAllPlayersTableRow.projection
       if (!selectedFantasyPlayer) return null
       const projectionTeam = selectedLineupRole?.team ?? fantasyCardImage?.team ?? latestLocalTeam ?? null
       const officialProjectionRoundPlays = teamPlaysInRound(draw2026Data, selectedFantasyCoachRound, projectionTeam)
@@ -4182,7 +4186,7 @@ export function FantasyDashboard({
         officialProjectionRoundPlays === false
       )
     },
-    [casualtyWardPlayerNames, draw2026Data, fantasyCardImage, latestLocalTeam, lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyCoachRound, selectedFantasyPlayer, selectedLineupRole]
+    [casualtyWardPlayerNames, draw2026Data, fantasyCardImage, latestLocalTeam, lineupsProjections, selectedAllPlayersTableRow, selectedFantasyCoachMetrics, selectedFantasyCoachRound, selectedFantasyPlayer, selectedLineupRole]
   )
   const selectedProjectionBand = useMemo(
     () => {
@@ -4207,14 +4211,17 @@ export function FantasyDashboard({
     [fantasyProjectionSigmas, lineupsProjections?.source, selectedAdjustedProjection, selectedLineupRole]
   )
   const selectedAdjustedBreakEven = useMemo(
-    () => applyFantasyBreakEvenOffset(
-      selectedFantasyCoachMetrics.breakEven ?? selectedFantasyPlayer?.be ?? null,
-      selectedFantasyPlayer?.id ?? null,
-      selectedFantasyCoachRound,
-    ),
-    [selectedFantasyCoachMetrics.breakEven, selectedFantasyPlayer, selectedFantasyCoachRound]
+    () =>
+      selectedAllPlayersTableRow?.breakeven ??
+      applyFantasyBreakEvenOffset(
+        selectedFantasyCoachMetrics.breakEven ?? selectedFantasyPlayer?.be ?? null,
+        selectedFantasyPlayer?.id ?? null,
+        selectedFantasyCoachRound,
+      ),
+    [selectedAllPlayersTableRow, selectedFantasyCoachMetrics.breakEven, selectedFantasyPlayer, selectedFantasyCoachRound]
   )
   const localPpm = useMemo(() => {
+    if (selectedAllPlayersTableRow?.ppm != null) return selectedAllPlayersTableRow.ppm
     const scores = playerRowsForYear
       .map((row) => toFiniteNumber(row.Fantasy))
       .filter((value): value is number => value !== null)
@@ -4227,7 +4234,7 @@ export function FantasyDashboard({
     const totalMins = mins.reduce((sum, value) => sum + value, 0)
     if (totalMins <= 0) return null
     return totalScore / totalMins
-  }, [playerRowsForYear])
+  }, [playerRowsForYear, selectedAllPlayersTableRow])
 
   const playerSearchOptions = useMemo(
     () => (fantasyPlayers.length > 0 ? fantasyPlayers.map((player) => player.name) : allPlayersTableRows.map((row) => row.player.name)),
@@ -5346,10 +5353,10 @@ export function FantasyDashboard({
                           {selectedFantasyPlayer.name}
                         </h2>
                         <span className="rounded-md bg-nrl-accent/15 px-1 py-0.5 text-[8px] font-semibold text-nrl-accent sm:px-2 sm:text-xs">
-                          {formatPrice(selectedFantasyPlayer.cost)}
+                          {formatPrice(selectedDisplayFantasyPlayer?.cost ?? null)}
                         </span>
                         <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1 py-0.5 text-[8px] text-nrl-muted sm:px-2 sm:text-xs">
-                          {selectedFantasyPlayer.positionLabel}
+                          {selectedDisplayFantasyPlayer?.positionLabel ?? selectedFantasyPlayer.positionLabel}
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1.5 text-[8px] sm:gap-3 sm:text-xs">
@@ -5379,13 +5386,13 @@ export function FantasyDashboard({
 
                     <div className={`grid items-start gap-3 pt-4 sm:gap-4 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5 ${fantasyCardPlayerName ? "grid-cols-[minmax(0,1fr)_10.75rem] min-[420px]:grid-cols-[minmax(0,1fr)_11.5rem] sm:grid-cols-[minmax(0,1fr)_14.25rem]" : "grid-cols-1"}`}>
                       <div className="grid w-full auto-rows-fr grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
-                        <MetricCard compact mobileTight label="Price" value={formatPrice(selectedFantasyPlayer.cost)} />
+                        <MetricCard compact mobileTight label="Price" value={formatPrice(selectedDisplayFantasyPlayer?.cost ?? null)} />
                         <MetricCard compact mobileTight label="PPM" value={formatNumber(localPpm, 2)} />
                         <MetricCard
                           compact
                           mobileTight
                           label="Own %"
-                          value={formatPercent(selectedFantasyPlayer.ownedBy)}
+                          value={formatPercent(selectedDisplayFantasyPlayer?.ownedBy ?? null)}
                           sublabel={
                             ownershipBaselineSnapshot
                               ? `Weekly ${formatOwnershipDelta(selectedOwnershipDelta)}`
@@ -5396,7 +5403,7 @@ export function FantasyDashboard({
                           compact
                           mobileTight
                           label="Priced At"
-                          value={formatNumber(selectedFantasyPlayer.pricedAt, 0)}
+                          value={formatNumber(selectedDisplayFantasyPlayer?.pricedAt ?? null, 0)}
                         />
                       </div>
 

@@ -10,7 +10,7 @@ import {
   fetchLatestFantasyOwnershipBaselineSnapshot,
   fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
-import { fetchAvailableYears, fetchOriginChances, fetchPlayerImages, fetchPlayerStats, fetchRelevantCasualtyWardOutCandidates } from "@/lib/supabase/queries"
+import { fetchAvailableYears, fetchFantasyPlayerCardSummaries, fetchOriginChances, fetchPlayerImages, fetchRelevantCasualtyWardOutCandidates } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 const FANTASY_PAGE_CONTEXT_TIMEOUT_MS = 8000
@@ -58,7 +58,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticleLinks, relevantOutCandidates, draw2026Data, originChances, initialAllPlayerStats] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticleLinks, relevantOutCandidates, draw2026Data, originChances, precomputedAllPlayersRows] = await Promise.all([
     withFantasyPageContextTimeout("fantasy players", fetchFantasyPlayersSnapshot(), []),
     withFantasyPageContextTimeout("fantasy coach players", fetchFantasyCoachPlayersSnapshot(), []),
     withFantasyPageContextTimeout("lineup projections", fetchLineupsProjectionsByPlayerId(), {
@@ -77,7 +77,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
     withFantasyPageContextTimeout("relevant casualty candidates", fetchRelevantCasualtyWardOutCandidates(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("2026 draw", loadDraw2026Data(), null, FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("Origin chances", fetchOriginChances(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
-    fetchPlayerStats(["2026"]),
+    withFantasyPageContextTimeout("fantasy player card summaries", fetchFantasyPlayerCardSummaries(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
   ])
   const fantasyProjectionArticle = approvedArticleLinks.find((article) => {
     const title = normaliseArticleTitle(article.title)
@@ -98,7 +98,8 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
       availableYears={unlockedYears}
       defaultYears={initialYears}
       initialPlayerStats={[]}
-      initialAllPlayerStats={initialAllPlayerStats}
+      initialAllPlayerStats={[]}
+      precomputedAllPlayersRows={precomputedAllPlayersRows}
       canAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
       initialShowFantasyAnalytics={params.analytics === "1"}

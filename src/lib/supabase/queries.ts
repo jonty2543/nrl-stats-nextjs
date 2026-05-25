@@ -72,6 +72,29 @@ export interface OriginChanceRecord {
   updatedAt: string | null;
 }
 
+export interface FantasyPlayerCardSummary {
+  playerId: number | null;
+  player: string;
+  localName: string | null;
+  team: string | null;
+  position: string | null;
+  weeklyChange: number | null;
+  pricedAt: number | null;
+  avg2026: number | null;
+  last3: number | null;
+  ppm: number | null;
+  projection: number | null;
+  value: number | null;
+  breakeven: number | null;
+  gamesPlayed: number | null;
+  price: number | null;
+  ownedBy: number | null;
+  nextMajorByeRound: number | null;
+  playsNextMajorBye: boolean | null;
+  originChance: boolean | null;
+  updatedAt: string | null;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -174,6 +197,17 @@ function isRelevantOutsTeamMatch(left: string | null | undefined, right: string 
 
 function toNullableString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function toNullableBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+  if (typeof value === "string" && value.trim()) {
+    const normalised = value.trim().toLowerCase();
+    if (["true", "t", "yes", "y", "1"].includes(normalised)) return true;
+    if (["false", "f", "no", "n", "0"].includes(normalised)) return false;
+  }
+  return null;
 }
 
 function normalisePositionText(value: string | null | undefined): string {
@@ -1712,6 +1746,76 @@ export async function fetchOriginChances(): Promise<OriginChanceRecord[]> {
     createdAt: toNullableString(row.created_at),
     updatedAt: toNullableString(row.updated_at),
   }));
+}
+
+function mapFantasyPlayerCardSummary(row: Record<string, unknown>): FantasyPlayerCardSummary | null {
+  const player = toNullableString(row.player) ?? toNullableString(row.name);
+  if (!player) return null;
+
+  return {
+    playerId:
+      toFiniteNumber(row.player_id) ??
+      toFiniteNumber(row.fantasy_player_id) ??
+      toFiniteNumber(row.nrl_fantasy_id),
+    player,
+    localName: toNullableString(row.local_name) ?? toNullableString(row.stats_player),
+    team: toNullableString(row.team),
+    position: toNullableString(row.position) ?? toNullableString(row.position_label),
+    weeklyChange: toFiniteNumber(row.weekly_change) ?? toFiniteNumber(row.ownership_delta),
+    pricedAt: toFiniteNumber(row.priced_at),
+    avg2026: toFiniteNumber(row.avg_2026) ?? toFiniteNumber(row.average_2026),
+    last3: toFiniteNumber(row.last3) ?? toFiniteNumber(row.last_3) ?? toFiniteNumber(row.l3_average),
+    ppm: toFiniteNumber(row.ppm),
+    projection: toFiniteNumber(row.projection),
+    value: toFiniteNumber(row.value),
+    breakeven: toFiniteNumber(row.breakeven) ?? toFiniteNumber(row.be),
+    gamesPlayed: toFiniteNumber(row.games_played) ?? toFiniteNumber(row.games),
+    price: toFiniteNumber(row.price) ?? toFiniteNumber(row.cost),
+    ownedBy: toFiniteNumber(row.owned_by) ?? toFiniteNumber(row.own_percent),
+    nextMajorByeRound: toFiniteNumber(row.next_major_bye_round),
+    playsNextMajorBye: toNullableBoolean(row.plays_next_major_bye),
+    originChance: toNullableBoolean(row.origin_chance),
+    updatedAt: toNullableString(row.updated_at),
+  };
+}
+
+async function fetchFantasyPlayerCardSummariesFromSupabase(): Promise<FantasyPlayerCardSummary[]> {
+  const supabase = createServerSupabaseClient("nrl");
+  const { data, error } = await supabase
+    .from("fantasy_player_card_summary")
+    .select("*")
+    .order("player", { ascending: true })
+    .limit(1000);
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+      return [];
+    }
+    throw new Error(`Supabase fetch nrl.fantasy_player_card_summary: ${error.message}`);
+  }
+
+  return ((data ?? []) as Record<string, unknown>[])
+    .map(mapFantasyPlayerCardSummary)
+    .filter((row): row is FantasyPlayerCardSummary => row !== null);
+}
+
+const fetchFantasyPlayerCardSummariesCached = unstable_cache(
+  async (): Promise<FantasyPlayerCardSummary[]> => fetchFantasyPlayerCardSummariesFromSupabase(),
+  ["fantasy-player-card-summary-v1"],
+  { revalidate: 300 }
+);
+
+export async function fetchFantasyPlayerCardSummaries(): Promise<FantasyPlayerCardSummary[]> {
+  try {
+    if (process.env.NODE_ENV !== "production") {
+      return await fetchFantasyPlayerCardSummariesFromSupabase();
+    }
+    return await fetchFantasyPlayerCardSummariesCached();
+  } catch (error) {
+    console.warn("Unable to fetch fantasy player card summaries; falling back to derived rows.", error);
+    return [];
+  }
 }
 
 export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord[]> {

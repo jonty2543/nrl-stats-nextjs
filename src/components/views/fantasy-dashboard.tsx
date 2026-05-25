@@ -16,7 +16,7 @@ import type {
   LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import { PLAYER_STATS } from "@/lib/data/constants"
-import type { CasualtyWardRecord, OriginChanceRecord, PlayerImageRecord } from "@/lib/supabase/queries"
+import type { CasualtyWardRecord, FantasyPlayerCardSummary, OriginChanceRecord, PlayerImageRecord } from "@/lib/supabase/queries"
 import {
   applyFantasyBreakEvenOffset,
   FANTASY_POSITION_MAP,
@@ -110,6 +110,7 @@ interface FantasyDashboardProps {
   defaultYears: string[]
   initialPlayerStats: PlayerStat[]
   initialAllPlayerStats?: PlayerStat[]
+  precomputedAllPlayersRows?: FantasyPlayerCardSummary[]
   playerImages?: PlayerImageRecord[]
   teamLogos?: Record<string, string>
   preloadedPlayerAllYears?: boolean
@@ -216,6 +217,8 @@ interface FantasyAnalyticsPoint {
   position: string
   positionLabels: string[]
   tagFilters: string[]
+  imageUrl: string | null
+  team: string | null
   price: number | null
   pricedAt: number | null
   avg2026: number | null
@@ -242,6 +245,9 @@ interface GlobalStatVsFantasyPoint {
   position: string
   positionLabels: string[]
   tagFilters: string[]
+  imageUrl: string | null
+  team: string | null
+  price: number | null
   statValue: number
   fantasyAvg: number
 }
@@ -1922,22 +1928,51 @@ function FantasyAnalyticsScatterPlot({
         </g>
       </svg>
       {selectedPoint ? (
-        <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-2 text-xs text-nrl-text">
-          <div className="font-semibold">{selectedPoint.name}</div>
-          <div className="mt-1 grid gap-1 text-[10px] text-nrl-muted sm:grid-cols-3">
-            <span>Priced At: {formatTableNumber(selectedPoint.pricedAt, 0)}</span>
-            <span>
-              {metricOption.label}: {formatTableNumber(getFantasyAnalyticsMetricValue(selectedPoint, metric), 1)}
-            </span>
-            <span>
-              Delta: {(() => {
-                const metricValue = getFantasyAnalyticsMetricValue(selectedPoint, metric) ?? 0
-                const delta = metricValue - (selectedPoint.pricedAt ?? 0)
-                return `${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`
-              })()}
-            </span>
+        <Link
+          href={`/dashboard/fantasy/${fantasyPlayerSlug(selectedPoint.name)}?from=fantasy`}
+          className="group flex items-center gap-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-xs text-nrl-text transition-colors hover:border-nrl-accent/60 hover:bg-nrl-panel"
+        >
+          <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-xs font-semibold text-nrl-muted">
+            {selectedPoint.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={selectedPoint.imageUrl} alt="" className="h-full w-full object-cover object-top" loading="lazy" />
+            ) : (
+              <span>{getPlayerInitials(selectedPoint.name)}</span>
+            )}
           </div>
-        </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold text-nrl-text group-hover:text-white">{selectedPoint.name}</div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">
+                  <span>{selectedPoint.position}</span>
+                  {selectedPoint.team ? <span className="text-nrl-border">/</span> : null}
+                  {selectedPoint.team ? <span>{selectedPoint.team}</span> : null}
+                </div>
+              </div>
+              <div className="shrink-0 rounded-md border border-nrl-border bg-nrl-panel px-2 py-1 text-right">
+                <div className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Price</div>
+                <div className="text-xs font-bold text-nrl-text">{formatPrice(selectedPoint.price)}</div>
+              </div>
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              {(() => {
+                const metricValue = getFantasyAnalyticsMetricValue(selectedPoint, metric)
+                const delta = (metricValue ?? 0) - (selectedPoint.pricedAt ?? 0)
+                return [
+                  { label: "Priced At", value: formatTableNumber(selectedPoint.pricedAt, 0), className: "text-nrl-text" },
+                  { label: metricOption.shortLabel, value: formatTableNumber(metricValue, 1), className: "text-nrl-text" },
+                  { label: "Delta", value: `${delta >= 0 ? "+" : ""}${formatTableNumber(delta, 1)}`, className: getFantasyValueClass(delta) },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-md border border-nrl-border/80 bg-nrl-panel px-2 py-1">
+                    <div className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">{item.label}</div>
+                    <div className={`mt-0.5 text-xs font-bold ${item.className}`}>{item.value}</div>
+                  </div>
+                ))
+              })()}
+            </div>
+          </div>
+        </Link>
       ) : (
         <div className="text-[10px] text-nrl-muted">
           {zoom > 1 ? "Drag the plot to pan. Hover or tap a point to inspect the player." : "Hover or tap a point to inspect the player."}
@@ -2188,13 +2223,46 @@ function GlobalStatVsFantasyScatterPlot({
         ))}
       </div>
       {selectedPoint ? (
-        <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-2 text-xs text-nrl-text">
-          <div className="font-semibold">{selectedPoint.name}</div>
-          <div className="mt-1 grid gap-1 text-[10px] text-nrl-muted sm:grid-cols-2">
-            <span>{selectedOption.label}: {formatTableNumber(selectedPoint.statValue, 1)}</span>
-            <span>Fantasy Avg: {formatTableNumber(selectedPoint.fantasyAvg, 1)}</span>
+        <Link
+          href={`/dashboard/fantasy/${fantasyPlayerSlug(selectedPoint.name)}?from=fantasy`}
+          className="group flex items-center gap-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-xs text-nrl-text transition-colors hover:border-nrl-accent/60 hover:bg-nrl-panel"
+        >
+          <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-xs font-semibold text-nrl-muted">
+            {selectedPoint.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={selectedPoint.imageUrl} alt="" className="h-full w-full object-cover object-top" loading="lazy" />
+            ) : (
+              <span>{getPlayerInitials(selectedPoint.name)}</span>
+            )}
           </div>
-        </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold text-nrl-text group-hover:text-white">{selectedPoint.name}</div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide text-nrl-muted">
+                  <span>{selectedPoint.position}</span>
+                  {selectedPoint.team ? <span className="text-nrl-border">/</span> : null}
+                  {selectedPoint.team ? <span>{selectedPoint.team}</span> : null}
+                </div>
+              </div>
+              <div className="shrink-0 rounded-md border border-nrl-border bg-nrl-panel px-2 py-1 text-right">
+                <div className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Price</div>
+                <div className="text-xs font-bold text-nrl-text">{formatPrice(selectedPoint.price)}</div>
+              </div>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              {[
+                { label: selectedOption.label, value: formatTableNumber(selectedPoint.statValue, 1) },
+                { label: "Fantasy Avg", value: formatTableNumber(selectedPoint.fantasyAvg, 1) },
+              ].map((item) => (
+                <div key={item.label} className="rounded-md border border-nrl-border/80 bg-nrl-panel px-2 py-1">
+                  <div className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">{item.label}</div>
+                  <div className="mt-0.5 text-xs font-bold text-nrl-text">{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Link>
       ) : (
         <div className="text-[10px] text-nrl-muted">
           {zoom > 1 ? "Drag the plot to pan. Hover or tap a player to inspect their 2026 averages." : "Hover or tap a player to inspect their 2026 averages."}
@@ -2772,6 +2840,7 @@ export function FantasyDashboard({
   defaultYears,
   initialPlayerStats,
   initialAllPlayerStats = [],
+  precomputedAllPlayersRows = [],
   playerImages = [],
   teamLogos = {},
   preloadedPlayerAllYears = false,
@@ -2863,6 +2932,18 @@ export function FantasyDashboard({
     () => hasAllPlayerStatsForYear(allData, ALL_PLAYERS_STATS_YEAR) ? allData : allPlayersStatsData,
     [allData, allPlayersStatsData]
   )
+  const hasPrecomputedAllPlayersRows = precomputedAllPlayersRows.length > 0
+  const precomputedAllPlayersRowsByKey = useMemo(() => {
+    const map = new Map<string, FantasyPlayerCardSummary>()
+    for (const row of precomputedAllPlayersRows) {
+      if (row.playerId !== null) map.set(`id:${row.playerId}`, row)
+      const playerKey = normaliseName(row.player)
+      if (playerKey) map.set(`name:${playerKey}`, row)
+      const localNameKey = row.localName ? normaliseName(row.localName) : ""
+      if (localNameKey) map.set(`name:${localNameKey}`, row)
+    }
+    return map
+  }, [precomputedAllPlayersRows])
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
   const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata)
@@ -3397,6 +3478,7 @@ export function FantasyDashboard({
   useEffect(() => {
     if (
       !showOwnedCards ||
+      hasPrecomputedAllPlayersRows ||
       allPlayersStatsLoadFailed ||
       hasRequestedAllPlayersStats ||
       hasAllPlayerStatsForYear(allPlayersStatsSourceData, ALL_PLAYERS_STATS_YEAR)
@@ -3431,7 +3513,7 @@ export function FantasyDashboard({
     return () => {
       cancelled = true
     }
-  }, [allPlayersStatsLoadFailed, allPlayersStatsSourceData, hasRequestedAllPlayersStats, showOwnedCards])
+  }, [allPlayersStatsLoadFailed, allPlayersStatsSourceData, hasPrecomputedAllPlayersRows, hasRequestedAllPlayersStats, showOwnedCards])
 
   useEffect(() => {
     if (hasLoginAccess) return
@@ -3717,7 +3799,7 @@ export function FantasyDashboard({
     [casualtyWardRows, relevantOutCandidates, relevantOuts]
   )
 
-  const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
+ const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
     const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
     const localNames = Array.from(new Set(rows2026.map(playerStatName).filter(Boolean))).sort()
     const rowsByName = new Map<string, PlayerStat[]>()
@@ -3738,20 +3820,38 @@ export function FantasyDashboard({
     )
 
     return sourceFantasyPlayers.map((player) => {
-      const localName = findLocalPlayerMatch(player.name, localNames)
+      const precomputedRow =
+        precomputedAllPlayersRowsByKey.get(`id:${player.id}`) ??
+        precomputedAllPlayersRowsByKey.get(`name:${normaliseName(player.name)}`) ??
+        null
+      const displayPlayer = precomputedRow
+        ? {
+          ...player,
+          cost: precomputedRow.price ?? player.cost,
+          ownedBy: precomputedRow.ownedBy ?? player.ownedBy,
+          positionLabel: precomputedRow.position ?? player.positionLabel,
+          positionLabels: precomputedRow.position ? [precomputedRow.position] : player.positionLabels,
+          pricedAt: precomputedRow.pricedAt ?? player.pricedAt,
+          be: precomputedRow.breakeven ?? player.be,
+          gamesPlayed: precomputedRow.gamesPlayed ?? player.gamesPlayed,
+        }
+        : player
+      const localName = precomputedRow?.localName ?? findLocalPlayerMatch(player.name, localNames)
       const playerRows = localName ? rowsByName.get(localName) ?? [] : []
       const fantasyScores = playerRows.map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
       const minutes = playerRows.map((row) => playerStatMetricValue(row, "Mins Played", "mins_played"))
       const totalFantasy = fantasyScores.reduce<number>((sum, value) => sum + (value ?? 0), 0)
       const totalMinutes = minutes.reduce<number>((sum, value) => sum + (value ?? 0), 0)
-      const recentScores = [...playerRows]
-        .sort(sortRoundsDesc)
-        .slice(0, 3)
-        .map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
+      const recentScores = precomputedRow?.last3 != null
+        ? []
+        : [...playerRows]
+          .sort(sortRoundsDesc)
+          .slice(0, 3)
+          .map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
       const coachPlayer = fantasyCoachPlayers.find((entry) => entry.id === player.id)
       const coachMetrics = getFantasyCoachRoundMetrics(coachPlayer)
       const ownershipDelta = ownershipDeltaByPlayerId.get(player.id) ?? null
-      const teamHint = playerRows.length > 0 ? primaryTeamForRows(playerRows) : null
+      const teamHint = precomputedRow?.team ?? (playerRows.length > 0 ? primaryTeamForRows(playerRows) : null)
       const imageRow =
         resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
         resolvePlayerImage(player.name, teamHint, playerImages)
@@ -3769,13 +3869,14 @@ export function FantasyDashboard({
         casualtyWardPlayerNames,
         officialProjectionRoundPlays === false
       )
-      const pricedAt = player.pricedAt
+      const pricedAt = displayPlayer.pricedAt
       const originChance = originChancePlayerNames.has(normaliseProjectionPlayerName(player.name))
-      const projection = rawProjection
-      const value = roundedFantasyValue(projection, pricedAt)
-      const nextMajorByeRound = getNextMajorByeRound(projectionRound)
+      const projection = precomputedRow?.projection ?? rawProjection
+      const effectivePricedAt = precomputedRow?.pricedAt ?? pricedAt
+      const value = precomputedRow?.value ?? roundedFantasyValue(projection, effectivePricedAt)
+      const nextMajorByeRound = precomputedRow?.nextMajorByeRound ?? getNextMajorByeRound(projectionRound)
       const byeTeam = projectionTeam
-      const playsNextMajorBye = teamPlaysInRound(draw2026Data, nextMajorByeRound, byeTeam)
+      const playsNextMajorBye = precomputedRow?.playsNextMajorBye ?? teamPlaysInRound(draw2026Data, nextMajorByeRound, byeTeam)
       const majorByeRoundTags = MAJOR_BYE_ROUNDS
         .filter((round) => nextMajorByeRound != null && round >= nextMajorByeRound)
         .map((round) => ({
@@ -3798,17 +3899,17 @@ export function FantasyDashboard({
           : []
 
       return {
-        player,
+        player: displayPlayer,
         localName,
         imageRow,
-        avg2026: averageNumbers(fantasyScores) ?? player.avgPoints,
-        last3: averageNumbers(recentScores),
-        ppm: totalMinutes > 0 ? totalFantasy / totalMinutes : null,
-        weeklyChange: ownershipDelta,
-        pricedAt,
+        avg2026: precomputedRow?.avg2026 ?? averageNumbers(fantasyScores) ?? player.avgPoints,
+        last3: precomputedRow?.last3 ?? averageNumbers(recentScores),
+        ppm: precomputedRow?.ppm ?? (totalMinutes > 0 ? totalFantasy / totalMinutes : null),
+        weeklyChange: precomputedRow?.weeklyChange ?? ownershipDelta,
+        pricedAt: effectivePricedAt,
         projection,
         value,
-        breakeven: applyFantasyBreakEvenOffset(
+        breakeven: precomputedRow?.breakeven ?? applyFantasyBreakEvenOffset(
           coachMetrics.breakEven ?? player.be ?? null,
           player.id,
           projectionRound
@@ -3817,11 +3918,11 @@ export function FantasyDashboard({
         majorByeRoundTags,
         nextMajorByeRound,
         playsNextMajorBye,
-        originChance,
-        gamesPlayed: playerRows.length || player.gamesPlayed || 0,
+        originChance: precomputedRow?.originChance ?? originChance,
+        gamesPlayed: Math.trunc(precomputedRow?.gamesPlayed ?? (playerRows.length || player.gamesPlayed || 0)),
       }
     })
-  }, [allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, relevantOutCandidates])
+  }, [allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
 
   const selectedAllPlayersTableRow = useMemo(
     () => selectedFantasyPlayer
@@ -3837,6 +3938,8 @@ export function FantasyDashboard({
         position: row.player.positionLabel,
         positionLabels: row.player.positionLabels,
         tagFilters: getFantasyFilterTags(row),
+        imageUrl: getPlayerThumbnailUrl(row.imageRow),
+        team: row.imageRow?.team ?? null,
         price: row.player.cost,
         pricedAt: row.player.pricedAt,
         avg2026: row.avg2026,
@@ -3903,6 +4006,9 @@ export function FantasyDashboard({
         position: row.player.positionLabel,
         positionLabels: row.player.positionLabels,
         tagFilters: getFantasyFilterTags(row),
+        imageUrl: getPlayerThumbnailUrl(row.imageRow),
+        team: row.imageRow?.team ?? null,
+        price: row.player.cost,
         statValue,
         fantasyAvg: row.avg2026,
       }]
@@ -3932,6 +4038,9 @@ export function FantasyDashboard({
       filteredGlobalStatVsFantasyPoints.map((point) => point.fantasyAvg)
     )
   }, [filteredGlobalStatVsFantasyPoints])
+  const hasRawStatsForGlobalStatVsFantasy = allPlayersStatsSourceData.some(
+    (row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR
+  )
 
   const fantasyTemplateRows = useMemo<Array<{ label: string; slots: FantasyTemplateSlot[] }>>(() => {
     const usedPlayerIds = new Set<number>()
@@ -4631,6 +4740,7 @@ export function FantasyDashboard({
                   <div className="grid h-[280px] place-items-center text-xs text-nrl-muted">No projection data available.</div>
                 )}
               </div>
+              {hasRawStatsForGlobalStatVsFantasy ? (
               <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 [contain-intrinsic-size:410px] [content-visibility:auto]">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -4679,6 +4789,7 @@ export function FantasyDashboard({
                   <div className="grid h-[220px] place-items-center text-xs text-nrl-muted">No 2026 stat averages available.</div>
                 )}
               </div>
+              ) : null}
               </>
               </div>
               <div className="order-1 min-w-0 xl:order-2 xl:sticky xl:top-3 xl:self-start">

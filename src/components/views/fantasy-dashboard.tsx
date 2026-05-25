@@ -1056,6 +1056,11 @@ function formatSignedTableNumber(value: number | null, digits = 1): string {
   return value > 0 ? `+${formatted}` : formatted
 }
 
+function roundedFantasyValue(projection: number | null, pricedAt: number | null): number | null {
+  if (projection == null || pricedAt == null) return null
+  return Math.round(projection) - Math.round(pricedAt)
+}
+
 function formatPercent(value: number | null): string {
   if (value === null) return "-"
   return `${value.toFixed(2)}%`
@@ -3767,7 +3772,7 @@ export function FantasyDashboard({
       const pricedAt = player.pricedAt
       const originChance = originChancePlayerNames.has(normaliseProjectionPlayerName(player.name))
       const projection = rawProjection
-      const value = projection != null && pricedAt != null ? projection - pricedAt : null
+      const value = roundedFantasyValue(projection, pricedAt)
       const nextMajorByeRound = getNextMajorByeRound(projectionRound)
       const byeTeam = projectionTeam
       const playsNextMajorBye = teamPlaysInRound(draw2026Data, nextMajorByeRound, byeTeam)

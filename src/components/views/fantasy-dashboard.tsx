@@ -2495,7 +2495,6 @@ function MetricCard({
   mobileTight = false,
   center = false,
   prominentValue = false,
-  alignWithRangeMetric = false,
 }: {
   label: string
   value: string
@@ -2505,10 +2504,9 @@ function MetricCard({
   mobileTight?: boolean
   center?: boolean
   prominentValue?: boolean
-  alignWithRangeMetric?: boolean
 }) {
   const valueSizeClass = prominentValue
-    ? `${alignWithRangeMetric ? "mt-[2.15rem] sm:mt-[2.25rem]" : "mt-1"} text-[1.35rem] leading-none tracking-tight sm:text-[1.7rem]`
+    ? "text-[1.35rem] leading-none tracking-tight sm:text-[1.7rem]"
     : compact
       ? mobileTight
         ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none"
@@ -2528,7 +2526,7 @@ function MetricCard({
         {label}
       </div>
       <div
-        className={`${valueSizeClass} min-w-0 font-bold text-nrl-text ${center ? "text-center" : ""} ${blurValue ? "select-none blur-[8px] opacity-60" : ""
+        className={`${prominentValue ? "flex min-h-[3.7rem] items-center justify-center sm:min-h-[4rem]" : ""} ${valueSizeClass} min-w-0 font-bold text-nrl-text ${center ? "text-center" : ""} ${blurValue ? "select-none blur-[8px] opacity-60" : ""
           }`}
         aria-hidden={blurValue || undefined}
       >
@@ -2561,7 +2559,7 @@ function ProjectionBandMetricCard({
       <div className="min-h-[1.8em] text-center text-[7px] font-semibold uppercase leading-[1.15] tracking-wide text-nrl-muted">
         {label}
       </div>
-      <div className={`mt-1 grid grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-end gap-1 ${blurValue ? "select-none blur-[8px] opacity-60" : ""}`}>
+      <div className={`grid min-h-[3.7rem] grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-center gap-1 sm:min-h-[4rem] ${blurValue ? "select-none blur-[8px] opacity-60" : ""}`}>
         <div className="min-w-0 text-left" aria-hidden={blurValue || undefined}>
           <div className="text-[8px] font-semibold uppercase tracking-wide text-red-300/80">Lower 5%</div>
           <div className="mt-0.5 text-sm font-bold leading-none text-red-300 sm:text-base">{lower}</div>
@@ -5488,7 +5486,6 @@ export function FantasyDashboard({
                       blurValue={analysisLocked}
                       center
                       prominentValue
-                      alignWithRangeMetric={Boolean(selectedProjectionBand)}
                     />
                   </div>
                   <div className="relative mx-auto w-full max-w-[43rem]">

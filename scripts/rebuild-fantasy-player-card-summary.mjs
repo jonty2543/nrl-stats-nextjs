@@ -121,6 +121,7 @@ function parseFantasyPlayer(raw) {
     ? raw.positions.map(toInt).filter((value) => value != null)
     : [];
   const priceHistory = extractHistory(raw.stats?.prices, true);
+  const scoreHistory = extractHistory(raw.stats?.scores);
   const cost = latestHistoryValue(priceHistory, toInt(raw.cost));
 
   return {
@@ -132,8 +133,11 @@ function parseFantasyPlayer(raw) {
     avgPoints: toNum(raw.stats?.avg_points),
     projectedAvg: toNum(raw.stats?.proj_avg),
     gamesPlayed: toInt(raw.stats?.games_played),
+    totalPoints: toNum(raw.stats?.total_points),
+    tog: toNum(raw.stats?.tog),
     be: toInt(raw.stats?.be) ?? toInt(raw.stats?.break_even) ?? toInt(raw.stats?.breakeven),
     pricedAt: cost != null ? cost / 12725 : null,
+    scoreHistory,
   };
 }
 
@@ -232,10 +236,21 @@ function findLocalRows(playerName, statsByName) {
   const last = fantasyParts[fantasyParts.length - 1];
   if (!first || !last) return [];
 
+  const candidates = [];
   for (const [key, rows] of statsByName.entries()) {
     const parts = key.split(" ").filter(Boolean);
-    if (parts[0] === first && parts[parts.length - 1] === last) return rows;
+    if (parts[parts.length - 1] === last) candidates.push({ key, rows, parts });
   }
+  const initialMatches = candidates.filter(({ parts }) => parts[0]?.[0] && parts[0][0] === first[0]);
+  if (initialMatches.length === 1) return initialMatches[0].rows;
+
+  const prefixMatches = candidates.filter(({ parts }) => {
+    const candidateFirst = parts[0] ?? "";
+    return candidateFirst.startsWith(first) || first.startsWith(candidateFirst);
+  });
+  if (prefixMatches.length === 1) return prefixMatches[0].rows;
+  if (candidates.length === 1) return candidates[0].rows;
+
   return [];
 }
 
@@ -243,6 +258,19 @@ function average(values) {
   const valid = values.filter((value) => value != null && Number.isFinite(value));
   if (valid.length === 0) return null;
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
+
+function lastFantasyScoresFromHistory(scoreHistory, count) {
+  return Object.entries(scoreHistory ?? {})
+    .map(([round, value]) => ({ round: Number.parseInt(round, 10), value }))
+    .filter((row) => Number.isFinite(row.round) && valueIsFinite(row.value))
+    .sort((a, b) => b.round - a.round)
+    .slice(0, count)
+    .map((row) => row.value);
+}
+
+function valueIsFinite(value) {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function primaryTeam(rows) {
@@ -467,7 +495,9 @@ async function main() {
     const minutes = localRows.map((row) => row.minutes);
     const totalFantasy = fantasyScores.reduce((sum, value) => sum + (value ?? 0), 0);
     const totalMinutes = minutes.reduce((sum, value) => sum + (value ?? 0), 0);
-    const last3 = average(latestRows.slice(0, 3).map((row) => row.fantasy));
+    const last3 =
+      average(latestRows.slice(0, 3).map((row) => row.fantasy)) ??
+      average(lastFantasyScoresFromHistory(player.scoreHistory, 3));
     const nameKey = normaliseProjectionPlayerName(player.name);
     const coach = coachPlayersById.get(player.id);
     const role = lineups.roleByPlayerId.get(player.id) ?? lineups.roleByPlayerName.get(nameKey) ?? null;
@@ -496,7 +526,11 @@ async function main() {
       priced_at: player.pricedAt,
       avg_2026: average(fantasyScores) ?? player.avgPoints,
       last3,
-      ppm: totalMinutes > 0 ? totalFantasy / totalMinutes : null,
+      ppm: totalMinutes > 0
+        ? totalFantasy / totalMinutes
+        : player.tog != null && player.tog > 0 && player.totalPoints != null
+          ? player.totalPoints / player.tog
+          : null,
       projection,
       value: projection == null || player.pricedAt == null ? null : Math.round(projection) - Math.round(player.pricedAt),
       breakeven,

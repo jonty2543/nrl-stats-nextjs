@@ -2629,7 +2629,7 @@ function ProjectionBandMetricCard({
       </div>
       <div className={`grid min-h-[2.75rem] grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-center gap-1 sm:min-h-[3rem] ${blurValue ? "select-none blur-[8px] opacity-60" : ""}`}>
         <div className="min-w-0 text-left" aria-hidden={blurValue || undefined}>
-          <div className="text-[8px] font-semibold uppercase tracking-wide text-red-300/80">Lower 5%</div>
+          <div className="text-[8px] font-semibold uppercase tracking-wide text-red-300/80">LOW 5%</div>
           <div className="mt-0.5 text-sm font-bold leading-none text-red-300 sm:text-base">{lower}</div>
         </div>
         <div className="min-w-0 text-center" aria-hidden={blurValue || undefined}>
@@ -2638,7 +2638,7 @@ function ProjectionBandMetricCard({
           </div>
         </div>
         <div className="min-w-0 text-right" aria-hidden={blurValue || undefined}>
-          <div className="text-[8px] font-semibold uppercase tracking-wide text-emerald-300/80">Upper 5%</div>
+          <div className="text-[8px] font-semibold uppercase tracking-wide text-emerald-300/80">HIGH 5%</div>
           <div className="mt-0.5 text-sm font-bold leading-none text-emerald-300 sm:text-base">{upper}</div>
         </div>
       </div>

@@ -2904,7 +2904,7 @@ export function FantasyDashboard({
     null
   )
   const [allPlayersSort, setAllPlayersSort] = useState<{ column: AllPlayersSortKey; direction: AllPlayersSortDirection }>({
-    column: "weeklyChange",
+    column: "last3",
     direction: "desc",
   })
   const [allPlayersView, setAllPlayersView] = useState<"cards" | "table">("cards")
@@ -5049,6 +5049,13 @@ export function FantasyDashboard({
                     locked: false,
                   },
                   {
+                    key: "last3",
+                    label: "L3",
+                    value: formatTableNumber(row.last3),
+                    valueClassName: "text-nrl-text",
+                    locked: false,
+                  },
+                  {
                     key: "pricedAt",
                     label: "Priced At",
                     value: formatTableNumber(row.pricedAt, 0),
@@ -5094,13 +5101,6 @@ export function FantasyDashboard({
                     key: "avg2026",
                     label: "Avg",
                     value: formatTableNumber(row.avg2026),
-                    valueClassName: "text-nrl-text",
-                    locked: false,
-                  },
-                  {
-                    key: "last3",
-                    label: "L3",
-                    value: formatTableNumber(row.last3),
                     valueClassName: "text-nrl-text",
                     locked: false,
                   },

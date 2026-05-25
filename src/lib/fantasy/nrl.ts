@@ -499,7 +499,7 @@ export interface LineupsProjectionSnapshot {
   round: number | null
   source: FantasyProjectionSource
   lineupsAvailable: boolean
-  /** Maps NRL player_id → model projection. Missing players default to 0 at call sites. */
+  /** Maps NRL player_id → model projection. */
   projectionByPlayerId: Map<number, number>
   /** Maps normalised player name → model projection fallback. */
   projectionByPlayerName: Map<string, number>

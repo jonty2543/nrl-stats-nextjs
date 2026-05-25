@@ -1802,7 +1802,7 @@ async function fetchFantasyPlayerCardSummariesFromSupabase(): Promise<FantasyPla
 
 const fetchFantasyPlayerCardSummariesCached = unstable_cache(
   async (): Promise<FantasyPlayerCardSummary[]> => fetchFantasyPlayerCardSummariesFromSupabase(),
-  ["fantasy-player-card-summary-v1"],
+  ["fantasy-player-card-summary-v2"],
   { revalidate: 300 }
 );
 

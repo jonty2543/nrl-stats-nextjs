@@ -7,6 +7,7 @@ import { isAccessibleSeason } from "@/lib/access/season-access"
 import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
+  fetchFantasyProjectionSigmas,
   fetchLatestFantasyOwnershipBaselineSnapshot,
   fetchLineupsProjectionsByPlayerId,
   type LineupsProjectionSnapshot,
@@ -90,10 +91,11 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot, originChances] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, projectionSigmas, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot, originChances] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     withPlayerPageContextTimeout("lineup projections", fetchLineupsProjectionsByPlayerId(), emptyLineupsProjectionSnapshot(), PLAYER_PAGE_LINEUPS_TIMEOUT_MS),
+    withPlayerPageContextTimeout("fantasy projection sigmas", fetchFantasyProjectionSigmas(), []),
     fetchAvailableYears(),
     withPlayerPageContextTimeout("2026 draw", loadDraw2026Data(), null),
     withPlayerPageContextTimeout("player images", fetchPlayerImages(), []),
@@ -161,6 +163,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
         fantasyPlayers={fantasyPlayers}
         fantasyCoachPlayers={fantasyCoachPlayers}
         lineupsProjections={lineupsProjections}
+        fantasyProjectionSigmas={projectionSigmas}
         availableYears={unlockedYears}
         defaultYears={initialPlayerStatsYears}
         initialPlayerStats={initialPlayerStats}

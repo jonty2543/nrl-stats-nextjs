@@ -485,6 +485,15 @@ export interface LineupsPlayerRole {
 
 export type FantasyProjectionSource = "lineups" | "lineup_unaware" | "none"
 
+export interface FantasyProjectionSigma {
+  position: string
+  fallbackPosition: string | null
+  projection: string | null
+  residualSigma: number | null
+  normalLow95Delta: number | null
+  normalHigh95Delta: number | null
+}
+
 export interface LineupsProjectionSnapshot {
   /** Parsed integer round number, e.g. 9. Null when lineups table is empty. */
   round: number | null
@@ -509,6 +518,38 @@ function emptyLineupsProjectionSnapshot(source: FantasyProjectionSource = "none"
     projectionByPlayerName: new Map(),
     roleByPlayerId: new Map(),
     roleByPlayerName: new Map(),
+  }
+}
+
+export async function fetchFantasyProjectionSigmas(): Promise<FantasyProjectionSigma[]> {
+  try {
+    const supabase = createServerSupabaseClient()
+    const { data, error } = await supabase
+      .schema("nrl")
+      .from("fantasy_projection_sigmas")
+      .select("position, fallback_position, projection, residual_sigma, normal_low_95_delta, normal_high_95_delta")
+      .eq("calibration_key", "final_post_opponent_position_v1")
+
+    if (error || !data) return []
+
+    return data
+      .map((row) => {
+        const position = typeof row.position === "string" ? row.position : null
+        if (!position) return null
+
+        return {
+          position,
+          fallbackPosition: typeof row.fallback_position === "string" ? row.fallback_position : null,
+          projection: typeof row.projection === "string" ? row.projection : null,
+          residualSigma: toFiniteProjectionNumber(row.residual_sigma),
+          normalLow95Delta: toFiniteProjectionNumber(row.normal_low_95_delta),
+          normalHigh95Delta: toFiniteProjectionNumber(row.normal_high_95_delta),
+        }
+      })
+      .filter((row): row is FantasyProjectionSigma => row !== null)
+  } catch (error) {
+    console.warn("Unable to fetch fantasy projection sigmas.", error)
+    return []
   }
 }
 

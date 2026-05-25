@@ -12,6 +12,7 @@ import type {
   FantasyCoachPlayerSnapshot,
   FantasyOwnershipBaselineSnapshot,
   FantasyPlayerSnapshot,
+  FantasyProjectionSigma,
   LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import { PLAYER_STATS } from "@/lib/data/constants"
@@ -99,6 +100,7 @@ interface FantasyDashboardProps {
   fantasyPlayers: FantasyPlayerSnapshot[]
   fantasyCoachPlayers?: FantasyCoachPlayerSnapshot[]
   lineupsProjections?: LineupsProjectionSnapshot
+  fantasyProjectionSigmas?: FantasyProjectionSigma[]
   ownershipBaselineSnapshot?: FantasyOwnershipBaselineSnapshot | null
   casualtyWardRows?: CasualtyWardRecord[]
   relevantOuts?: CasualtyWardRecord[]
@@ -128,7 +130,7 @@ type TeammateMode = "With" | "Without"
 type GameLogSortDirection = "asc" | "desc"
 type AllPlayersSortDirection = "asc" | "desc"
 type FantasyAnalyticsMetric = "projection" | "last3" | "avg2026"
-type LockedPreviewPlot = "rolling" | "box" | "stat" | "heatmap" | "baseUpside"
+type LockedPreviewPlot = "rolling" | "projectionRange" | "box" | "stat" | "heatmap" | "baseUpside"
 type FantasyTemplateMode = "ownership" | "change"
 type AllPlayersSortKey =
   | "name"
@@ -178,6 +180,16 @@ interface FantasyBoxPlotRow {
   q3: number
   max: number
 }
+
+interface ProjectionDistributionData {
+  mean: number
+  sigma: number
+  lower: number
+  upper: number
+}
+
+const PROJECTION_RANGE_TAIL_PERCENT = 5
+const PROJECTION_RANGE_Z_SCORE = 1.6448536269514722
 
 interface AllPlayersTableRow {
   player: FantasyPlayerSnapshot
@@ -330,6 +342,12 @@ const STATIC_LOCKED_PREVIEW_BOX_ROWS: FantasyBoxPlotRow[] = [
   { label: "2026", values: [41, 52, 59, 69, 83], min: 41, q1: 53, median: 62, q3: 74, max: 83 },
   { label: "2025", values: [32, 44, 51, 61, 76], min: 32, q1: 45, median: 55, q3: 66, max: 76 },
 ]
+const STATIC_LOCKED_PREVIEW_PROJECTION_RANGE: ProjectionDistributionData = {
+  mean: 48,
+  sigma: 14,
+  lower: 48 - 14 * PROJECTION_RANGE_Z_SCORE,
+  upper: 48 + 14 * PROJECTION_RANGE_Z_SCORE,
+}
 const STATIC_LOCKED_PREVIEW_BASE_UPSIDE_ROWS = {
   maxFantasy: 90,
   rows: [
@@ -349,7 +367,7 @@ const STATIC_LOCKED_PREVIEW_OPPONENT_HEATMAP = [
   { opponent: "MAN", average: 53, games: 3 },
   { opponent: "CRO", average: 76, games: 4 },
 ]
-const STATIC_LOCKED_PREVIEW_PLOTS: LockedPreviewPlot[] = ["rolling", "box", "stat", "heatmap", "baseUpside"]
+const STATIC_LOCKED_PREVIEW_PLOTS: LockedPreviewPlot[] = ["rolling", "projectionRange", "box", "stat", "heatmap", "baseUpside"]
 const TRADE_SCREENSHOT_SLOTS: Array<{ key: TradeScreenshotSlot; label: string; hint: string }> = [
   { key: "starters", label: "Starters", hint: "Selected 13 / field view" },
   { key: "bench", label: "Bench", hint: "Interchange + emergencies" },
@@ -615,6 +633,59 @@ function playerStatMetricValue(row: PlayerStat, key: string, rawKey?: string): n
   return toFiniteNumber(row[key]) ?? (rawKey ? toFiniteNumber(row[rawKey]) : null)
 }
 
+function stableFallbackFantasyPlayerId(name: string): number {
+  let hash = 0
+  for (let index = 0; index < name.length; index += 1) {
+    hash = Math.imul(31, hash) + name.charCodeAt(index)
+  }
+  return -Math.abs(hash || name.length)
+}
+
+function fantasyPositionCodesFromLocalPosition(position: string | null | undefined): number[] {
+  const group = relevantOutsPositionGroup(position)
+  if (group === "hooker") return [1]
+  if (group === "middle") return [2]
+  if (group === "second-row") return [3]
+  if (group === "halves") return [4]
+  if (group === "centre") return [5]
+  if (group === "fullback" || group === "wing") return [6]
+  return []
+}
+
+function buildFallbackFantasyPlayersFromStats(rowsByName: Map<string, PlayerStat[]>): FantasyPlayerSnapshot[] {
+  return Array.from(rowsByName.entries()).map(([name, rows]) => {
+    const latestRow = [...rows].sort(sortRoundsDesc)[0] ?? null
+    const positions = fantasyPositionCodesFromLocalPosition(latestRow?.Position)
+    const positionLabels = positions.map((code) => FANTASY_POSITION_MAP[code] ?? `POS ${code}`)
+    const fantasyScores = rows.map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
+    return {
+      id: stableFallbackFantasyPlayerId(name),
+      firstName: name.split(/\s+/)[0] ?? name,
+      lastName: name.split(/\s+/).slice(1).join(" "),
+      name,
+      squadId: null,
+      cost: null,
+      status: null,
+      positions,
+      positionLabels,
+      positionLabel: positionLabels.join("/") || "POS",
+      ownedBy: null,
+      selections: null,
+      avgPoints: averageNumbers(fantasyScores),
+      projectedAvg: null,
+      gamesPlayed: rows.length,
+      totalPoints: fantasyScores.reduce((sum, value) => sum + (value ?? 0), 0),
+      tog: null,
+      be: null,
+      pricedAt: null,
+      isBye: false,
+      locked: false,
+      priceHistory: {},
+      scoreHistory: {},
+    }
+  })
+}
+
 function hasAllPlayerStatsForYear(rows: PlayerStat[], year: string): boolean {
   const names = new Set(
     rows
@@ -744,6 +815,63 @@ function normalisePositionForComparison(value: string | null | undefined): strin
     .replace(/2nd/g, "second")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
+}
+
+function projectionSigmaPositionKey(value: string | null | undefined): string | null {
+  const normalised = normalisePositionForComparison(value)
+  if (!normalised) return null
+  if (["global", "__global__"].includes(normalised)) return "__global__"
+  if (["bench", "interchange", "reserve", "replacement"].includes(normalised)) return "bench"
+  if (["fullback", "fb"].includes(normalised)) return "fullback"
+  if (["wing", "winger", "w"].includes(normalised)) return "winger"
+  if (["centre", "center", "ctr"].includes(normalised)) return "centre"
+  if (["halfback", "five eighth", "five eighths", "5 8", "58", "half", "hlf"].includes(normalised)) return "half"
+  if (["hooker", "dummy half", "hok"].includes(normalised)) return "hooker"
+  if (["lock", "prop", "front row", "front rower", "middle", "mid"].includes(normalised)) return "middle"
+  if (["second row", "second rower", "back row", "back rower", "2rf", "edg", "edge"].includes(normalised)) return "edge"
+  return normalised
+}
+
+function resolveProjectionSigma(
+  position: string | null | undefined,
+  sigmas: FantasyProjectionSigma[]
+): FantasyProjectionSigma | null {
+  if (sigmas.length === 0) return null
+  const positionKey = projectionSigmaPositionKey(position)
+  const globalSigma = sigmas.find((row) => projectionSigmaPositionKey(row.position) === "__global__") ?? null
+  if (!positionKey) return globalSigma
+  return sigmas.find((row) => projectionSigmaPositionKey(row.position) === positionKey) ?? globalSigma
+}
+
+function resolveProjectionBand(
+  projection: number | null,
+  position: string | null | undefined,
+  sigmas: FantasyProjectionSigma[]
+): { lower: number; upper: number } | null {
+  const distribution = resolveProjectionDistribution(projection, position, sigmas)
+  return distribution ? { lower: distribution.lower, upper: distribution.upper } : null
+}
+
+function resolveProjectionDistribution(
+  projection: number | null,
+  position: string | null | undefined,
+  sigmas: FantasyProjectionSigma[]
+): ProjectionDistributionData | null {
+  if (projection == null) return null
+  const sigma = resolveProjectionSigma(position, sigmas)
+  if (!sigma) return null
+  const residualSigma =
+    sigma.residualSigma ??
+    (sigma.normalHigh95Delta != null && sigma.normalLow95Delta != null
+      ? (sigma.normalHigh95Delta - sigma.normalLow95Delta) / 3.92
+      : null)
+  if (residualSigma == null || residualSigma <= 0) return null
+  return {
+    mean: projection,
+    sigma: residualSigma,
+    lower: projection - residualSigma * PROJECTION_RANGE_Z_SCORE,
+    upper: projection + residualSigma * PROJECTION_RANGE_Z_SCORE,
+  }
 }
 
 function relevantOutsPositionGroup(value: string | null | undefined): string | null {
@@ -2355,6 +2483,8 @@ function MetricCard({
   compact = false,
   blurValue = false,
   mobileTight = false,
+  center = false,
+  prominentValue = false,
 }: {
   label: string
   value: string
@@ -2362,32 +2492,259 @@ function MetricCard({
   compact?: boolean
   blurValue?: boolean
   mobileTight?: boolean
+  center?: boolean
+  prominentValue?: boolean
 }) {
+  const valueSizeClass = prominentValue
+    ? "mt-1 text-[1.35rem] leading-none tracking-tight sm:text-[1.7rem]"
+    : compact
+      ? mobileTight
+        ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none"
+        : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none"
+      : "mt-1 text-xl"
+
   return (
     <div
-      className={`rounded-lg border border-nrl-border bg-nrl-panel-2 ${compact
+      className={`h-full rounded-lg border border-nrl-border bg-nrl-panel-2 ${compact
         ? mobileTight
           ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
           : "px-2 py-3 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5"
         : "px-3 py-2"
         }`}
     >
-      <div className={`${compact ? mobileTight ? "min-h-[1.8em] text-[6.5px] leading-[1.15] sm:text-[7px]" : "min-h-[1.8em] text-[7px] leading-[1.15]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted`}>
+      <div className={`${compact ? mobileTight ? "min-h-[1.8em] text-[6.5px] leading-[1.15] sm:text-[7px]" : "min-h-[1.8em] text-[7px] leading-[1.15]" : "text-[9px]"} font-semibold uppercase tracking-wide text-nrl-muted ${center ? "text-center" : ""}`}>
         {label}
       </div>
       <div
-        className={`${compact ? mobileTight ? "mt-1 text-[1.12rem] leading-tight tracking-tight sm:mt-1 sm:text-[1.5rem] sm:leading-none" : "mt-1 text-[1.15rem] leading-tight tracking-tight sm:text-[1.5rem] sm:leading-none" : "mt-1 text-xl"} min-w-0 font-bold text-nrl-text ${blurValue ? "select-none blur-[8px] opacity-60" : ""
+        className={`${valueSizeClass} min-w-0 font-bold text-nrl-text ${center ? "text-center" : ""} ${blurValue ? "select-none blur-[8px] opacity-60" : ""
           }`}
         aria-hidden={blurValue || undefined}
       >
         {value}
       </div>
       {sublabel ? (
-        <div className={`${compact ? mobileTight ? "mt-1 text-[7px] leading-tight sm:mt-1 sm:text-[8px]" : "mt-1 text-[8px] leading-tight" : "mt-0.5 text-[10px]"} text-nrl-muted`}>
+        <div className={`${compact ? mobileTight ? "mt-1 text-[7px] leading-tight sm:mt-1 sm:text-[8px]" : "mt-1 text-[8px] leading-tight" : "mt-0.5 text-[10px]"} text-nrl-muted ${center ? "text-center" : ""}`}>
           {sublabel}
         </div>
       ) : null}
     </div>
+  )
+}
+
+function ProjectionBandMetricCard({
+  label,
+  projection,
+  lower,
+  upper,
+  blurValue = false,
+}: {
+  label: string
+  projection: string
+  lower: string
+  upper: string
+  blurValue?: boolean
+}) {
+  return (
+    <div className="h-full rounded-lg border border-nrl-border bg-nrl-panel-2 px-2 py-3 sm:px-2.5 sm:py-4 xl:px-2.5 xl:py-2.5">
+      <div className="min-h-[1.8em] text-center text-[7px] font-semibold uppercase leading-[1.15] tracking-wide text-nrl-muted">
+        {label}
+      </div>
+      <div className={`mt-1 grid grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-end gap-1 ${blurValue ? "select-none blur-[8px] opacity-60" : ""}`}>
+        <div className="min-w-0 text-left" aria-hidden={blurValue || undefined}>
+          <div className="text-[8px] font-semibold uppercase tracking-wide text-red-300/80">Lower 5%</div>
+          <div className="mt-0.5 text-sm font-bold leading-none text-red-300 sm:text-base">{lower}</div>
+        </div>
+        <div className="min-w-0 text-center" aria-hidden={blurValue || undefined}>
+          <div className="text-[1.35rem] font-bold leading-none tracking-tight text-nrl-text sm:text-[1.7rem]">
+            {projection}
+          </div>
+        </div>
+        <div className="min-w-0 text-right" aria-hidden={blurValue || undefined}>
+          <div className="text-[8px] font-semibold uppercase tracking-wide text-emerald-300/80">Upper 5%</div>
+          <div className="mt-0.5 text-sm font-bold leading-none text-emerald-300 sm:text-base">{upper}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProjectionRangePlot({
+  data,
+}: {
+  data: ProjectionDistributionData
+}) {
+  const xMin = Math.floor(Math.min(data.mean - data.sigma * 3.5, data.lower - data.sigma * 0.35))
+  const xMax = Math.ceil(Math.max(data.mean + data.sigma * 3.5, data.upper + data.sigma * 0.35))
+  const width = 720
+  const height = 232
+  const padX = 44
+  const padTop = 36
+  const padBottom = 30
+  const plotWidth = width - padX * 2
+  const plotHeight = height - padTop - padBottom
+  const xScale = (value: number) => padX + ((value - xMin) / Math.max(1, xMax - xMin)) * plotWidth
+  const yScale = (value: number, maxValue: number) => padTop + plotHeight - (value / Math.max(maxValue, 0.0001)) * plotHeight
+  const relativeDensityAt = (value: number) => {
+    const z = (value - data.mean) / data.sigma
+    return Math.exp(-0.5 * z * z)
+  }
+  const normalCdf = (value: number) => {
+    const z = (value - data.mean) / (data.sigma * Math.SQRT2)
+    const sign = z < 0 ? -1 : 1
+    const absZ = Math.abs(z)
+    const t = 1 / (1 + 0.3275911 * absZ)
+    const erf =
+      sign *
+      (1 -
+        (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+          t *
+          Math.exp(-absZ * absZ))
+    return 0.5 * (1 + erf)
+  }
+  const barColor = (index: number, total: number) => {
+    const ratio = total <= 1 ? 0.5 : index / (total - 1)
+    const hue = 0 + ratio * 145
+    return `hsla(${hue.toFixed(0)}, 78%, 62%, 0.78)`
+  }
+  const binCount = 31
+  const binWidth = (xMax - xMin) / binCount
+  const bars = Array.from({ length: binCount }, (_, index) => {
+    const start = xMin + index * binWidth
+    const end = index === binCount - 1 ? xMax : start + binWidth
+    const mid = (start + end) / 2
+    const probability = Math.max(0, normalCdf(end) - normalCdf(start))
+    return { start, end, mid, probability }
+  })
+  const maxProbability = Math.max(...bars.map((bar) => bar.probability), 0.0001)
+  const ticks = [data.lower, data.mean, data.upper]
+  return (
+    <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+            Projection Range
+          </div>
+          <div className="text-[10px] text-nrl-muted">
+            Normal central 90% prediction range from residual sigma
+          </div>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Projection normal prediction range" className="h-[210px] w-full overflow-visible sm:h-[224px]">
+        <line x1={padX} x2={width - padX} y1={padTop + plotHeight} y2={padTop + plotHeight} stroke="rgba(154,164,191,0.45)" strokeWidth="1" />
+        {bars.map((bar, index) => {
+          const barX = xScale(bar.start) + 1
+          const barRight = xScale(bar.end) - 1
+          const barY = yScale(bar.probability, maxProbability)
+          const barHeight = padTop + plotHeight - barY
+          return (
+            <rect
+              key={`projection-range-bar-${index}`}
+              x={barX}
+              y={barY}
+              width={Math.max(1, barRight - barX)}
+              height={Math.max(1, barHeight)}
+              rx="2"
+              fill={barColor(index, bars.length)}
+              stroke="rgba(255,255,255,0.10)"
+              strokeWidth="0.8"
+            >
+              <title>
+                {`${bar.start.toFixed(0)}-${bar.end.toFixed(0)} pts: ${(bar.probability * 100).toFixed(1)}%`}
+              </title>
+            </rect>
+          )
+        })}
+        {ticks.map((tick) => (
+          <g key={`projection-range-tick-${tick}`}>
+            <line x1={xScale(tick)} x2={xScale(tick)} y1={padTop} y2={padTop + plotHeight} stroke="rgba(154,164,191,0.22)" strokeWidth="1" />
+            <text x={xScale(tick)} y={height - 12} textAnchor="middle" fill="rgba(154,164,191,0.92)" fontSize="11" fontWeight="600">
+              {formatNumber(tick, 0)}
+            </text>
+          </g>
+        ))}
+        <line x1={xScale(data.lower)} x2={xScale(data.lower)} y1={padTop + plotHeight} y2={yScale(relativeDensityAt(data.lower), 1)} stroke="rgba(252,165,165,0.95)" strokeWidth="2" />
+        <line x1={xScale(data.mean)} x2={xScale(data.mean)} y1={padTop + plotHeight} y2={padTop} stroke="rgba(255,255,255,0.95)" strokeWidth="2" />
+        <line x1={xScale(data.upper)} x2={xScale(data.upper)} y1={padTop + plotHeight} y2={yScale(relativeDensityAt(data.upper), 1)} stroke="rgba(110,231,183,0.95)" strokeWidth="2" />
+        <text x={xScale(data.lower)} y={padTop - 14} textAnchor="middle" fill="rgba(252,165,165,0.98)" fontSize="11" fontWeight="700">
+          Lower {PROJECTION_RANGE_TAIL_PERCENT}% {formatNumber(data.lower, 0)}
+        </text>
+        <text x={xScale(data.mean)} y={padTop - 20} textAnchor="middle" fill="rgba(255,255,255,0.98)" fontSize="11" fontWeight="700">
+          Projection {formatNumber(data.mean, 0)}
+        </text>
+        <text x={xScale(data.upper)} y={padTop - 14} textAnchor="middle" fill="rgba(110,231,183,0.98)" fontSize="11" fontWeight="700">
+          Upper {PROJECTION_RANGE_TAIL_PERCENT}% {formatNumber(data.upper, 0)}
+        </text>
+      </svg>
+    </div>
+  )
+}
+
+function ProjectionRangePreviewBars({ data }: { data: ProjectionDistributionData }) {
+  const xMin = Math.floor(data.mean - data.sigma * 3.4)
+  const xMax = Math.ceil(data.mean + data.sigma * 3.4)
+  const width = 360
+  const height = 150
+  const padX = 24
+  const padTop = 30
+  const padBottom = 22
+  const plotWidth = width - padX * 2
+  const plotHeight = height - padTop - padBottom
+  const xScale = (value: number) => padX + ((value - xMin) / Math.max(1, xMax - xMin)) * plotWidth
+  const yScale = (value: number, maxValue: number) => padTop + plotHeight - (value / Math.max(maxValue, 0.0001)) * plotHeight
+  const normalCdf = (value: number) => {
+    const z = (value - data.mean) / (data.sigma * Math.SQRT2)
+    const sign = z < 0 ? -1 : 1
+    const absZ = Math.abs(z)
+    const t = 1 / (1 + 0.3275911 * absZ)
+    const erf =
+      sign *
+      (1 -
+        (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+          t *
+          Math.exp(-absZ * absZ))
+    return 0.5 * (1 + erf)
+  }
+  const binCount = 25
+  const binWidth = (xMax - xMin) / binCount
+  const bars = Array.from({ length: binCount }, (_, index) => {
+    const start = xMin + index * binWidth
+    const end = index === binCount - 1 ? xMax : start + binWidth
+    return { start, end, probability: Math.max(0, normalCdf(end) - normalCdf(start)) }
+  })
+  const maxProbability = Math.max(...bars.map((bar) => bar.probability), 0.0001)
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full overflow-visible">
+      <line x1={padX} x2={width - padX} y1={padTop + plotHeight} y2={padTop + plotHeight} stroke="rgba(154,164,191,0.45)" strokeWidth="1" />
+      {bars.map((bar, index) => {
+        const hue = index / Math.max(1, bars.length - 1) * 145
+        const barX = xScale(bar.start) + 0.8
+        const barRight = xScale(bar.end) - 0.8
+        const barY = yScale(bar.probability, maxProbability)
+        return (
+          <rect
+            key={`projection-preview-bar-${index}`}
+            x={barX}
+            y={barY}
+            width={Math.max(1, barRight - barX)}
+            height={Math.max(1, padTop + plotHeight - barY)}
+            rx="1.5"
+            fill={`hsla(${hue.toFixed(0)}, 78%, 62%, 0.78)`}
+          />
+        )
+      })}
+      {[
+        { value: data.lower, label: `Lower ${formatNumber(data.lower, 0)}`, color: "rgba(252,165,165,0.98)" },
+        { value: data.mean, label: `Proj ${formatNumber(data.mean, 0)}`, color: "rgba(255,255,255,0.98)" },
+        { value: data.upper, label: `Upper ${formatNumber(data.upper, 0)}`, color: "rgba(110,231,183,0.98)" },
+      ].map((tick) => (
+        <g key={`projection-preview-tick-${tick.label}`}>
+          <line x1={xScale(tick.value)} x2={xScale(tick.value)} y1={padTop} y2={padTop + plotHeight} stroke={tick.color} strokeWidth="1.4" />
+          <text x={xScale(tick.value)} y={padTop - 9} textAnchor="middle" fill={tick.color} fontSize="8" fontWeight="700">
+            {tick.label}
+          </text>
+        </g>
+      ))}
+    </svg>
   )
 }
 
@@ -2400,6 +2757,7 @@ export function FantasyDashboard({
   relevantOutCandidates = [],
   originChances = [],
   lineupsProjections,
+  fantasyProjectionSigmas = [],
   availableYears,
   defaultYears,
   initialPlayerStats,
@@ -2447,6 +2805,7 @@ export function FantasyDashboard({
   const [minutesUnderFilter, setMinutesUnderFilter] = useState<string>("Any")
   const [showRollingAveragePlot, setShowRollingAveragePlot] = useState(false)
   const [selectedRollingAverageWindow, setSelectedRollingAverageWindow] = useState<number>(5)
+  const [showProjectionRangePlot, setShowProjectionRangePlot] = useState(false)
   const [showBaseUpsideBars, setShowBaseUpsideBars] = useState(false)
   const [showOpponentHeatmap, setShowOpponentHeatmap] = useState(false)
   const [showFantasyBoxPlot, setShowFantasyBoxPlot] = useState(false)
@@ -3344,11 +3703,6 @@ export function FantasyDashboard({
     const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
     const localNames = Array.from(new Set(rows2026.map(playerStatName).filter(Boolean))).sort()
     const rowsByName = new Map<string, PlayerStat[]>()
-    const namedLineupPlayers = new Set(lineupsProjections?.roleByPlayerName.keys() ?? [])
-    const fantasyPlayerByName = new Map(
-      fantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
-    )
-
     for (const row of rows2026) {
       const name = playerStatName(row)
       if (!name) continue
@@ -3357,7 +3711,15 @@ export function FantasyDashboard({
       rowsByName.set(name, rows)
     }
 
-    return fantasyPlayers.map((player) => {
+    const sourceFantasyPlayers = fantasyPlayers.length > 0
+      ? fantasyPlayers
+      : buildFallbackFantasyPlayersFromStats(rowsByName)
+    const namedLineupPlayers = new Set(lineupsProjections?.roleByPlayerName.keys() ?? [])
+    const fantasyPlayerByName = new Map(
+      sourceFantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
+    )
+
+    return sourceFantasyPlayers.map((player) => {
       const localName = findLocalPlayerMatch(player.name, localNames)
       const playerRows = localName ? rowsByName.get(localName) ?? [] : []
       const fantasyScores = playerRows.map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
@@ -3687,6 +4049,28 @@ export function FantasyDashboard({
     },
     [lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyPlayer]
   )
+  const selectedProjectionBand = useMemo(
+    () => {
+      if (lineupsProjections?.source === "lineups" && !selectedLineupRole) return null
+      return resolveProjectionBand(
+        selectedAdjustedProjection,
+        selectedLineupRole?.position,
+        fantasyProjectionSigmas
+      )
+    },
+    [fantasyProjectionSigmas, lineupsProjections?.source, selectedAdjustedProjection, selectedLineupRole]
+  )
+  const selectedProjectionDistribution = useMemo(
+    () => {
+      if (lineupsProjections?.source === "lineups" && !selectedLineupRole) return null
+      return resolveProjectionDistribution(
+        selectedAdjustedProjection,
+        selectedLineupRole?.position,
+        fantasyProjectionSigmas
+      )
+    },
+    [fantasyProjectionSigmas, lineupsProjections?.source, selectedAdjustedProjection, selectedLineupRole]
+  )
   const selectedAdjustedBreakEven = useMemo(
     () => applyFantasyBreakEvenOffset(
       selectedFantasyCoachMetrics.breakEven ?? selectedFantasyPlayer?.be ?? null,
@@ -3695,20 +4079,6 @@ export function FantasyDashboard({
     ),
     [selectedFantasyCoachMetrics.breakEven, selectedFantasyPlayer, selectedFantasyCoachRound]
   )
-  const selectedLineupPositionAverage = useMemo(() => {
-    const lineupPosition = selectedLineupRole?.position
-    if (!lineupPosition) return null
-    const targetPosition = normalisePositionForComparison(lineupPosition)
-    const positionRows = allData.filter(
-      (row) => normalisePositionForComparison(row.Position) === targetPosition
-    )
-    const scores = positionRows
-      .map((row) => toFiniteNumber(row.Fantasy))
-      .filter((value): value is number => value !== null)
-    if (scores.length === 0) return null
-    return scores.reduce((sum, value) => sum + value, 0) / scores.length
-  }, [allData, selectedLineupRole])
-
   const localPpm = useMemo(() => {
     const scores = playerRowsForYear
       .map((row) => toFiniteNumber(row.Fantasy))
@@ -3725,8 +4095,8 @@ export function FantasyDashboard({
   }, [playerRowsForYear])
 
   const playerSearchOptions = useMemo(
-    () => fantasyPlayers.map((player) => player.name),
-    [fantasyPlayers]
+    () => (fantasyPlayers.length > 0 ? fantasyPlayers.map((player) => player.name) : allPlayersTableRows.map((row) => row.player.name)),
+    [allPlayersTableRows, fantasyPlayers]
   )
 
   const selectedStatVsFantasyOption = useMemo(
@@ -4461,6 +4831,16 @@ export function FantasyDashboard({
             </div>
           </div>
           <div className={`${allPlayersView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2`}>
+            <div className="mb-2 max-w-2xl">
+              <SearchableSelect
+                label=""
+                value={selectedFantasyName}
+                options={playerSearchOptions}
+                onChange={navigateToPlayer}
+                placeholder="Search player..."
+                showLoadingOnType
+              />
+            </div>
             <div className="flex items-end gap-2">
               <div className="w-40">
                 <Select
@@ -4490,16 +4870,6 @@ export function FantasyDashboard({
               >
                 {allPlayersSort.direction === "asc" ? "↑" : "↓"}
               </button>
-            </div>
-            <div className="mt-2 max-w-2xl">
-              <SearchableSelect
-                label=""
-                value={selectedFantasyName}
-                options={playerSearchOptions}
-                onChange={navigateToPlayer}
-                placeholder="Search player..."
-                showLoadingOnType
-              />
             </div>
           </div>
           <div className={`${allPlayersView === "cards" ? "grid" : "hidden"} max-h-[760px] grid-cols-1 gap-2 overflow-y-auto p-2.5`}>
@@ -5064,30 +5434,32 @@ export function FantasyDashboard({
                   </div>
                 </div>
                 <div className={analysisLocked ? "select-none" : undefined}>
-                  <div className={`mb-5 grid gap-4 sm:gap-5 ${
-                    selectedLineupRole?.position && lineupsProjections?.source === "lineups"
-                      ? "grid-cols-3 sm:max-w-[760px]"
-                      : "grid-cols-2 sm:max-w-[520px]"
-                  }`}>
-                    <MetricCard
-                      compact
-                      label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
-                      value={formatNumber(selectedAdjustedProjection, 0)}
-                      blurValue={analysisLocked}
-                    />
-                    {selectedLineupRole?.position && lineupsProjections?.source === "lineups" ? (
-                      <MetricCard
-                        compact
-                        label={`Avg at ${selectedLineupRole.position}`}
-                        value={formatNumber(selectedLineupPositionAverage, 1)}
+                  <div className="mb-5 grid grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
+                    {selectedProjectionBand ? (
+                      <ProjectionBandMetricCard
+                        label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
+                        projection={formatNumber(selectedAdjustedProjection, 0)}
+                        lower={formatNumber(selectedProjectionBand.lower, 0)}
+                        upper={formatNumber(selectedProjectionBand.upper, 0)}
                         blurValue={analysisLocked}
                       />
-                    ) : null}
+                    ) : (
+                      <MetricCard
+                        compact
+                        label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
+                        value={formatNumber(selectedAdjustedProjection, 0)}
+                        blurValue={analysisLocked}
+                        center
+                        prominentValue
+                      />
+                    )}
                     <MetricCard
                       compact
                       label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}
                       value={formatNumber(selectedAdjustedBreakEven, 0)}
                       blurValue={analysisLocked}
+                      center
+                      prominentValue
                     />
                   </div>
                   <div className="relative mx-auto w-full max-w-[43rem]">
@@ -5098,6 +5470,13 @@ export function FantasyDashboard({
                         onClick={() => setShowRollingAveragePlot((prev) => !prev)}
                         activeLabel="Hide Rolling Average Plot"
                         inactiveLabel="Show Rolling Average Plot"
+                      />
+                      <FantasyPlotToggleButton
+                        active={showProjectionRangePlot}
+                        locked={analysisLocked}
+                        onClick={() => setShowProjectionRangePlot((prev) => !prev)}
+                        activeLabel="Hide Projection Range"
+                        inactiveLabel="Show Projection Range"
                       />
                       <FantasyPlotToggleButton
                         active={showBaseUpsideBars}
@@ -5200,6 +5579,16 @@ export function FantasyDashboard({
                                     rollingWindow={5}
                                     showInternalControls={false}
                                   />
+                                </div>
+                              </div>
+                            ) : null}
+                            {plot === "projectionRange" ? (
+                              <div className="flex h-full flex-col py-1">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                                  Projection Range Preview
+                                </div>
+                                <div className="mt-2 h-[150px] opacity-70 blur-[2px] sm:h-[164px]">
+                                  <ProjectionRangePreviewBars data={STATIC_LOCKED_PREVIEW_PROJECTION_RANGE} />
                                 </div>
                               </div>
                             ) : null}
@@ -5315,6 +5704,16 @@ export function FantasyDashboard({
 
                 {!analysisLocked ? (
                 <div>
+                {showProjectionRangePlot ? (
+                  selectedProjectionDistribution ? (
+                    <ProjectionRangePlot data={selectedProjectionDistribution} />
+                  ) : (
+                    <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3 text-xs text-nrl-muted">
+                      Projection range is unavailable for this player.
+                    </div>
+                  )
+                ) : null}
+
                 {showRollingAveragePlot && trendFilteredRows.length > 0 ? (
                   <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                     <div className="mb-2 flex flex-wrap items-start justify-between gap-3">

@@ -204,6 +204,15 @@ function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | n
   )
 }
 
+function lineupsSummaryHasRecentResults(summary: Awaited<ReturnType<typeof fetchLineupsPageSummary>>): boolean {
+  if (!summary || summary.matches.length === 0) return false
+  return summary.matches.some((match) =>
+    Array.isArray(match.homeRecentResults) ||
+    Array.isArray(match.awayRecentResults) ||
+    Array.isArray(match.recentHeadToHead)
+  )
+}
+
 export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const params = await searchParams
   const { userId } = await auth()
@@ -211,7 +220,8 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const year = currentYearInBrisbane()
   const roundOptions = await fetchLineupRoundOptions(year)
   const selectedRound = roundOptions.find((option) => option.value === params.round)?.value ?? currentRoundOption(roundOptions)?.value ?? "Round 1"
-  const summary = hasProAccess ? null : await withFallback(fetchLineupsPageSummary(year, selectedRound), null, "Lineups page summary")
+  const rawSummary = hasProAccess ? null : await withFallback(fetchLineupsPageSummary(year, selectedRound), null, "Lineups page summary")
+  const summary = lineupsSummaryHasRecentResults(rawSummary) ? rawSummary : null
   const fallbackData = summary ? null : await (async () => {
     const [teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStatsCurrentYear, playerTryHistory, lineupRound] = await Promise.all([
       withFallback(fetchTeamLogos(), {}, "Lineups team logos"),

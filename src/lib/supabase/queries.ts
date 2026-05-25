@@ -72,6 +72,29 @@ export interface OriginChanceRecord {
   updatedAt: string | null;
 }
 
+export interface FantasyPlayerCardSummary {
+  playerId: number | null;
+  player: string;
+  localName: string | null;
+  team: string | null;
+  position: string | null;
+  weeklyChange: number | null;
+  pricedAt: number | null;
+  avg2026: number | null;
+  last3: number | null;
+  ppm: number | null;
+  projection: number | null;
+  value: number | null;
+  breakeven: number | null;
+  gamesPlayed: number | null;
+  price: number | null;
+  ownedBy: number | null;
+  nextMajorByeRound: number | null;
+  playsNextMajorBye: boolean | null;
+  originChance: boolean | null;
+  updatedAt: string | null;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -87,6 +110,38 @@ function normaliseTeamKey(value: unknown): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+const NRL_TEAM_LOGO_ALIAS_GROUPS: string[][] = [
+  ["brisbane broncos", "broncos"],
+  ["canberra raiders", "raiders"],
+  ["canterbury bankstown bulldogs", "canterbury bulldogs", "bulldogs"],
+  ["cronulla sutherland sharks", "cronulla sharks", "sharks"],
+  ["dolphins", "the dolphins"],
+  ["gold coast titans", "titans"],
+  ["manly warringah sea eagles", "manly sea eagles", "sea eagles", "manly"],
+  ["melbourne storm", "storm"],
+  ["newcastle knights", "knights"],
+  ["new zealand warriors", "nz warriors", "warriors"],
+  ["north queensland cowboys", "nth queensland cowboys", "north qld cowboys", "cowboys"],
+  ["parramatta eels", "eels"],
+  ["penrith panthers", "panthers"],
+  ["south sydney rabbitohs", "rabbitohs", "souths"],
+  ["st george illawarra dragons", "st george dragons", "st george", "dragons"],
+  ["sydney roosters", "eastern suburbs roosters", "roosters"],
+  ["wests tigers", "west tigers", "tigers"],
+];
+
+function teamLogoAliasKeys(value: unknown): string[] {
+  const key = normaliseTeamKey(value);
+  if (!key) return [];
+
+  const group = NRL_TEAM_LOGO_ALIAS_GROUPS.find((aliases) =>
+    aliases.some((alias) => normaliseTeamKey(alias) === key)
+  );
+  if (!group) return [key];
+
+  return [...new Set(group.map((alias) => normaliseTeamKey(alias)).filter(Boolean))];
 }
 
 function normalisePlayerAliasKey(value: string): string {
@@ -142,6 +197,17 @@ function isRelevantOutsTeamMatch(left: string | null | undefined, right: string 
 
 function toNullableString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function toNullableBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+  if (typeof value === "string" && value.trim()) {
+    const normalised = value.trim().toLowerCase();
+    if (["true", "t", "yes", "y", "1"].includes(normalised)) return true;
+    if (["false", "f", "no", "n", "0"].includes(normalised)) return false;
+  }
+  return null;
 }
 
 function normalisePositionText(value: string | null | undefined): string {
@@ -1682,6 +1748,76 @@ export async function fetchOriginChances(): Promise<OriginChanceRecord[]> {
   }));
 }
 
+function mapFantasyPlayerCardSummary(row: Record<string, unknown>): FantasyPlayerCardSummary | null {
+  const player = toNullableString(row.player) ?? toNullableString(row.name);
+  if (!player) return null;
+
+  return {
+    playerId:
+      toFiniteNumber(row.player_id) ??
+      toFiniteNumber(row.fantasy_player_id) ??
+      toFiniteNumber(row.nrl_fantasy_id),
+    player,
+    localName: toNullableString(row.local_name) ?? toNullableString(row.stats_player),
+    team: toNullableString(row.team),
+    position: toNullableString(row.position) ?? toNullableString(row.position_label),
+    weeklyChange: toFiniteNumber(row.weekly_change) ?? toFiniteNumber(row.ownership_delta),
+    pricedAt: toFiniteNumber(row.priced_at),
+    avg2026: toFiniteNumber(row.avg_2026) ?? toFiniteNumber(row.average_2026),
+    last3: toFiniteNumber(row.last3) ?? toFiniteNumber(row.last_3) ?? toFiniteNumber(row.l3_average),
+    ppm: toFiniteNumber(row.ppm),
+    projection: toFiniteNumber(row.projection),
+    value: toFiniteNumber(row.value),
+    breakeven: toFiniteNumber(row.breakeven) ?? toFiniteNumber(row.be),
+    gamesPlayed: toFiniteNumber(row.games_played) ?? toFiniteNumber(row.games),
+    price: toFiniteNumber(row.price) ?? toFiniteNumber(row.cost),
+    ownedBy: toFiniteNumber(row.owned_by) ?? toFiniteNumber(row.own_percent),
+    nextMajorByeRound: toFiniteNumber(row.next_major_bye_round),
+    playsNextMajorBye: toNullableBoolean(row.plays_next_major_bye),
+    originChance: toNullableBoolean(row.origin_chance),
+    updatedAt: toNullableString(row.updated_at),
+  };
+}
+
+async function fetchFantasyPlayerCardSummariesFromSupabase(): Promise<FantasyPlayerCardSummary[]> {
+  const supabase = createServerSupabaseClient("nrl");
+  const { data, error } = await supabase
+    .from("fantasy_player_card_summary")
+    .select("*")
+    .order("player", { ascending: true })
+    .limit(1000);
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+      return [];
+    }
+    throw new Error(`Supabase fetch nrl.fantasy_player_card_summary: ${error.message}`);
+  }
+
+  return ((data ?? []) as Record<string, unknown>[])
+    .map(mapFantasyPlayerCardSummary)
+    .filter((row): row is FantasyPlayerCardSummary => row !== null);
+}
+
+const fetchFantasyPlayerCardSummariesCached = unstable_cache(
+  async (): Promise<FantasyPlayerCardSummary[]> => fetchFantasyPlayerCardSummariesFromSupabase(),
+  ["fantasy-player-card-summary-v1"],
+  { revalidate: 300 }
+);
+
+export async function fetchFantasyPlayerCardSummaries(): Promise<FantasyPlayerCardSummary[]> {
+  try {
+    if (process.env.NODE_ENV !== "production") {
+      return await fetchFantasyPlayerCardSummariesFromSupabase();
+    }
+    return await fetchFantasyPlayerCardSummariesCached();
+  } catch (error) {
+    console.warn("Unable to fetch fantasy player card summaries; falling back to derived rows.", error);
+    return [];
+  }
+}
+
 export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord[]> {
   const raw = await fetchAllRows<Record<string, unknown>>("player_images");
   return raw.map((row) => ({
@@ -1758,9 +1894,6 @@ export async function fetchTeamLogosFromSupabase(): Promise<Record<string, strin
   const logos = new Map<string, string>();
 
   for (const row of raw) {
-    const teamKey = normaliseTeamKey(row.team);
-    if (!teamKey) continue;
-
     const candidates = [
       row.short_side_logo_url,
       row.side_logo_url,
@@ -1771,8 +1904,24 @@ export async function fetchTeamLogosFromSupabase(): Promise<Record<string, strin
       (value): value is string => typeof value === "string" && value.trim().length > 0
     )?.trim();
 
-    if (logoUrl && !logos.has(teamKey)) {
-      logos.set(teamKey, logoUrl);
+    if (!logoUrl) continue;
+
+    const teamNameCandidates = [
+      row.team,
+      row.team_name,
+      row.name,
+      row.display_name,
+      row.full_name,
+      row.short_name,
+      row.club,
+      row.nickname,
+      row.abbreviation,
+    ];
+
+    for (const teamKey of teamNameCandidates.flatMap(teamLogoAliasKeys)) {
+      if (!logos.has(teamKey)) {
+        logos.set(teamKey, logoUrl);
+      }
     }
   }
 

@@ -515,14 +515,14 @@ function computeBetProfit(status: TrackedBetStatus, stake: number, odds: number)
 }
 
 function betStatusPillClass(status: TrackedBetStatus): string {
-  if (status === "won") return "border-nrl-accent/35 bg-nrl-accent/10 text-nrl-accent";
+  if (status === "won") return "border-emerald-300/40 bg-emerald-400/12 text-emerald-300";
   if (status === "lost") return "border-red-500/35 bg-red-500/10 text-red-400";
   if (status === "push") return "border-white/12 bg-white/[0.04] text-nrl-muted";
   return "border-sky-400/30 bg-sky-400/10 text-sky-200";
 }
 
 function betStatusIconClass(status: TrackedBetStatus): string {
-  if (status === "won") return "bg-nrl-accent text-[#07180f]";
+  if (status === "won") return "bg-emerald-300 text-[#07180f]";
   if (status === "lost") return "bg-red-500 text-white";
   if (status === "push") return "bg-slate-500 text-white";
   return "bg-amber-300 text-[#1f1706]";
@@ -1691,7 +1691,7 @@ export function BettingDashboard({
         <Link
           href={`/dashboard/articles/${marginModelArticle.slug}`}
           aria-label={`Read ${marginModelArticle.title}`}
-          className="group relative flex min-h-[58px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.22)] bg-[#20284a]/80 text-white shadow-[0_8px_18px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/55"
+          className="group relative flex min-h-[58px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.22)] bg-[#20284a]/80 text-white shadow-[0_8px_18px_rgba(8,10,18,0.16)] transition-colors hover:border-emerald-300/40"
         >
           <div className={`absolute inset-0 grid ${marginModelArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
             {marginModelArticle.imageUrls.slice(0, 2).map((url, index) => (
@@ -1708,7 +1708,7 @@ export function BettingDashboard({
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.92),rgba(14,19,48,0.78),rgba(14,19,48,0.56))]" />
           <div className="relative flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-2">
             <div className="min-w-0">
-              <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent/80">
+              <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-emerald-300">
                 Article
               </div>
               <div className="mt-0.5 overflow-hidden text-[10px] font-bold uppercase leading-tight tracking-[0.08em] text-white/85 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
@@ -1747,7 +1747,7 @@ export function BettingDashboard({
                     </span>
                   </div>
                   <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
-                  <BillingPageLink className="mt-2 inline-flex rounded border border-nrl-accent/45 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10">
+                  <BillingPageLink className="mt-2 inline-flex rounded border border-emerald-300/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12">
                     View plans
                   </BillingPageLink>
                 </div>
@@ -1760,8 +1760,8 @@ export function BettingDashboard({
                 onClick={() => handleStakingModeChange(option.mode)}
                 className={`rounded-md border px-3 py-2 text-left transition-colors ${
                   active
-                    ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                    ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
+                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
@@ -1781,7 +1781,7 @@ export function BettingDashboard({
               min={0}
               step={10}
               onChange={(event) => setBankroll(Math.max(0, Number(event.target.value) || 0))}
-              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
             />
           </label>
           {stakingMode === "percentage" ? (
@@ -1794,7 +1794,7 @@ export function BettingDashboard({
                 max={100}
                 step={0.1}
                 onChange={(event) => setPercentageStakePct(clamp(Number(event.target.value) || 0, 0, 100))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -1808,7 +1808,7 @@ export function BettingDashboard({
                 max={100}
                 step={0.1}
                 onChange={(event) => setTargetProfitPct(clamp(Number(event.target.value) || 0, 0, 100))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -1822,7 +1822,7 @@ export function BettingDashboard({
                 max={1}
                 step={0.05}
                 onChange={(event) => setKellyScale(clamp(Number(event.target.value) || 0, 0, 1))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -1836,7 +1836,7 @@ export function BettingDashboard({
                 max={1}
                 step={0.01}
                 onChange={(event) => setMaxEdge(clamp(Number(event.target.value) || 0, 0, 1))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -1859,7 +1859,7 @@ export function BettingDashboard({
                 type="button"
                 aria-label={trackerOpen ? "Collapse bet tracker" : "Expand bet tracker"}
                 onClick={() => setTrackerOpen((open) => !open)}
-                className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-nrl-accent/45 bg-nrl-accent/10 text-sm font-bold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/15"
+                className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-emerald-300/40 bg-emerald-400/12 text-sm font-bold text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12"
               >
                 <span aria-hidden="true">{trackerOpen ? "▴" : "▾"}</span>
               </button>
@@ -1995,7 +1995,7 @@ export function BettingDashboard({
                         setManualError(null);
                         setQuickAddOpen(true);
                       }}
-                      className="cursor-pointer rounded-md border border-nrl-accent/50 bg-nrl-accent/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/15"
+                      className="cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12"
                     >
                       Quick Add
                     </button>
@@ -2047,7 +2047,7 @@ export function BettingDashboard({
                                     }
                                     void handleUpdateBet(bet.id, { odds: nextOdds });
                                   }}
-                                  className="mt-1 h-8 w-full rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-white outline-none focus:border-nrl-accent"
+                                  className="mt-1 h-8 w-full rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-white outline-none focus:border-emerald-300/40"
                                 />
                               </div>
                               <div>
@@ -2065,7 +2065,7 @@ export function BettingDashboard({
                                     }
                                     void handleUpdateBet(bet.id, { stake: nextStake });
                                   }}
-                                  className="mt-1 h-8 w-full rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-white outline-none focus:border-nrl-accent"
+                                  className="mt-1 h-8 w-full rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-white outline-none focus:border-emerald-300/40"
                                 />
                               </div>
                               <div>
@@ -2079,7 +2079,7 @@ export function BettingDashboard({
                               <select
                                 value={bet.status}
                                 onChange={(event) => void handleUpdateBet(bet.id, { status: event.target.value as TrackedBetStatus })}
-                                className={`h-8 rounded-md border px-2 text-xs font-semibold outline-none focus:border-nrl-accent ${betStatusPillClass(bet.status)}`}
+                                className={`h-8 rounded-md border px-2 text-xs font-semibold outline-none focus:border-emerald-300/40 ${betStatusPillClass(bet.status)}`}
                               >
                                 <option value="pending">pending</option>
                                 <option value="won">won</option>
@@ -2123,13 +2123,13 @@ export function BettingDashboard({
           <div className="w-full max-w-2xl rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-nrl-accent">Quick Add</div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Quick Add</div>
                 <div className="mt-1 text-sm font-semibold text-nrl-text">Add a bet to the tracker</div>
               </div>
               <button
                 type="button"
                 onClick={() => setQuickAddOpen(false)}
-                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
                 aria-label="Close quick add"
               >
                 ×
@@ -2143,7 +2143,7 @@ export function BettingDashboard({
                   type="date"
                   value={manualMatchDate}
                   onChange={(event) => setManualMatchDate(event.target.value)}
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-nrl-accent"
+                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
               <label className="flex flex-col gap-1">
@@ -2151,7 +2151,7 @@ export function BettingDashboard({
                 <select
                   value={selectedMarket}
                   onChange={(event) => handleMarketChange(event.target.value)}
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-nrl-accent"
+                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40"
                 >
                   {MARKET_TABS.map((marketOption) => (
                     <option key={marketOption} value={marketOption}>{marketOption}</option>
@@ -2165,7 +2165,7 @@ export function BettingDashboard({
                   value={manualMatchName}
                   onChange={(event) => setManualMatchName(event.target.value)}
                   placeholder="Team A vs Team B"
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-nrl-accent"
+                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
               <label className="flex flex-col gap-1 sm:col-span-2">
@@ -2175,7 +2175,7 @@ export function BettingDashboard({
                   value={manualSelection}
                   onChange={(event) => setManualSelection(event.target.value)}
                   placeholder="Selection"
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-nrl-accent"
+                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
               <label className="flex flex-col gap-1">
@@ -2186,7 +2186,7 @@ export function BettingDashboard({
                   min={1.01}
                   step={0.01}
                   onChange={(event) => setManualOdds(event.target.value)}
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-nrl-accent"
+                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
               <label className="flex flex-col gap-1">
@@ -2197,7 +2197,7 @@ export function BettingDashboard({
                   min={0}
                   step={1}
                   onChange={(event) => setManualStake(event.target.value)}
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-nrl-accent"
+                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
               <label className="flex flex-col gap-1">
@@ -2205,7 +2205,7 @@ export function BettingDashboard({
                 <select
                   value={manualStatus}
                   onChange={(event) => setManualStatus(event.target.value as TrackedBetStatus)}
-                  className={`h-9 rounded-md border px-2 text-xs font-semibold outline-none focus:border-nrl-accent ${betStatusPillClass(manualStatus)}`}
+                  className={`h-9 rounded-md border px-2 text-xs font-semibold outline-none focus:border-emerald-300/40 ${betStatusPillClass(manualStatus)}`}
                 >
                   <option value="pending">pending</option>
                   <option value="won">won</option>
@@ -2247,7 +2247,7 @@ export function BettingDashboard({
                     if (added) setQuickAddOpen(false);
                   })();
                 }}
-                className="cursor-pointer rounded-md border border-nrl-accent/55 bg-nrl-accent/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/15"
+                className="cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12"
               >
                 Add Bet
               </button>
@@ -2257,7 +2257,7 @@ export function BettingDashboard({
       ) : null}
 
       {betAddedMessage ? (
-        <div className="fixed bottom-4 right-4 z-[120] rounded-md border border-nrl-accent/40 bg-nrl-panel px-3 py-2 text-xs font-semibold text-nrl-accent shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+        <div className="fixed bottom-4 right-4 z-[120] rounded-md border border-emerald-300/40 bg-nrl-panel px-3 py-2 text-xs font-semibold text-emerald-300 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
           {betAddedMessage}
         </div>
       ) : null}
@@ -2279,8 +2279,8 @@ export function BettingDashboard({
                 onClick={() => handleMarketChange(tab)}
                 className={`rounded-md border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
                   active
-                    ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                    ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
+                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
                 }`}
               >
                 <span className="inline-flex items-center gap-2">
@@ -2368,9 +2368,9 @@ function BestBetsHero({
       }
     : {
         label: "Model Value",
-        pill: "border-nrl-accent/35 bg-nrl-accent/8 text-nrl-accent",
-        activeBorder: "border-nrl-accent/35",
-        activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.06)]",
+        pill: "border-nrl-accent/45 bg-nrl-accent/12 text-nrl-accent",
+        activeBorder: "border-nrl-accent/45",
+        activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.08)]",
         metric: "text-nrl-accent drop-shadow-[0_0_10px_rgba(0,245,138,0.22)]",
       };
   const bestBetSlipImplied = bestBetSlip ? impliedProbability(bestBetSlip.odds) : null;
@@ -2406,8 +2406,8 @@ function BestBetsHero({
             onClick={() => handleCategoryChange("model")}
             className={`rounded-md border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
               category === "model"
-                ? "border-nrl-accent/55 bg-nrl-accent/10 text-nrl-accent"
-                : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-nrl-accent/35 hover:text-nrl-text"
+                ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
             }`}
           >
             Model Value <span className="ml-1 text-nrl-muted">{modelBets.length}</span>
@@ -2584,7 +2584,7 @@ function BestBetsHero({
                           stake: bet.kellyStake,
                         });
                       }}
-                      className="w-full cursor-pointer rounded-md border border-white/12 bg-white/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-nrl-text transition-colors hover:border-nrl-accent/55 hover:bg-nrl-accent/10 hover:text-nrl-accent"
+                      className="w-full cursor-pointer rounded-md border border-white/12 bg-white/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-nrl-text transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12 hover:text-emerald-300"
                     >
                       Add To Bet Tracker
                     </button>
@@ -2713,7 +2713,7 @@ function BestBetsHero({
           <div className="w-full max-w-md rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-accent">
+                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">
                   Add To Bet Tracker
                 </div>
                 <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-semibold text-nrl-text">
@@ -2731,7 +2731,7 @@ function BestBetsHero({
               <button
                 type="button"
                 onClick={() => setBestBetSlip(null)}
-                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
                 aria-label="Close bet slip"
               >
                 ×
@@ -2753,7 +2753,7 @@ function BestBetsHero({
                       odds: Number.isFinite(nextOdds) ? nextOdds : 0,
                     } : current);
                   }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
               <label className="block">
@@ -2767,7 +2767,7 @@ function BestBetsHero({
                     const nextStake = Math.max(0, Number(event.target.value) || 0);
                     setBestBetSlip((current) => current ? { ...current, stake: nextStake } : current);
                   }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
             </div>
@@ -2779,7 +2779,7 @@ function BestBetsHero({
               </div>
               <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className="mt-0.5 font-semibold text-nrl-accent">
+                <div className="mt-0.5 font-semibold text-emerald-300">
                   {bestBetSlipEdgePp == null ? "-" : `${bestBetSlipEdgePp >= 0 ? "+" : ""}${bestBetSlipEdgePp.toFixed(2)}`}
                 </div>
               </div>
@@ -2789,7 +2789,7 @@ function BestBetsHero({
               <button
                 type="button"
                 onClick={() => setBestBetSlip(null)}
-                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
               >
                 Cancel
               </button>
@@ -2814,7 +2814,7 @@ function BestBetsHero({
                 }}
                 className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
                   canConfirmBestBetSlip
-                    ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                    ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
                     : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                 }`}
               >
@@ -2924,7 +2924,7 @@ function MarketSection({
       {[...groupsByDate.entries()].map(([date, dateGroups]) => (
         <section key={date} className="space-y-7 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
           <div className="flex items-center gap-3">
-            <h2 className="shrink-0 text-sm font-bold uppercase tracking-[0.12em] text-nrl-accent sm:text-base">
+            <h2 className="shrink-0 text-sm font-bold uppercase tracking-[0.12em] text-emerald-300 sm:text-base">
               {formatDateLabel(date)}
             </h2>
             <div className="h-px flex-1 bg-nrl-border/70" />
@@ -2967,7 +2967,7 @@ function MarketSection({
                         ...current,
                         [group.key]: !current[group.key],
                       }))}
-                      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
                     >
                       <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
                     </button>
@@ -2991,9 +2991,9 @@ function MarketSection({
                           onClick={() => setTryscorerValueByGroup((current) => ({ ...current, [group.key]: value }))}
                           className={`rounded-md border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition-colors ${
                             active
-                              ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                              ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
                               : hasRows
-                                ? "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                                ? "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
                                 : "cursor-not-allowed border-nrl-border bg-nrl-panel-2 text-nrl-muted opacity-45"
                           }`}
                         >
@@ -3063,7 +3063,7 @@ function MarketSection({
                           ? "text-red-500"
                           : overEdgeCliff
                             ? "text-orange-500"
-                            : "text-nrl-accent";
+                            : "text-emerald-300";
                     const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                     const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
                     const canOpenMobileBet = oddsValue != null
@@ -3108,14 +3108,14 @@ function MarketSection({
                               }}
                               className={`shrink-0 rounded border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${
                                 canOpenMobileBet
-                                  ? "cursor-pointer border-nrl-accent/60 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/20"
+                                  ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
                                   : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                               }`}
                             >
                               +
                             </button>
                           ) : (
-                            <BillingPageLink className="shrink-0 rounded border border-nrl-border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted opacity-75 transition-colors hover:border-nrl-accent hover:text-nrl-text">
+                            <BillingPageLink className="shrink-0 rounded border border-nrl-border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted opacity-75 transition-colors hover:border-emerald-300/40 hover:text-nrl-text">
                               Locked
                             </BillingPageLink>
                           )}
@@ -3135,7 +3135,7 @@ function MarketSection({
                               <div
                                 key={`${group.key}-mobile-${row.result}-${bookie}`}
                                 className={`flex min-h-[34px] min-w-0 flex-col justify-center gap-1 rounded px-1.5 py-1 ${
-                                  isBest ? "bg-nrl-accent/12 text-nrl-accent" : "text-nrl-text"
+                                  isBest ? "text-emerald-300" : "text-nrl-text"
                                 }`}
                               >
                                 <div className="flex h-4 items-center opacity-90">
@@ -3155,7 +3155,7 @@ function MarketSection({
                         <div className={`mt-3 grid ${showModelColumns ? "grid-cols-4" : "grid-cols-2"} gap-x-3 gap-y-2 text-[10px]`}>
                           <div className="min-w-0">
                             <div className="font-bold uppercase tracking-[0.08em] text-nrl-muted">Best</div>
-                            <div className="mt-1 truncate text-xs font-bold leading-none text-nrl-accent tabular-nums">
+                            <div className="mt-1 truncate text-xs font-bold leading-none text-emerald-300 tabular-nums">
                               {formatPrice(row.bestPriceComputed)}
                             </div>
                           </div>
@@ -3278,7 +3278,7 @@ function MarketSection({
                               ? "text-red-500"
                               : overEdgeCliff
                                 ? "text-orange-500"
-                                : "text-nrl-accent";
+                                : "text-emerald-300";
                         const outcomeLabel = row.result;
                         const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                         const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
@@ -3317,7 +3317,7 @@ function MarketSection({
                               return (
                                 <td
                                   key={`${group.key}-${row.result}-${bookie}`}
-                                  className={`py-2 pr-3 ${group.market === "Tryscorer" && bookieIndex === 0 ? "pl-5" : ""} ${isBest ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
+                                  className={`py-2 pr-3 ${group.market === "Tryscorer" && bookieIndex === 0 ? "pl-5" : ""} ${isBest ? "font-semibold text-emerald-300" : "text-nrl-text"}`}
                                 >
                                   {offer == null ? "-" : (
                                     <div className="leading-tight">
@@ -3382,7 +3382,7 @@ function MarketSection({
                                   if (Number.isFinite(nextOdds) && nextOdds > 1) return;
                                   onOddsOverride(betRowKey, row.bestPriceComputed ?? 0);
                                 }}
-                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-emerald-300/40"
                               />
                             </td>
                             <td className="py-2 pr-0 text-nrl-text">
@@ -3392,7 +3392,7 @@ function MarketSection({
                                 step={1}
                                 value={Number.isFinite(stakeValue) ? stakeValue : 0}
                                 onChange={(event) => onStakeOverride(betRowKey, Math.max(0, Number(event.target.value) || 0))}
-                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-emerald-300/40"
                               />
                             </td>
                             <td className="py-2 pl-3 pr-0">
@@ -3417,14 +3417,14 @@ function MarketSection({
                                   }}
                                   className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                                     canPlaceBet
-                                      ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                                      ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
                                       : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                                   }`}
                                 >
                                   Bet
                                 </button>
                               ) : (
-                                <BillingPageLink className="inline-flex rounded-md border border-nrl-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted opacity-75 transition-colors hover:border-nrl-accent hover:text-nrl-text">
+                                <BillingPageLink className="inline-flex rounded-md border border-nrl-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted opacity-75 transition-colors hover:border-emerald-300/40 hover:text-nrl-text">
                                   Locked
                                 </BillingPageLink>
                               )}
@@ -3447,7 +3447,7 @@ function MarketSection({
           <div className="w-full rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-accent">
+                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">
                   Add To Bets
                 </div>
                 <div className="mt-1 truncate text-base font-semibold text-nrl-text">
@@ -3458,7 +3458,7 @@ function MarketSection({
               <button
                 type="button"
                 onClick={() => setMobileBetSlip(null)}
-                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
                 aria-label="Close bet slip"
               >
                 ×
@@ -3480,7 +3480,7 @@ function MarketSection({
                       odds: Number.isFinite(nextOdds) ? nextOdds : 0,
                     } : current);
                   }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
               <label className="block">
@@ -3494,7 +3494,7 @@ function MarketSection({
                     const nextStake = Math.max(0, Number(event.target.value) || 0);
                     setMobileBetSlip((current) => current ? { ...current, stake: nextStake } : current);
                   }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
             </div>
@@ -3506,7 +3506,7 @@ function MarketSection({
               </div>
               <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className="mt-0.5 font-semibold text-nrl-accent">
+                <div className="mt-0.5 font-semibold text-emerald-300">
                   {mobileSlipEdgePp == null ? "-" : `${mobileSlipEdgePp >= 0 ? "+" : ""}${mobileSlipEdgePp.toFixed(2)}`}
                 </div>
               </div>
@@ -3516,7 +3516,7 @@ function MarketSection({
               <button
                 type="button"
                 onClick={() => setMobileBetSlip(null)}
-                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
               >
                 Cancel
               </button>
@@ -3543,7 +3543,7 @@ function MarketSection({
                 }}
                 className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
                   canConfirmMobileSlip
-                    ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                    ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
                     : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                 }`}
               >

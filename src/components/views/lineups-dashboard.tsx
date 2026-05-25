@@ -754,11 +754,6 @@ function LiveStatusIcon({ type, compact = false }: { type: "off" | "on"; compact
   )
 }
 
-function formatWeatherNumber(value: number | null, suffix: string, maximumFractionDigits = 0): string | null {
-  if (value == null || !Number.isFinite(value)) return null
-  return `${value.toLocaleString("en-AU", { maximumFractionDigits })}${suffix}`
-}
-
 function weatherConditionEmoji(condition: string): string {
   const value = condition.toLowerCase()
   if (value.includes("storm")) return "⛈️"
@@ -768,46 +763,6 @@ function weatherConditionEmoji(condition: string): string {
   if (value.includes("cloud")) return "☁️"
   if (value.includes("clear")) return "☀️"
   return "🌤️"
-}
-
-function MatchWeather({ forecast }: { forecast: LineupWeatherForecast | null }) {
-  if (!forecast) return null
-
-  const temperature = formatWeatherNumber(forecast.temperatureC, "C")
-  const rainChance = formatWeatherNumber(forecast.precipitationProbabilityPct, "% rain")
-  const wind = formatWeatherNumber(forecast.windKmh, " km/h wind")
-  const items = [forecast.condition, temperature, rainChance, wind].filter(Boolean)
-  if (items.length === 0) return null
-
-  return (
-    <span className="inline-flex min-w-0 flex-nowrap items-center justify-center gap-x-1.5 whitespace-nowrap text-center text-[8px] font-bold uppercase tracking-[0.04em] text-sky-100/90 sm:gap-x-2 sm:text-[10px]">
-      <span className="flex-none text-xs leading-none sm:text-base" aria-hidden="true">
-        {weatherConditionEmoji(forecast.condition)}
-      </span>
-      <span className="min-w-0">{items.join(" · ")}</span>
-    </span>
-  )
-}
-
-function MatchMetaBand({ match, weatherForecast }: { match: LineupMatch; weatherForecast: LineupWeatherForecast | null }) {
-  const hasVenue = Boolean(match.venue)
-  const hasWeather = Boolean(weatherForecast)
-  if (!hasVenue && !hasWeather) return null
-
-  return (
-    <div className="relative z-[1] mx-auto mt-4 max-w-4xl border-t border-blue-300/20 pt-3 text-center">
-      <div className="flex min-w-0 flex-nowrap items-center justify-center gap-x-1.5 text-[10px] font-medium text-nrl-muted sm:text-[11px]">
-        {hasVenue ? (
-          <span className="min-w-0 truncate">
-            {match.venue}{hasWeather ? "," : ""}
-          </span>
-        ) : null}
-        {hasWeather ? (
-          <MatchWeather forecast={weatherForecast} />
-        ) : null}
-      </div>
-    </div>
-  )
 }
 
 function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: LineupLiveMatch | null }) {
@@ -836,7 +791,7 @@ function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: 
           <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
             {score.homeScore ?? "-"} - {score.awayScore ?? "-"}
           </div>
-          <div className="mt-3 inline-flex self-center rounded-full border border-emerald-300/25 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]">
+          <div className="mt-3 inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]">
             {matchStateLabel}{clock && showLiveBadge ? ` · ${clock}` : ""}
           </div>
         </>
@@ -845,7 +800,7 @@ function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: 
           <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
             {formatKickoffTime(match.kickoffUtc)}
           </div>
-          <div className="mt-3 inline-flex self-center rounded-full border border-nrl-border bg-nrl-panel px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-nrl-accent sm:text-[10px]">
+          <div className="mt-3 inline-flex self-center rounded-full border border-emerald-300/35 bg-nrl-panel px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300 sm:text-[10px]">
             {match.round}
           </div>
         </>
@@ -1158,8 +1113,8 @@ function MatchStatsPanel({
   const isFixtureOnly = match.matchId.startsWith("draw-2026-")
 
   if (!home || !away) {
-    if (isFixtureOnly) return <FixtureOnlyPanel />
     if (isPregame) return <PregameMatchStatsPreview match={match} teamLogos={teamLogos} />
+    if (isFixtureOnly) return <FixtureOnlyPanel />
     return (
       <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
         No match stats available for this game yet.
@@ -1518,6 +1473,10 @@ function SportsbetOddsPill({ odds }: { odds: LineupSportsbetOdds }) {
   )
 }
 
+function displayTeamBadgeName(value: string): string {
+  return normaliseKey(value) === "wests tigers" ? "Tigers" : value
+}
+
 function TeamBadge({
   team,
   teamLogos,
@@ -1528,8 +1487,8 @@ function TeamBadge({
   sportsbetOdds: LineupSportsbetOdds | null
 }) {
   const logo = resolveLogo(team, teamLogos)
-  const shortName = team?.team ?? team?.teamName ?? "TBC"
-  const fullName = team?.teamName ?? team?.team ?? "TBC"
+  const shortName = displayTeamBadgeName(team?.team ?? team?.teamName ?? "TBC")
+  const fullName = displayTeamBadgeName(team?.teamName ?? team?.team ?? "TBC")
 
   return (
     <div className="flex min-h-[6.5rem] w-[5.75rem] min-w-0 max-w-full -translate-y-1 flex-col items-center justify-start gap-0.5 px-2 py-1 text-center sm:min-h-[7.5rem] sm:w-[6.75rem] sm:-translate-y-1.5 sm:px-2.5">
@@ -1544,9 +1503,9 @@ function TeamBadge({
           />
         </div>
       ) : null}
-      <div className="w-full min-w-0">
-        <div className="truncate text-[11px] font-bold text-nrl-text sm:hidden">{shortName}</div>
-        <div className="hidden truncate text-xs font-bold text-nrl-text sm:block">{fullName}</div>
+      <div className="mt-1 w-full min-w-0 sm:mt-1.5">
+        <div className="line-clamp-2 text-[11px] font-bold leading-tight text-nrl-text sm:hidden">{shortName}</div>
+        <div className="hidden text-wrap text-xs font-bold leading-tight text-nrl-text sm:block">{fullName}</div>
         {sportsbetOdds ? <SportsbetOddsPill odds={sportsbetOdds} /> : null}
       </div>
     </div>
@@ -2153,7 +2112,7 @@ function LineupCard({
         className="pointer-events-none absolute inset-px rounded-[calc(0.5rem-1px)] opacity-70 transition-opacity group-open:opacity-0"
         style={MATCH_CARD_TEXTURE_STYLE}
       />
-      <summary className="relative z-[1] cursor-pointer list-none px-3 pb-11 pt-3 marker:hidden sm:px-5 sm:pb-12 sm:pt-4 [&::-webkit-details-marker]:hidden">
+      <summary className="relative z-[1] cursor-pointer list-none px-3 pb-8 pt-3 marker:hidden sm:px-5 sm:pb-9 sm:pt-4 [&::-webkit-details-marker]:hidden">
         {homeLogo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -2174,20 +2133,31 @@ function LineupCard({
             loading="lazy"
           />
         ) : null}
-        <div className="relative z-[1] pb-2 text-center text-[10px] font-bold uppercase tracking-[0.28em] text-nrl-muted sm:text-xs">
-          {match.round} · {formatCardDate(match)}
+        <div className="relative z-[1] pb-2 text-center">
+          <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-nrl-muted sm:text-xs">
+            {match.round} · {formatCardDate(match)}
+          </div>
+          {match.venue || weatherForecast ? (
+            <div className="mx-auto mt-1 flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px]">
+              {weatherForecast ? (
+                <span className="flex-none text-xs leading-none sm:text-sm" aria-hidden="true">
+                  {weatherConditionEmoji(weatherForecast.condition)}
+                </span>
+              ) : null}
+              {match.venue ? <span className="min-w-0 truncate">{match.venue}</span> : null}
+            </div>
+          ) : null}
         </div>
-        <div className="relative z-[1] mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.5rem,auto)_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_minmax(0,1fr)] sm:gap-6">
-          <div className="min-w-0 justify-self-center">
+        <div className="relative z-[1] mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5">
+          <div className="min-w-0 justify-self-start sm:justify-self-center">
             <TeamBadge team={match.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
           <LiveScoreHeader match={match} liveMatch={displayLiveMatch} />
-          <div className="min-w-0 justify-self-center">
+          <div className="min-w-0 justify-self-end sm:justify-self-center">
             <TeamBadge team={match.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
         </div>
-        <MatchMetaBand match={match} weatherForecast={weatherForecast} />
-        <span className="absolute bottom-3 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text sm:bottom-3.5">
+        <span className="absolute bottom-1 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text sm:bottom-1.5">
           <span className="sr-only">Toggle match details</span>
           <svg
             viewBox="0 0 16 16"
@@ -2369,7 +2339,7 @@ export function LineupsDashboard({
         <div className="space-y-11">
           {matchDateGroups.map((group) => (
             <section key={group.dateKey} className="space-y-6">
-              <div className="px-1 text-xs font-bold uppercase tracking-[0.18em] text-nrl-accent/90">
+              <div className="px-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300/90">
                 {formatMatchDateHeader(group.dateKey)}
               </div>
               {group.matches.map((match) => (

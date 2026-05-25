@@ -1354,7 +1354,7 @@ export async function fetchFantasyPlayerStatsForYears(
   if (!fantasyName.trim()) return [];
   const normalizedYears = years?.filter(Boolean).sort();
   try {
-    const serverCache = await readPlayerStatsServerCache();
+    const serverCache = await readPlayerStatsServerCache(normalizedYears);
 
     if (serverCache) {
       const allRows = filterPlayerStatsRowsByYears(serverCache.rows, normalizedYears);

@@ -485,12 +485,21 @@ export interface LineupsPlayerRole {
 
 export type FantasyProjectionSource = "lineups" | "lineup_unaware" | "none"
 
+export interface FantasyProjectionSigma {
+  position: string
+  fallbackPosition: string | null
+  projection: string | null
+  residualSigma: number | null
+  normalLow95Delta: number | null
+  normalHigh95Delta: number | null
+}
+
 export interface LineupsProjectionSnapshot {
   /** Parsed integer round number, e.g. 9. Null when lineups table is empty. */
   round: number | null
   source: FantasyProjectionSource
   lineupsAvailable: boolean
-  /** Maps NRL player_id → model projection. Missing players default to 0 at call sites. */
+  /** Maps NRL player_id → model projection. */
   projectionByPlayerId: Map<number, number>
   /** Maps normalised player name → model projection fallback. */
   projectionByPlayerName: Map<string, number>
@@ -509,6 +518,38 @@ function emptyLineupsProjectionSnapshot(source: FantasyProjectionSource = "none"
     projectionByPlayerName: new Map(),
     roleByPlayerId: new Map(),
     roleByPlayerName: new Map(),
+  }
+}
+
+export async function fetchFantasyProjectionSigmas(): Promise<FantasyProjectionSigma[]> {
+  try {
+    const supabase = createServerSupabaseClient()
+    const { data, error } = await supabase
+      .schema("nrl")
+      .from("fantasy_projection_sigmas")
+      .select("position, fallback_position, projection, residual_sigma, normal_low_95_delta, normal_high_95_delta")
+      .eq("calibration_key", "final_post_opponent_position_v1")
+
+    if (error || !data) return []
+
+    return data
+      .map((row) => {
+        const position = typeof row.position === "string" ? row.position : null
+        if (!position) return null
+
+        return {
+          position,
+          fallbackPosition: typeof row.fallback_position === "string" ? row.fallback_position : null,
+          projection: typeof row.projection === "string" ? row.projection : null,
+          residualSigma: toFiniteProjectionNumber(row.residual_sigma),
+          normalLow95Delta: toFiniteProjectionNumber(row.normal_low_95_delta),
+          normalHigh95Delta: toFiniteProjectionNumber(row.normal_high_95_delta),
+        }
+      })
+      .filter((row): row is FantasyProjectionSigma => row !== null)
+  } catch (error) {
+    console.warn("Unable to fetch fantasy projection sigmas.", error)
+    return []
   }
 }
 
@@ -600,12 +641,19 @@ function toFiniteProjectionNumber(value: unknown): number | null {
   return null
 }
 
+function parseRoundNumber(value: unknown): number | null {
+  const match = String(value ?? "").match(/\d+/)
+  if (!match) return null
+  const round = Number.parseInt(match[0], 10)
+  return Number.isFinite(round) ? round : null
+}
+
 async function fetchLineupUnawareProjectionSnapshot(cutoffUtc: string): Promise<LineupsProjectionSnapshot> {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .schema("nrl")
     .from("lineup_unaware_fantasy_projections")
-    .select("player, team, assumed_jersey, assumed_position, projection, model_projection, kickoff_utc")
+    .select("round, player, team, assumed_jersey, assumed_position, projection, model_projection, kickoff_utc")
     .gte("kickoff_utc", cutoffUtc)
     .order("kickoff_utc", { ascending: true })
 
@@ -622,6 +670,7 @@ async function fetchLineupUnawareProjectionSnapshot(cutoffUtc: string): Promise<
         const kickoffMs = Date.parse(String(row.kickoff_utc ?? ""))
         return Number.isFinite(kickoffMs) && kickoffMs >= firstKickoffMs && kickoffMs < firstKickoffMs + 6 * ONE_DAY_MS
       })
+  snapshot.round = parseRoundNumber(roundRows[0]?.round)
 
   for (const row of roundRows) {
     const nameKey = normaliseProjectionPlayerName(row.player)
@@ -671,9 +720,7 @@ export async function fetchLineupsProjectionsByPlayerId(): Promise<LineupsProjec
 
     if (!roundLabel) return fetchLineupUnawareProjectionSnapshot(lineupCutoffUtc)
 
-    // Parse the integer out of labels like "9", "Round 9", "Round 9 - 2026"
-    const roundNumMatch = roundLabel.match(/\d+/)
-    const round = roundNumMatch ? Number.parseInt(roundNumMatch[0], 10) : null
+    const round = parseRoundNumber(roundLabel)
 
     const { data, error } = await supabase
       .schema("nrl")

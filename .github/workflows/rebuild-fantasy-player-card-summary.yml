@@ -11,10 +11,10 @@ jobs:
     environment: Production
     timeout-minutes: 15
     steps:
-      - name: Checkout betting/testing
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
-          ref: betting/testing
+          ref: main
 
       - name: Setup Node
         uses: actions/setup-node@v4

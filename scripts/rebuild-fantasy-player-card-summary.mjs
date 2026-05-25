@@ -3,6 +3,7 @@ import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
 const PAGE_SIZE = 1000;
+const PROJECTION_RANGE_Z_SCORE = 1.6448536269514722;
 const FANTASY_POSITION_MAP = {
   1: "HOK",
   2: "MID",
@@ -39,6 +40,15 @@ function normaliseName(value) {
     .replace(/[^a-z0-9 ]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function fantasyPlayerSlug(name) {
+  return String(name ?? "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function normaliseProjectionPlayerName(value) {
@@ -79,6 +89,43 @@ function teamGroup(value) {
   if (key.includes("roosters") || key.includes("sydney")) return "roosters";
   if (key.includes("tigers") || key.includes("wests")) return "tigers";
   return key;
+}
+
+function normalisePosition(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/five[-\s]?eighth/g, "five eighth")
+    .replace(/2nd/g, "second")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function positionGroup(value) {
+  const normalised = normalisePosition(value);
+  if (!normalised) return null;
+  if (["fullback", "fb"].includes(normalised)) return "fullback";
+  if (["wing", "winger", "w"].includes(normalised)) return "wing";
+  if (["centre", "center", "ctr"].includes(normalised)) return "centre";
+  if (["halfback", "five eighth", "five eighths", "5 8", "58", "half", "hlf"].includes(normalised)) return "halves";
+  if (["hooker", "dummy half", "hok"].includes(normalised)) return "hooker";
+  if (["lock", "prop", "front row", "front rower", "middle", "mid"].includes(normalised)) return "middle";
+  if (["second row", "second rower", "back row", "back rower", "2rf", "edg", "edge"].includes(normalised)) return "second-row";
+  return normalised;
+}
+
+function projectionSigmaPositionKey(value) {
+  const normalised = normalisePosition(value);
+  if (!normalised) return null;
+  if (["global", "__global__"].includes(normalised)) return "__global__";
+  if (["bench", "interchange", "reserve", "replacement"].includes(normalised)) return "bench";
+  if (["fullback", "fb"].includes(normalised)) return "fullback";
+  if (["wing", "winger", "w"].includes(normalised)) return "winger";
+  if (["centre", "center", "ctr"].includes(normalised)) return "centre";
+  if (["halfback", "five eighth", "five eighths", "5 8", "58", "half", "hlf"].includes(normalised)) return "half";
+  if (["hooker", "dummy half", "hok"].includes(normalised)) return "hooker";
+  if (["lock", "prop", "front row", "front rower", "middle", "mid"].includes(normalised)) return "middle";
+  if (["second row", "second rower", "back row", "back rower", "2rf", "edg", "edge"].includes(normalised)) return "edge";
+  return normalised;
 }
 
 function positionLabels(positions) {
@@ -187,6 +234,77 @@ async function fetchAllRows(supabase, table, select, applyFilters = (query) => q
   return out;
 }
 
+async function fetchPlayerImages(supabase) {
+  return fetchAllRows(supabase, "player_images", "player,team,number,position,head_image,body_image,last_seen_match_date");
+}
+
+async function fetchTeamLogos(supabase) {
+  const rows = await fetchAllRows(supabase, "team_logos", "*");
+  const logos = new Map();
+  for (const row of rows) {
+    const logoUrl = [
+      row.short_side_logo_url,
+      row.side_logo_url,
+      row.short_logo_url,
+      row.logo_url,
+    ].find((value) => typeof value === "string" && value.trim())?.trim();
+    if (!logoUrl) continue;
+    for (const candidate of [
+      row.team,
+      row.team_name,
+      row.name,
+      row.display_name,
+      row.full_name,
+      row.short_name,
+      row.club,
+      row.nickname,
+      row.abbreviation,
+    ]) {
+      const key = teamGroup(candidate) ?? normaliseTeamKey(candidate);
+      if (key && !logos.has(key)) logos.set(key, logoUrl);
+    }
+  }
+  return logos;
+}
+
+async function fetchCasualtyWardRows(supabase) {
+  const rows = await fetchAllRows(
+    supabase,
+    "casualty_ward",
+    "player,team,position,injury,return_date,games,average_fantasy,source_url,scraped_at"
+  );
+  return rows
+    .map((row) => ({
+      player: typeof row.player === "string" ? row.player.trim() : "",
+      team: typeof row.team === "string" ? row.team.trim() : null,
+      position: typeof row.position === "string" ? row.position.trim() : null,
+      injury: typeof row.injury === "string" ? row.injury.trim() : null,
+      returnDate: typeof row.return_date === "string" ? row.return_date.trim() : null,
+      games: toNum(row.games),
+      averageFantasy: toNum(row.average_fantasy),
+      sourceUrl: typeof row.source_url === "string" ? row.source_url.trim() : null,
+      scrapedAt: typeof row.scraped_at === "string" ? row.scraped_at.trim() : null,
+    }))
+    .filter((row) => row.player);
+}
+
+async function fetchProjectionSigmas(supabase) {
+  const rows = await fetchAllRows(
+    supabase,
+    "fantasy_projection_sigmas",
+    "position,fallback_position,projection,residual_sigma,normal_low_95_delta,normal_high_95_delta",
+    (query) => query.eq("calibration_key", "final_post_opponent_position_v1")
+  );
+  return rows
+    .map((row) => ({
+      position: typeof row.position === "string" ? row.position : null,
+      residualSigma: toNum(row.residual_sigma),
+      normalLow95Delta: toNum(row.normal_low_95_delta),
+      normalHigh95Delta: toNum(row.normal_high_95_delta),
+    }))
+    .filter((row) => row.position);
+}
+
 function minutesToNumber(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value !== "string") return toNum(value);
@@ -271,6 +389,66 @@ function lastFantasyScoresFromHistory(scoreHistory, count) {
 
 function valueIsFinite(value) {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function normaliseImageUrl(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("http://")) return `https://${trimmed.slice("http://".length)}`;
+  const marker = "/remote.axd?";
+  const idx = trimmed.indexOf(marker);
+  if (idx >= 0) {
+    const nested = trimmed.slice(idx + marker.length);
+    if (nested.startsWith("http://")) return `https://${nested.slice("http://".length)}`;
+    return nested || null;
+  }
+  return trimmed;
+}
+
+function resolvePlayerImage(playerName, localName, team, playerImages) {
+  const nameKeys = [playerName, localName].map(normaliseName).filter(Boolean);
+  const teamKey = teamGroup(team);
+  const candidates = playerImages.filter((row) => nameKeys.includes(normaliseName(row.player)));
+  if (candidates.length === 0) return null;
+  return candidates.find((row) => teamKey && teamGroup(row.team) === teamKey) ?? candidates[0] ?? null;
+}
+
+function resolveTeamLogo(team, teamLogos) {
+  const key = teamGroup(team) ?? normaliseTeamKey(team);
+  return key ? teamLogos.get(key) ?? null : null;
+}
+
+function resolveProjectionBand(projection, position, sigmas) {
+  if (projection == null) return { low: null, high: null };
+  const positionKey = projectionSigmaPositionKey(position);
+  const globalSigma = sigmas.find((row) => projectionSigmaPositionKey(row.position) === "__global__") ?? null;
+  const sigma = sigmas.find((row) => projectionSigmaPositionKey(row.position) === positionKey) ?? globalSigma;
+  if (!sigma) return { low: null, high: null };
+  const residualSigma =
+    sigma.residualSigma ??
+    (sigma.normalHigh95Delta != null && sigma.normalLow95Delta != null
+      ? (sigma.normalHigh95Delta - sigma.normalLow95Delta) / 3.92
+      : null);
+  if (residualSigma == null || residualSigma <= 0) return { low: null, high: null };
+  return {
+    low: projection - residualSigma * PROJECTION_RANGE_Z_SCORE,
+    high: projection + residualSigma * PROJECTION_RANGE_Z_SCORE,
+  };
+}
+
+function formatCasualtyRow(row) {
+  return {
+    player: row.player,
+    team: row.team,
+    position: row.position,
+    injury: row.injury,
+    returnDate: row.returnDate,
+    games: row.games,
+    averageFantasy: row.averageFantasy,
+    sourceUrl: row.sourceUrl,
+    scrapedAt: row.scrapedAt,
+  };
 }
 
 function primaryTeam(rows) {
@@ -463,6 +641,16 @@ function getNextMajorByeRound(currentRound) {
   return MAJOR_BYE_ROUNDS.find((byeRound) => byeRound >= round) ?? null;
 }
 
+function majorByeTags(drawRows, nextMajorByeRound, team) {
+  if (nextMajorByeRound == null) return [];
+  return MAJOR_BYE_ROUNDS
+    .filter((round) => round >= nextMajorByeRound)
+    .map((round) => ({
+      round,
+      plays: teamPlaysInRound(drawRows, round, team),
+    }));
+}
+
 async function main() {
   const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -477,6 +665,10 @@ async function main() {
     ownershipBaselineById,
     originChanceNames,
     drawRows,
+    playerImages,
+    teamLogos,
+    casualtyRows,
+    projectionSigmas,
   ] = await Promise.all([
     fetchFantasyPlayers(),
     fetchCoachPlayers(),
@@ -485,10 +677,29 @@ async function main() {
     fetchOwnershipBaseline(supabaseShortside),
     fetchOriginChanceNames(supabaseNrl),
     loadDrawRows(),
+    fetchPlayerImages(supabaseNrl).catch((error) => {
+      console.warn("Unable to fetch player images for page summary.", error);
+      return [];
+    }),
+    fetchTeamLogos(supabaseNrl).catch((error) => {
+      console.warn("Unable to fetch team logos for page summary.", error);
+      return new Map();
+    }),
+    fetchCasualtyWardRows(supabaseNrl).catch((error) => {
+      console.warn("Unable to fetch casualty ward rows for page summary.", error);
+      return [];
+    }),
+    fetchProjectionSigmas(supabaseNrl).catch((error) => {
+      console.warn("Unable to fetch projection sigmas for page summary.", error);
+      return [];
+    }),
   ]);
 
   const statsByName = buildStatsByName(playerStats2026);
-  const rows = fantasyPlayers.map((player) => {
+  const namedLineupPlayers = new Set(lineups.roleByPlayerName.keys());
+  const cardRows = [];
+  const pageRows = [];
+  for (const player of fantasyPlayers) {
     const localRows = findLocalRows(player.name, statsByName);
     const latestRows = [...localRows].sort((a, b) => b.matchDate.localeCompare(a.matchDate) || b.round - a.round);
     const fantasyScores = localRows.map((row) => row.fantasy);
@@ -514,14 +725,36 @@ async function main() {
         ? null
         : player.ownedBy - ownershipBaselineById.get(player.id);
     const projectionTeam = role?.team ?? primaryTeam(localRows);
+    const effectivePosition = role?.position ?? latestPosition(localRows) ?? player.positionLabel;
     const nextMajorByeRound = getNextMajorByeRound(lineups.round);
+    const playsNextMajorBye = teamPlaysInRound(drawRows, nextMajorByeRound, projectionTeam);
+    const projectionBand = resolveProjectionBand(projection, effectivePosition, projectionSigmas);
+    const playerImage = resolvePlayerImage(player.name, localRows[0]?.player ?? null, projectionTeam, playerImages);
+    const playerCasualtyRows = casualtyRows
+      .filter((row) => normaliseProjectionPlayerName(row.player) === nameKey)
+      .slice(0, 5)
+      .map(formatCasualtyRow);
+    const relevantOuts =
+      role?.isOnField && role.team && role.position
+        ? casualtyRows
+          .filter((row) =>
+            normaliseProjectionPlayerName(row.player) !== nameKey &&
+            !namedLineupPlayers.has(normaliseProjectionPlayerName(row.player)) &&
+            teamGroup(row.team) === teamGroup(role.team) &&
+            positionGroup(row.position) === positionGroup(role.position)
+          )
+          .sort((a, b) => (b.averageFantasy ?? -Infinity) - (a.averageFantasy ?? -Infinity))
+          .slice(0, 8)
+          .map(formatCasualtyRow)
+        : [];
+    const updatedAt = new Date().toISOString();
 
-    return {
+    cardRows.push({
       player_id: player.id,
       player: player.name,
       local_name: localRows[0]?.player ?? null,
       team: projectionTeam,
-      position: role?.position ?? latestPosition(localRows) ?? player.positionLabel,
+      position: effectivePosition,
       weekly_change: weeklyChange,
       priced_at: player.pricedAt,
       avg_2026: average(fantasyScores) ?? player.avgPoints,
@@ -538,21 +771,70 @@ async function main() {
       price: player.cost,
       owned_by: player.ownedBy,
       next_major_bye_round: nextMajorByeRound,
-      plays_next_major_bye: teamPlaysInRound(drawRows, nextMajorByeRound, projectionTeam),
+      plays_next_major_bye: playsNextMajorBye,
       origin_chance: originChanceNames.has(nameKey),
-      updated_at: new Date().toISOString(),
-    };
-  });
+      updated_at: updatedAt,
+    });
 
-  for (let start = 0; start < rows.length; start += 500) {
-    const chunk = rows.slice(start, start + 500);
+    pageRows.push({
+      player_id: player.id,
+      player_slug: fantasyPlayerSlug(player.name),
+      player: player.name,
+      local_name: localRows[0]?.player ?? null,
+      team: projectionTeam,
+      position: effectivePosition,
+      lineup_position: role?.position ?? null,
+      lineup_team: role?.team ?? null,
+      is_on_field: role?.isOnField ?? null,
+      price: player.cost,
+      owned_by: player.ownedBy,
+      weekly_change: weeklyChange,
+      priced_at: player.pricedAt,
+      avg_2026: average(fantasyScores) ?? player.avgPoints,
+      last3,
+      ppm: totalMinutes > 0
+        ? totalFantasy / totalMinutes
+        : player.tog != null && player.tog > 0 && player.totalPoints != null
+          ? player.totalPoints / player.tog
+          : null,
+      games_played: localRows.length || player.gamesPlayed || 0,
+      projection,
+      projection_low_5: projectionBand.low,
+      projection_high_5: projectionBand.high,
+      breakeven,
+      projection_round: lineups.round,
+      value: projection == null || player.pricedAt == null ? null : Math.round(projection) - Math.round(player.pricedAt),
+      next_major_bye_round: nextMajorByeRound,
+      plays_next_major_bye: playsNextMajorBye,
+      major_bye_tags: majorByeTags(drawRows, nextMajorByeRound, projectionTeam),
+      origin_chance: originChanceNames.has(nameKey),
+      head_image: normaliseImageUrl(playerImage?.head_image),
+      body_image: normaliseImageUrl(playerImage?.body_image),
+      team_logo_url: resolveTeamLogo(playerImage?.team ?? projectionTeam, teamLogos),
+      casualty_status: playerCasualtyRows,
+      relevant_outs: relevantOuts,
+      updated_at: updatedAt,
+    });
+  }
+
+  for (let start = 0; start < cardRows.length; start += 500) {
+    const chunk = cardRows.slice(start, start + 500);
     const { error } = await supabaseNrl
       .from("fantasy_player_card_summary")
       .upsert(chunk, { onConflict: "player_id" });
     if (error) throw new Error(`Upsert fantasy_player_card_summary failed: ${error.message}`);
   }
 
-  console.log(`Rebuilt nrl.fantasy_player_card_summary with ${rows.length} rows.`);
+  for (let start = 0; start < pageRows.length; start += 500) {
+    const chunk = pageRows.slice(start, start + 500);
+    const { error } = await supabaseNrl
+      .from("fantasy_player_page_summary")
+      .upsert(chunk, { onConflict: "player_id" });
+    if (error) throw new Error(`Upsert fantasy_player_page_summary failed: ${error.message}`);
+  }
+
+  console.log(`Rebuilt nrl.fantasy_player_card_summary with ${cardRows.length} rows.`);
+  console.log(`Rebuilt nrl.fantasy_player_page_summary with ${pageRows.length} rows.`);
 }
 
 main().catch((error) => {

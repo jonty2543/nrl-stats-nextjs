@@ -20,6 +20,14 @@ function requireEnv(name) {
   return value;
 }
 
+function requireAnyEnv(names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) return value;
+  }
+  throw new Error(`Missing required environment variable: one of ${names.join(", ")}`);
+}
+
 function toNum(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -652,7 +660,7 @@ function majorByeTags(drawRows, nextMajorByeRound, team) {
 }
 
 async function main() {
-  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const supabaseUrl = requireAnyEnv(["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL"]);
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
   const supabaseNrl = createClient(supabaseUrl, serviceRoleKey, { db: { schema: "nrl" } });
   const supabaseShortside = createClient(supabaseUrl, serviceRoleKey, { db: { schema: "shortside" } });

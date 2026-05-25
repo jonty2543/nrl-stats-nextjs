@@ -1,9 +1,9 @@
--- nrl schema: wide precomputed fantasy player detail page summary
+-- summary schema: wide precomputed fantasy player detail page summary
 -- Run in Supabase SQL editor. Updated by scripts/rebuild-fantasy-player-card-summary.mjs.
 
-create schema if not exists nrl;
+create schema if not exists summary;
 
-create table if not exists nrl.fantasy_player_page_summary (
+create table if not exists summary.fantasy_player_page_summary (
   player_id integer primary key,
   player_slug text unique not null,
   player text not null,
@@ -47,13 +47,14 @@ create table if not exists nrl.fantasy_player_page_summary (
 );
 
 create index if not exists fantasy_player_page_summary_player_idx
-  on nrl.fantasy_player_page_summary (player);
+  on summary.fantasy_player_page_summary (player);
 
 create index if not exists fantasy_player_page_summary_team_idx
-  on nrl.fantasy_player_page_summary (team);
+  on summary.fantasy_player_page_summary (team);
 
 create index if not exists fantasy_player_page_summary_updated_at_idx
-  on nrl.fantasy_player_page_summary (updated_at desc);
+  on summary.fantasy_player_page_summary (updated_at desc);
 
-grant usage on schema nrl to service_role;
-grant select, insert, update, delete on table nrl.fantasy_player_page_summary to service_role;
+grant usage on schema summary to anon, authenticated, service_role;
+grant select on table summary.fantasy_player_page_summary to anon, authenticated;
+grant select, insert, update, delete on table summary.fantasy_player_page_summary to service_role;

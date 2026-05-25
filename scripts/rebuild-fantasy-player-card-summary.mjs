@@ -13,6 +13,21 @@ const FANTASY_POSITION_MAP = {
   6: "WFB",
 };
 const MAJOR_BYE_ROUNDS = [12, 15, 18];
+const LINEUPS_AVERAGE_STATS = [
+  ["Tries", "tries"],
+  ["Try Assists", "try_assists"],
+  ["All Run Metres", "all_run_metres"],
+  ["Post Contact Metres", "post_contact_metres"],
+  ["Tackles Made", "tackles_made"],
+  ["Tackle Efficiency", "tackle_efficiency"],
+  ["Line Breaks", "line_breaks"],
+  ["Line Break Assists", "line_break_assists"],
+  ["Errors", "errors"],
+  ["Missed Tackles", "missed_tackles"],
+  ["Receipts", "receipts"],
+  ["Tackle Breaks", "tackle_breaks"],
+  ["Offloads", "offloads"],
+];
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -326,7 +341,17 @@ async function fetchPlayerStats2026(supabase) {
   const rows = await fetchAllRows(
     supabase,
     "player_stats",
-    "player,team,position,match_date,round,total_points,mins_played",
+    [
+      "player",
+      "team",
+      "position",
+      "number",
+      "match_date",
+      "round",
+      "total_points",
+      "mins_played",
+      ...LINEUPS_AVERAGE_STATS.map(([, column]) => column),
+    ].join(","),
     (query) => query.gte("match_date", "2026-01-01").lt("match_date", "2027-01-01")
   );
   return rows
@@ -334,12 +359,149 @@ async function fetchPlayerStats2026(supabase) {
       player: typeof row.player === "string" ? row.player.trim() : "",
       team: typeof row.team === "string" ? row.team.trim() : null,
       position: typeof row.position === "string" ? row.position.trim() : null,
+      number: toNum(row.number),
       matchDate: typeof row.match_date === "string" ? row.match_date : "",
       round: Number.parseInt(String(row.round ?? "").match(/\d+/)?.[0] ?? "0", 10),
       fantasy: toNum(row.total_points),
       minutes: minutesToNumber(row.mins_played),
+      stats: row,
     }))
     .filter((row) => row.player && row.fantasy != null && (row.minutes ?? 0) > 0);
+}
+
+function currentYearInBrisbane() {
+  const year = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+  }).format(new Date());
+  return Number.parseInt(year, 10);
+}
+
+function opponentFromMatch(match, team) {
+  if (!match || !team) return null;
+  const teams = String(match).split(/\s+vs\s+/i).map((part) => part.trim()).filter(Boolean);
+  if (teams.length !== 2) return null;
+  const teamGroupKey = teamGroup(team);
+  const opponent = teams.find((entry) => teamGroup(entry) !== teamGroupKey) ?? null;
+  return opponent || null;
+}
+
+async function fetchLineupPlayerTryHistoryRows(supabase, endYear) {
+  const startYear = endYear - 4;
+  const rows = await fetchAllRows(
+    supabase,
+    "player_stats",
+    "player,team,match,match_date,round,tries",
+    (query) => query.gte("match_date", `${startYear}-01-01`).lt("match_date", `${endYear + 1}-01-01`)
+  );
+  return rows
+    .map((row) => {
+      const player = typeof row.player === "string" ? row.player.trim() : "";
+      const team = typeof row.team === "string" ? row.team.trim() : "";
+      const matchDate = typeof row.match_date === "string" ? row.match_date : "";
+      return {
+        player,
+        playerKey: normaliseName(player),
+        team,
+        opponent: opponentFromMatch(row.match, team),
+        tries: toNum(row.tries) ?? 0,
+        year: matchDate.slice(0, 4),
+        round: Number.parseInt(String(row.round ?? "").match(/\d+/)?.[0] ?? "0", 10),
+        matchDate,
+      };
+    })
+    .filter((row) => row.playerKey && row.player && row.matchDate);
+}
+
+function buildLineupPlayerTryHistorySummary(rows) {
+  const byPlayer = new Map();
+  for (const row of rows) {
+    const bucket = byPlayer.get(row.playerKey) ?? { playerKey: row.playerKey, player: row.player, history: [] };
+    bucket.history.push(row);
+    byPlayer.set(row.playerKey, bucket);
+  }
+
+  const updatedAt = new Date().toISOString();
+  return [...byPlayer.values()].map((entry) => ({
+    player_key: entry.playerKey,
+    player: entry.player,
+    history: entry.history
+      .sort((a, b) => b.matchDate.localeCompare(a.matchDate) || b.round - a.round)
+      .slice(0, 100)
+      .map((row) => ({
+        team: row.team,
+        opponent: row.opponent,
+        tries: row.tries,
+        year: row.year,
+        round: row.round,
+      })),
+    updated_at: updatedAt,
+  }));
+}
+
+function buildLineupPlayerTryHistoryObject(rows) {
+  return Object.fromEntries(
+    buildLineupPlayerTryHistorySummary(rows).map((row) => [row.player_key, row.history])
+  );
+}
+
+function positionBaselineKey(position, number) {
+  const rawNumber = Number(number);
+  if (rawNumber === 1) return "FB";
+  if (rawNumber === 2 || rawNumber === 5) return "W";
+  if (rawNumber === 3 || rawNumber === 4) return "C";
+  if (rawNumber === 6) return "FE";
+  if (rawNumber === 7) return "HLF";
+  if (rawNumber === 8 || rawNumber === 10) return "PR";
+  if (rawNumber === 9) return "HK";
+  if (rawNumber === 11 || rawNumber === 12) return "2RF";
+  if (rawNumber === 13) return "LK";
+  const key = normaliseName(position);
+  if (key.includes("fullback")) return "FB";
+  if (key.includes("wing")) return "W";
+  if (key.includes("centre") || key.includes("center")) return "C";
+  if (key.includes("five eighth")) return "FE";
+  if (key.includes("halfback")) return "HLF";
+  if (key.includes("hooker")) return "HK";
+  if (key.includes("prop")) return "PR";
+  if (key.includes("row")) return "2RF";
+  if (key.includes("lock")) return "LK";
+  return null;
+}
+
+function buildLineupsPlayerAverages(rows) {
+  const totals = new Map();
+  for (const row of rows) {
+    const key = normaliseName(row.player);
+    if (!key) continue;
+    const bucket = totals.get(key) ?? { games: 0, values: Object.fromEntries(LINEUPS_AVERAGE_STATS.map(([label]) => [label, 0])) };
+    bucket.games += 1;
+    for (const [label, column] of LINEUPS_AVERAGE_STATS) {
+      bucket.values[label] += toNum(row.stats?.[column]) ?? 0;
+    }
+    totals.set(key, bucket);
+  }
+  return Object.fromEntries(
+    [...totals.entries()].map(([key, bucket]) => [
+      key,
+      Object.fromEntries(LINEUPS_AVERAGE_STATS.map(([label]) => [label, bucket.games > 0 ? bucket.values[label] / bucket.games : 0])),
+    ])
+  );
+}
+
+function buildLineupsPositionPpmBaselines(rows) {
+  const totals = new Map();
+  for (const row of rows) {
+    const key = positionBaselineKey(row.position, row.number);
+    if (!key || row.minutes == null || row.minutes <= 0 || row.fantasy == null) continue;
+    const bucket = totals.get(key) ?? { fantasy: 0, minutes: 0 };
+    bucket.fantasy += row.fantasy;
+    bucket.minutes += row.minutes;
+    totals.set(key, bucket);
+  }
+  return Object.fromEntries(
+    [...totals.entries()].map(([key, bucket]) => [key, bucket.minutes > 0 ? bucket.fantasy / bucket.minutes : 0])
+  );
 }
 
 function buildStatsByName(rows) {
@@ -659,11 +821,240 @@ function majorByeTags(drawRows, nextMajorByeRound, team) {
     }));
 }
 
+function text(value) {
+  return typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
+}
+
+function nullableText(value) {
+  const valueText = text(value);
+  return valueText || null;
+}
+
+function booleanValue(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+  if (typeof value === "string") return ["true", "t", "yes", "y", "1"].includes(value.trim().toLowerCase());
+  return false;
+}
+
+function nominalSide(number) {
+  if (number == null || number >= 14) return "bench";
+  if (number === 5 || number === 4 || number === 11 || number === 6) return "left";
+  if (number === 2 || number === 3 || number === 12 || number === 7) return "right";
+  if (number === 9 || number === 1) return "spine";
+  if (number === 8 || number === 10 || number === 13) return "middle";
+  return "unknown";
+}
+
+function currentRoundOption(options) {
+  if (options.length === 0) return null;
+  const now = new Date();
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const activeRound = options.find((option) => today >= option.startDate && today <= option.endDate);
+  if (activeRound) return activeRound;
+  return options.find((option) => option.startDate >= today) ?? options.findLast((option) => option.startDate <= today) ?? options[0] ?? null;
+}
+
+async function fetchLineupRoundOptionsSummary(supabase, year) {
+  const rows = await fetchAllRows(
+    supabase,
+    "matches",
+    "round,round_number,match_date",
+    (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("match_date", { ascending: true })
+  );
+  const byRound = new Map();
+  for (const row of rows) {
+    const round = text(row.round);
+    if (!round) continue;
+    const current = byRound.get(round) ?? {
+      value: round,
+      label: round,
+      roundNumber: toNum(row.round_number) ?? Number.parseInt(round.match(/\d+/)?.[0] ?? "0", 10),
+      startDate: text(row.match_date).slice(0, 10),
+      endDate: text(row.match_date).slice(0, 10),
+    };
+    const date = text(row.match_date).slice(0, 10);
+    if (date) {
+      if (!current.startDate || date < current.startDate) current.startDate = date;
+      if (!current.endDate || date > current.endDate) current.endDate = date;
+    }
+    byRound.set(round, current);
+  }
+  return [...byRound.values()].sort((a, b) => a.roundNumber - b.roundNumber);
+}
+
+async function fetchLineupMatchesSummary(supabase, round, year) {
+  const rows = await fetchAllRows(
+    supabase,
+    "lineups",
+    [
+      "match_id",
+      "match_date",
+      "kickoff_utc",
+      "round",
+      "venue",
+      "match",
+      "match_url",
+      "team",
+      "team_name",
+      "team_id",
+      "team_type",
+      "number",
+      "position",
+      "player",
+      "player_id",
+      "is_captain",
+      "is_on_field",
+      "head_image",
+      "body_image",
+    ].join(","),
+    (query) => query.eq("round", round).gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("match_date", { ascending: true }).order("number", { ascending: true })
+  );
+  const byMatch = new Map();
+  for (const row of rows) {
+    const matchId = text(row.match_id);
+    if (!matchId) continue;
+    const group = byMatch.get(matchId) ?? { base: row, players: [] };
+    const number = toNum(row.number);
+    group.players.push({
+      matchId,
+      team: text(row.team),
+      teamName: text(row.team_name) || text(row.team),
+      teamId: toNum(row.team_id),
+      teamType: text(row.team_type),
+      number,
+      position: text(row.position),
+      player: text(row.player),
+      playerId: toNum(row.player_id),
+      isCaptain: booleanValue(row.is_captain),
+      isOnField: booleanValue(row.is_on_field),
+      headImage: nullableText(row.head_image),
+      bodyImage: nullableText(row.body_image),
+      fantasyProjection: null,
+      side: nominalSide(number),
+      sideSource: "nominal",
+    });
+    byMatch.set(matchId, group);
+  }
+  return [...byMatch.values()].map(({ base, players }) => {
+    const homePlayers = players.filter((player) => player.teamType.toLowerCase() === "home");
+    const awayPlayers = players.filter((player) => player.teamType.toLowerCase() === "away");
+    const teamFromPlayers = (teamPlayers, teamType) => teamPlayers.length === 0 ? null : {
+      team: teamPlayers[0].team,
+      teamName: teamPlayers[0].teamName,
+      teamId: teamPlayers[0].teamId,
+      teamType,
+      players: teamPlayers.sort((a, b) => (a.number ?? 99) - (b.number ?? 99)),
+    };
+    return {
+      matchId: text(base.match_id),
+      matchDate: text(base.match_date),
+      kickoffUtc: nullableText(base.kickoff_utc),
+      round: text(base.round),
+      venue: nullableText(base.venue),
+      match: text(base.match),
+      matchUrl: nullableText(base.match_url),
+      homeTeam: teamFromPlayers(homePlayers, "Home"),
+      awayTeam: teamFromPlayers(awayPlayers, "Away"),
+    };
+  });
+}
+
+async function fetchLineupsSummaryTeamLogos(supabase) {
+  const rows = await fetchAllRows(supabase, "team_logos", "team,team_name,name,short_name,logo_url,short_side_logo_url,side_logo_url,short_logo_url");
+  const logos = new Map();
+  for (const row of rows) {
+    const logo = nullableText(row.short_side_logo_url) ?? nullableText(row.side_logo_url) ?? nullableText(row.short_logo_url) ?? nullableText(row.logo_url);
+    if (!logo) continue;
+    for (const name of [row.team, row.team_name, row.name, row.short_name]) {
+      const key = normaliseName(text(name));
+      if (key && !logos.has(key)) logos.set(key, logo);
+    }
+  }
+  return Object.fromEntries(logos);
+}
+
+async function fetchLineupsSummaryTryscorerOdds(supabase, today) {
+  const rows = await fetchAllRows(
+    supabase,
+    "NRL Tryscorers",
+    "*",
+    (query) => query.gte("Date", today).eq("Value", 1)
+  );
+  const odds = new Map();
+  for (const row of rows) {
+    const player = text(row.Result);
+    const bestPrice = toNum(row["Best Price"]);
+    const key = normaliseName(player);
+    if (!key || bestPrice == null) continue;
+    const current = odds.get(key);
+    if (current?.bestPrice != null && current.bestPrice >= bestPrice) continue;
+    odds.set(key, { player, bestBookie: nullableText(row["Best Bookie"]), bestPrice });
+  }
+  return Object.fromEntries(odds);
+}
+
+async function fetchLineupsSummarySportsbetOdds(supabase, today) {
+  const rows = await fetchAllRows(supabase, "NRL Odds", "*", (query) => query.gte("Date", today));
+  const odds = new Map();
+  for (const row of rows) {
+    const market = text(row.Market).toLowerCase();
+    if (market && market !== "h2h") continue;
+    const team = text(row.Result);
+    const price = toNum(row.Sportsbet ?? row.SportsBet ?? row.sportsbet);
+    const date = text(row.Date).slice(0, 10);
+    if (!team || price == null || price <= 1 || !date) continue;
+    const entry = { team, matchDate: date, match: text(row.Match), price };
+    const teamKey = normaliseName(team);
+    if (teamKey && !odds.has(teamKey)) odds.set(teamKey, entry);
+    const datedKey = `${date}|${teamKey}`;
+    if (teamKey && !odds.has(datedKey)) odds.set(datedKey, entry);
+  }
+  return Object.fromEntries(odds);
+}
+
+async function fetchLineupsSummaryCasualtyOuts(supabase) {
+  const rows = await fetchAllRows(
+    supabase,
+    "casualty_ward",
+    "team,player,injury,return_date",
+    (query) => query.eq("competition_id", 111).order("team", { ascending: true }).order("player", { ascending: true })
+  );
+  const byTeam = new Map();
+  for (const row of rows) {
+    const team = text(row.team);
+    const player = text(row.player);
+    const key = normaliseName(team);
+    if (!team || !player || !key) continue;
+    const outs = byTeam.get(key) ?? [];
+    outs.push({ team, player, injury: nullableText(row.injury), returnDate: nullableText(row.return_date) });
+    byTeam.set(key, outs);
+  }
+  return Object.fromEntries(byTeam);
+}
+
+function getTodayInBrisbane() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 async function main() {
   const supabaseUrl = requireAnyEnv(["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL"]);
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
   const supabaseNrl = createClient(supabaseUrl, serviceRoleKey, { db: { schema: "nrl" } });
+  const supabasePublic = createClient(supabaseUrl, serviceRoleKey, { db: { schema: "public" } });
+  const supabaseSummary = createClient(supabaseUrl, serviceRoleKey, { db: { schema: "summary" } });
   const supabaseShortside = createClient(supabaseUrl, serviceRoleKey, { db: { schema: "shortside" } });
+  const currentYear = currentYearInBrisbane();
 
   const [
     fantasyPlayers,
@@ -677,6 +1068,7 @@ async function main() {
     teamLogos,
     casualtyRows,
     projectionSigmas,
+    playerTryHistoryRows,
   ] = await Promise.all([
     fetchFantasyPlayers(),
     fetchCoachPlayers(),
@@ -701,12 +1093,48 @@ async function main() {
       console.warn("Unable to fetch projection sigmas for page summary.", error);
       return [];
     }),
+    fetchLineupPlayerTryHistoryRows(supabaseNrl, currentYear).catch((error) => {
+      console.warn("Unable to fetch player try history summary rows.", error);
+      return [];
+    }),
   ]);
 
   const statsByName = buildStatsByName(playerStats2026);
   const namedLineupPlayers = new Set(lineups.roleByPlayerName.keys());
   const cardRows = [];
   const pageRows = [];
+  const tryHistoryRows = buildLineupPlayerTryHistorySummary(playerTryHistoryRows);
+  const playerTryHistory = buildLineupPlayerTryHistoryObject(playerTryHistoryRows);
+  const lineupsRoundOptions = await fetchLineupRoundOptionsSummary(supabaseNrl, currentYear).catch((error) => {
+    console.warn("Unable to fetch lineups round options for page summary.", error);
+    return [];
+  });
+  const lineupsRound = currentRoundOption(lineupsRoundOptions);
+  const today = getTodayInBrisbane();
+  const lineupsPageSummaryRow = lineupsRound ? await Promise.all([
+    fetchLineupMatchesSummary(supabaseNrl, lineupsRound.value, currentYear).catch((error) => {
+      console.warn("Unable to fetch lineups matches for page summary.", error);
+      return [];
+    }),
+    fetchLineupsSummaryTeamLogos(supabaseNrl).catch(() => ({})),
+    fetchLineupsSummaryTryscorerOdds(supabasePublic, today).catch(() => ({})),
+    fetchLineupsSummarySportsbetOdds(supabasePublic, today).catch(() => ({})),
+    fetchLineupsSummaryCasualtyOuts(supabaseNrl).catch(() => ({})),
+  ]).then(([matches, lineupsTeamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts]) => matches.length === 0 ? null : {
+    year: currentYear,
+    round: lineupsRound.value,
+    round_options: lineupsRoundOptions,
+    matches,
+    match_stats: {},
+    team_logos: lineupsTeamLogos,
+    tryscorer_odds: tryscorerOdds,
+    sportsbet_odds: sportsbetOdds,
+    casualty_ward_outs: casualtyWardOuts,
+    player_averages: buildLineupsPlayerAverages(playerStats2026),
+    position_ppm_baselines: buildLineupsPositionPpmBaselines(playerStats2026),
+    player_try_history: playerTryHistory,
+    updated_at: new Date().toISOString(),
+  }) : null;
   for (const player of fantasyPlayers) {
     const localRows = findLocalRows(player.name, statsByName);
     const latestRows = [...localRows].sort((a, b) => b.matchDate.localeCompare(a.matchDate) || b.round - a.round);
@@ -827,7 +1255,7 @@ async function main() {
 
   for (let start = 0; start < cardRows.length; start += 500) {
     const chunk = cardRows.slice(start, start + 500);
-    const { error } = await supabaseNrl
+    const { error } = await supabaseSummary
       .from("fantasy_player_card_summary")
       .upsert(chunk, { onConflict: "player_id" });
     if (error) throw new Error(`Upsert fantasy_player_card_summary failed: ${error.message}`);
@@ -835,14 +1263,31 @@ async function main() {
 
   for (let start = 0; start < pageRows.length; start += 500) {
     const chunk = pageRows.slice(start, start + 500);
-    const { error } = await supabaseNrl
+    const { error } = await supabaseSummary
       .from("fantasy_player_page_summary")
       .upsert(chunk, { onConflict: "player_id" });
     if (error) throw new Error(`Upsert fantasy_player_page_summary failed: ${error.message}`);
   }
 
-  console.log(`Rebuilt nrl.fantasy_player_card_summary with ${cardRows.length} rows.`);
-  console.log(`Rebuilt nrl.fantasy_player_page_summary with ${pageRows.length} rows.`);
+  for (let start = 0; start < tryHistoryRows.length; start += 500) {
+    const chunk = tryHistoryRows.slice(start, start + 500);
+    const { error } = await supabaseSummary
+      .from("lineup_player_try_history_summary")
+      .upsert(chunk, { onConflict: "player_key" });
+    if (error) throw new Error(`Upsert lineup_player_try_history_summary failed: ${error.message}`);
+  }
+
+  if (lineupsPageSummaryRow) {
+    const { error } = await supabaseSummary
+      .from("lineups_page_summary")
+      .upsert(lineupsPageSummaryRow, { onConflict: "year,round" });
+    if (error) throw new Error(`Upsert lineups_page_summary failed: ${error.message}`);
+  }
+
+  console.log(`Rebuilt summary.fantasy_player_card_summary with ${cardRows.length} rows.`);
+  console.log(`Rebuilt summary.fantasy_player_page_summary with ${pageRows.length} rows.`);
+  console.log(`Rebuilt summary.lineup_player_try_history_summary with ${tryHistoryRows.length} rows.`);
+  console.log(`Rebuilt summary.lineups_page_summary with ${lineupsPageSummaryRow ? 1 : 0} rows.`);
 }
 
 main().catch((error) => {

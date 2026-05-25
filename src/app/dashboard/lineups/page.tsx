@@ -10,9 +10,8 @@ import {
   fetchUpcomingTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
 import { fetchLineupWeatherForecasts } from "@/lib/lineups/weather"
-import { fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
+import { fetchLineupPlayerTryHistorySummary, fetchLineupsPageSummary, fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
 import type { PlayerStat } from "@/lib/data/types"
-import type { PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type { LineupLiveMatch, LineupMatch, LineupRoundOption } from "@/lib/lineups/nrl-lineups"
 
 export const dynamic = "force-dynamic"
@@ -88,33 +87,6 @@ function buildPlayerAverages(rows: PlayerStat[]): Record<string, Record<AverageK
       ) as Record<AverageKey, number>,
     ])
   )
-}
-
-function buildPlayerTryHistory(rows: PlayerStat[]): PlayerTryHistory {
-  const history = new Map<string, PlayerTryHistory[string]>()
-  const sortedRows = [...rows].sort((a, b) => {
-    const yearDiff = Number(b.Year) - Number(a.Year)
-    if (yearDiff !== 0) return yearDiff
-    return Number(b.Round ?? 0) - Number(a.Round ?? 0)
-  })
-
-  for (const row of sortedRows) {
-    const key = normaliseName(row.Name)
-    if (!key) continue
-    const tries = Number(row.Tries ?? 0)
-    const entry = {
-      team: String(row.Team ?? ""),
-      opponent: typeof row.Opponent === "string" ? row.Opponent : null,
-      tries: Number.isFinite(tries) ? tries : 0,
-      year: String(row.Year ?? ""),
-      round: Number(row.Round ?? 0),
-    }
-    const current = history.get(key) ?? []
-    current.push(entry)
-    history.set(key, current)
-  }
-
-  return Object.fromEntries(history)
 }
 
 function positionBaselineKey(position: string | null | undefined, number: string | number | null | undefined): PositionBaselineKey | null {
@@ -237,22 +209,37 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const { userId } = await auth()
   const hasProAccess = await getServerProPlotAccess(userId)
   const year = currentYearInBrisbane()
-  const playerStatYears = Array.from({ length: 5 }, (_, index) => String(year - index))
-  const [roundOptions, teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStatsHistory] = await Promise.all([
-    fetchLineupRoundOptions(year),
-    withFallback(fetchTeamLogos(), {}, "Lineups team logos"),
-    withFallback(fetchUpcomingTryscorerOdds(), {}, "Lineups tryscorer odds"),
-    withFallback(fetchUpcomingSportsbetH2HOdds(), {}, "Lineups H2H odds"),
-    withFallback(fetchCasualtyWardOuts(), {}, "Lineups casualty ward"),
-    withFallback(fetchPlayerStats(playerStatYears), [], "Lineups player stats"),
-  ])
-  const playerStatsCurrentYear = playerStatsHistory.filter((row) => String(row.Year) === String(year))
+  const roundOptions = await fetchLineupRoundOptions(year)
   const selectedRound = roundOptions.find((option) => option.value === params.round)?.value ?? currentRoundOption(roundOptions)?.value ?? "Round 1"
-  const { matches, matchStats } = await fetchLineupsForRound({
-    round: selectedRound,
-    year,
-    includeFantasyProjections: hasProAccess,
-  })
+  const summary = hasProAccess ? null : await withFallback(fetchLineupsPageSummary(year, selectedRound), null, "Lineups page summary")
+  const fallbackData = summary ? null : await (async () => {
+    const [teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStatsCurrentYear, playerTryHistory, lineupRound] = await Promise.all([
+      withFallback(fetchTeamLogos(), {}, "Lineups team logos"),
+      withFallback(fetchUpcomingTryscorerOdds(), {}, "Lineups tryscorer odds"),
+      withFallback(fetchUpcomingSportsbetH2HOdds(), {}, "Lineups H2H odds"),
+      withFallback(fetchCasualtyWardOuts(), {}, "Lineups casualty ward"),
+      withFallback(fetchPlayerStats([String(year)]), [], "Lineups player stats"),
+      withFallback(fetchLineupPlayerTryHistorySummary(), {}, "Lineups player try history summary"),
+      fetchLineupsForRound({
+        round: selectedRound,
+        year,
+        includeFantasyProjections: hasProAccess,
+      }),
+    ])
+    return {
+      teamLogos,
+      tryscorerOdds,
+      sportsbetOdds,
+      casualtyWardOuts,
+      playerAverages: buildPlayerAverages(playerStatsCurrentYear),
+      playerTryHistory,
+      positionPpmBaselines: buildPositionPpmBaselines(playerStatsCurrentYear),
+      matches: lineupRound.matches,
+      matchStats: lineupRound.matchStats,
+    }
+  })()
+  const matches = summary?.matches ?? fallbackData?.matches ?? []
+  const matchStats = summary?.matchStats ?? fallbackData?.matchStats ?? {}
   const [liveMatches, weatherForecasts] = await Promise.all([
     withFallback(fetchLiveLineupData(matches.map((match) => match.matchId)), {}, "Lineups live data"),
     withFallback(fetchLineupWeatherForecasts(matches), {}, "Lineups weather"),
@@ -265,16 +252,16 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       liveMatches={liveMatches}
       weatherForecasts={weatherForecasts}
       matchStats={matchStats}
-      roundOptions={roundOptions}
+      roundOptions={summary?.roundOptions.length ? summary.roundOptions : roundOptions}
       selectedRound={selectedRound}
-      teamLogos={teamLogos}
-      tryscorerOdds={tryscorerOdds}
-      sportsbetOdds={sportsbetOdds}
+      teamLogos={summary?.teamLogos ?? fallbackData?.teamLogos ?? {}}
+      tryscorerOdds={summary?.tryscorerOdds ?? fallbackData?.tryscorerOdds ?? {}}
+      sportsbetOdds={summary?.sportsbetOdds ?? fallbackData?.sportsbetOdds ?? {}}
       canAccessFantasyProjections={hasProAccess}
-      casualtyWardOuts={casualtyWardOuts}
-      playerAverages={buildPlayerAverages(playerStatsCurrentYear)}
-      playerTryHistory={buildPlayerTryHistory(playerStatsHistory)}
-      positionPpmBaselines={buildPositionPpmBaselines(playerStatsCurrentYear)}
+      casualtyWardOuts={summary?.casualtyWardOuts ?? fallbackData?.casualtyWardOuts ?? {}}
+      playerAverages={(summary?.playerAverages ?? fallbackData?.playerAverages ?? {}) as Record<string, Record<AverageKey, number>>}
+      playerTryHistory={summary?.playerTryHistory ?? fallbackData?.playerTryHistory ?? {}}
+      positionPpmBaselines={summary?.positionPpmBaselines ?? fallbackData?.positionPpmBaselines ?? {}}
     />
   )
 }

@@ -987,7 +987,6 @@ function isFantasyPlayerUnavailableForFallback(
   player: FantasyPlayerSnapshot,
   casualtyWardPlayerNames?: Set<string>
 ): boolean {
-  if (player.isBye) return true
   if (casualtyWardPlayerNames?.has(normaliseProjectionPlayerName(player.name))) return true
   const status = player.status?.trim().toLowerCase()
   return Boolean(
@@ -1000,12 +999,16 @@ function resolveFantasyProjectionForLineups(
   player: FantasyPlayerSnapshot,
   lineupsProjections: LineupsProjectionSnapshot | undefined,
   coachProjection: number | null,
-  casualtyWardPlayerNames?: Set<string>
+  casualtyWardPlayerNames?: Set<string>,
+  isOfficialDrawBye = false
 ): number | null {
   const playerNameKey = normaliseProjectionPlayerName(player.name)
-  const fallbackProjection =
+  const projectionFromSnapshot =
     lineupsProjections?.projectionByPlayerId.get(player.id) ??
     lineupsProjections?.projectionByPlayerName.get(playerNameKey) ??
+    null
+  const fallbackProjection =
+    projectionFromSnapshot ??
     coachProjection ??
     player.projectedAvg ??
     player.avgPoints ??
@@ -1026,10 +1029,12 @@ function resolveFantasyProjectionForLineups(
   }
 
   if (lineupsProjections?.source === "lineup_unaware") {
+    if (isOfficialDrawBye) return null
     if (isFantasyPlayerUnavailableForFallback(player, casualtyWardPlayerNames)) return null
     return fallbackProjection
   }
 
+  if (isOfficialDrawBye) return null
   if (isFantasyPlayerUnavailableForFallback(player, casualtyWardPlayerNames)) return null
   return fallbackProjection
 }
@@ -3746,22 +3751,25 @@ export function FantasyDashboard({
         resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
         resolvePlayerImage(player.name, teamHint, playerImages)
       const projectionRound = lineupsProjections?.round ?? coachMetrics.round
+      const lineupRole =
+        lineupsProjections?.roleByPlayerId.get(player.id) ??
+        lineupsProjections?.roleByPlayerName.get(normaliseProjectionPlayerName(player.name)) ??
+        null
+      const projectionTeam = lineupRole?.team ?? teamHint ?? imageRow?.team ?? null
+      const officialProjectionRoundPlays = teamPlaysInRound(draw2026Data, projectionRound, projectionTeam)
       const rawProjection = resolveFantasyProjectionForLineups(
         player,
         lineupsProjections,
         coachMetrics.projection,
-        casualtyWardPlayerNames
+        casualtyWardPlayerNames,
+        officialProjectionRoundPlays === false
       )
       const pricedAt = player.pricedAt
       const originChance = originChancePlayerNames.has(normaliseProjectionPlayerName(player.name))
       const projection = rawProjection
       const value = projection != null && pricedAt != null ? projection - pricedAt : null
-      const lineupRole =
-        lineupsProjections?.roleByPlayerId.get(player.id) ??
-        lineupsProjections?.roleByPlayerName.get(normaliseProjectionPlayerName(player.name)) ??
-        null
       const nextMajorByeRound = getNextMajorByeRound(projectionRound)
-      const byeTeam = lineupRole?.team ?? teamHint ?? imageRow?.team ?? null
+      const byeTeam = projectionTeam
       const playsNextMajorBye = teamPlaysInRound(draw2026Data, nextMajorByeRound, byeTeam)
       const majorByeRoundTags = MAJOR_BYE_ROUNDS
         .filter((round) => nextMajorByeRound != null && round >= nextMajorByeRound)
@@ -4050,14 +4058,17 @@ export function FantasyDashboard({
   const selectedAdjustedProjection = useMemo(
     () => {
       if (!selectedFantasyPlayer) return null
+      const projectionTeam = selectedLineupRole?.team ?? fantasyCardImage?.team ?? latestLocalTeam ?? null
+      const officialProjectionRoundPlays = teamPlaysInRound(draw2026Data, selectedFantasyCoachRound, projectionTeam)
       return resolveFantasyProjectionForLineups(
         selectedFantasyPlayer,
         lineupsProjections,
         selectedFantasyCoachMetrics.projection,
-        casualtyWardPlayerNames
+        casualtyWardPlayerNames,
+        officialProjectionRoundPlays === false
       )
     },
-    [casualtyWardPlayerNames, lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyPlayer]
+    [casualtyWardPlayerNames, draw2026Data, fantasyCardImage, latestLocalTeam, lineupsProjections, selectedFantasyCoachMetrics, selectedFantasyCoachRound, selectedFantasyPlayer, selectedLineupRole]
   )
   const selectedProjectionBand = useMemo(
     () => {

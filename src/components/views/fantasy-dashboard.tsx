@@ -2518,7 +2518,7 @@ function MetricCard({
       className={`h-full rounded-lg border border-nrl-border bg-nrl-panel-2 ${compact
         ? mobileTight
           ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
-          : "px-2 py-3 sm:px-1.5 sm:py-4 xl:px-1.5 xl:py-2.5"
+          : "px-2 py-2 sm:px-2.5 sm:py-2.5 xl:px-2.5 xl:py-2.5"
         : "px-3 py-2"
         }`}
     >
@@ -2526,7 +2526,7 @@ function MetricCard({
         {label}
       </div>
       <div
-        className={`${prominentValue ? "flex min-h-[3.7rem] items-center justify-center sm:min-h-[4rem]" : ""} ${valueSizeClass} min-w-0 font-bold text-nrl-text ${center ? "text-center" : ""} ${blurValue ? "select-none blur-[8px] opacity-60" : ""
+        className={`${prominentValue ? "flex min-h-[2.75rem] items-center justify-center sm:min-h-[3rem]" : ""} ${valueSizeClass} min-w-0 font-bold text-nrl-text ${center ? "text-center" : ""} ${blurValue ? "select-none blur-[8px] opacity-60" : ""
           }`}
         aria-hidden={blurValue || undefined}
       >
@@ -2555,11 +2555,11 @@ function ProjectionBandMetricCard({
   blurValue?: boolean
 }) {
   return (
-    <div className="h-full rounded-lg border border-nrl-border bg-nrl-panel-2 px-2 py-3 sm:px-2.5 sm:py-4 xl:px-2.5 xl:py-2.5">
+    <div className="h-full rounded-lg border border-nrl-border bg-nrl-panel-2 px-2 py-2 sm:px-2.5 sm:py-2.5 xl:px-2.5 xl:py-2.5">
       <div className="min-h-[1.8em] text-center text-[7px] font-semibold uppercase leading-[1.15] tracking-wide text-nrl-muted">
         {label}
       </div>
-      <div className={`grid min-h-[3.7rem] grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-center gap-1 sm:min-h-[4rem] ${blurValue ? "select-none blur-[8px] opacity-60" : ""}`}>
+      <div className={`grid min-h-[2.75rem] grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-center gap-1 sm:min-h-[3rem] ${blurValue ? "select-none blur-[8px] opacity-60" : ""}`}>
         <div className="min-w-0 text-left" aria-hidden={blurValue || undefined}>
           <div className="text-[8px] font-semibold uppercase tracking-wide text-red-300/80">Lower 5%</div>
           <div className="mt-0.5 text-sm font-bold leading-none text-red-300 sm:text-base">{lower}</div>

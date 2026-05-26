@@ -1810,6 +1810,8 @@ function PlayerToken({
   const displayedProjection = showProjections
     ? actualScore ?? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
     : null
+  const isEligibleSwapTarget = swapMenuOpen && playerIndex != null && eligibleSwapPlayers.some(({ index }) => index === playerIndex)
+  const isSwapSource = swapMenuOpen && selected
 
   const content = (
     <>
@@ -1865,19 +1867,36 @@ function PlayerToken({
     </>
   )
 
-  const className = `relative mx-auto flex min-h-[72px] w-full max-w-[6rem] flex-col items-center justify-end rounded-md text-center outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-nrl-accent/70 lg:min-h-[100px] lg:max-w-[7.75rem] ${selected ? "ring-2 ring-nrl-accent/70" : ""}`
+  const className = `relative mx-auto flex min-h-[72px] w-full max-w-[6rem] flex-col items-center justify-end rounded-md text-center outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-nrl-accent/70 lg:min-h-[100px] lg:max-w-[7.75rem] ${
+    isEligibleSwapTarget
+      ? "ring-2 ring-emerald-400/90 shadow-[0_0_0_4px_rgba(16,185,129,0.18),0_18px_36px_rgba(16,185,129,0.18)]"
+      : isSwapSource
+        ? "ring-2 ring-nrl-accent/70"
+        : selected ? "ring-2 ring-nrl-accent/70" : ""
+  }`
   if (playerIndex == null) return <div className={className}>{content}</div>
 
   return (
     <div className="relative" data-my-team-player-interactive="true">
       <button
         type="button"
-        onClick={() => onSelectPlayer(playerIndex)}
+        onClick={() => {
+          if (isEligibleSwapTarget) {
+            onSwapWithPlayer(playerIndex)
+          } else {
+            onSelectPlayer(playerIndex)
+          }
+        }}
         className={className}
       >
         {content}
       </button>
-      {selected ? (
+      {isEligibleSwapTarget ? (
+        <span className="pointer-events-none absolute -top-2 left-1/2 z-30 -translate-x-1/2 rounded-full bg-emerald-400 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#06131f] shadow-[0_10px_22px_rgba(16,185,129,0.28)]">
+          Swap
+        </span>
+      ) : null}
+      {selected && !swapMenuOpen ? (
         <div className={`absolute left-1/2 top-full z-40 mt-2 flex w-72 max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col rounded-lg border border-nrl-border bg-[#0e1530] p-1.5 text-left shadow-[0_18px_34px_rgba(2,6,23,0.48)] sm:w-[22rem] sm:flex-row ${bench ? "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2" : "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2"}`}>
           <div className="shrink-0 sm:w-40">
             <button
@@ -1922,32 +1941,6 @@ function PlayerToken({
               </Link>
             ) : null}
           </div>
-          {swapMenuOpen ? (
-            <div className="mt-1 max-h-44 overflow-y-auto border-t border-nrl-border pt-1 sm:ml-1 sm:mt-0 sm:w-44 sm:border-l sm:border-t-0 sm:pl-1 sm:pt-0">
-              {eligibleSwapPlayers.length > 0 ? (
-                eligibleSwapPlayers.map(({ player: swapPlayer, index }) => {
-                  const swapFantasyPlayer = swapPlayer.playerId != null ? fantasyPlayersById.get(swapPlayer.playerId) : null
-                  return (
-                    <button
-                      key={`${swapPlayer.displayName}-${index}`}
-                      type="button"
-                      onClick={() => onSwapWithPlayer(index)}
-                      className="block w-full rounded-md px-2.5 py-2 text-left text-[11px] font-semibold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
-                    >
-                      <span className="block truncate">{swapFantasyPlayer?.name ?? swapPlayer.displayName}</span>
-                      <span className="text-[9px] uppercase tracking-wide text-nrl-muted">
-                        {swapPlayer.squadRole === "starter" ? swapPlayer.slot : swapPlayer.squadRole}
-                      </span>
-                    </button>
-                  )
-                })
-              ) : (
-                <div className="px-2.5 py-2 text-[11px] font-semibold text-nrl-muted">
-                  No eligible swaps.
-                </div>
-              )}
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>
@@ -2758,6 +2751,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     setError(null)
     setStatus(null)
     setTeam(result.team)
+    setSelectedPlayerIndex(null)
     setIsSwapMenuOpen(false)
     setIsTradeMenuOpen(false)
   }

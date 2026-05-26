@@ -194,11 +194,18 @@ function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | n
   )
 }
 
-async function isLocalhostRequest(): Promise<boolean> {
+async function shouldShowLineupsSummaryDiagnostic(): Promise<boolean> {
+  if (process.env.VERCEL_GIT_COMMIT_REF === "betting/testing") return true
+
   const headerStore = await headers()
-  const host = headerStore.get("host")?.split(":")[0] ?? ""
-  const forwardedHost = headerStore.get("x-forwarded-host")?.split(":")[0] ?? ""
-  return ["localhost", "127.0.0.1", "::1"].includes(host) || ["localhost", "127.0.0.1", "::1"].includes(forwardedHost)
+  const host = headerStore.get("host")?.split(":")[0].toLowerCase() ?? ""
+  const forwardedHost = headerStore.get("x-forwarded-host")?.split(":")[0].toLowerCase() ?? ""
+  const hosts = [host, forwardedHost]
+
+  return hosts.some((value) =>
+    ["localhost", "127.0.0.1", "::1"].includes(value) ||
+    value.includes("betting-testing")
+  )
 }
 
 function lineupsSummaryMissReason(
@@ -264,7 +271,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const matches = summary?.matches ?? fallbackData?.matches ?? []
   const matchStats = summary?.matchStats ?? fallbackData?.matchStats ?? {}
   const visibleMatches = matches.filter((match) => match.homeTeam?.players.length || match.awayTeam?.players.length || matchStats[match.matchId] || isDrawFallbackMatch(match) || !isPastMatch(match))
-  const summaryDiagnostic = summaryMissReason && await isLocalhostRequest()
+  const summaryDiagnostic = summaryMissReason && await shouldShowLineupsSummaryDiagnostic()
     ? `lineups_page_summary miss: ${summaryMissReason} Heavy fallback data path is active for ${year} ${selectedRound}.`
     : null
 

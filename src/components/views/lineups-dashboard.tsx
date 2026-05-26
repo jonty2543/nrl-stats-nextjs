@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type {
@@ -35,6 +35,7 @@ interface LineupsDashboardProps {
   playerAverages: Record<string, Record<AverageStatKey, number>>
   playerTryHistory: PlayerTryHistory
   positionPpmBaselines: Record<string, number>
+  summaryDiagnostic?: string | null
 }
 
 type Slot = "FB" | "LW" | "LC" | "RW" | "RC" | "FE" | "HLF" | "LK" | "L2R" | "R2R" | "HK" | "PR"
@@ -2332,8 +2333,8 @@ function RoundSelector({
 
 export function LineupsDashboard({
   matches,
-  liveMatches,
-  weatherForecasts,
+  liveMatches: initialLiveMatches,
+  weatherForecasts: initialWeatherForecasts,
   matchStats,
   roundOptions,
   selectedRound,
@@ -2345,8 +2346,55 @@ export function LineupsDashboard({
   playerAverages,
   playerTryHistory,
   positionPpmBaselines,
+  summaryDiagnostic,
 }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("odds")
+  const [supplementalData, setSupplementalData] = useState<{
+    key: string
+    liveMatches: Record<string, LineupLiveMatch>
+    weatherForecasts: Record<string, LineupWeatherForecast>
+  } | null>(null)
+  const supplementalFetchKey = useMemo(
+    () => matches.map((match) => [match.matchId, match.venue ?? "", match.kickoffUtc ?? ""].join(":")).join("|"),
+    [matches]
+  )
+  const liveMatches = supplementalData?.key === supplementalFetchKey ? supplementalData.liveMatches : initialLiveMatches
+  const weatherForecasts = supplementalData?.key === supplementalFetchKey ? supplementalData.weatherForecasts : initialWeatherForecasts
+
+  useEffect(() => {
+    if (matches.length === 0) return
+
+    const controller = new AbortController()
+    const payload = {
+      matches: matches.map((match) => ({
+        matchId: match.matchId,
+        venue: match.venue,
+        kickoffUtc: match.kickoffUtc,
+      })),
+    }
+
+    fetch("/api/lineups/supplemental", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { liveMatches?: Record<string, LineupLiveMatch>; weatherForecasts?: Record<string, LineupWeatherForecast> } | null) => {
+        if (!data || controller.signal.aborted) return
+        setSupplementalData({
+          key: supplementalFetchKey,
+          liveMatches: data.liveMatches ?? {},
+          weatherForecasts: data.weatherForecasts ?? {},
+        })
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) console.warn("Unable to load lineup supplemental data.", error)
+      })
+
+    return () => controller.abort()
+  }, [matches, supplementalFetchKey])
+
   const matchDateGroups = matches.reduce<Array<{ dateKey: string; matches: LineupMatch[] }>>(
     (groups, match) => {
       const dateKey = matchDateKey(match)
@@ -2364,6 +2412,11 @@ export function LineupsDashboard({
 
   return (
     <div className="space-y-3">
+      {summaryDiagnostic ? (
+        <div className="rounded-lg border border-amber-300/50 bg-amber-300/12 px-4 py-3 text-xs font-semibold text-amber-100">
+          {summaryDiagnostic}
+        </div>
+      ) : null}
       <RoundSelector roundOptions={roundOptions} selectedRound={selectedRound} />
       {matches.length > 0 ? (
         <div className="space-y-11">

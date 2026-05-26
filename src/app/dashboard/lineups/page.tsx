@@ -1,18 +1,17 @@
 import { auth } from "@clerk/nextjs/server"
+import { headers } from "next/headers"
 import { LineupsDashboard } from "@/components/views/lineups-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import {
   fetchCasualtyWardOuts,
   fetchLineupRoundOptions,
   fetchLineupsForRound,
-  fetchLiveLineupData,
   fetchUpcomingSportsbetH2HOdds,
   fetchUpcomingTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
-import { fetchLineupWeatherForecasts } from "@/lib/lineups/weather"
 import { fetchLineupPlayerTryHistorySummary, fetchLineupsPageSummary, fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
 import type { PlayerStat } from "@/lib/data/types"
-import type { LineupLiveMatch, LineupMatch, LineupRoundOption } from "@/lib/lineups/nrl-lineups"
+import type { LineupMatch, LineupRoundOption } from "@/lib/lineups/nrl-lineups"
 
 export const dynamic = "force-dynamic"
 
@@ -146,15 +145,6 @@ function isPastMatch(match: LineupMatch, now = new Date()): boolean {
   return kickoff != null && kickoff.getTime() <= now.getTime()
 }
 
-function hasLiveData(liveMatch: LineupLiveMatch | null | undefined): boolean {
-  return Boolean(
-    liveMatch?.state ||
-    (liveMatch?.scoringEvents.length ?? 0) > 0 ||
-    Object.keys(liveMatch?.playerStates ?? {}).length > 0 ||
-    Object.keys(liveMatch?.playerStats ?? {}).length > 0
-  )
-}
-
 function isDrawFallbackMatch(match: LineupMatch): boolean {
   return match.matchId.startsWith("draw-2026-")
 }
@@ -204,24 +194,35 @@ function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | n
   )
 }
 
-function lineupsSummarySupportsAccess(
+async function isLocalhostRequest(): Promise<boolean> {
+  const headerStore = await headers()
+  const host = headerStore.get("host")?.split(":")[0] ?? ""
+  const forwardedHost = headerStore.get("x-forwarded-host")?.split(":")[0] ?? ""
+  return ["localhost", "127.0.0.1", "::1"].includes(host) || ["localhost", "127.0.0.1", "::1"].includes(forwardedHost)
+}
+
+function lineupsSummaryMissReason(
   summary: Awaited<ReturnType<typeof fetchLineupsPageSummary>>,
   hasProAccess: boolean
-): boolean {
-  if (!summary || summary.matches.length === 0) return false
+): string | null {
+  if (!summary) return "No row returned from summary.lineups_page_summary for this year/round."
+  if (summary.matches.length === 0) return "Summary row returned zero matches."
   const hasRecentResults = summary.matches.some((match) =>
     Array.isArray(match.homeRecentResults) ||
     Array.isArray(match.awayRecentResults) ||
     Array.isArray(match.recentHeadToHead)
   )
-  if (!hasRecentResults) return false
-  if (!hasProAccess) return true
+  if (!hasRecentResults) return "Summary is missing recent-results fields used by the page."
+  if (!hasProAccess) return null
 
   const players = summary.matches.flatMap((match) => [
     ...(match.homeTeam?.players ?? []),
     ...(match.awayTeam?.players ?? []),
   ])
-  return players.length === 0 || players.some((player) => typeof player.fantasyProjection === "number")
+  if (players.length > 0 && !players.some((player) => typeof player.fantasyProjection === "number")) {
+    return "Pro access is enabled, but the summary has no player fantasyProjection values."
+  }
+  return null
 }
 
 export default async function LineupsPage({ searchParams }: LineupsPageProps) {
@@ -232,7 +233,8 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const roundOptions = await fetchLineupRoundOptions(year)
   const selectedRound = roundOptions.find((option) => option.value === params.round)?.value ?? currentRoundOption(roundOptions)?.value ?? "Round 1"
   const rawSummary = await withFallback(fetchLineupsPageSummary(year, selectedRound), null, "Lineups page summary")
-  const summary = lineupsSummarySupportsAccess(rawSummary, hasProAccess) ? rawSummary : null
+  const summaryMissReason = lineupsSummaryMissReason(rawSummary, hasProAccess)
+  const summary = summaryMissReason ? null : rawSummary
   const fallbackData = summary ? null : await (async () => {
     const [teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStatsCurrentYear, playerTryHistory, lineupRound] = await Promise.all([
       withFallback(fetchTeamLogos(), {}, "Lineups team logos"),
@@ -261,17 +263,16 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   })()
   const matches = summary?.matches ?? fallbackData?.matches ?? []
   const matchStats = summary?.matchStats ?? fallbackData?.matchStats ?? {}
-  const [liveMatches, weatherForecasts] = await Promise.all([
-    withFallback(fetchLiveLineupData(matches.map((match) => match.matchId)), {}, "Lineups live data"),
-    withFallback(fetchLineupWeatherForecasts(matches), {}, "Lineups weather"),
-  ])
-  const visibleMatches = matches.filter((match) => match.homeTeam?.players.length || match.awayTeam?.players.length || matchStats[match.matchId] || isDrawFallbackMatch(match) || !isPastMatch(match) || hasLiveData(liveMatches[match.matchId]))
+  const visibleMatches = matches.filter((match) => match.homeTeam?.players.length || match.awayTeam?.players.length || matchStats[match.matchId] || isDrawFallbackMatch(match) || !isPastMatch(match))
+  const summaryDiagnostic = summaryMissReason && await isLocalhostRequest()
+    ? `lineups_page_summary miss: ${summaryMissReason} Heavy fallback data path is active for ${year} ${selectedRound}.`
+    : null
 
   return (
     <LineupsDashboard
       matches={visibleMatches}
-      liveMatches={liveMatches}
-      weatherForecasts={weatherForecasts}
+      liveMatches={{}}
+      weatherForecasts={{}}
       matchStats={matchStats}
       roundOptions={summary?.roundOptions.length ? summary.roundOptions : roundOptions}
       selectedRound={selectedRound}
@@ -283,6 +284,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       playerAverages={(summary?.playerAverages ?? fallbackData?.playerAverages ?? {}) as Record<string, Record<AverageKey, number>>}
       playerTryHistory={summary?.playerTryHistory ?? fallbackData?.playerTryHistory ?? {}}
       positionPpmBaselines={summary?.positionPpmBaselines ?? fallbackData?.positionPpmBaselines ?? {}}
+      summaryDiagnostic={summaryDiagnostic}
     />
   )
 }

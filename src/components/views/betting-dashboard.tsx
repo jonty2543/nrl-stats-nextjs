@@ -2394,13 +2394,6 @@ function BestBetsHero({
   } | null>(null);
   const queueViewportRef = useRef<HTMLDivElement | null>(null);
   const isArbitrage = category === "arbitrage";
-  const ratedModelBets = useMemo(
-    () => [...modelBets].sort((a, b) => {
-      if (Math.abs(a.score - b.score) > 1e-9) return b.score - a.score;
-      return b.edgePp - a.edgePp;
-    }),
-    [modelBets]
-  );
   const ratedArbitrageBets = useMemo(
     () => [...arbitrageBets].sort((a, b) => {
       if (Math.abs(a.score - b.score) > 1e-9) return b.score - a.score;
@@ -2410,7 +2403,7 @@ function BestBetsHero({
   );
   const activeSelectedBestBetId = selectedBestBetIds[category];
   const activeItems = useMemo(() => {
-    const sortedItems = isArbitrage ? ratedArbitrageBets : ratedModelBets;
+    const sortedItems = isArbitrage ? ratedArbitrageBets : modelBets;
     if (!activeSelectedBestBetId) return sortedItems;
 
     const selectedIndex = sortedItems.findIndex((item) => item.id === activeSelectedBestBetId);
@@ -2424,7 +2417,7 @@ function BestBetsHero({
       ...sortedItems.slice(0, selectedIndex),
       ...sortedItems.slice(selectedIndex + 1),
     ];
-  }, [activeSelectedBestBetId, isArbitrage, ratedArbitrageBets, ratedModelBets]);
+  }, [activeSelectedBestBetId, isArbitrage, modelBets, ratedArbitrageBets]);
   const featuredItem = activeItems[0] ?? null;
   const queueItems = activeItems.slice(1);
   const activeTheme = isArbitrage

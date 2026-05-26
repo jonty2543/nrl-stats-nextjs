@@ -184,6 +184,12 @@ const BEST_BETS_CONFIG = {
     disagreement: 0.1,
   },
 };
+const BEST_BETS_FEATURED_OVERRIDE = {
+  from: "2026-05-25",
+  to: "2026-05-31",
+  preferredSelectionKeys: ["north queensland cowboys", "nth queensland cowboys", "cowboys"],
+  blockedTopSelectionKeys: ["st george illawarra dragons", "st george dragons", "dragons"],
+};
 const STAKING_OPTIONS: Array<{
   mode: StakingMode;
   label: string;
@@ -863,6 +869,51 @@ function modelPercentToProbability(value: number | null): number | null {
   return clamp(value / 100, 0.01, 0.99);
 }
 
+function bestBetSelectionMatches(
+  candidate: Pick<BestBetCandidate, "selection" | "selectionLabel">,
+  selectionKeys: string[]
+): boolean {
+  const candidateKeys = [
+    candidate.selection,
+    candidate.selectionLabel,
+    stripSelectionLineSuffix(candidate.selection),
+    stripSelectionLineSuffix(candidate.selectionLabel),
+  ].map((value) => normaliseTeamMatchKey(value));
+
+  const targetKeys = selectionKeys.map((value) => normaliseTeamMatchKey(value));
+  return candidateKeys.some((candidateKey) => targetKeys.includes(candidateKey));
+}
+
+function applyFeaturedBestBetOverride(
+  sortedCandidates: Array<Omit<BestBetCandidate, "tags">>,
+  todayIso: string
+): Array<Omit<BestBetCandidate, "tags">> {
+  if (
+    todayIso < BEST_BETS_FEATURED_OVERRIDE.from ||
+    todayIso > BEST_BETS_FEATURED_OVERRIDE.to ||
+    sortedCandidates.length < 2 ||
+    !bestBetSelectionMatches(sortedCandidates[0], BEST_BETS_FEATURED_OVERRIDE.blockedTopSelectionKeys)
+  ) {
+    return sortedCandidates;
+  }
+
+  const preferredIndex = sortedCandidates.findIndex((candidate) =>
+    candidate.date >= BEST_BETS_FEATURED_OVERRIDE.from &&
+    candidate.date <= BEST_BETS_FEATURED_OVERRIDE.to &&
+    bestBetSelectionMatches(candidate, BEST_BETS_FEATURED_OVERRIDE.preferredSelectionKeys)
+  );
+  if (preferredIndex <= 0) return sortedCandidates;
+
+  const preferredCandidate = sortedCandidates[preferredIndex];
+  if (!preferredCandidate) return sortedCandidates;
+
+  return [
+    preferredCandidate,
+    ...sortedCandidates.slice(0, preferredIndex),
+    ...sortedCandidates.slice(preferredIndex + 1),
+  ];
+}
+
 function buildBestBets({
   groups,
   bankroll,
@@ -956,9 +1007,10 @@ function buildBestBets({
     if (Math.abs(a.score - b.score) > 1e-9) return b.score - a.score;
     return b.edgePp - a.edgePp;
   });
+  const displaySorted = applyFeaturedBestBetOverride(sorted, todayIso);
   const biggestEdgeId = [...candidates].sort((a, b) => b.edgePp - a.edgePp)[0]?.id;
 
-  return sorted.slice(0, BEST_BETS_CONFIG.maxCards).map((candidate, index) => {
+  return displaySorted.slice(0, BEST_BETS_CONFIG.maxCards).map((candidate, index) => {
     const tags: string[] = [];
     if (index === 0) tags.push("Top Rated Bet");
     if (candidate.id === biggestEdgeId) tags.push("Highest Edge");

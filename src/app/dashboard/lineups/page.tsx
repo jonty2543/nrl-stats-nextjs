@@ -208,27 +208,9 @@ async function shouldShowLineupsSummaryDiagnostic(): Promise<boolean> {
   )
 }
 
-function lineupsSummaryMissReason(
-  summary: Awaited<ReturnType<typeof fetchLineupsPageSummary>>,
-  hasProAccess: boolean
-): string | null {
+function lineupsSummaryMissReason(summary: Awaited<ReturnType<typeof fetchLineupsPageSummary>>): string | null {
   if (!summary) return "No row returned from summary.lineups_page_summary for this year/round."
   if (summary.matches.length === 0) return "Summary row returned zero matches."
-  const hasRecentResults = summary.matches.some((match) =>
-    Array.isArray(match.homeRecentResults) ||
-    Array.isArray(match.awayRecentResults) ||
-    Array.isArray(match.recentHeadToHead)
-  )
-  if (!hasRecentResults) return "Summary is missing recent-results fields used by the page."
-  if (!hasProAccess) return null
-
-  const players = summary.matches.flatMap((match) => [
-    ...(match.homeTeam?.players ?? []),
-    ...(match.awayTeam?.players ?? []),
-  ])
-  if (players.length > 0 && !players.some((player) => typeof player.fantasyProjection === "number")) {
-    return "Pro access is enabled, but the summary has no player fantasyProjection values."
-  }
   return null
 }
 
@@ -240,7 +222,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const roundOptions = await fetchLineupRoundOptions(year)
   const selectedRound = roundOptions.find((option) => option.value === params.round)?.value ?? currentRoundOption(roundOptions)?.value ?? "Round 1"
   const rawSummary = await withFallback(fetchLineupsPageSummary(year, selectedRound), null, "Lineups page summary")
-  const summaryMissReason = lineupsSummaryMissReason(rawSummary, hasProAccess)
+  const summaryMissReason = lineupsSummaryMissReason(rawSummary)
   const summary = summaryMissReason ? null : rawSummary
   const fallbackData = summary ? null : await (async () => {
     const [teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStatsCurrentYear, playerTryHistory, lineupRound] = await Promise.all([

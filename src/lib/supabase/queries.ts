@@ -1939,16 +1939,8 @@ async function fetchLineupsPageSummaryFromSupabase(year: number, round: string):
 }
 
 export async function fetchLineupsPageSummary(year: number, round: string): Promise<LineupsPageSummary | null> {
-  const key = `${year}:${round}`;
   try {
-    if (process.env.NODE_ENV !== "production") {
-      return await fetchLineupsPageSummaryFromSupabase(year, round);
-    }
-    return await unstable_cache(
-      async () => fetchLineupsPageSummaryFromSupabase(year, round),
-      ["lineups-page-summary-v1", key],
-      { revalidate: 300 }
-    )();
+    return await fetchLineupsPageSummaryFromSupabase(year, round);
   } catch (error) {
     console.warn("Unable to fetch lineups page summary.", error);
     return null;

@@ -2333,6 +2333,7 @@ function BestBetsHero({
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
+  const [selectedBestBetIds, setSelectedBestBetIds] = useState<Partial<Record<"model" | "arbitrage", string>>>({});
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [bestBetSlip, setBestBetSlip] = useState<{
     bet: BestBetCandidate;
@@ -2355,7 +2356,23 @@ function BestBetsHero({
     }),
     [arbitrageBets]
   );
-  const activeItems = isArbitrage ? ratedArbitrageBets : ratedModelBets;
+  const activeSelectedBestBetId = selectedBestBetIds[category];
+  const activeItems = useMemo(() => {
+    const sortedItems = isArbitrage ? ratedArbitrageBets : ratedModelBets;
+    if (!activeSelectedBestBetId) return sortedItems;
+
+    const selectedIndex = sortedItems.findIndex((item) => item.id === activeSelectedBestBetId);
+    if (selectedIndex <= 0) return sortedItems;
+
+    const selectedItem = sortedItems[selectedIndex];
+    if (!selectedItem) return sortedItems;
+
+    return [
+      selectedItem,
+      ...sortedItems.slice(0, selectedIndex),
+      ...sortedItems.slice(selectedIndex + 1),
+    ];
+  }, [activeSelectedBestBetId, isArbitrage, ratedArbitrageBets, ratedModelBets]);
   const featuredItem = activeItems[0] ?? null;
   const queueItems = activeItems.slice(1);
   const activeTheme = isArbitrage
@@ -2389,6 +2406,16 @@ function BestBetsHero({
 
   const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
     setCategory(nextCategory);
+    window.requestAnimationFrame(() => {
+      if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
+    });
+  };
+
+  const handleBestBetSelect = (itemId: string) => {
+    setSelectedBestBetIds((current) => ({
+      ...current,
+      [category]: itemId,
+    }));
     window.requestAnimationFrame(() => {
       if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
     });
@@ -2686,9 +2713,14 @@ function BestBetsHero({
                       {rowContent}
                     </div>
                   ) : (
-                    <div key={item.id} className="block w-full">
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleBestBetSelect(item.id)}
+                      className="block w-full cursor-pointer"
+                    >
                       {rowContent}
-                    </div>
+                    </button>
                   );
                 })}
                 </div>

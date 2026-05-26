@@ -1661,6 +1661,7 @@ export function BettingDashboard({
 
     const minValue = Math.min(...values);
     const maxValue = Math.max(...values);
+    const latestValue = values[values.length - 1] ?? 0;
     const range = maxValue - minValue || 1;
     const chartLeft = paddingLeft;
     const chartRight = width - paddingRight;
@@ -1713,6 +1714,8 @@ export function BettingDashboard({
       height,
       lineSegments,
       areaPoints: `${points.join(" ")} ${chartRight},${chartBottom} ${chartLeft},${chartBottom}`,
+      areaFillFrom: latestValue < 0 ? "rgba(252,165,165,0.2)" : "rgba(0,245,138,0.22)",
+      areaFillTo: latestValue < 0 ? "rgba(252,165,165,0)" : "rgba(0,245,138,0)",
       chartLeft,
       chartRight,
       chartTop,
@@ -1974,8 +1977,8 @@ export function BettingDashboard({
                 <svg viewBox={`0 0 ${trackerChart.width} ${trackerChart.height}`} className="h-36 w-full overflow-visible md:h-44" preserveAspectRatio="none" role="img" aria-label="Bet tracker profit line chart">
                   <defs>
                     <linearGradient id="tracker-profit-fill" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="rgba(0,245,138,0.22)" />
-                      <stop offset="100%" stopColor="rgba(0,245,138,0)" />
+                      <stop offset="0%" stopColor={trackerChart.areaFillFrom} />
+                      <stop offset="100%" stopColor={trackerChart.areaFillTo} />
                     </linearGradient>
                   </defs>
                   {trackerChart.yLabels.map(({ label, y }) => (

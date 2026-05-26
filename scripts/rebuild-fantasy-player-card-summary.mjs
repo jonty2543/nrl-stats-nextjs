@@ -653,6 +653,7 @@ function isZeroProjectionPosition(value) {
 async function fetchLineupProjectionSnapshot(supabase) {
   const cutoffUtc = getProjectionFixtureCutoffUtc();
   const empty = {
+    source: "none",
     round: null,
     projectionByPlayerId: new Map(),
     projectionByPlayerName: new Map(),
@@ -696,7 +697,7 @@ async function fetchLineupProjectionSnapshot(supabase) {
     }
   }
 
-  const snapshot = { ...empty, round: parseRoundNumber(roundLabel) };
+  const snapshot = { ...empty, source: "lineups", round: parseRoundNumber(roundLabel) };
   for (const row of data) {
     const id = row.player_id == null ? null : Number(row.player_id);
     const nameKey = normaliseProjectionPlayerName(row.player);
@@ -742,7 +743,7 @@ async function fetchLineupUnawareProjectionSnapshot(supabase, cutoffUtc, empty) 
       return Number.isFinite(kickoffMs) && kickoffMs >= firstKickoffMs && kickoffMs < firstKickoffMs + 6 * 24 * 60 * 60 * 1000;
     });
 
-  const snapshot = { ...empty, round: parseRoundNumber(rows[0]?.round) };
+  const snapshot = { ...empty, source: "lineup_unaware", round: parseRoundNumber(rows[0]?.round) };
   for (const row of rows) {
     const nameKey = normaliseProjectionPlayerName(row.player);
     const projection = toNum(row.projection) ?? toNum(row.model_projection);
@@ -1297,13 +1298,22 @@ async function main() {
     const nameKey = normaliseProjectionPlayerName(player.name);
     const coach = coachPlayersById.get(player.id);
     const role = lineups.roleByPlayerId.get(player.id) ?? lineups.roleByPlayerName.get(nameKey) ?? null;
-    const projection =
+    const lineupProjection =
       lineups.projectionByPlayerId.get(player.id) ??
       lineups.projectionByPlayerName.get(nameKey) ??
-      coach?.projection ??
-      player.projectedAvg ??
-      player.avgPoints ??
       null;
+    const isNamedInCurrentLineups =
+      lineups.roleByPlayerId.has(player.id) ||
+      lineups.roleByPlayerName.has(nameKey);
+    const projection = lineups.source === "lineups"
+      ? isNamedInCurrentLineups
+        ? lineupProjection ?? 0
+        : null
+      : lineupProjection ??
+        coach?.projection ??
+        player.projectedAvg ??
+        player.avgPoints ??
+        null;
     const breakeven = coach?.breakeven ?? player.be ?? null;
     const weeklyChange =
       player.ownedBy == null || ownershipBaselineById.get(player.id) == null

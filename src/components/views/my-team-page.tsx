@@ -1879,50 +1879,52 @@ function PlayerToken({
         {content}
       </button>
       {selected ? (
-        <div className={`absolute left-1/2 top-full z-40 mt-2 w-40 -translate-x-1/2 rounded-lg border border-nrl-border bg-[#0e1530] p-1.5 text-left shadow-[0_18px_34px_rgba(2,6,23,0.48)] ${bench ? "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2" : "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2"}`}>
-          <button
-            type="button"
-            onClick={onToggleSwapMenu}
-            className="block w-full rounded-md px-2.5 py-2 text-left text-xs font-bold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
-          >
-            Swap
-          </button>
-          {player.tradeReversal ? (
+        <div className={`absolute left-1/2 top-full z-40 mt-2 flex w-72 max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col rounded-lg border border-nrl-border bg-[#0e1530] p-1.5 text-left shadow-[0_18px_34px_rgba(2,6,23,0.48)] sm:w-[22rem] sm:flex-row ${bench ? "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2" : "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2"}`}>
+          <div className="shrink-0 sm:w-40">
             <button
               type="button"
-              onClick={onReverseTrade}
-              className="block w-full rounded-md px-2.5 py-2 text-left text-xs font-bold text-nrl-accent transition-colors hover:bg-nrl-accent/10"
-            >
-              Reverse
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onToggleTradeMenu}
+              onClick={onToggleSwapMenu}
               className="block w-full rounded-md px-2.5 py-2 text-left text-xs font-bold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
             >
-              Trade
+              Swap
             </button>
-          )}
-          {showCaptainStyling ? (
-            <button
-              type="button"
-              onClick={onSetCaptain}
-              className="block w-full rounded-md px-2.5 py-2 text-left text-xs font-bold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
-            >
-              Captain
-            </button>
-          ) : null}
-          {fantasyPlayer ? (
-            <Link
-              href={`/dashboard/fantasy/${encodeURIComponent(fantasyPlayerSlug(fantasyPlayer.name))}?from=my-team`}
-              className="block rounded-md px-2.5 py-2 text-xs font-bold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
-            >
-              Player Profile
-            </Link>
-          ) : null}
+            {player.tradeReversal ? (
+              <button
+                type="button"
+                onClick={onReverseTrade}
+                className="block w-full rounded-md px-2.5 py-2 text-left text-xs font-bold text-nrl-accent transition-colors hover:bg-nrl-accent/10"
+              >
+                Reverse
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onToggleTradeMenu}
+                className="block w-full rounded-md px-2.5 py-2 text-left text-xs font-bold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
+              >
+                Trade
+              </button>
+            )}
+            {showCaptainStyling ? (
+              <button
+                type="button"
+                onClick={onSetCaptain}
+                className="block w-full rounded-md px-2.5 py-2 text-left text-xs font-bold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
+              >
+                Captain
+              </button>
+            ) : null}
+            {fantasyPlayer ? (
+              <Link
+                href={`/dashboard/fantasy/${encodeURIComponent(fantasyPlayerSlug(fantasyPlayer.name))}?from=my-team`}
+                className="block rounded-md px-2.5 py-2 text-xs font-bold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
+              >
+                Player Profile
+              </Link>
+            ) : null}
+          </div>
           {swapMenuOpen ? (
-            <div className="mt-1 max-h-44 overflow-y-auto border-t border-nrl-border pt-1">
+            <div className="mt-1 max-h-44 overflow-y-auto border-t border-nrl-border pt-1 sm:ml-1 sm:mt-0 sm:w-44 sm:border-l sm:border-t-0 sm:pl-1 sm:pt-0">
               {eligibleSwapPlayers.length > 0 ? (
                 eligibleSwapPlayers.map(({ player: swapPlayer, index }) => {
                   const swapFantasyPlayer = swapPlayer.playerId != null ? fantasyPlayersById.get(swapPlayer.playerId) : null
@@ -2251,7 +2253,7 @@ function TeamBoard({
   return (
     <section className="rounded-xl border border-nrl-border bg-nrl-panel text-nrl-text shadow-[0_18px_48px_rgba(2,6,23,0.28)]">
       {availabilitySummary.length > 0 ? (
-        <div className="grid grid-cols-6 gap-px border-b border-nrl-border bg-nrl-border text-center">
+        <div className="flex gap-2 overflow-x-auto border-b border-nrl-border bg-[#0b1229] p-2 text-center sm:gap-3 sm:p-3">
           {availabilitySummary.map(({ round, availableCount, target }) => {
             const missing = Math.max(0, target - availableCount)
             const countColour = missing === 0
@@ -2266,7 +2268,7 @@ function TeamBoard({
               key={round}
               type="button"
               onClick={() => selectHeaderRound(round)}
-              className="min-w-0 bg-[#101936] px-1 py-2 transition-colors hover:bg-[#14203f] sm:px-2"
+              className="min-w-[5.5rem] flex-1 rounded-lg border border-nrl-border bg-[#101936] px-3 py-3 transition-colors hover:bg-[#14203f] sm:min-w-[7rem]"
             >
               <div className="text-[8px] font-black uppercase tracking-[0.12em] text-nrl-muted">R{round}</div>
               <div className={`text-[11px] font-black leading-tight sm:text-sm lg:text-base ${countColour}`}>{availableCount}/{target}</div>

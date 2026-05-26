@@ -97,6 +97,7 @@ interface MyTeamPlayer {
     player: MyTeamPlayer
     outgoingCost: number | null
     incomingCost: number | null
+    round?: string
   } | null
 }
 
@@ -1616,6 +1617,18 @@ function swapMyTeamPlayers(
   return { team: { ...team, players: nextPlayers }, error: null }
 }
 
+function canSwapMyTeamPlayers(
+  team: SavedMyTeam,
+  sourceIndex: number,
+  targetIndex: number,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+): boolean {
+  const targetPlayer = team.players[targetIndex] ?? null
+  if (!targetPlayer) return false
+  const result = swapMyTeamPlayers(team, sourceIndex, dropTargetForPlayer(targetPlayer, targetIndex), fantasyPlayersById)
+  return result.error == null && result.team != null
+}
+
 function dropTargetForPlayer(player: MyTeamPlayer, index: number): TeamDropTarget {
   return player.squadRole === "starter"
     ? { kind: "starter", slot: player.slot, playerIndex: index }
@@ -1761,6 +1774,7 @@ function PlayerToken({
   swapMenuOpen = false,
   majorRoundAvailability = [],
   markerOverride = null,
+  showTradeReversal = false,
   eligibleSwapPlayers,
   onSelectPlayer,
   onToggleSwapMenu,
@@ -1783,6 +1797,7 @@ function PlayerToken({
   swapMenuOpen?: boolean
   majorRoundAvailability?: RoundAvailabilityBadge[]
   markerOverride?: "available" | "unavailable" | "bye" | null
+  showTradeReversal?: boolean
   eligibleSwapPlayers: IndexedMyTeamPlayer[]
   onSelectPlayer: (playerIndex: number) => void
   onToggleSwapMenu: () => void
@@ -1827,7 +1842,7 @@ function PlayerToken({
           className="h-full w-full object-cover object-top"
         />
       </div>
-      {player.tradeReversal ? (
+      {showTradeReversal ? (
         <span className="absolute left-[8%] top-[9%] z-20 grid h-5 w-5 place-items-center rounded-full border border-emerald-200/80 bg-emerald-500 text-[12px] font-black text-[#07131f] shadow-[0_8px_18px_rgba(0,0,0,0.22)] lg:h-6 lg:w-6 lg:text-sm">
           &uarr;
         </span>
@@ -1897,7 +1912,7 @@ function PlayerToken({
         </span>
       ) : null}
       {selected && !swapMenuOpen ? (
-        <div className={`absolute left-1/2 top-full z-40 mt-2 flex w-72 max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col rounded-lg border border-nrl-border bg-[#0e1530] p-1.5 text-left shadow-[0_18px_34px_rgba(2,6,23,0.48)] sm:w-[22rem] sm:flex-row ${bench ? "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2" : "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2"}`}>
+        <div className={`absolute left-1/2 top-full z-40 mt-2 w-40 max-w-[calc(100vw-1rem)] -translate-x-1/2 rounded-lg border border-nrl-border bg-[#0e1530] p-1.5 text-left shadow-[0_18px_34px_rgba(2,6,23,0.48)] ${bench ? "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2" : "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2"}`}>
           <div className="shrink-0 sm:w-40">
             <button
               type="button"
@@ -2161,6 +2176,8 @@ function TeamBoard({
     player
       ? getMajorRoundAvailabilityBadges(player, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames, currentRoundForHeader)
       : []
+  const showTradeReversalForPlayer = (player: MyTeamPlayer | null) =>
+    Boolean(player?.tradeReversal?.round && player.tradeReversal.round === team?.round)
   const availableHeaderRounds = MY_TEAM_PROJECTION_ROUNDS.filter((round) => round >= (currentRoundForHeader ?? 1))
   const showRoundProjections = showProjections && selectedProjectionRound == null
   const activeHeaderIsMajorRound = activeHeaderRound != null && MY_TEAM_MAJOR_BYE_ROUNDS.includes(activeHeaderRound as MyTeamMajorByeRound)
@@ -2405,13 +2422,13 @@ function TeamBoard({
                   {row.count === 1 ? (
                     <>
                       <div />
-                      <PlayerToken player={cells[0]?.player ?? null} playerIndex={cells[0]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showRoundProjections} scoreRound={activeHeaderRound} showCaptainStyling={showCaptainStyling} selected={cells[0]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} majorRoundAvailability={availabilityForPlayer(cells[0]?.player ?? null)} markerOverride={markerOverrideForIndex(cells[0]?.index ?? null)} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={() => cells[0]?.index != null ? onSetCaptain(cells[0].index) : undefined} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
+                      <PlayerToken player={cells[0]?.player ?? null} playerIndex={cells[0]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showRoundProjections} scoreRound={activeHeaderRound} showCaptainStyling={showCaptainStyling} selected={cells[0]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} majorRoundAvailability={availabilityForPlayer(cells[0]?.player ?? null)} markerOverride={markerOverrideForIndex(cells[0]?.index ?? null)} showTradeReversal={showTradeReversalForPlayer(cells[0]?.player ?? null)} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={() => cells[0]?.index != null ? onSetCaptain(cells[0].index) : undefined} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
                       <div />
                     </>
                   ) : row.count === 2 ? (
                     <>
-                      <PlayerToken player={cells[0]?.player ?? null} playerIndex={cells[0]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showRoundProjections} scoreRound={activeHeaderRound} showCaptainStyling={showCaptainStyling} selected={cells[0]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} majorRoundAvailability={availabilityForPlayer(cells[0]?.player ?? null)} markerOverride={markerOverrideForIndex(cells[0]?.index ?? null)} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={() => cells[0]?.index != null ? onSetCaptain(cells[0].index) : undefined} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
-                      <PlayerToken player={cells[1]?.player ?? null} playerIndex={cells[1]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showRoundProjections} scoreRound={activeHeaderRound} showCaptainStyling={showCaptainStyling} selected={cells[1]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} majorRoundAvailability={availabilityForPlayer(cells[1]?.player ?? null)} markerOverride={markerOverrideForIndex(cells[1]?.index ?? null)} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={() => cells[1]?.index != null ? onSetCaptain(cells[1].index) : undefined} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
+                      <PlayerToken player={cells[0]?.player ?? null} playerIndex={cells[0]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showRoundProjections} scoreRound={activeHeaderRound} showCaptainStyling={showCaptainStyling} selected={cells[0]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} majorRoundAvailability={availabilityForPlayer(cells[0]?.player ?? null)} markerOverride={markerOverrideForIndex(cells[0]?.index ?? null)} showTradeReversal={showTradeReversalForPlayer(cells[0]?.player ?? null)} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={() => cells[0]?.index != null ? onSetCaptain(cells[0].index) : undefined} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
+                      <PlayerToken player={cells[1]?.player ?? null} playerIndex={cells[1]?.index ?? null} fantasyPlayersById={fantasyPlayersById} fantasyCoachPlayersById={fantasyCoachPlayersById} lineupsProjections={lineupsProjections} playerImages={playerImages} showProjections={showRoundProjections} scoreRound={activeHeaderRound} showCaptainStyling={showCaptainStyling} selected={cells[1]?.index === selectedPlayerIndex} swapMenuOpen={swapMenuOpen} majorRoundAvailability={availabilityForPlayer(cells[1]?.player ?? null)} markerOverride={markerOverrideForIndex(cells[1]?.index ?? null)} showTradeReversal={showTradeReversalForPlayer(cells[1]?.player ?? null)} eligibleSwapPlayers={eligibleSwapPlayers} onSelectPlayer={onSelectPlayer} onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu} onSetCaptain={() => cells[1]?.index != null ? onSetCaptain(cells[1].index) : undefined} onSwapWithPlayer={onSwapWithPlayer} onReverseTrade={onReverseTrade} />
                     </>
                   ) : (
                     cells.map((entry, index) => (
@@ -2430,6 +2447,7 @@ function TeamBoard({
                         swapMenuOpen={swapMenuOpen}
                         majorRoundAvailability={availabilityForPlayer(entry?.player ?? null)}
                         markerOverride={markerOverrideForIndex(entry?.index ?? null)}
+                        showTradeReversal={showTradeReversalForPlayer(entry?.player ?? null)}
                         eligibleSwapPlayers={eligibleSwapPlayers}
                         onSelectPlayer={onSelectPlayer}
                         onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu}
@@ -2466,6 +2484,7 @@ function TeamBoard({
               swapMenuOpen={swapMenuOpen}
               majorRoundAvailability={availabilityForPlayer(benchPlayers[index]?.player ?? null)}
               markerOverride={markerOverrideForIndex(benchPlayers[index]?.index ?? null)}
+              showTradeReversal={showTradeReversalForPlayer(benchPlayers[index]?.player ?? null)}
               eligibleSwapPlayers={eligibleSwapPlayers}
               onSelectPlayer={onSelectPlayer}
               onToggleSwapMenu={onToggleSwapMenu} onToggleTradeMenu={onToggleTradeMenu}
@@ -2522,6 +2541,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
       const target = event.target as Element | null
       if (target?.closest("[data-my-team-player-interactive='true']")) return
       if (tradeOverlayRef.current?.contains(event.target as Node)) return
+      if (isSwapMenuOpen && teamBoardRef.current?.contains(event.target as Node)) return
       setSelectedPlayerIndex(null)
       setIsSwapMenuOpen(false)
       setIsTradeMenuOpen(false)
@@ -2529,7 +2549,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
 
     document.addEventListener("pointerdown", handlePointerDown)
     return () => document.removeEventListener("pointerdown", handlePointerDown)
-  }, [selectedPlayerIndex])
+  }, [isSwapMenuOpen, selectedPlayerIndex])
 
   useEffect(() => {
     if (!isMyTeamAuthLoaded) {
@@ -2714,6 +2734,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
       .map((player, index) => ({ player, index }))
       .filter(({ index }) => index !== selectedPlayerIndex)
       .filter(({ player }) => playersShareFantasyPosition(team.players[selectedPlayerIndex], player, fantasyPlayersById))
+      .filter(({ index }) => canSwapMyTeamPlayers(team, selectedPlayerIndex, index, fantasyPlayersById))
     : []
   const selectedPlayer = selectedPlayerIndex != null ? team?.players[selectedPlayerIndex] ?? null : null
   const selectedFantasyPlayer = selectedPlayer?.playerId != null ? fantasyPlayersById.get(selectedPlayer.playerId) ?? null : null
@@ -2808,6 +2829,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
         isBye: incomingPlayer.isBye,
         status: statusForTradedFantasyPlayer(incomingPlayer),
         tradeReversal: {
+          round: team.round,
           player: { ...outgoingPlayer, tradeReversal: null },
           outgoingCost: outgoingFantasyPlayer?.cost ?? null,
           incomingCost: incomingPlayer.cost,

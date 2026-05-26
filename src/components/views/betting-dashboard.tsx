@@ -266,8 +266,10 @@ function normaliseTeamMatchKey(value: string): string {
     "canterbury bulldogs": "canterbury bankstown bulldogs",
     raiders: "canberra raiders",
     sharks: "cronulla sutherland sharks",
+    "cronulla sharks": "cronulla sutherland sharks",
     titans: "gold coast titans",
     "sea eagles": "manly warringah sea eagles",
+    "manly sea eagles": "manly warringah sea eagles",
     storm: "melbourne storm",
     knights: "newcastle knights",
     cowboys: "north queensland cowboys",
@@ -290,6 +292,12 @@ function buildMatchKickoffKey(date: string, match: string): string | null {
   if (!home || !away) return null;
   const teamsKey = [normaliseTeamMatchKey(home), normaliseTeamMatchKey(away)].sort().join("|");
   return `${date}|${teamsKey}`;
+}
+
+function buildMatchGroupKey(match: string): string {
+  const { home, away } = parseMatch(match);
+  if (!home || !away) return normaliseLookupKey(match);
+  return [normaliseTeamMatchKey(home), normaliseTeamMatchKey(away)].sort().join("|");
 }
 
 function kickoffSortMs(group: Pick<EventGroup, "date" | "match">, kickoffsByMatch: Record<string, string>): number {
@@ -749,7 +757,7 @@ function buildEventGroups(
 
   for (const row of rows) {
     if (row.market === "Tryscorer" && row.result.includes(";")) continue;
-    const eventKey = `${row.date}|${row.match}|${row.market}`;
+    const eventKey = `${row.date}|${buildMatchGroupKey(row.match)}|${row.market}`;
     const existingGroup = groups.get(eventKey);
     if (!existingGroup) {
       groups.set(eventKey, {

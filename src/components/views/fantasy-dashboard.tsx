@@ -4568,92 +4568,102 @@ export function FantasyDashboard({
     <div className="space-y-6">
       <div className="space-y-3">
         {showOwnedCards ? (
-          <div className="grid gap-5 xl:grid-cols-4 xl:items-stretch xl:gap-3">
+          <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch">
             <Link
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}
-              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/55 bg-violet-700 px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(124,58,237,0.24)] transition-colors hover:border-violet-200 hover:bg-violet-600 xl:order-1 xl:min-h-[64px] xl:py-2"
+              className="relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-violet-300/35 bg-[linear-gradient(135deg,rgba(111,34,214,0.92),rgba(86,21,183,0.86))] px-5 py-4 text-left text-white shadow-[0_12px_24px_rgba(8,10,18,0.22)] transition-colors hover:border-violet-200/70 hover:bg-violet-700 xl:min-h-[108px] xl:py-3"
             >
-              <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+              <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
                 <span className="absolute -left-2 top-2 h-14 w-36 rounded-full opacity-45 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
                 <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-35 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
               </span>
-              <span className="absolute -right-1 -top-2 rounded-full border border-emerald-200 bg-nrl-accent px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.28)]">
+              <span className="absolute right-3 top-3 rounded-full border border-emerald-200 bg-nrl-accent px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.22)]">
                 New
               </span>
-              <span className="relative z-10 inline-flex items-center gap-2 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
-                <PersonIcon className="h-5 w-5" />
-                <span className="text-sm font-black">My Team</span>
+              <span className="relative z-10 inline-flex items-center gap-2 pr-12 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10">
+                  <PersonIcon className="h-5 w-5" />
+                </span>
+                <span className="text-base font-black leading-none">My Team</span>
               </span>
-              <span className="relative z-10 px-5 text-[10px] font-black leading-tight text-white drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
+              <span className="relative z-10 max-w-[280px] text-[11px] font-bold leading-snug text-white/95 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
                 Upload screenshots, save your team and get personalised advice
               </span>
               {isMyTeamPending ? (
-                <span className="absolute inset-x-5 bottom-2 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                <span className="absolute inset-x-5 bottom-3 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
                   <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
                 </span>
               ) : null}
             </Link>
-            <div className={`grid items-center gap-2 sm:gap-3 xl:contents ${fantasyProjectionArticle ? "grid-cols-3" : "grid-cols-2"}`}>
-              <Link
-                href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
-                onClick={() => setIsFantasyAnalyticsPending(true)}
-                className={`relative flex min-h-[44px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-2 py-1.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] sm:min-h-[52px] sm:px-4 xl:order-2 xl:col-span-1 xl:min-h-[64px] xl:py-2 ${
-                  showFantasyAnalytics
-                    ? "border-nrl-accent bg-[#20284a]"
-                    : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
-                }`}
-              >
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold leading-tight sm:text-sm">
-                  <TrendGraphIcon className="h-4 w-4 text-nrl-accent" />
-                  Find Value
-                </span>
-                {isFantasyAnalyticsPending ? (
-                  <span className="absolute inset-x-5 bottom-2 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
-                    <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+            <div className={`grid items-center gap-2 sm:gap-3 xl:order-2 xl:col-span-2 xl:items-stretch ${fantasyProjectionArticle ? "grid-cols-3 xl:grid-cols-2" : "grid-cols-2 xl:grid-cols-1"}`}>
+              <div className="contents xl:grid xl:grid-rows-2 xl:gap-3">
+                <Link
+                  href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
+                  onClick={() => setIsFantasyAnalyticsPending(true)}
+                  className={`relative flex min-h-[44px] w-full cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
+                    showFantasyAnalytics
+                      ? "border-nrl-accent bg-[#20284a]"
+                      : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
+                  }`}
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
+                    <TrendGraphIcon className="h-4 w-4 text-nrl-accent" />
                   </span>
-                ) : null}
-              </Link>
-              <div className="group self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))] sm:p-1.5 xl:order-3 xl:col-span-1">
-                {hasFantasyPlotAccess ? (
-                  <Link
-                    href="/dashboard/fantasy/draft"
-                    onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative inline-flex h-full min-h-[36px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-2 py-1.5 text-center leading-tight text-white transition-colors hover:text-white group-hover:bg-[#29335f] sm:min-h-[44px] sm:px-4 xl:min-h-[52px]"
-                  >
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold sm:gap-1.5 sm:text-[11px]">
-                      <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
-                      Draft / H2H Odds
+                  <span className="text-[12px] font-bold leading-tight sm:text-sm">
+                    Find Value
+                  </span>
+                  {isFantasyAnalyticsPending ? (
+                    <span className="absolute inset-x-5 bottom-2 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                      <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
                     </span>
-                    {isFantasyDraftPending ? (
-                      <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
-                        <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                  ) : null}
+                </Link>
+                <div className="group self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] p-0 shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f]">
+                  {hasFantasyPlotAccess ? (
+                    <Link
+                      href="/dashboard/fantasy/draft"
+                      onClick={() => setIsFantasyDraftPending(true)}
+                      className="relative inline-flex h-full min-h-[44px] w-full items-center justify-start gap-3 rounded-xl px-4 py-3 text-left leading-tight text-white transition-colors hover:text-white sm:min-h-[52px] xl:min-h-0 xl:py-2"
+                    >
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
+                        <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
                       </span>
-                    ) : null}
-                  </Link>
-                ) : (
-                  <Link
-                    href="/dashboard/fantasy/draft"
-                    onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative flex h-full min-h-[36px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-2 py-1.5 text-center transition-colors group-hover:bg-[#29335f] sm:min-h-[44px] sm:px-4 xl:min-h-[52px]"
-                  >
-                    <div className="inline-flex items-center gap-1 text-[10px] font-semibold leading-tight text-white sm:gap-1.5 sm:text-[11px]">
-                      <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
-                      Draft / H2H Odds
-                    </div>
-                    {isFantasyDraftPending ? (
-                      <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
-                        <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                      <span className="text-[12px] font-bold sm:text-sm">
+                        Draft / H2H Odds
                       </span>
-                    ) : null}
-                  </Link>
-                )}
+                      {isFantasyDraftPending ? (
+                        <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                          <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                        </span>
+                      ) : null}
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/dashboard/fantasy/draft"
+                      onClick={() => setIsFantasyDraftPending(true)}
+                      className="relative flex h-full min-h-[44px] w-full items-center justify-start gap-3 rounded-xl px-4 py-3 text-left transition-colors sm:min-h-[52px] xl:min-h-0 xl:py-2"
+                    >
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
+                        <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
+                      </span>
+                      <div className="text-[12px] font-bold leading-tight text-white sm:text-sm">
+                        Draft / H2H Odds
+                      </div>
+                      {isFantasyDraftPending ? (
+                        <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                          <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                        </span>
+                      ) : null}
+                    </Link>
+                  )}
+                </div>
               </div>
               {fantasyProjectionArticle ? (
                 <Link
                   href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
                   aria-label={`Read ${fantasyProjectionArticle.title}`}
-                  className="group relative flex min-h-[44px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:order-4 xl:col-span-1 xl:min-h-[64px]"
+                  className="group relative flex min-h-[44px] w-full cursor-pointer overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:min-h-[108px]"
                 >
                   <div className={`absolute inset-0 grid ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                     {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
@@ -4670,7 +4680,7 @@ export function FantasyDashboard({
                     ))}
                   </div>
                   <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.95),rgba(14,19,48,0.74),rgba(14,19,48,0.45))]" />
-                  <div className="relative flex h-full min-h-[44px] w-full items-center justify-between gap-2 px-3 py-1.5 sm:min-h-[52px] sm:px-4 xl:min-h-[64px] xl:gap-3 xl:px-5 xl:py-2">
+                  <div className="relative flex h-full min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 sm:min-h-[52px] sm:px-4 xl:min-h-[108px] xl:gap-3 xl:px-5 xl:py-3">
                     <div className="min-w-0">
                       <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent">
                         Article

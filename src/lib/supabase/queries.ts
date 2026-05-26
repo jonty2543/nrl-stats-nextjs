@@ -634,6 +634,7 @@ interface TryscorerPredictionRow extends Record<string, unknown> {
   match?: unknown;
   player?: unknown;
   expected_tries?: unknown;
+  try_share?: unknown;
   anytime_prob?: unknown;
   updated_at?: unknown;
 }
@@ -656,7 +657,7 @@ interface PredictionLookupMaps {
 
 interface TryscorerPredictionEntry {
   anytimeProb: number | null;
-  expectedTries: number | null;
+  playerExpectedTries: number | null;
   updatedAtMs: number;
 }
 
@@ -697,8 +698,8 @@ function chooseTryscorerPredictionEntry(
   if (!existing) return next;
   if (next.updatedAtMs > existing.updatedAtMs) return next;
   if (next.updatedAtMs < existing.updatedAtMs) return existing;
-  const existingCompleteness = Number(existing.anytimeProb != null) + Number(existing.expectedTries != null);
-  const nextCompleteness = Number(next.anytimeProb != null) + Number(next.expectedTries != null);
+  const existingCompleteness = Number(existing.anytimeProb != null) + Number(existing.playerExpectedTries != null);
+  const nextCompleteness = Number(next.anytimeProb != null) + Number(next.playerExpectedTries != null);
   return nextCompleteness >= existingCompleteness ? next : existing;
 }
 
@@ -794,10 +795,15 @@ function buildTryscorerPredictionLookup(rows: TryscorerPredictionRow[]): Tryscor
     const date = toIsoDate(raw.match_date);
     const playerKey = normaliseLookupKey(raw.player);
     if (!date || !playerKey) continue;
+    const teamExpectedTries = toNullableFinite(raw.expected_tries);
+    const tryShare = toNullableFinite(raw.try_share);
+    const playerExpectedTries = teamExpectedTries == null || tryShare == null
+      ? null
+      : teamExpectedTries * tryShare;
 
     const entry: TryscorerPredictionEntry = {
       anytimeProb: toNullableProbability(raw.anytime_prob),
-      expectedTries: toNullableFinite(raw.expected_tries),
+      playerExpectedTries,
       updatedAtMs: toUpdatedAtMs(raw.updated_at),
     };
 
@@ -912,9 +918,9 @@ function applyTryscorerPredictionModelToRow(
   const targetTries = Math.max(1, Math.round(row.value ?? 1));
   const probability = targetTries <= 1
     ? prediction.anytimeProb
-    : prediction.expectedTries == null
+    : prediction.playerExpectedTries == null
       ? null
-      : poissonAtLeast(prediction.expectedTries, targetTries);
+      : poissonAtLeast(prediction.playerExpectedTries, targetTries);
 
   return {
     ...row,
@@ -1741,7 +1747,7 @@ async function fetchTryscorerPredictionRowsFromSupabase(rows: BettingOddsRow[]):
     const end = start + PAGE_SIZE - 1;
     const { data, error } = await supabase
       .from("tryscorer_predictions")
-      .select("match_date,match,player,expected_tries,anytime_prob,updated_at")
+      .select("match_date,match,player,expected_tries,try_share,anytime_prob,updated_at")
       .gte("match_date", dateRange.minDate)
       .lte("match_date", dateRange.maxDate)
       .range(start, end);

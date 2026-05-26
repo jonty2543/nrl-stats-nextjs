@@ -166,9 +166,11 @@ interface MobileBetSlip {
 }
 
 const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
+const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
 const DEFAULT_BETTING_MARKET: BettingMarket = "H2H";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
+const BETTING_PANEL_HEADER_CLASS = "text-[10px] font-bold uppercase tracking-[0.22em]";
 const IMPLIED_LINE_SIGMA = 16.85;
 const IMPLIED_TOTAL_SIGMA = 16.85;
 const BEST_BETS_CONFIG = {
@@ -608,6 +610,10 @@ function formatBestBetScore(score: number): string {
   return `${(clamp(score, 0, 1) * 10).toFixed(1)}/10`;
 }
 
+function formatBestBetMarketLabel(market: BettingMarket): string {
+  return market === "Tryscorer" ? "Tryscorers" : market;
+}
+
 function createBookieRecord<T>(factory: () => T): Record<BettingBookie, T> {
   return {
     Sportsbet: factory(),
@@ -1007,21 +1013,25 @@ function buildBestBets({
     if (Math.abs(a.score - b.score) > 1e-9) return b.score - a.score;
     return b.edgePp - a.edgePp;
   });
-  const displaySorted = applyFeaturedBestBetOverride(sorted, todayIso);
-  const biggestEdgeId = [...candidates].sort((a, b) => b.edgePp - a.edgePp)[0]?.id;
 
-  return displaySorted.slice(0, BEST_BETS_CONFIG.maxCards).map((candidate, index) => {
-    const tags: string[] = [];
-    if (index === 0) tags.push("Top Rated Bet");
-    if (candidate.id === biggestEdgeId) tags.push("Highest Edge");
-    if ((candidate.marketDisagreementPct ?? 0) >= 5) tags.push("Best Value");
-    if (candidate.modelProbability >= 0.55 && candidate.market !== "Tryscorer") tags.push("Model Favourite");
-    if (tags.length === 0) tags.push("Sharp Value");
+  return BEST_BET_MODEL_MARKETS.flatMap((market) => {
+    const marketCandidates = sorted.filter((candidate) => candidate.market === market);
+    const displaySorted = applyFeaturedBestBetOverride(marketCandidates, todayIso);
+    const biggestEdgeId = [...marketCandidates].sort((a, b) => b.edgePp - a.edgePp)[0]?.id;
 
-    return {
-      ...candidate,
-      tags: [...new Set(tags)].slice(0, 2),
-    };
+    return displaySorted.slice(0, BEST_BETS_CONFIG.maxCards).map((candidate, index) => {
+      const tags: string[] = [];
+      if (index === 0) tags.push("Top Rated Bet");
+      if (candidate.id === biggestEdgeId) tags.push("Highest Edge");
+      if ((candidate.marketDisagreementPct ?? 0) >= 5) tags.push("Best Value");
+      if (candidate.modelProbability >= 0.55 && candidate.market !== "Tryscorer") tags.push("Model Favourite");
+      if (tags.length === 0) tags.push("Sharp Value");
+
+      return {
+        ...candidate,
+        tags: [...new Set(tags)].slice(0, 2),
+      };
+    });
   });
 }
 
@@ -1778,7 +1788,7 @@ export function BettingDashboard({
       ) : null}
 
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-nrl-text">Staking Calculator</h2>
+        <h2 className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>Staking Calculator</h2>
         {stakingPreferencesLoading ? (
           <div className="mt-4 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-4 text-xs text-nrl-muted">
             Loading staking preferences...
@@ -1905,7 +1915,7 @@ export function BettingDashboard({
           <div className="border-b border-white/8 bg-[#111936] px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold uppercase tracking-wide text-nrl-text">Bet Tracker</div>
+                <div className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>Bet Tracker</div>
                 <div className="mt-1 text-xs text-nrl-muted">
                   {bets.length} tracked {bets.length === 1 ? "bet" : "bets"}
                 </div>
@@ -2388,6 +2398,7 @@ function BestBetsHero({
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
+  const [selectedModelMarket, setSelectedModelMarket] = useState<BettingMarket>("H2H");
   const [selectedBestBetIds, setSelectedBestBetIds] = useState<Partial<Record<"model" | "arbitrage", string>>>({});
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [bestBetSlip, setBestBetSlip] = useState<{
@@ -2404,9 +2415,25 @@ function BestBetsHero({
     }),
     [arbitrageBets]
   );
+  const modelBetCountsByMarket = useMemo(() => {
+    const counts: Record<BettingMarket, number> = {
+      H2H: 0,
+      Line: 0,
+      Total: 0,
+      Tryscorer: 0,
+    };
+    for (const bet of modelBets) {
+      counts[bet.market] += 1;
+    }
+    return counts;
+  }, [modelBets]);
+  const selectedModelBets = useMemo(
+    () => modelBets.filter((bet) => bet.market === selectedModelMarket),
+    [modelBets, selectedModelMarket]
+  );
   const activeSelectedBestBetId = selectedBestBetIds[category];
   const activeItems = useMemo(() => {
-    const sortedItems = isArbitrage ? ratedArbitrageBets : modelBets;
+    const sortedItems = isArbitrage ? ratedArbitrageBets : selectedModelBets;
     if (!activeSelectedBestBetId) return sortedItems;
 
     const selectedIndex = sortedItems.findIndex((item) => item.id === activeSelectedBestBetId);
@@ -2420,7 +2447,7 @@ function BestBetsHero({
       ...sortedItems.slice(0, selectedIndex),
       ...sortedItems.slice(selectedIndex + 1),
     ];
-  }, [activeSelectedBestBetId, isArbitrage, modelBets, ratedArbitrageBets]);
+  }, [activeSelectedBestBetId, isArbitrage, ratedArbitrageBets, selectedModelBets]);
   const featuredItem = activeItems[0] ?? null;
   const queueItems = activeItems.slice(1);
   const activeTheme = isArbitrage
@@ -2459,6 +2486,13 @@ function BestBetsHero({
     });
   };
 
+  const handleModelMarketChange = (market: BettingMarket) => {
+    setSelectedModelMarket(market);
+    window.requestAnimationFrame(() => {
+      if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
+    });
+  };
+
   const handleBestBetSelect = (itemId: string) => {
     setSelectedBestBetIds((current) => ({
       ...current,
@@ -2472,7 +2506,7 @@ function BestBetsHero({
   return (
     <section className="overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3 sm:px-5">
-        <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-nrl-text">
+        <div className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>
           Today&apos;s Best Bets
         </div>
         <div className="flex gap-2">
@@ -2501,9 +2535,34 @@ function BestBetsHero({
         </div>
       </div>
 
+      {!isArbitrage ? (
+        <div className="flex gap-2 overflow-x-auto border-b border-white/8 px-4 py-2 sm:px-5">
+          {BEST_BET_MODEL_MARKETS.map((market) => {
+            const active = selectedModelMarket === market;
+            return (
+              <button
+                key={`best-bets-market-${market}`}
+                type="button"
+                onClick={() => handleModelMarketChange(market)}
+                className={`shrink-0 rounded-md border px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                  active
+                    ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                    : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
+                }`}
+              >
+                {formatBestBetMarketLabel(market)}
+                <span className="ml-1 text-nrl-muted">{modelBetCountsByMarket[market]}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {activeItems.length === 0 ? (
         <div className="border-t border-white/8 px-4 py-2.5 text-sm text-nrl-muted sm:px-5">
-          {isArbitrage ? "No arbitrage markets currently identified." : "No strong model value currently identified."}
+          {isArbitrage
+            ? "No arbitrage markets currently identified."
+            : `No strong ${formatBestBetMarketLabel(selectedModelMarket).toLowerCase()} model value currently identified.`}
         </div>
       ) : featuredItem ? (
         <div className="space-y-3 p-3">
@@ -3004,14 +3063,14 @@ function MarketSection({
       {[...groupsByDate.entries()].map(([date, dateGroups]) => (
         <section key={date} className="space-y-7 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
           <div className="flex items-center gap-3">
-            <h2 className="shrink-0 text-sm font-bold uppercase tracking-[0.12em] text-emerald-300 sm:text-base">
+            <h2 className={`${BETTING_PANEL_HEADER_CLASS} shrink-0 text-emerald-300`}>
               {formatDateLabel(date)}
             </h2>
             <div className="h-px flex-1 bg-nrl-border/70" />
           </div>
           {dateGroups.map((group, groupIndex) => {
             const { home, away } = parseMatch(group.match);
-            const showModelColumns = group.market !== "Tryscorer";
+            const showModelColumns = group.market !== "Tryscorer" || group.outcomes.some((row) => row.bestModelComputed != null);
             const blurPremiumColumns = !canAccessPremium && showModelColumns;
             const collapsed = group.market === "Tryscorer" && collapsedTryscorerGroups[group.key] === true;
             const selectedTryscorerValue = tryscorerValueByGroup[group.key] ?? 1;

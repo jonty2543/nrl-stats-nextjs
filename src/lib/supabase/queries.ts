@@ -542,6 +542,10 @@ function toNullableProbability(value: unknown): number | null {
   return null;
 }
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 function toIsoDate(value: unknown): string {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -625,6 +629,15 @@ interface PredictionModelRow extends Record<string, unknown> {
   updated_at?: unknown;
 }
 
+interface TryscorerPredictionRow extends Record<string, unknown> {
+  match_date?: unknown;
+  match?: unknown;
+  player?: unknown;
+  expected_tries?: unknown;
+  anytime_prob?: unknown;
+  updated_at?: unknown;
+}
+
 interface MarginOverrideRow extends Record<string, unknown> {
   url?: unknown;
   margin_override_points?: unknown;
@@ -639,6 +652,17 @@ interface PredictionLookupEntry {
 interface PredictionLookupMaps {
   byDateTeam: Map<string, PredictionLookupEntry>;
   byDateMatchTeam: Map<string, PredictionLookupEntry>;
+}
+
+interface TryscorerPredictionEntry {
+  anytimeProb: number | null;
+  expectedTries: number | null;
+  updatedAtMs: number;
+}
+
+interface TryscorerPredictionLookupMaps {
+  byDatePlayer: Map<string, TryscorerPredictionEntry>;
+  byDateMatchPlayer: Map<string, TryscorerPredictionEntry>;
 }
 
 function predictionHomeTeam(raw: PredictionModelRow): string | null {
@@ -663,6 +687,18 @@ function choosePredictionEntry(
   if (next.updatedAtMs < existing.updatedAtMs) return existing;
   const existingCompleteness = Number(existing.winProb != null) + Number(existing.predMargin != null);
   const nextCompleteness = Number(next.winProb != null) + Number(next.predMargin != null);
+  return nextCompleteness >= existingCompleteness ? next : existing;
+}
+
+function chooseTryscorerPredictionEntry(
+  existing: TryscorerPredictionEntry | undefined,
+  next: TryscorerPredictionEntry
+): TryscorerPredictionEntry {
+  if (!existing) return next;
+  if (next.updatedAtMs > existing.updatedAtMs) return next;
+  if (next.updatedAtMs < existing.updatedAtMs) return existing;
+  const existingCompleteness = Number(existing.anytimeProb != null) + Number(existing.expectedTries != null);
+  const nextCompleteness = Number(next.anytimeProb != null) + Number(next.expectedTries != null);
   return nextCompleteness >= existingCompleteness ? next : existing;
 }
 
@@ -750,6 +786,37 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
   return { byDateTeam, byDateMatchTeam };
 }
 
+function buildTryscorerPredictionLookup(rows: TryscorerPredictionRow[]): TryscorerPredictionLookupMaps {
+  const byDatePlayer = new Map<string, TryscorerPredictionEntry>();
+  const byDateMatchPlayer = new Map<string, TryscorerPredictionEntry>();
+
+  for (const raw of rows) {
+    const date = toIsoDate(raw.match_date);
+    const playerKey = normaliseLookupKey(raw.player);
+    if (!date || !playerKey) continue;
+
+    const entry: TryscorerPredictionEntry = {
+      anytimeProb: toNullableProbability(raw.anytime_prob),
+      expectedTries: toNullableFinite(raw.expected_tries),
+      updatedAtMs: toUpdatedAtMs(raw.updated_at),
+    };
+
+    const datePlayerKey = `${date}|${playerKey}`;
+    byDatePlayer.set(datePlayerKey, chooseTryscorerPredictionEntry(byDatePlayer.get(datePlayerKey), entry));
+
+    const normalizedMatchKey = matchKey(raw.match);
+    if (!normalizedMatchKey) continue;
+
+    const dateMatchPlayerKey = `${date}|${normalizedMatchKey}|${playerKey}`;
+    byDateMatchPlayer.set(
+      dateMatchPlayerKey,
+      chooseTryscorerPredictionEntry(byDateMatchPlayer.get(dateMatchPlayerKey), entry)
+    );
+  }
+
+  return { byDatePlayer, byDateMatchPlayer };
+}
+
 function findPredictionForOddsRow(
   row: BettingOddsRow,
   lookup: PredictionLookupMaps
@@ -765,6 +832,34 @@ function findPredictionForOddsRow(
   }
 
   return lookup.byDateTeam.get(`${date}|${teamKey}`) ?? null;
+}
+
+function findTryscorerPredictionForOddsRow(
+  row: BettingOddsRow,
+  lookup: TryscorerPredictionLookupMaps
+): TryscorerPredictionEntry | null {
+  const date = toIsoDate(row.date);
+  const playerKey = normaliseLookupKey(row.result);
+  if (!date || !playerKey) return null;
+
+  const normalizedMatchKey = matchKey(row.match);
+  if (normalizedMatchKey) {
+    const byMatch = lookup.byDateMatchPlayer.get(`${date}|${normalizedMatchKey}|${playerKey}`);
+    if (byMatch) return byMatch;
+  }
+
+  return lookup.byDatePlayer.get(`${date}|${playerKey}`) ?? null;
+}
+
+function poissonAtLeast(lambda: number, count: number): number | null {
+  if (!Number.isFinite(lambda) || lambda < 0 || count < 1) return null;
+  let cumulative = 0;
+  let term = Math.exp(-lambda);
+  for (let k = 0; k < count; k += 1) {
+    if (k > 0) term *= lambda / k;
+    cumulative += term;
+  }
+  return clampNumber(1 - cumulative, 0, 1);
 }
 
 function applyPredictionModelToRow(row: BettingOddsRow, lookup: PredictionLookupMaps): BettingOddsRow {
@@ -797,6 +892,33 @@ function applyPredictionModelToRow(row: BettingOddsRow, lookup: PredictionLookup
   return {
     ...row,
     model: coverProbability * 100,
+  };
+}
+
+function applyTryscorerPredictionModelToRow(
+  row: BettingOddsRow,
+  lookup: TryscorerPredictionLookupMaps
+): BettingOddsRow {
+  if (row.market !== "Tryscorer") return row;
+
+  const prediction = findTryscorerPredictionForOddsRow(row, lookup);
+  if (!prediction) {
+    return {
+      ...row,
+      model: null,
+    };
+  }
+
+  const targetTries = Math.max(1, Math.round(row.value ?? 1));
+  const probability = targetTries <= 1
+    ? prediction.anytimeProb
+    : prediction.expectedTries == null
+      ? null
+      : poissonAtLeast(prediction.expectedTries, targetTries);
+
+  return {
+    ...row,
+    model: probability == null ? null : probability * 100,
   };
 }
 
@@ -1607,6 +1729,37 @@ async function fetchMarginOverrideRowsFromSupabase(rows: PredictionModelRow[]): 
   return allRows;
 }
 
+async function fetchTryscorerPredictionRowsFromSupabase(rows: BettingOddsRow[]): Promise<TryscorerPredictionRow[]> {
+  const dateRange = bettingOddsDateRange(rows);
+  if (!dateRange) return [];
+
+  const supabase = createServerSupabaseClient("nrl");
+  const allRows: TryscorerPredictionRow[] = [];
+  let start = 0;
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("tryscorer_predictions")
+      .select("match_date,match,player,expected_tries,anytime_prob,updated_at")
+      .gte("match_date", dateRange.minDate)
+      .lte("match_date", dateRange.maxDate)
+      .range(start, end);
+
+    if (error) {
+      throw new Error(`Supabase fetch nrl.tryscorer_predictions: ${error.message}`);
+    }
+
+    const pageRows = (data ?? []) as unknown as TryscorerPredictionRow[];
+    if (pageRows.length === 0) break;
+    allRows.push(...pageRows);
+    if (pageRows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
 export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
   const [h2hRaw, lineRaw, total, tryscorer] = await Promise.all([
     fetchBettingOddsTableOrEmpty("NRL Odds"),
@@ -1622,7 +1775,12 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
     console.warn("Unable to fetch betting margin overrides; using saved prediction margins.", error);
     return [];
   });
+  const tryscorerPredictionRows = await fetchTryscorerPredictionRowsFromSupabase(tryscorer).catch((error) => {
+    console.warn("Unable to fetch betting tryscorer prediction rows; rendering try scorer odds without model values.", error);
+    return [];
+  });
   const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
+  const tryscorerPredictionLookup = buildTryscorerPredictionLookup(tryscorerPredictionRows);
   const h2h = h2hRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
   const line = lineRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
 
@@ -1630,7 +1788,7 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
     h2h,
     line,
     total,
-    tryscorer,
+    tryscorer: tryscorer.map((row) => applyTryscorerPredictionModelToRow(row, tryscorerPredictionLookup)),
     generatedAt: new Date().toISOString(),
   };
 }

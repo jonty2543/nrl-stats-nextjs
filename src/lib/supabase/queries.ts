@@ -542,10 +542,6 @@ function toNullableProbability(value: unknown): number | null {
   return null;
 }
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 function toIsoDate(value: unknown): string {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -633,8 +629,6 @@ interface TryscorerPredictionRow extends Record<string, unknown> {
   match_date?: unknown;
   match?: unknown;
   player?: unknown;
-  expected_tries?: unknown;
-  try_share?: unknown;
   anytime_prob?: unknown;
   updated_at?: unknown;
 }
@@ -657,7 +651,6 @@ interface PredictionLookupMaps {
 
 interface TryscorerPredictionEntry {
   anytimeProb: number | null;
-  playerExpectedTries: number | null;
   updatedAtMs: number;
 }
 
@@ -698,8 +691,8 @@ function chooseTryscorerPredictionEntry(
   if (!existing) return next;
   if (next.updatedAtMs > existing.updatedAtMs) return next;
   if (next.updatedAtMs < existing.updatedAtMs) return existing;
-  const existingCompleteness = Number(existing.anytimeProb != null) + Number(existing.playerExpectedTries != null);
-  const nextCompleteness = Number(next.anytimeProb != null) + Number(next.playerExpectedTries != null);
+  const existingCompleteness = Number(existing.anytimeProb != null);
+  const nextCompleteness = Number(next.anytimeProb != null);
   return nextCompleteness >= existingCompleteness ? next : existing;
 }
 
@@ -795,15 +788,9 @@ function buildTryscorerPredictionLookup(rows: TryscorerPredictionRow[]): Tryscor
     const date = toIsoDate(raw.match_date);
     const playerKey = normaliseLookupKey(raw.player);
     if (!date || !playerKey) continue;
-    const teamExpectedTries = toNullableFinite(raw.expected_tries);
-    const tryShare = toNullableFinite(raw.try_share);
-    const playerExpectedTries = teamExpectedTries == null || tryShare == null
-      ? null
-      : teamExpectedTries * tryShare;
 
     const entry: TryscorerPredictionEntry = {
       anytimeProb: toNullableProbability(raw.anytime_prob),
-      playerExpectedTries,
       updatedAtMs: toUpdatedAtMs(raw.updated_at),
     };
 
@@ -857,17 +844,6 @@ function findTryscorerPredictionForOddsRow(
   return lookup.byDatePlayer.get(`${date}|${playerKey}`) ?? null;
 }
 
-function poissonAtLeast(lambda: number, count: number): number | null {
-  if (!Number.isFinite(lambda) || lambda < 0 || count < 1) return null;
-  let cumulative = 0;
-  let term = Math.exp(-lambda);
-  for (let k = 0; k < count; k += 1) {
-    if (k > 0) term *= lambda / k;
-    cumulative += term;
-  }
-  return clampNumber(1 - cumulative, 0, 1);
-}
-
 function applyPredictionModelToRow(row: BettingOddsRow, lookup: PredictionLookupMaps): BettingOddsRow {
   if (row.market !== "H2H" && row.market !== "Line") return row;
 
@@ -916,11 +892,7 @@ function applyTryscorerPredictionModelToRow(
   }
 
   const targetTries = Math.max(1, Math.round(row.value ?? 1));
-  const probability = targetTries <= 1
-    ? prediction.anytimeProb
-    : prediction.playerExpectedTries == null
-      ? null
-      : poissonAtLeast(prediction.playerExpectedTries, targetTries);
+  const probability = targetTries <= 1 ? prediction.anytimeProb : null;
 
   return {
     ...row,
@@ -1747,7 +1719,7 @@ async function fetchTryscorerPredictionRowsFromSupabase(rows: BettingOddsRow[]):
     const end = start + PAGE_SIZE - 1;
     const { data, error } = await supabase
       .from("tryscorer_predictions")
-      .select("match_date,match,player,expected_tries,try_share,anytime_prob,updated_at")
+      .select("match_date,match,player,anytime_prob,updated_at")
       .gte("match_date", dateRange.minDate)
       .lte("match_date", dateRange.maxDate)
       .range(start, end);

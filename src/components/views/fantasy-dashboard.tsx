@@ -4572,11 +4572,11 @@ export function FantasyDashboard({
             <Link
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}
-              className="relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-violet-300/35 bg-[linear-gradient(135deg,rgba(111,34,214,0.92),rgba(86,21,183,0.86))] px-5 py-4 text-left text-white shadow-[0_12px_24px_rgba(8,10,18,0.22)] transition-colors hover:border-violet-200/70 hover:bg-violet-700 xl:min-h-[108px] xl:py-3"
+              className="relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-violet-300/25 bg-[linear-gradient(135deg,rgba(82,43,168,0.72),rgba(33,39,83,0.92))] px-5 py-4 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-violet-200/55 hover:bg-[#34296f] xl:min-h-[108px] xl:py-3"
             >
               <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-                <span className="absolute -left-2 top-2 h-14 w-36 rounded-full opacity-45 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
-                <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-35 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
+                <span className="absolute -left-2 top-2 h-14 w-36 rounded-full opacity-25 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
+                <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-20 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
               </span>
               <span className="absolute right-3 top-3 rounded-full border border-emerald-200 bg-nrl-accent px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.22)]">
                 New

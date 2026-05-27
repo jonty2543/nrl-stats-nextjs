@@ -1493,18 +1493,6 @@ function playerCanCoverSlot(
   return player.slot === slot
 }
 
-function playersShareFantasyPosition(
-  a: MyTeamPlayer,
-  b: MyTeamPlayer,
-  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
-): boolean {
-  const aFantasyPlayer = a.playerId != null ? fantasyPlayersById.get(a.playerId) : null
-  const bFantasyPlayer = b.playerId != null ? fantasyPlayersById.get(b.playerId) : null
-  const aPositions = aFantasyPlayer?.positionLabels.length ? aFantasyPlayer.positionLabels : [a.slot]
-  const bPositions = bFantasyPlayer?.positionLabels.length ? bFantasyPlayer.positionLabels : [b.slot]
-  return aPositions.some((position) => bPositions.includes(position))
-}
-
 function isNonPlayingForProjection(
   player: MyTeamPlayer,
   fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
@@ -2734,7 +2722,6 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     ? team.players
       .map((player, index) => ({ player, index }))
       .filter(({ index }) => index !== selectedPlayerIndex)
-      .filter(({ player }) => playersShareFantasyPosition(team.players[selectedPlayerIndex], player, fantasyPlayersById))
       .filter(({ index }) => canSwapMyTeamPlayers(team, selectedPlayerIndex, index, fantasyPlayersById))
     : []
   const selectedPlayer = selectedPlayerIndex != null ? team?.players[selectedPlayerIndex] ?? null : null

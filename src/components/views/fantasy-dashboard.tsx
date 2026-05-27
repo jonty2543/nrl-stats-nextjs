@@ -4596,12 +4596,12 @@ export function FantasyDashboard({
                 </span>
               ) : null}
             </Link>
-            <div className={`grid items-center gap-2 sm:gap-3 xl:order-2 xl:col-span-2 xl:items-stretch ${fantasyProjectionArticle ? "grid-cols-3 xl:grid-cols-2" : "grid-cols-2 xl:grid-cols-1"}`}>
+            <div className={`grid items-stretch gap-2 sm:gap-3 xl:order-2 xl:col-span-2 ${fantasyProjectionArticle ? "grid-cols-3 xl:grid-cols-2" : "grid-cols-2 xl:grid-cols-1"}`}>
               <div className="contents xl:grid xl:grid-rows-2 xl:gap-3">
                 <Link
                   href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
                   onClick={() => setIsFantasyAnalyticsPending(true)}
-                  className={`relative flex min-h-[44px] w-full cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
+                  className={`relative flex h-full min-h-[44px] w-full cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
                     showFantasyAnalytics
                       ? "border-nrl-accent bg-[#20284a]"
                       : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
@@ -4619,7 +4619,7 @@ export function FantasyDashboard({
                     </span>
                   ) : null}
                 </Link>
-                <div className="group self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] p-0 shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f]">
+                <div className="group h-full self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] p-0 shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f]">
                   {hasFantasyPlotAccess ? (
                     <Link
                       href="/dashboard/fantasy/draft"
@@ -4663,7 +4663,7 @@ export function FantasyDashboard({
                 <Link
                   href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
                   aria-label={`Read ${fantasyProjectionArticle.title}`}
-                  className="group relative flex min-h-[44px] w-full cursor-pointer overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:min-h-[108px]"
+                  className="group relative flex h-full min-h-[44px] w-full cursor-pointer overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:min-h-[108px]"
                 >
                   <div className={`absolute inset-0 grid ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                     {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (

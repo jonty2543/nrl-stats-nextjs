@@ -545,7 +545,12 @@ function scoringEventMatchesTeam(event: LineupLiveMatch["scoringEvents"][number]
 
 function resolveTeamLogo(teamName: string | null | undefined, teamLogos: Record<string, string>): string | null {
   if (!teamName) return null
-  const candidates = [teamName, teamName.replace(/^North Queensland /, ""), teamName.replace(/^Gold Coast /, "")]
+  const candidates = [
+    ...teamAliases(teamName),
+    teamName,
+    teamName.replace(/^North Queensland /, ""),
+    teamName.replace(/^Gold Coast /, ""),
+  ]
   for (const candidate of candidates) {
     const logo = teamLogos[normaliseKey(candidate)]
     if (logo) return logo
@@ -1473,8 +1478,32 @@ function SportsbetOddsPill({ odds }: { odds: LineupSportsbetOdds }) {
   )
 }
 
+const TEAM_BADGE_DISPLAY_NAMES: Record<string, string> = {
+  broncos: "Broncos",
+  bulldogs: "Bulldogs",
+  cowboys: "Cowboys",
+  dolphins: "Dolphins",
+  dragons: "Dragons",
+  eels: "Eels",
+  knights: "Knights",
+  panthers: "Panthers",
+  rabbitohs: "Rabbitohs",
+  raiders: "Raiders",
+  roosters: "Roosters",
+  "sea eagles": "Sea Eagles",
+  sharks: "Sharks",
+  storm: "Storm",
+  titans: "Titans",
+  warriors: "Warriors",
+  "wests tigers": "Tigers",
+}
+
 function displayTeamBadgeName(value: string): string {
-  return normaliseKey(value) === "wests tigers" ? "Tigers" : value
+  for (const alias of teamAliases(value)) {
+    const displayName = TEAM_BADGE_DISPLAY_NAMES[alias]
+    if (displayName) return displayName
+  }
+  return value
 }
 
 function TeamBadge({
@@ -1488,7 +1517,6 @@ function TeamBadge({
 }) {
   const logo = resolveLogo(team, teamLogos)
   const shortName = displayTeamBadgeName(team?.team ?? team?.teamName ?? "TBC")
-  const fullName = displayTeamBadgeName(team?.teamName ?? team?.team ?? "TBC")
 
   return (
     <div className="flex min-h-[6.5rem] w-[5.75rem] min-w-0 max-w-full -translate-y-1 flex-col items-center justify-start gap-0.5 px-2 py-1 text-center sm:min-h-[7.5rem] sm:w-[6.75rem] sm:-translate-y-1.5 sm:px-2.5">
@@ -1505,7 +1533,7 @@ function TeamBadge({
       ) : null}
       <div className="mt-1 w-full min-w-0 sm:mt-1.5">
         <div className="line-clamp-2 text-[11px] font-bold leading-tight text-nrl-text sm:hidden">{shortName}</div>
-        <div className="hidden text-wrap text-xs font-bold leading-tight text-nrl-text sm:block">{fullName}</div>
+        <div className="hidden text-wrap text-xs font-bold leading-tight text-nrl-text sm:block">{shortName}</div>
         {sportsbetOdds ? <SportsbetOddsPill odds={sportsbetOdds} /> : null}
       </div>
     </div>

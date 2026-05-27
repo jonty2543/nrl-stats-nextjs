@@ -261,6 +261,10 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   })()
   const matches = summary?.matches ?? fallbackData?.matches ?? []
   const matchStats = summary?.matchStats ?? fallbackData?.matchStats ?? {}
+  const summaryTeamLogos = summary?.teamLogos ?? {}
+  const teamLogos = Object.keys(summaryTeamLogos).length > 0
+    ? summaryTeamLogos
+    : fallbackData?.teamLogos ?? await withFallback(fetchTeamLogos(), {}, "Lineups team logos")
   const [liveMatches, weatherForecasts] = await Promise.all([
     withFallback(fetchLiveLineupData(matches.map((match) => match.matchId)), {}, "Lineups live data"),
     withFallback(fetchLineupWeatherForecasts(matches), {}, "Lineups weather"),
@@ -275,7 +279,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       matchStats={matchStats}
       roundOptions={summary?.roundOptions.length ? summary.roundOptions : roundOptions}
       selectedRound={selectedRound}
-      teamLogos={summary?.teamLogos ?? fallbackData?.teamLogos ?? {}}
+      teamLogos={teamLogos}
       tryscorerOdds={summary?.tryscorerOdds ?? fallbackData?.tryscorerOdds ?? {}}
       sportsbetOdds={summary?.sportsbetOdds ?? fallbackData?.sportsbetOdds ?? {}}
       canAccessFantasyProjections={hasProAccess}

@@ -1825,6 +1825,7 @@ function PlayerToken({
   const displayedProjection = showProjections
     ? actualScore ?? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
     : null
+  const canSetCaptain = showCaptainStyling && player.squadRole === "starter"
   const isEligibleSwapTarget = swapMenuOpen && playerIndex != null && eligibleSwapPlayers.some(({ index }) => index === playerIndex)
   const isSwapSource = swapMenuOpen && selected
 
@@ -1938,7 +1939,7 @@ function PlayerToken({
                 Trade
               </button>
             )}
-            {showCaptainStyling ? (
+            {canSetCaptain ? (
               <button
                 type="button"
                 onClick={onSetCaptain}
@@ -2781,6 +2782,11 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     if (!team) return
     const captain = team.players[captainIndex]
     if (!captain) return
+    if (captain.squadRole !== "starter") {
+      setError("Only starting 13 players can be captain.")
+      setStatus(null)
+      return
+    }
     setTeam({
       ...team,
       players: team.players.map((player, index) => ({

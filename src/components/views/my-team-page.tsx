@@ -2917,9 +2917,10 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
       </div>
 
       {!hasLoadedSavedTeam ? (
-        <section className="mx-auto max-w-[760px] rounded-xl border border-nrl-border bg-nrl-panel px-4 py-6 text-center text-sm font-semibold text-nrl-muted lg:max-w-[920px]">
-          Loading your team...
-        </section>
+        <div className="flex min-h-[11rem] items-center justify-center" role="status" aria-label="Loading your team">
+          <span className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/20 border-t-nrl-accent shadow-[0_0_24px_rgba(0,245,138,0.18)]" />
+          <span className="sr-only">Loading your team...</span>
+        </div>
       ) : null}
 
       {hasLoadedSavedTeam && (!team || isUpdatingTeam) ? (

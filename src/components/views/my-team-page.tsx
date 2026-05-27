@@ -1910,7 +1910,7 @@ function PlayerToken({
             >
               Swap
             </button>
-            {player.tradeReversal ? (
+            {showTradeReversal ? (
               <button
                 type="button"
                 onClick={onReverseTrade}
@@ -2849,6 +2849,11 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     const currentPlayer = team.players[selectedPlayerIndex]
     const reversal = currentPlayer?.tradeReversal
     if (!currentPlayer || !reversal) return
+    if (!reversal.round || reversal.round !== team.round) {
+      setError("Only trades from the current round can be reversed.")
+      setStatus(null)
+      return
+    }
 
     const currentBank = parseBankValue(team.bankRemaining)
     const incomingCost = reversal.incomingCost ?? 0

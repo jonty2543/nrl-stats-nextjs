@@ -161,6 +161,10 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
     }
   })()
   const matches = (summary?.matches ?? fallbackData?.matches ?? []).map(matchShell)
+  const summaryTeamLogos = summary?.teamLogos ?? {}
+  const teamLogos = Object.keys(summaryTeamLogos).length > 0
+    ? summaryTeamLogos
+    : fallbackData?.teamLogos ?? await withFallback(fetchTeamLogos(), {}, "Lineups team logos")
   const visibleMatches = matches.filter((match) => match.homeTeam || match.awayTeam || isDrawFallbackMatch(match) || !isPastMatch(match))
   const summaryDiagnostic = summaryMissReason && await shouldShowLineupsSummaryDiagnostic()
     ? `lineups_page_summary miss: ${summaryMissReason} Heavy fallback data path is active for ${year} ${selectedRound}.`
@@ -174,7 +178,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       weatherForecasts={{}}
       roundOptions={summary?.roundOptions.length ? summary.roundOptions : initialRoundOptions}
       selectedRound={selectedRound}
-      teamLogos={summary?.teamLogos ?? fallbackData?.teamLogos ?? {}}
+      teamLogos={teamLogos}
       canAccessFantasyProjections={hasProAccess}
       summaryDiagnostic={summaryDiagnostic}
     />

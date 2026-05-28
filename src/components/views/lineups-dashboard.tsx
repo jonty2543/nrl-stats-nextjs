@@ -2211,8 +2211,9 @@ function LineupCard({
       <div className="relative z-[1] border-t border-blue-300/30 px-2 pb-3 sm:px-3">
         <div className="pt-5" />
         {detailStatus === "loading" && !detail ? (
-          <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
-            Loading match details...
+          <div className="flex items-center justify-center gap-3 rounded-lg border border-emerald-300/35 bg-emerald-400/8 px-4 py-5 text-sm font-semibold text-emerald-200 shadow-[0_0_24px_rgba(16,185,129,0.12)]">
+            <span className="h-5 w-5 animate-spin rounded-full border-[3px] border-emerald-300/25 border-t-emerald-300" aria-hidden="true" />
+            <span>Loading match details...</span>
           </div>
         ) : detailStatus === "error" ? (
           <div className="rounded-lg border border-red-300/30 bg-red-500/10 px-4 py-5 text-sm text-red-100">

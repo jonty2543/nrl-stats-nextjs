@@ -120,6 +120,26 @@ export interface LineupsPageSummary {
   updatedAt: string | null;
 }
 
+export interface LineupsPageShellSummary {
+  year: number;
+  round: string;
+  roundOptions: LineupRoundOption[];
+  matches: LineupMatch[];
+  teamLogos: Record<string, string>;
+  updatedAt: string | null;
+}
+
+export interface LineupsMatchDetailSummary {
+  match: LineupMatch;
+  matchStats: LineupMatchStats | null;
+  tryscorerOdds: Record<string, LineupTryscorerOdds>;
+  sportsbetOdds: Record<string, LineupSportsbetOdds>;
+  casualtyWardOuts: Record<string, LineupCasualtyOut[]>;
+  playerAverages: Record<string, Record<string, number>>;
+  positionPpmBaselines: Record<string, number>;
+  playerTryHistory: PlayerTryHistory;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -2054,6 +2074,23 @@ function mapLineupsPageSummary(row: Record<string, unknown>): LineupsPageSummary
   };
 }
 
+function mapLineupsPageShellSummary(row: Record<string, unknown>): LineupsPageShellSummary | null {
+  const year = toFiniteNumber(row.year);
+  const round = toNullableString(row.round);
+  if (year == null || !round) return null;
+
+  return {
+    year: Math.trunc(year),
+    round,
+    roundOptions: jsonArray<LineupRoundOption>(row.round_options),
+    matches: jsonArray<LineupMatch>(row.matches),
+    teamLogos: jsonRecord<string>(row.team_logos),
+    updatedAt: toNullableString(row.updated_at),
+  };
+}
+
+const LINEUPS_PAGE_SHELL_COLUMNS = "year,round,round_options,matches,team_logos,updated_at";
+
 async function fetchLineupsPageSummaryFromSupabase(year: number, round: string): Promise<LineupsPageSummary | null> {
   const supabase = createServerSupabaseClient("summary");
   const { data, error } = await supabase
@@ -2074,6 +2111,47 @@ async function fetchLineupsPageSummaryFromSupabase(year: number, round: string):
   return data ? mapLineupsPageSummary(data as Record<string, unknown>) : null;
 }
 
+async function fetchLineupsPageShellSummaryFromSupabase(year: number, round: string): Promise<LineupsPageShellSummary | null> {
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("lineups_page_summary")
+    .select(LINEUPS_PAGE_SHELL_COLUMNS)
+    .eq("year", year)
+    .eq("round", round)
+    .maybeSingle();
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+      return null;
+    }
+    throw new Error(`Supabase fetch summary.lineups_page_summary shell: ${error.message}`);
+  }
+
+  return data ? mapLineupsPageShellSummary(data as Record<string, unknown>) : null;
+}
+
+async function fetchLatestLineupsPageShellSummaryFromSupabase(year: number): Promise<LineupsPageShellSummary | null> {
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("lineups_page_summary")
+    .select(LINEUPS_PAGE_SHELL_COLUMNS)
+    .eq("year", year)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+      return null;
+    }
+    throw new Error(`Supabase fetch latest summary.lineups_page_summary shell: ${error.message}`);
+  }
+
+  return data ? mapLineupsPageShellSummary(data as Record<string, unknown>) : null;
+}
+
 export async function fetchLineupsPageSummary(year: number, round: string): Promise<LineupsPageSummary | null> {
   const key = `${year}:${round}`;
   try {
@@ -2087,6 +2165,123 @@ export async function fetchLineupsPageSummary(year: number, round: string): Prom
     )();
   } catch (error) {
     console.warn("Unable to fetch lineups page summary.", error);
+    return null;
+  }
+}
+
+export async function fetchLineupsPageShellSummary(year: number, round: string): Promise<LineupsPageShellSummary | null> {
+  try {
+    return await fetchLineupsPageShellSummaryFromSupabase(year, round);
+  } catch (error) {
+    console.warn("Unable to fetch lineups page shell summary.", error);
+    return null;
+  }
+}
+
+export async function fetchLatestLineupsPageShellSummary(year: number): Promise<LineupsPageShellSummary | null> {
+  try {
+    return await fetchLatestLineupsPageShellSummaryFromSupabase(year);
+  } catch (error) {
+    console.warn("Unable to fetch latest lineups page shell summary.", error);
+    return null;
+  }
+}
+
+function lineupsPlayerKeys(match: LineupMatch): string[] {
+  const players = [
+    ...(match.homeTeam?.players ?? []),
+    ...(match.awayTeam?.players ?? []),
+  ];
+  return [...new Set(players.map((player) => normaliseNameForMatch(player.player)).filter(Boolean))];
+}
+
+function filterRecordByKeys<T>(record: Record<string, T>, keys: Iterable<string>): Record<string, T> {
+  const filtered: Record<string, T> = {};
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(record, key)) filtered[key] = record[key];
+  }
+  return filtered;
+}
+
+async function fetchLineupPlayerTryHistoryForKeys(playerKeys: string[]): Promise<PlayerTryHistory> {
+  const keys = [...new Set(playerKeys)].filter(Boolean);
+  if (keys.length === 0) return {};
+
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("lineup_player_try_history_summary")
+    .select("player_key,history")
+    .in("player_key", keys);
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+      return {};
+    }
+    throw new Error(`Supabase fetch summary.lineup_player_try_history_summary by keys: ${error.message}`);
+  }
+
+  return Object.fromEntries(
+    ((data ?? []) as Record<string, unknown>[])
+      .map(mapLineupPlayerTryHistoryRow)
+      .filter((entry): entry is [string, PlayerTryHistory[string]] => entry !== null)
+  );
+}
+
+export async function fetchLineupsMatchDetailSummary(
+  year: number,
+  round: string,
+  matchId: string
+): Promise<LineupsMatchDetailSummary | null> {
+  try {
+    const supabase = createServerSupabaseClient("summary");
+    const { data, error } = await supabase
+      .from("lineups_page_summary")
+      .select("matches,match_stats,tryscorer_odds,sportsbet_odds,casualty_ward_outs,player_averages,position_ppm_baselines")
+      .eq("year", year)
+      .eq("round", round)
+      .maybeSingle();
+
+    if (error) {
+      const message = error.message.toLowerCase();
+      if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+        return null;
+      }
+      throw new Error(`Supabase fetch summary.lineups_page_summary match detail: ${error.message}`);
+    }
+    if (!data) return null;
+
+    const row = data as Record<string, unknown>;
+    const match = jsonArray<LineupMatch>(row.matches).find((candidate) => candidate.matchId === matchId) ?? null;
+    if (!match) return null;
+
+    const playerKeys = lineupsPlayerKeys(match);
+    const teamKeys = [
+      normaliseLookupKey(match.homeTeam?.team),
+      normaliseLookupKey(match.homeTeam?.teamName),
+      normaliseLookupKey(match.awayTeam?.team),
+      normaliseLookupKey(match.awayTeam?.teamName),
+    ].filter(Boolean);
+    const sportsbetOdds = jsonRecord<LineupSportsbetOdds>(row.sportsbet_odds);
+    const matchStats = jsonRecord<LineupMatchStats>(row.match_stats)[matchId] ?? null;
+
+    return {
+      match,
+      matchStats,
+      tryscorerOdds: filterRecordByKeys(jsonRecord<LineupTryscorerOdds>(row.tryscorer_odds), playerKeys),
+      sportsbetOdds: Object.fromEntries(
+        Object.entries(sportsbetOdds).filter(([key, odds]) =>
+          key.includes(String(match.matchDate ?? "").slice(0, 10)) ||
+          teamKeys.includes(normaliseLookupKey(odds.team))
+        )
+      ),
+      casualtyWardOuts: filterRecordByKeys(jsonRecord<LineupCasualtyOut[]>(row.casualty_ward_outs), teamKeys),
+      playerAverages: filterRecordByKeys(jsonRecord<Record<string, number>>(row.player_averages), playerKeys),
+      positionPpmBaselines: jsonRecord<number>(row.position_ppm_baselines),
+      playerTryHistory: await fetchLineupPlayerTryHistoryForKeys(playerKeys),
+    };
+  } catch (error) {
+    console.warn("Unable to fetch lineups match detail summary.", error);
     return null;
   }
 }

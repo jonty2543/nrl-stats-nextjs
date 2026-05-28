@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type {
@@ -22,15 +22,21 @@ import type { LineupWeatherForecast } from "@/lib/lineups/weather"
 
 interface LineupsDashboardProps {
   matches: LineupMatch[]
+  year: number
   liveMatches: Record<string, LineupLiveMatch>
   weatherForecasts: Record<string, LineupWeatherForecast>
-  matchStats: Record<string, LineupMatchStats>
   roundOptions: LineupRoundOption[]
   selectedRound: string
   teamLogos: Record<string, string>
+  canAccessFantasyProjections: boolean
+  summaryDiagnostic?: string | null
+}
+
+interface LineupMatchDetailData {
+  match: LineupMatch
+  matchStats: LineupMatchStats | null
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   sportsbetOdds: Record<string, LineupSportsbetOdds>
-  canAccessFantasyProjections: boolean
   casualtyWardOuts: Record<string, LineupCasualtyOut[]>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   playerTryHistory: PlayerTryHistory
@@ -2043,72 +2049,73 @@ function LineupCard({
   match,
   matchIndex,
   liveMatch,
-  matchStats,
   weatherForecast,
   teamLogos,
   displayMode,
   onDisplayModeChange,
-  tryscorerOdds,
-  sportsbetOdds,
   canAccessFantasyProjections,
-  casualtyWardOuts,
-  playerAverages,
-  playerTryHistory,
-  positionPpmBaselines,
+  detail,
+  detailStatus,
+  onOpen,
 }: {
   match: LineupMatch
   matchIndex: number
   liveMatch: LineupLiveMatch | null
-  matchStats: LineupMatchStats | null
   weatherForecast: LineupWeatherForecast | null
   teamLogos: Record<string, string>
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
-  tryscorerOdds: Record<string, LineupTryscorerOdds>
-  sportsbetOdds: Record<string, LineupSportsbetOdds>
   canAccessFantasyProjections: boolean
-  casualtyWardOuts: Record<string, LineupCasualtyOut[]>
-  playerAverages: Record<string, Record<AverageStatKey, number>>
-  playerTryHistory: PlayerTryHistory
-  positionPpmBaselines: Record<string, number>
+  detail: LineupMatchDetailData | null
+  detailStatus: "idle" | "loading" | "loaded" | "error"
+  onOpen: () => void
 }) {
-  const historicalData = historicalLiveMatch(match, matchStats)
+  const detailMatch = detail?.match ?? match
+  const matchStats = detail?.matchStats ?? null
+  const tryscorerOdds = detail?.tryscorerOdds ?? {}
+  const sportsbetOdds = detail?.sportsbetOdds ?? {}
+  const casualtyWardOuts = detail?.casualtyWardOuts ?? {}
+  const playerAverages = detail?.playerAverages ?? {}
+  const playerTryHistory = detail?.playerTryHistory ?? {}
+  const positionPpmBaselines = detail?.positionPpmBaselines ?? {}
+  const historicalData = historicalLiveMatch(detailMatch, matchStats)
   const displayLiveMatch = isLiveDataVisible(liveMatch) ? liveMatch : historicalData
-  const completedHomePlayers = applyCompletedPlayerStats(match.homeTeam?.players ?? [], matchStats, match.homeTeam)
-  const completedAwayPlayers = applyCompletedPlayerStats(match.awayTeam?.players ?? [], matchStats, match.awayTeam)
+  const completedHomePlayers = applyCompletedPlayerStats(detailMatch.homeTeam?.players ?? [], matchStats, detailMatch.homeTeam)
+  const completedAwayPlayers = applyCompletedPlayerStats(detailMatch.awayTeam?.players ?? [], matchStats, detailMatch.awayTeam)
   const homePlayers =
     completedHomePlayers.length > 0 ? completedHomePlayers : historicalPlayersFromStats(matchStats, matchStats?.home, "Home")
   const awayPlayers =
     completedAwayPlayers.length > 0 ? completedAwayPlayers : historicalPlayersFromStats(matchStats, matchStats?.away, "Away")
   const homeTeamForDisplay =
-    match.homeTeam ? { ...match.homeTeam, players: homePlayers } : historicalTeamFromStats(matchStats, matchStats?.home, "Home", homePlayers)
+    detailMatch.homeTeam ? { ...detailMatch.homeTeam, players: homePlayers } : historicalTeamFromStats(matchStats, matchStats?.home, "Home", homePlayers)
   const awayTeamForDisplay =
-    match.awayTeam ? { ...match.awayTeam, players: awayPlayers } : historicalTeamFromStats(matchStats, matchStats?.away, "Away", awayPlayers)
+    detailMatch.awayTeam ? { ...detailMatch.awayTeam, players: awayPlayers } : historicalTeamFromStats(matchStats, matchStats?.away, "Away", awayPlayers)
   const hasLineupData = homePlayers.length > 0 || awayPlayers.length > 0
-  const isFixtureOnly = match.matchId.startsWith("draw-2026-") && !hasLineupData && matchStats == null
+  const isFixtureOnly = detailMatch.matchId.startsWith("draw-2026-") && !hasLineupData && matchStats == null
   const [selectedPlayer, setSelectedPlayer] = useState<LineupPlayer | null>(null)
-  const [detailView, setDetailView] = useState<LineupDetailView>(hasLineupData ? "lineup" : "stats")
+  const [detailView, setDetailView] = useState<LineupDetailView>("lineup")
   const availableDetailViews: LineupDetailView[] = hasLineupData ? ["lineup", "stats"] : ["stats"]
+  const activeDetailView = availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
   const isLive = hasMatchStarted(displayLiveMatch)
-  const hasResultScore = match.homeScore != null || match.awayScore != null
+  const hasResultScore = detailMatch.homeScore != null || detailMatch.awayScore != null
   const showPregameContent = !isLive && !hasResultScore
   const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
-  const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.homeTeam, sportsbetOdds) : null
-  const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(match, match.awayTeam, sportsbetOdds) : null
-  const homeLogo = resolveLogo(match.homeTeam, teamLogos)
-  const awayLogo = resolveLogo(match.awayTeam, teamLogos)
-  const homeWatermarkClass = isStormTeam(match.homeTeam)
+  const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(detailMatch, detailMatch.homeTeam, sportsbetOdds) : null
+  const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(detailMatch, detailMatch.awayTeam, sportsbetOdds) : null
+  const homeLogo = resolveLogo(detailMatch.homeTeam, teamLogos)
+  const awayLogo = resolveLogo(detailMatch.awayTeam, teamLogos)
+  const homeWatermarkClass = isStormTeam(detailMatch.homeTeam)
     ? "hidden left-6 h-40 w-40 opacity-[0.16] grayscale sm:left-16 sm:block sm:h-48 sm:w-48"
-    : isBroncosTeam(match.homeTeam)
+    : isBroncosTeam(detailMatch.homeTeam)
       ? "hidden -left-8 h-44 w-44 opacity-[0.16] grayscale sm:left-4 sm:block sm:h-56 sm:w-56"
-    : isRabbitohsTeam(match.homeTeam)
+    : isRabbitohsTeam(detailMatch.homeTeam)
       ? "hidden -left-8 h-44 w-44 opacity-[0.22] sm:left-4 sm:block sm:h-56 sm:w-56"
     : "hidden -left-8 h-44 w-44 opacity-[0.065] grayscale sm:left-4 sm:block sm:h-56 sm:w-56"
-  const awayWatermarkClass = isStormTeam(match.awayTeam)
+  const awayWatermarkClass = isStormTeam(detailMatch.awayTeam)
     ? "hidden right-6 h-40 w-40 opacity-[0.16] grayscale sm:right-16 sm:block sm:h-48 sm:w-48"
-    : isBroncosTeam(match.awayTeam)
+    : isBroncosTeam(detailMatch.awayTeam)
       ? "hidden -right-8 h-44 w-44 opacity-[0.16] grayscale sm:right-4 sm:block sm:h-56 sm:w-56"
-    : isRabbitohsTeam(match.awayTeam)
+    : isRabbitohsTeam(detailMatch.awayTeam)
       ? "hidden -right-8 h-44 w-44 opacity-[0.22] sm:right-4 sm:block sm:h-56 sm:w-56"
     : "hidden -right-8 h-44 w-44 opacity-[0.065] grayscale sm:right-4 sm:block sm:h-56 sm:w-56"
   const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
@@ -2123,7 +2130,7 @@ function LineupCard({
   const insights = isLive
     ? []
     : generateMatchupInsights({
-        match,
+        match: detailMatch,
         tryscorerOdds,
         playerAverages,
         playerTryHistory,
@@ -2134,6 +2141,9 @@ function LineupCard({
     <details
       className="group relative origin-top overflow-hidden rounded-lg border border-transparent shadow-[0_24px_54px_rgba(0,0,0,0.48)] transform-gpu [transform:perspective(1100px)_rotateX(3.2deg)_scaleY(0.965)]"
       style={BLUE_GRADIENT_BORDER_STYLE}
+      onToggle={(event) => {
+        if (event.currentTarget.open) onOpen()
+      }}
     >
       <span
         aria-hidden="true"
@@ -2163,26 +2173,26 @@ function LineupCard({
         ) : null}
         <div className="relative z-[1] pb-2 text-center">
           <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-nrl-muted sm:text-xs">
-            {match.round} · {formatCardDate(match)}
+            {detailMatch.round} · {formatCardDate(detailMatch)}
           </div>
-          {match.venue || weatherForecast ? (
+          {detailMatch.venue || weatherForecast ? (
             <div className="mx-auto mt-1 flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px]">
               {weatherForecast ? (
                 <span className="flex-none text-xs leading-none sm:text-sm" aria-hidden="true">
                   {weatherConditionEmoji(weatherForecast.condition)}
                 </span>
               ) : null}
-              {match.venue ? <span className="min-w-0 truncate">{match.venue}</span> : null}
+              {detailMatch.venue ? <span className="min-w-0 truncate">{detailMatch.venue}</span> : null}
             </div>
           ) : null}
         </div>
         <div className="relative z-[1] mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5">
           <div className="min-w-0 justify-self-start sm:justify-self-center">
-            <TeamBadge team={match.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
+            <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
-          <LiveScoreHeader match={match} liveMatch={displayLiveMatch} />
+          <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} />
           <div className="min-w-0 justify-self-end sm:justify-self-center">
-            <TeamBadge team={match.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
+            <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
         </div>
         <span className="absolute bottom-1 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text sm:bottom-1.5">
@@ -2200,7 +2210,17 @@ function LineupCard({
 
       <div className="relative z-[1] border-t border-blue-300/30 px-2 pb-3 sm:px-3">
         <div className="pt-5" />
-        <LiveTryScorersStrip match={match} liveMatch={displayLiveMatch} />
+        {detailStatus === "loading" && !detail ? (
+          <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
+            Loading match details...
+          </div>
+        ) : detailStatus === "error" ? (
+          <div className="rounded-lg border border-red-300/30 bg-red-500/10 px-4 py-5 text-sm text-red-100">
+            Unable to load match details.
+          </div>
+        ) : (
+          <>
+        <LiveTryScorersStrip match={detailMatch} liveMatch={displayLiveMatch} />
         {availableDetailViews.length > 1 ? (
           <div className="mb-3 flex justify-center">
             <div className="inline-flex rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
@@ -2210,7 +2230,7 @@ function LineupCard({
                   type="button"
                   onClick={() => setDetailView(view)}
                   className={`rounded-md px-3 py-1.5 transition-colors ${
-                    detailView === view ? "bg-nrl-accent text-nrl-bg" : "hover:text-nrl-text"
+                    activeDetailView === view ? "bg-nrl-accent text-nrl-bg" : "hover:text-nrl-text"
                   }`}
                 >
                   {view === "lineup" ? "Lineup" : "Match stats"}
@@ -2220,8 +2240,8 @@ function LineupCard({
           </div>
         ) : null}
 
-        {detailView === "stats" ? (
-          <MatchStatsPanel match={match} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />
+        {activeDetailView === "stats" ? (
+          <MatchStatsPanel match={detailMatch} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />
         ) : hasLineupData ? (
           <>
             {showPregameContent ? (
@@ -2291,6 +2311,8 @@ function LineupCard({
             </div>
           )
         )}
+          </>
+        )}
       </div>
       <PlayerStatsDialog selection={selectedPlayerStats} onClose={() => setSelectedPlayer(null)} />
     </details>
@@ -2330,21 +2352,95 @@ function RoundSelector({
 
 export function LineupsDashboard({
   matches,
-  liveMatches,
-  weatherForecasts,
-  matchStats,
+  year,
+  liveMatches: initialLiveMatches,
+  weatherForecasts: initialWeatherForecasts,
   roundOptions,
   selectedRound,
   teamLogos,
-  tryscorerOdds,
-  sportsbetOdds,
   canAccessFantasyProjections,
-  casualtyWardOuts,
-  playerAverages,
-  playerTryHistory,
-  positionPpmBaselines,
+  summaryDiagnostic,
 }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("odds")
+  const [matchDetails, setMatchDetails] = useState<Record<string, { status: "loading" | "loaded" | "error"; detail: LineupMatchDetailData | null }>>({})
+  const [supplementalData, setSupplementalData] = useState<{
+    key: string
+    liveMatches: Record<string, LineupLiveMatch>
+    weatherForecasts: Record<string, LineupWeatherForecast>
+  } | null>(null)
+  const supplementalFetchKey = useMemo(
+    () => matches.map((match) => [match.matchId, match.venue ?? "", match.kickoffUtc ?? ""].join(":")).join("|"),
+    [matches]
+  )
+  const liveMatches = supplementalData?.key === supplementalFetchKey ? supplementalData.liveMatches : initialLiveMatches
+  const weatherForecasts = supplementalData?.key === supplementalFetchKey ? supplementalData.weatherForecasts : initialWeatherForecasts
+
+  function loadMatchDetail(match: LineupMatch) {
+    const current = matchDetails[match.matchId]
+    if (current?.status === "loading" || current?.status === "loaded") return
+
+    setMatchDetails((details) => ({
+      ...details,
+      [match.matchId]: { status: "loading", detail: null },
+    }))
+
+    fetch("/api/lineups/match-detail", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ matchId: match.matchId, round: selectedRound, year }),
+    })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { detail?: LineupMatchDetailData | null } | null) => {
+        setMatchDetails((details) => ({
+          ...details,
+          [match.matchId]: data?.detail
+            ? { status: "loaded", detail: data.detail }
+            : { status: "error", detail: null },
+        }))
+      })
+      .catch((error) => {
+        console.warn("Unable to load lineup match details.", error)
+        setMatchDetails((details) => ({
+          ...details,
+          [match.matchId]: { status: "error", detail: null },
+        }))
+      })
+  }
+
+  useEffect(() => {
+    if (matches.length === 0) return
+
+    const controller = new AbortController()
+    const payload = {
+      matches: matches.map((match) => ({
+        matchId: match.matchId,
+        venue: match.venue,
+        kickoffUtc: match.kickoffUtc,
+      })),
+    }
+
+    fetch("/api/lineups/supplemental", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { liveMatches?: Record<string, LineupLiveMatch>; weatherForecasts?: Record<string, LineupWeatherForecast> } | null) => {
+        if (!data || controller.signal.aborted) return
+        setSupplementalData({
+          key: supplementalFetchKey,
+          liveMatches: data.liveMatches ?? {},
+          weatherForecasts: data.weatherForecasts ?? {},
+        })
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) console.warn("Unable to load lineup supplemental data.", error)
+      })
+
+    return () => controller.abort()
+  }, [matches, supplementalFetchKey])
+
   const matchDateGroups = matches.reduce<Array<{ dateKey: string; matches: LineupMatch[] }>>(
     (groups, match) => {
       const dateKey = matchDateKey(match)
@@ -2362,6 +2458,11 @@ export function LineupsDashboard({
 
   return (
     <div className="space-y-3">
+      {summaryDiagnostic ? (
+        <div className="rounded-lg border border-amber-300/50 bg-amber-300/12 px-4 py-3 text-xs font-semibold text-amber-100">
+          {summaryDiagnostic}
+        </div>
+      ) : null}
       <RoundSelector roundOptions={roundOptions} selectedRound={selectedRound} />
       {matches.length > 0 ? (
         <div className="space-y-11">
@@ -2376,18 +2477,14 @@ export function LineupsDashboard({
                   match={match}
                   matchIndex={matchIndexById.get(match.matchId) ?? 0}
                   liveMatch={liveMatches[match.matchId] ?? null}
-                  matchStats={matchStats[match.matchId] ?? null}
                   weatherForecast={weatherForecasts[match.matchId] ?? null}
                   teamLogos={teamLogos}
                   displayMode={displayMode}
                   onDisplayModeChange={setDisplayMode}
-                  tryscorerOdds={tryscorerOdds}
-                  sportsbetOdds={sportsbetOdds}
                   canAccessFantasyProjections={canAccessFantasyProjections}
-                  casualtyWardOuts={casualtyWardOuts}
-                  playerAverages={playerAverages}
-                  playerTryHistory={playerTryHistory}
-                  positionPpmBaselines={positionPpmBaselines}
+                  detail={matchDetails[match.matchId]?.detail ?? null}
+                  detailStatus={matchDetails[match.matchId]?.status ?? "idle"}
+                  onOpen={() => loadMatchDetail(match)}
                 />
               ))}
             </section>

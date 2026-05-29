@@ -13,16 +13,11 @@ import {
 } from "@/components/views/player-comparison"
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
-import { fetchApprovedArticles } from "@/lib/articles"
-import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import type { Draw2026Data } from "@/lib/draw/types"
 import {
   applyFantasyBreakEvenOffset,
   applyFantasyProjectionOffset,
   buildFantasyOwnershipDeltaByPlayerId,
-  fetchFantasyCoachPlayersSnapshot,
-  fetchFantasyPlayersSnapshot,
-  fetchLineupsProjectionsByPlayerId,
   getTopFantasyOwnershipRise,
   getFantasyCoachRoundMetrics,
   type FantasyCoachPlayerSnapshot,
@@ -30,22 +25,15 @@ import {
   type LineupsProjectionSnapshot,
 } from "@/lib/fantasy/nrl"
 import {
-  fetchUpcomingLineups,
-  fetchUpcomingTryscorerOdds,
   type LineupPlayer,
   type LineupTeam,
   type LineupTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
 import type { PlayerStat } from "@/lib/data/types"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
-import {
-  fetchAvailableYears,
-  fetchBettingOddsSnapshot,
-  fetchPlayerImages,
-  fetchTeamLogos,
-} from "@/lib/supabase/queries"
+import { getLandingStaticSnapshot } from "@/lib/landing/static-snapshot"
 
-export const revalidate = 120
+export const dynamic = "force-static"
 
 const BOOKIE_LOGOS: Record<string, string> = {
   Sportsbet: "/logos/sportsbet.png",
@@ -959,8 +947,8 @@ function FeatureSection({
   )
 }
 
-export default async function Home() {
-  const [
+export default function Home() {
+  const {
     fantasyPlayers,
     fantasyCoachPlayers,
     lineupsProjections,
@@ -972,25 +960,7 @@ export default async function Home() {
     draw2026Data,
     lineups,
     tryscorerOdds,
-  ] = await Promise.all([
-    fetchFantasyPlayersSnapshot(),
-    fetchFantasyCoachPlayersSnapshot(),
-    fetchLineupsProjectionsByPlayerId(),
-    fetchAvailableYears(),
-    fetchBettingOddsSnapshot().catch((): BettingOddsSnapshot => ({
-      h2h: [],
-      line: [],
-      total: [],
-      tryscorer: [],
-      generatedAt: "",
-    })),
-    fetchPlayerImages().catch(() => []),
-    fetchApprovedArticles().catch(() => []),
-    fetchTeamLogos().catch((): Record<string, string> => ({})),
-    loadDraw2026Data().catch(() => null),
-    fetchUpcomingLineups({ includeFantasyProjections: true }).catch(() => []),
-    fetchUpcomingTryscorerOdds().catch((): Record<string, LineupTryscorerOdds> => ({})),
-  ])
+  } = getLandingStaticSnapshot()
 
   const previewYears = [...availableYears].map(String).sort((a, b) => Number(b) - Number(a)).slice(0, 3)
   const plotYears = previewYears.filter((year) => year !== "2024")
@@ -1229,10 +1199,9 @@ export default async function Home() {
             ]}
             ctaHref="/dashboard/fantasy"
             ctaLabel="Fantasy"
-            live
           >
             <LandingCarousel>
-              <PreviewFrame title="Fantasy / Player Detail" live>
+              <PreviewFrame title="Fantasy / Player Detail">
                 <div className="mb-3 grid gap-2 rounded-2xl border border-white/8 bg-[#20284a] p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] sm:p-3">
                   <div className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-center text-xs font-bold text-emerald-300">
                     Find Value
@@ -1455,7 +1424,7 @@ export default async function Home() {
                 </div>
               </PreviewFrame>
 
-              <PreviewFrame title="Fantasy / Visuals" live>
+              <PreviewFrame title="Fantasy / Visuals">
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-3">
                     <div className="text-xs font-bold uppercase tracking-wide text-emerald-300">Average vs Opponent</div>
@@ -1592,7 +1561,7 @@ export default async function Home() {
                 </div>
               </PreviewFrame>
 
-              <PreviewFrame title="Fantasy / Find Value" contentClassName="lg:min-h-[480px]" live>
+              <PreviewFrame title="Fantasy / Find Value" contentClassName="lg:min-h-[480px]">
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.72fr)]">
                   <div className="space-y-4">
                     <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
@@ -1726,9 +1695,8 @@ export default async function Home() {
             ]}
             ctaHref="/dashboard/lineups"
             ctaLabel="Lineups"
-            live
           >
-            <PreviewFrame title="Lineups / Team Lists" contentClassName="lg:min-h-[540px]" live>
+            <PreviewFrame title="Lineups / Team Lists" contentClassName="lg:min-h-[540px]">
               {lineupsLandingMatch ? (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
@@ -1897,10 +1865,9 @@ export default async function Home() {
             ]}
             ctaHref="/dashboard/betting"
             ctaLabel="Betting"
-            live
           >
             <LandingCarousel>
-              <PreviewFrame title="Betting / Odds Comparison" live>
+              <PreviewFrame title="Betting / Odds Comparison">
                 <div className="space-y-2 sm:space-y-4">
                   <div className="inline-flex rounded-md border border-white/8 bg-white/[0.03] p-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/42 sm:p-1 sm:text-[10px] sm:tracking-[0.16em]">
                     <span className="rounded bg-emerald-400/16 px-2 py-0.5 text-emerald-300 sm:px-3 sm:py-1">H2H</span>
@@ -1916,10 +1883,10 @@ export default async function Home() {
                         <div className="flex flex-wrap items-end justify-between gap-2 border-b border-white/8 pb-2 sm:gap-3 sm:pb-3">
                           <div>
                             <div className="text-xs font-semibold text-white sm:text-sm">{preview.match ?? "Upcoming market"}</div>
-                            <div className="mt-1 text-[9px] text-white/38 sm:text-[11px]">{preview.dateLabel ?? "Live odds"}</div>
+                            <div className="mt-1 text-[9px] text-white/38 sm:text-[11px]">{preview.dateLabel ?? "Snapshot odds"}</div>
                           </div>
                           <div className="text-right">
-                            <div className="text-[9px] text-white/38 sm:text-[11px]">Best-book prices across current books</div>
+                            <div className="text-[9px] text-white/38 sm:text-[11px]">Best-book prices across selected books</div>
                             <div className="mt-1 text-[9px] text-white/48 sm:text-[11px]">
                               Best-book market %:{" "}
                               <span className="font-semibold text-white/88">{formatPct(marketPct)}</span>
@@ -2068,14 +2035,14 @@ export default async function Home() {
                       </div>
                     )) : (
                       <div className="rounded-2xl border border-dashed border-white/10 bg-[#1b2140] p-8 text-center text-sm text-white/55">
-                        No current odds are available.
+                        No snapshot odds are available.
                       </div>
                     )}
                   </div>
                 </div>
               </PreviewFrame>
 
-              <PreviewFrame title="Betting / Tools" live>
+              <PreviewFrame title="Betting / Tools">
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-white/8 bg-[#1b2140] p-4">
                     <div className="text-xs font-bold uppercase tracking-wide text-white/78">Staking Calculator</div>
@@ -2263,10 +2230,9 @@ export default async function Home() {
             ]}
             ctaHref="/dashboard/players"
             ctaLabel="Stats"
-            live
           >
             <LandingCarousel>
-              <PreviewFrame title="Stats / Players" contentClassName="lg:min-h-[450px]" live>
+              <PreviewFrame title="Stats / Players" contentClassName="lg:min-h-[450px]">
                 <div className="space-y-2.5 sm:space-y-4">
                   <StatsPreviewNav active="players" />
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-white/42">
@@ -2416,7 +2382,7 @@ export default async function Home() {
                 </div>
               </PreviewFrame>
 
-              <PreviewFrame title="Stats / Leaders" contentClassName="lg:min-h-[640px]" live>
+              <PreviewFrame title="Stats / Leaders" contentClassName="lg:min-h-[640px]">
                 <div className="space-y-4">
                   <StatsPreviewNav active="leaders" />
                   <div>
@@ -2499,9 +2465,8 @@ export default async function Home() {
             ]}
             ctaHref="/dashboard/ai"
             ctaLabel="NRL AI"
-            live
           >
-            <PreviewFrame title="NRL AI / Chat" contentClassName="lg:min-h-[440px]" live>
+            <PreviewFrame title="NRL AI / Chat" contentClassName="lg:min-h-[440px]">
               <div className="flex min-h-[300px] flex-col justify-between gap-8 rounded-2xl border border-white/8 bg-[#070b1f] px-5 py-4 sm:min-h-[420px] sm:px-7 sm:py-6 lg:px-8">
                 <div className="space-y-4">
                   <div className="ml-auto max-w-[88%] rounded-2xl bg-[#252c55] px-4 py-3 text-sm leading-6 text-white/88">

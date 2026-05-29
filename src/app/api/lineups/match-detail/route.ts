@@ -17,6 +17,12 @@ function numberValue(value: unknown): number | null {
   return null
 }
 
+function fallbackMatch(value: unknown, matchId: string): LineupMatch | null {
+  if (!value || typeof value !== "object") return null
+  const match = value as LineupMatch
+  return match.matchId === matchId ? match : null
+}
+
 function stripFantasyProjections(match: LineupMatch): LineupMatch {
   const stripTeam = (team: LineupMatch["homeTeam"]): LineupMatch["homeTeam"] =>
     team
@@ -39,6 +45,7 @@ export async function POST(request: NextRequest) {
     const matchId = text(body.matchId)
     const round = text(body.round)
     const year = numberValue(body.year)
+    const shellMatch = fallbackMatch(body.match, matchId)
 
     if (!matchId || !round || year == null) {
       return NextResponse.json({ detail: null }, { status: 400 })
@@ -47,15 +54,28 @@ export async function POST(request: NextRequest) {
     const { userId } = await auth()
     const hasProAccess = await getServerProPlotAccess(userId)
     const detail = await fetchLineupsMatchDetailSummary(year, round, matchId)
+    const fallbackDetail = shellMatch
+      ? {
+          match: shellMatch,
+          matchStats: null,
+          tryscorerOdds: {},
+          sportsbetOdds: {},
+          casualtyWardOuts: {},
+          playerAverages: {},
+          positionPpmBaselines: {},
+          playerTryHistory: {},
+        }
+      : null
 
-    if (!detail) return NextResponse.json({ detail: null }, { status: 404 })
+    const responseDetail = detail ?? fallbackDetail
+    if (!responseDetail) return NextResponse.json({ detail: null }, { status: 404 })
 
     return NextResponse.json({
       detail: hasProAccess
-        ? detail
+        ? responseDetail
         : {
-            ...detail,
-            match: stripFantasyProjections(detail.match),
+            ...responseDetail,
+            match: stripFantasyProjections(responseDetail.match),
           },
     })
   } catch (error) {

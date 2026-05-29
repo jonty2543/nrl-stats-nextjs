@@ -83,6 +83,19 @@ type AverageStatKey =
   | "Tackle Breaks"
   | "Offloads"
 
+function fallbackLineupMatchDetail(match: LineupMatch): LineupMatchDetailData {
+  return {
+    match,
+    matchStats: null,
+    tryscorerOdds: {},
+    sportsbetOdds: {},
+    casualtyWardOuts: {},
+    playerAverages: {},
+    playerTryHistory: {},
+    positionPpmBaselines: {},
+  }
+}
+
 const BOOKIE_LOGOS: Record<string, string> = {
   Sportsbet: "/logos/sportsbet.png",
   Pointsbet: "/logos/pointsbet.png",
@@ -2388,22 +2401,22 @@ export function LineupsDashboard({
     fetch("/api/lineups/match-detail", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ matchId: match.matchId, round: selectedRound, year }),
+      body: JSON.stringify({ matchId: match.matchId, round: selectedRound, year, match }),
     })
       .then((response) => response.ok ? response.json() : null)
       .then((data: { detail?: LineupMatchDetailData | null } | null) => {
+        const detail = data?.detail ?? fallbackLineupMatchDetail(match)
         setMatchDetails((details) => ({
           ...details,
-          [match.matchId]: data?.detail
-            ? { status: "loaded", detail: data.detail }
-            : { status: "error", detail: null },
+          [match.matchId]: { status: "loaded", detail },
         }))
       })
       .catch((error) => {
         console.warn("Unable to load lineup match details.", error)
+        const detail = fallbackLineupMatchDetail(match)
         setMatchDetails((details) => ({
           ...details,
-          [match.matchId]: { status: "error", detail: null },
+          [match.matchId]: { status: "loaded", detail },
         }))
       })
   }

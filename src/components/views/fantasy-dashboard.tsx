@@ -463,6 +463,9 @@ const GAME_LOG_COLUMNS: { key: GameLogColumn; label: string; align?: "left" | "r
 ]
 
 const GAME_LOG_BASE_UPSIDE_COLUMN_WIDTH_PX = 190
+const GAME_LOG_COLLAPSED_VISIBLE_ROWS = 5
+const GAME_LOG_COLLAPSED_MAX_HEIGHT_PX = 260
+const GAME_LOG_COLLAPSED_BASE_UPSIDE_MAX_HEIGHT_PX = 356
 const ALL_PLAYERS_STATS_YEAR = "2026"
 const ALL_PLAYERS_PREVIEW_LIMIT = 20
 
@@ -2910,6 +2913,7 @@ export function FantasyDashboard({
   const [selectedRollingAverageStat, setSelectedRollingAverageStat] = useState<string>("Fantasy")
   const [selectedStatVsFantasyLabel, setSelectedStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [showWithWithoutPlot, setShowWithWithoutPlot] = useState(false)
+  const [isGameLogExpanded, setIsGameLogExpanded] = useState(false)
   const [gameLogSort, setGameLogSort] = useState<{ column: GameLogColumn; direction: GameLogSortDirection } | null>(
     null
   )
@@ -4578,6 +4582,15 @@ export function FantasyDashboard({
       compareGameLogRows(a, b, gameLogSort.column, gameLogSort.direction)
     )
   }, [filteredRows, gameLogSort])
+  const shouldCollapseGameLog = sortedFilteredRows.length > GAME_LOG_COLLAPSED_VISIBLE_ROWS
+  const isGameLogCollapsed = shouldCollapseGameLog && !isGameLogExpanded
+  const gameLogCollapsedMaxHeight = showBaseUpsideBars
+    ? GAME_LOG_COLLAPSED_BASE_UPSIDE_MAX_HEIGHT_PX
+    : GAME_LOG_COLLAPSED_MAX_HEIGHT_PX
+
+  useEffect(() => {
+    setIsGameLogExpanded(false)
+  }, [selectedFantasyName])
 
   const toggleGameLogSort = useCallback((column: GameLogColumn) => {
     setGameLogSort((prev) => {
@@ -5496,7 +5509,7 @@ export function FantasyDashboard({
       {showPlayerDetails && selectedFantasyPlayer ? (
         <section ref={playerDetailsRef} id="fantasy-player-details" className="scroll-mt-24">
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_252px] xl:items-start">
-            <div className="min-w-0 space-y-4">
+            <div className="flex min-w-0 flex-col gap-4">
               <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel p-3">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_28%,rgba(71,255,182,0.16),transparent_30%),radial-gradient(circle_at_82%_76%,rgba(129,92,255,0.18),transparent_34%),linear-gradient(135deg,rgba(13,21,44,0.18),rgba(13,21,44,0))]" />
                 <div className="pointer-events-none absolute left-[10%] top-[18%] h-28 w-28 rounded-full bg-emerald-300/8 blur-3xl" />
@@ -5719,7 +5732,7 @@ export function FantasyDashboard({
               </div>
 
               <div
-                className={`relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel"
+                className={`order-6 relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel"
                   }`}
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -6334,22 +6347,26 @@ export function FantasyDashboard({
 
               </div>
 
-              <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
+              <div className="order-5 overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel">
                 <div className="border-b border-nrl-border bg-nrl-panel-2 px-4 py-3">
                   <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
                     Player Game Log
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table
-                    className="table-fixed border-collapse"
-                    style={{
-                      minWidth: `${GAME_LOG_COLUMNS.reduce(
-                        (sum, column) => sum + getGameLogColumnWidthPx(column.key),
-                        0
-                      ) + (showBaseUpsideBars ? GAME_LOG_BASE_UPSIDE_COLUMN_WIDTH_PX : 0)}px`,
-                    }}
+                <div className="relative">
+                  <div
+                    className={`overflow-x-auto ${isGameLogCollapsed ? "overflow-y-hidden" : ""}`}
+                    style={isGameLogCollapsed ? { maxHeight: `${gameLogCollapsedMaxHeight}px` } : undefined}
                   >
+                    <table
+                      className="table-fixed border-collapse"
+                      style={{
+                        minWidth: `${GAME_LOG_COLUMNS.reduce(
+                          (sum, column) => sum + getGameLogColumnWidthPx(column.key),
+                          0
+                        ) + (showBaseUpsideBars ? GAME_LOG_BASE_UPSIDE_COLUMN_WIDTH_PX : 0)}px`,
+                      }}
+                    >
                     <colgroup>
                       {GAME_LOG_COLUMNS.map((column) => (
                         <Fragment key={column.key}>
@@ -6525,8 +6542,53 @@ export function FantasyDashboard({
                         </>
                       )}
                     </tbody>
-                  </table>
+                    </table>
+                  </div>
+                  {isGameLogCollapsed ? (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-gradient-to-b from-transparent via-nrl-panel/55 to-nrl-panel/90 pb-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsGameLogExpanded(true)}
+                        className="pointer-events-auto inline-flex h-8 w-8 cursor-pointer items-center justify-center text-nrl-muted transition-colors hover:text-nrl-accent"
+                        aria-label="Expand player game log"
+                        aria-expanded={false}
+                      >
+                        <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5">
+                          <path
+                            d="M5 7.5 10 12.5 15 7.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
+                {shouldCollapseGameLog && isGameLogExpanded ? (
+                  <div className="flex justify-center border-t border-nrl-border bg-nrl-panel-2/45 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsGameLogExpanded(false)}
+                      className="inline-flex h-8 w-8 cursor-pointer items-center justify-center text-nrl-muted transition-colors hover:text-nrl-accent"
+                      aria-label="Collapse player game log"
+                      aria-expanded={true}
+                    >
+                      <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4">
+                        <path
+                          d="M5 12.5 10 7.5 15 12.5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
             <div className="xl:sticky xl:top-24">{draw2026Panel}</div>

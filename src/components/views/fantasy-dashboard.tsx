@@ -3245,13 +3245,14 @@ export function FantasyDashboard({
   const navigateToPlayer = useCallback(
     (name: string) => {
       if (playerRouteBasePath) {
-        router.push(`${playerRouteBasePath}/${encodeURIComponent(fantasyPlayerSlug(name))}`)
+        const sourceQuery = showAllPlayersOnly ? "?from=all-players" : ""
+        router.push(`${playerRouteBasePath}/${encodeURIComponent(fantasyPlayerSlug(name))}${sourceQuery}`)
         return
       }
       setSelectedFantasyName(name)
       scrollToPlayerDetails()
     },
-    [playerRouteBasePath, router, scrollToPlayerDetails]
+    [playerRouteBasePath, router, scrollToPlayerDetails, showAllPlayersOnly]
   )
 
   const loadTeammateLookupRows = useCallback(async (years: string[]) => {

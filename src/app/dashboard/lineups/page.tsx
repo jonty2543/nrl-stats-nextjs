@@ -94,6 +94,30 @@ function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | n
   )
 }
 
+function mergeRoundOptions(...optionGroups: LineupRoundOption[][]): LineupRoundOption[] {
+  const byRound = new Map<string, LineupRoundOption>()
+  for (const options of optionGroups) {
+    for (const option of options) {
+      const existing = byRound.get(option.value)
+      if (!existing) {
+        byRound.set(option.value, option)
+        continue
+      }
+      byRound.set(option.value, {
+        ...existing,
+        ...option,
+        startDate: existing.startDate && option.startDate
+          ? existing.startDate < option.startDate ? existing.startDate : option.startDate
+          : existing.startDate || option.startDate,
+        endDate: existing.endDate && option.endDate
+          ? existing.endDate > option.endDate ? existing.endDate : option.endDate
+          : existing.endDate || option.endDate,
+      })
+    }
+  }
+  return [...byRound.values()].sort((a, b) => a.roundNumber - b.roundNumber || a.label.localeCompare(b.label))
+}
+
 async function shouldShowLineupsSummaryDiagnostic(): Promise<boolean> {
   if (process.env.VERCEL_GIT_COMMIT_REF === "betting/testing") return true
 
@@ -131,10 +155,17 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const initialSummary = requestedRound
     ? await withFallback(fetchLineupsPageShellSummary(year, requestedRound), null, "Lineups page shell summary")
     : await withFallback(fetchLatestLineupsPageShellSummary(year), null, "Latest lineups page shell summary")
-  const fallbackRoundOptions = initialSummary?.roundOptions.length
+  const latestSummaryForOptions = requestedRound
+    ? await withFallback(fetchLatestLineupsPageShellSummary(year), null, "Latest lineups page shell summary")
+    : initialSummary
+  const fallbackRoundOptions = initialSummary?.roundOptions.length || latestSummaryForOptions?.roundOptions.length
     ? []
     : await withFallback(fetchLineupRoundOptions(year), [], "Lineups round options")
-  const initialRoundOptions = initialSummary?.roundOptions.length ? initialSummary.roundOptions : fallbackRoundOptions
+  const initialRoundOptions = mergeRoundOptions(
+    initialSummary?.roundOptions ?? [],
+    latestSummaryForOptions?.roundOptions ?? [],
+    fallbackRoundOptions
+  )
   const selectedRound =
     (requestedRound && initialRoundOptions.some((option) => option.value === requestedRound) ? requestedRound : null) ??
     currentRoundOption(initialRoundOptions)?.value ??
@@ -176,7 +207,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       year={year}
       liveMatches={{}}
       weatherForecasts={{}}
-      roundOptions={summary?.roundOptions.length ? summary.roundOptions : initialRoundOptions}
+      roundOptions={mergeRoundOptions(initialRoundOptions, summary?.roundOptions ?? [])}
       selectedRound={selectedRound}
       teamLogos={teamLogos}
       canAccessFantasyProjections={hasProAccess}

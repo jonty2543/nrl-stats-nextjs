@@ -10,7 +10,7 @@ import {
   fetchLatestFantasyOwnershipBaselineSnapshot,
   fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
-import { fetchAvailableYears, fetchFantasyPlayerCardSummaries, fetchOriginChances, fetchPlayerImages, fetchRelevantCasualtyWardOutCandidates } from "@/lib/supabase/queries"
+import { fetchAvailableYears, fetchOriginChances, fetchPlayerImages, fetchRelevantCasualtyWardOutCandidates, fetchTopWeeklyFantasyPlayerCardSummaries } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 const FANTASY_PAGE_CONTEXT_TIMEOUT_MS = 8000
@@ -78,7 +78,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
     withFantasyPageContextTimeout("relevant casualty candidates", fetchRelevantCasualtyWardOutCandidates(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("2026 draw", loadDraw2026Data(), null, FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("Origin chances", fetchOriginChances(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
-    withFantasyPageContextTimeout("fantasy player card summaries", fetchFantasyPlayerCardSummaries(), []),
+    withFantasyPageContextTimeout("top weekly fantasy player card summaries", fetchTopWeeklyFantasyPlayerCardSummaries(), []),
   ])
   const fantasyProjectionArticle = approvedArticleLinks.find((article) => {
     const title = normaliseArticleTitle(article.title)
@@ -101,6 +101,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
       initialPlayerStats={[]}
       initialAllPlayerStats={[]}
       precomputedAllPlayersRows={precomputedAllPlayersRows}
+      precomputedAllPlayersRowsArePreview
       canAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
       initialShowFantasyAnalytics={params.analytics === "1"}

@@ -37,6 +37,7 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { PillRadio } from "@/components/ui/pill-radio"
 import { YearRangeSlider } from "@/components/ui/year-range-slider"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
+import { FantasyBackLink } from "@/components/fantasy/fantasy-back-link"
 import {
   PlayerImageCard,
   primaryTeamForRows,
@@ -111,6 +112,7 @@ interface FantasyDashboardProps {
   initialPlayerStats: PlayerStat[]
   initialAllPlayerStats?: PlayerStat[]
   precomputedAllPlayersRows?: FantasyPlayerCardSummary[]
+  precomputedAllPlayersRowsArePreview?: boolean
   playerImages?: PlayerImageRecord[]
   teamLogos?: Record<string, string>
   preloadedPlayerAllYears?: boolean
@@ -118,6 +120,9 @@ interface FantasyDashboardProps {
   draw2026Data?: Draw2026Data | null
   initialSelectedFantasyName?: string
   showOwnedCards?: boolean
+  showFantasyActions?: boolean
+  showAllPlayersOnly?: boolean
+  showFantasyAnalyticsOnly?: boolean
   showPlayerDetails?: boolean
   showPlayerComments?: boolean
   initialShowFantasyAnalytics?: boolean
@@ -459,6 +464,7 @@ const GAME_LOG_COLUMNS: { key: GameLogColumn; label: string; align?: "left" | "r
 
 const GAME_LOG_BASE_UPSIDE_COLUMN_WIDTH_PX = 190
 const ALL_PLAYERS_STATS_YEAR = "2026"
+const ALL_PLAYERS_PREVIEW_LIMIT = 20
 
 const ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS = new Set<AllPlayersSortKey>()
 
@@ -2848,6 +2854,7 @@ export function FantasyDashboard({
   initialPlayerStats,
   initialAllPlayerStats = [],
   precomputedAllPlayersRows = [],
+  precomputedAllPlayersRowsArePreview = false,
   playerImages = [],
   teamLogos = {},
   preloadedPlayerAllYears = false,
@@ -2855,6 +2862,9 @@ export function FantasyDashboard({
   draw2026Data,
   initialSelectedFantasyName,
   showOwnedCards = true,
+  showFantasyActions = true,
+  showAllPlayersOnly = false,
+  showFantasyAnalyticsOnly = false,
   showPlayerDetails = true,
   showPlayerComments = false,
   initialShowFantasyAnalytics = false,
@@ -2907,6 +2917,7 @@ export function FantasyDashboard({
     column: "weeklyChange",
     direction: "desc",
   })
+  const [allPlayerCardSummaryRows, setAllPlayerCardSummaryRows] = useState<FantasyPlayerCardSummary[]>(precomputedAllPlayersRows)
   const [allPlayersView, setAllPlayersView] = useState<"cards" | "table">("cards")
   const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
   const [allPlayersTagFilters, setAllPlayersTagFilters] = useState<string[]>([])
@@ -2921,6 +2932,7 @@ export function FantasyDashboard({
   const [isFantasyAnalyticsPending, setIsFantasyAnalyticsPending] = useState(false)
   const [isFantasyDraftPending, setIsFantasyDraftPending] = useState(false)
   const [isMyTeamPending, setIsMyTeamPending] = useState(false)
+  const [isAllPlayersPending, setIsAllPlayersPending] = useState(false)
   const [isTradeSuggestorOpen, setIsTradeSuggestorOpen] = useState(false)
   const [tradeScreenshots, setTradeScreenshots] = useState<Record<TradeScreenshotSlot, FantasyTradeScreenshot | null>>({
     starters: null,
@@ -2939,10 +2951,13 @@ export function FantasyDashboard({
     () => hasAllPlayerStatsForYear(allData, ALL_PLAYERS_STATS_YEAR) ? allData : allPlayersStatsData,
     [allData, allPlayersStatsData]
   )
-  const hasPrecomputedAllPlayersRows = precomputedAllPlayersRows.length > 0
+  const hasLoadedFullAllPlayersRows = !precomputedAllPlayersRowsArePreview
+  const isAllPlayersPreview = precomputedAllPlayersRowsArePreview
+  const hasPrecomputedAllPlayersRows = allPlayerCardSummaryRows.length > 0
+  const effectiveAllPlayersView = hasLoadedFullAllPlayersRows ? allPlayersView : "cards"
   const precomputedAllPlayersRowsByKey = useMemo(() => {
     const map = new Map<string, FantasyPlayerCardSummary>()
-    for (const row of precomputedAllPlayersRows) {
+    for (const row of allPlayerCardSummaryRows) {
       if (row.playerId !== null) map.set(`id:${row.playerId}`, row)
       const playerKey = normaliseName(row.player)
       if (playerKey) map.set(`name:${playerKey}`, row)
@@ -2950,6 +2965,9 @@ export function FantasyDashboard({
       if (localNameKey) map.set(`name:${localNameKey}`, row)
     }
     return map
+  }, [allPlayerCardSummaryRows])
+  useEffect(() => {
+    setAllPlayerCardSummaryRows(precomputedAllPlayersRows)
   }, [precomputedAllPlayersRows])
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
@@ -3824,9 +3842,66 @@ export function FantasyDashboard({
       rowsByName.set(name, rows)
     }
 
-    const sourceFantasyPlayers = fantasyPlayers.length > 0
+    const baseFantasyPlayers = fantasyPlayers.length > 0
       ? fantasyPlayers
       : buildFallbackFantasyPlayersFromStats(rowsByName)
+    const fantasyPlayerById = new Map(baseFantasyPlayers.map((player) => [player.id, player]))
+    const fantasyPlayerByNormalizedName = new Map(
+      baseFantasyPlayers.map((player) => [normaliseName(player.name), player])
+    )
+    const previewFallbackCandidates = baseFantasyPlayers.map((player) => ({
+      player,
+      weeklyChange: ownershipDeltaByPlayerId.get(player.id),
+    }))
+    const hasPositiveWeeklyChange = previewFallbackCandidates.some((entry) => entry.weeklyChange != null && entry.weeklyChange > 0)
+    const previewFallbackPlayers = previewFallbackCandidates
+      .filter((entry) => !hasPositiveWeeklyChange || (entry.weeklyChange != null && entry.weeklyChange > 0))
+      .sort((a, b) => {
+        if (hasPositiveWeeklyChange) {
+          const aChange = a.weeklyChange ?? -Infinity
+          const bChange = b.weeklyChange ?? -Infinity
+          if (aChange !== bChange) return bChange - aChange
+        }
+        return (b.player.cost ?? -1) - (a.player.cost ?? -1)
+      })
+      .slice(0, ALL_PLAYERS_PREVIEW_LIMIT)
+      .map((entry) => entry.player)
+    const sourceFantasyPlayers = isAllPlayersPreview
+      ? allPlayerCardSummaryRows.length > 0
+        ? allPlayerCardSummaryRows.map((row, index): FantasyPlayerSnapshot => {
+          const existingPlayer =
+            (row.playerId !== null ? fantasyPlayerById.get(row.playerId) : undefined) ??
+            fantasyPlayerByNormalizedName.get(normaliseName(row.player))
+          if (existingPlayer) return existingPlayer
+          const positionLabel = row.position || "POS"
+          return {
+            id: row.playerId ?? -100000 - index,
+            firstName: "",
+            lastName: row.player,
+            name: row.player,
+            squadId: null,
+            cost: row.price,
+            status: null,
+            positions: [],
+            positionLabels: positionLabel ? [positionLabel] : [],
+            positionLabel,
+            ownedBy: row.ownedBy,
+            selections: null,
+            avgPoints: row.avg2026,
+            projectedAvg: row.projection,
+            gamesPlayed: row.gamesPlayed,
+            totalPoints: null,
+            tog: null,
+            be: row.breakeven,
+            pricedAt: row.pricedAt,
+            isBye: false,
+            locked: false,
+            priceHistory: {},
+            scoreHistory: {},
+          }
+        })
+        : previewFallbackPlayers
+      : baseFantasyPlayers
     const namedLineupPlayers = new Set(lineupsProjections?.roleByPlayerName.keys() ?? [])
     const fantasyPlayerByName = new Map(
       sourceFantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
@@ -3853,13 +3928,17 @@ export function FantasyDashboard({
           gamesPlayed: precomputedRow.gamesPlayed ?? player.gamesPlayed,
         }
         : player
-      const localName = precomputedRow?.localName ?? findLocalPlayerMatch(player.name, localNames)
+      const precomputedLocalNameMatches = precomputedRow?.localName
+        ? findLocalPlayerMatch(player.name, [precomputedRow.localName]) === precomputedRow.localName
+        : false
+      const precomputedStatsRow = precomputedLocalNameMatches ? precomputedRow : null
+      const localName = precomputedStatsRow?.localName ?? findLocalPlayerMatch(player.name, localNames)
       const playerRows = localName ? rowsByName.get(localName) ?? [] : []
       const fantasyScores = playerRows.map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
       const minutes = playerRows.map((row) => playerStatMetricValue(row, "Mins Played", "mins_played"))
       const totalFantasy = fantasyScores.reduce<number>((sum, value) => sum + (value ?? 0), 0)
       const totalMinutes = minutes.reduce<number>((sum, value) => sum + (value ?? 0), 0)
-      const recentScores = precomputedRow?.last3 != null
+      const recentScores = precomputedStatsRow?.last3 != null
         ? []
         : [...playerRows]
           .sort(sortRoundsDesc)
@@ -3919,9 +3998,9 @@ export function FantasyDashboard({
         player: displayPlayer,
         localName,
         imageRow,
-        avg2026: precomputedRow?.avg2026 ?? averageNumbers(fantasyScores) ?? player.avgPoints,
-        last3: precomputedRow?.last3 ?? averageNumbers(recentScores),
-        ppm: precomputedRow?.ppm ?? (totalMinutes > 0 ? totalFantasy / totalMinutes : null),
+        avg2026: precomputedStatsRow?.avg2026 ?? averageNumbers(fantasyScores) ?? player.avgPoints,
+        last3: precomputedStatsRow?.last3 ?? averageNumbers(recentScores),
+        ppm: precomputedStatsRow?.ppm ?? (totalMinutes > 0 ? totalFantasy / totalMinutes : null),
         weeklyChange: precomputedRow?.weeklyChange ?? ownershipDelta,
         pricedAt: effectivePricedAt,
         projection,
@@ -3936,10 +4015,10 @@ export function FantasyDashboard({
         nextMajorByeRound,
         playsNextMajorBye,
         originChance: precomputedRow?.originChance ?? originChance,
-        gamesPlayed: Math.trunc(precomputedRow?.gamesPlayed ?? (playerRows.length || player.gamesPlayed || 0)),
+        gamesPlayed: Math.trunc(precomputedStatsRow?.gamesPlayed ?? (playerRows.length || player.gamesPlayed || 0)),
       }
     })
-  }, [allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
+  }, [allPlayerCardSummaryRows, allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, isAllPlayersPreview, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
 
   const selectedAllPlayersTableRow = useMemo(
     () => selectedFantasyPlayer
@@ -4087,21 +4166,24 @@ export function FantasyDashboard({
 
   const sortedAllPlayersTableRows = useMemo(() => {
     let filteredRows =
-      allPlayersPositionFilter === "All Positions"
+      !hasLoadedFullAllPlayersRows || allPlayersPositionFilter === "All Positions"
         ? allPlayersTableRows
         : allPlayersTableRows.filter((row) => row.player.positionLabels.includes(allPlayersPositionFilter))
-    if (allPlayersTagFilters.length > 0) {
+    if (hasLoadedFullAllPlayersRows && allPlayersTagFilters.length > 0) {
       filteredRows = filteredRows.filter(
         (row) => matchesFantasyTagFilters(getFantasyFilterTags(row), allPlayersTagFilters)
       )
     }
+    const activeAllPlayersSort = hasLoadedFullAllPlayersRows
+      ? allPlayersSort
+      : { column: "weeklyChange" as const, direction: "desc" as const }
     const weeklyChangeUnavailable = filteredRows.every((row) => row.weeklyChange === null || row.weeklyChange === 0)
     const projectionUnavailable = filteredRows.every((row) => row.projection === null)
     const effectiveSort =
-      (allPlayersSort.column === "weeklyChange" && weeklyChangeUnavailable) ||
-      (allPlayersSort.column === "projection" && projectionUnavailable)
+      (activeAllPlayersSort.column === "weeklyChange" && weeklyChangeUnavailable) ||
+      (activeAllPlayersSort.column === "projection" && projectionUnavailable)
         ? { column: "price" as const, direction: "desc" as const }
-        : allPlayersSort
+        : activeAllPlayersSort
 
     const getSortValue = (row: AllPlayersTableRow): number | string | null => {
       if (effectiveSort.column === "name") return row.player.name.toLowerCase()
@@ -4136,7 +4218,7 @@ export function FantasyDashboard({
 
       return String(aValue).localeCompare(String(bValue)) * direction
     })
-  }, [allPlayersPositionFilter, allPlayersSort, allPlayersTableRows, allPlayersTagFilters])
+  }, [allPlayersPositionFilter, allPlayersSort, allPlayersTableRows, allPlayersTagFilters, hasLoadedFullAllPlayersRows])
 
   const allPlayersTagFilterOptions = useMemo(() => {
     const byeOptions = new Set<string>()
@@ -4567,7 +4649,7 @@ export function FantasyDashboard({
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        {showOwnedCards ? (
+        {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
           <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch">
             <Link
               href="/dashboard/fantasy/my-team"
@@ -4599,7 +4681,7 @@ export function FantasyDashboard({
             <div className={`grid items-stretch gap-2 sm:gap-3 xl:order-2 xl:col-span-2 ${fantasyProjectionArticle ? "grid-cols-3 xl:grid-cols-2" : "grid-cols-2 xl:grid-cols-1"}`}>
               <div className="contents xl:grid xl:grid-rows-2 xl:gap-3">
                 <Link
-                  href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
+                  href="/dashboard/fantasy/analytics"
                   onClick={() => setIsFantasyAnalyticsPending(true)}
                   className={`relative flex h-full min-h-[44px] w-full cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
                     showFantasyAnalytics
@@ -4701,10 +4783,16 @@ export function FantasyDashboard({
 
       </div>
 
-      {showOwnedCards && showFantasyAnalytics ? (
+      {showOwnedCards && showFantasyAnalyticsOnly ? (
+        <div>
+          <FantasyBackLink href="/dashboard/fantasy" label="Back to Fantasy Dashboard" />
+        </div>
+      ) : null}
+
+      {showOwnedCards && showFantasyAnalytics && !showAllPlayersOnly ? (
         <section id="fantasy-analytics" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
-              <div className="order-2 min-w-0 space-y-3 xl:order-1">
+          <div className={`grid gap-3 ${showFantasyAnalyticsOnly ? "" : "xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]"}`}>
+              <div className={`${showFantasyAnalyticsOnly ? "min-w-0 space-y-3" : "order-2 min-w-0 space-y-3 xl:order-1"}`}>
               <>
               <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 [contain-intrinsic-size:430px] [content-visibility:auto]">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
@@ -4825,7 +4913,7 @@ export function FantasyDashboard({
               ) : null}
               </>
               </div>
-              <div className="order-1 min-w-0 xl:order-2 xl:sticky xl:top-3 xl:self-start">
+              <div className={`${showFantasyAnalyticsOnly ? "min-w-0" : "order-1 min-w-0 xl:order-2 xl:sticky xl:top-3 xl:self-start"}`}>
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -4942,65 +5030,94 @@ export function FantasyDashboard({
         </section>
       ) : null}
 
-      {showOwnedCards ? (
+      {showOwnedCards && showAllPlayersOnly ? (
+        <div>
+          <FantasyBackLink href="/dashboard/fantasy" label="Back to Fantasy Dashboard" />
+        </div>
+      ) : null}
+
+      {showOwnedCards && !showFantasyAnalyticsOnly ? (
         <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-accent/10 px-3 py-2">
             <div>
-              <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">All Players</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
+                {hasLoadedFullAllPlayersRows ? "All Players" : "Top Weekly Buys"}
+              </div>
             </div>
-            <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-0.5 min-[360px]:gap-1 sm:w-auto sm:justify-end sm:gap-1.5">
-              <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-[2px]">
-                {(["cards", "table"] as const).map((view) => (
-                  <button
-                    key={view}
-                    type="button"
-                    onClick={() => setAllPlayersView(view)}
-                    className={`rounded-full px-1.5 py-1 text-[8px] font-bold uppercase tracking-wide transition-colors sm:px-2 sm:text-[9px] ${
-                      allPlayersView === view
-                        ? "bg-nrl-accent text-[#07131f]"
-                        : "text-nrl-muted hover:text-nrl-text"
-                    }`}
-                  >
-                    {view === "cards" ? "Cards" : "Table"}
-                  </button>
-                ))}
-              </div>
-              <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[126px]">
-                <Select
-                  label=""
-                  value={allPlayersPositionFilter}
-                  options={["All Positions", ...POSITION_TABLES.map((position) => position.label)]}
-                  onChange={setAllPlayersPositionFilter}
-                />
-              </div>
-              <label className="inline-flex shrink-0 cursor-pointer rounded-full bg-[linear-gradient(90deg,#071632,#1d4ed8,#7dd3fc,#bfdbfe,#1d4ed8,#071632)] p-[1px] shadow-[0_0_0_1px_rgba(125,211,252,0.28),0_0_14px_rgba(37,99,235,0.22)]">
-                <span className="inline-flex min-h-[28px] items-center justify-center gap-1 rounded-full bg-nrl-panel-2 px-1.5 text-[8px] font-bold uppercase tracking-wide text-nrl-muted min-[360px]:px-2 sm:gap-1.5 sm:text-[9px]">
-                  <span>Tags</span>
-                  <input
-                    type="checkbox"
-                    checked={showAllPlayersCardTags}
-                    onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
-                    className="sr-only"
+            {hasLoadedFullAllPlayersRows ? (
+              <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-0.5 min-[360px]:gap-1 sm:w-auto sm:justify-end sm:gap-1.5">
+                <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-[2px]">
+                  {(["cards", "table"] as const).map((view) => (
+                    <button
+                      key={view}
+                      type="button"
+                      onClick={() => {
+                        setAllPlayersView(view)
+                      }}
+                      className={`rounded-full px-1.5 py-1 text-[8px] font-bold uppercase tracking-wide transition-colors sm:px-2 sm:text-[9px] ${
+                        effectiveAllPlayersView === view
+                          ? "bg-nrl-accent text-[#07131f]"
+                          : "text-nrl-muted hover:text-nrl-text"
+                      }`}
+                    >
+                      {view === "cards" ? "Cards" : "Table"}
+                    </button>
+                  ))}
+                </div>
+                <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[126px]">
+                  <Select
+                    label=""
+                    value={allPlayersPositionFilter}
+                    options={["All Positions", ...POSITION_TABLES.map((position) => position.label)]}
+                    onChange={setAllPlayersPositionFilter}
                   />
-                  <span className={`relative h-3.5 w-5 rounded-full border transition-colors sm:w-6 ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
-                    <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-2.5 bg-nrl-accent sm:translate-x-3" : "translate-x-0.5 bg-nrl-muted"}`} />
+                </div>
+                <label className="inline-flex shrink-0 cursor-pointer rounded-full bg-[linear-gradient(90deg,#071632,#1d4ed8,#7dd3fc,#bfdbfe,#1d4ed8,#071632)] p-[1px] shadow-[0_0_0_1px_rgba(125,211,252,0.28),0_0_14px_rgba(37,99,235,0.22)]">
+                  <span className="inline-flex min-h-[28px] items-center justify-center gap-1 rounded-full bg-nrl-panel-2 px-1.5 text-[8px] font-bold uppercase tracking-wide text-nrl-muted min-[360px]:px-2 sm:gap-1.5 sm:text-[9px]">
+                    <span>Tags</span>
+                    <input
+                      type="checkbox"
+                      checked={showAllPlayersCardTags}
+                      onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
+                      className="sr-only"
+                    />
+                    <span className={`relative h-3.5 w-5 rounded-full border transition-colors sm:w-6 ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                      <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-2.5 bg-nrl-accent sm:translate-x-3" : "translate-x-0.5 bg-nrl-muted"}`} />
+                    </span>
                   </span>
-                </span>
-              </label>
-              <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[116px]">
-                <MultiSelect
-                  label=""
-                  value={allPlayersTagFilters}
-                  options={allPlayersTagFilterOptions}
-                  onChange={(value) => {
-                    setAllPlayersTagFilters(value)
-                  }}
-                  placeholder="All Tags"
-                />
+                </label>
+                <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[116px]">
+                  <MultiSelect
+                    label=""
+                    value={allPlayersTagFilters}
+                    options={allPlayersTagFilterOptions}
+                    onChange={setAllPlayersTagFilters}
+                    placeholder="All Tags"
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/dashboard/fantasy/players"
+                  onClick={() => setIsAllPlayersPending(true)}
+                  className="inline-flex min-h-[30px] items-center gap-1.5 rounded-full border border-nrl-accent/50 bg-nrl-accent/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent"
+                >
+                  See all players
+                  {isAllPlayersPending ? (
+                    <span className="inline-flex items-center gap-0.5" aria-hidden="true">
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-current" />
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-current [animation-delay:120ms]" />
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-current [animation-delay:240ms]" />
+                    </span>
+                  ) : (
+                    <span aria-hidden="true">→</span>
+                  )}
+                </Link>
+              </div>
+            )}
           </div>
-          <div className={`${allPlayersView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2`}>
+          <div className={`${hasLoadedFullAllPlayersRows && effectiveAllPlayersView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2`}>
             <div className="mb-2 max-w-2xl">
               <SearchableSelect
                 label=""
@@ -5042,10 +5159,10 @@ export function FantasyDashboard({
               </button>
             </div>
           </div>
-          <div className={`${allPlayersView === "cards" ? "grid" : "hidden"} max-h-[760px] grid-cols-1 gap-2 overflow-y-auto p-2.5`}>
+          <div className={`${effectiveAllPlayersView === "cards" ? "grid" : "hidden"} ${showAllPlayersOnly ? "" : "max-h-[760px]"} grid-cols-1 gap-2 overflow-y-auto p-2.5`}>
             {sortedAllPlayersTableRows.length === 0 ? (
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
-                No {ALL_PLAYERS_STATS_YEAR} player stats available.
+                {isAllPlayersPreview ? "No weekly ownership movers available." : `No ${ALL_PLAYERS_STATS_YEAR} player stats available.`}
               </div>
             ) : (
               sortedAllPlayersTableRows.map((row) => {
@@ -5223,7 +5340,7 @@ export function FantasyDashboard({
               })
             )}
           </div>
-          <div className={`${allPlayersView === "table" ? "block" : "hidden"} h-[756px] overflow-y-auto overflow-x-auto`}>
+          <div className={`${effectiveAllPlayersView === "table" ? "block" : "hidden"} ${showAllPlayersOnly ? "" : "h-[756px]"} overflow-y-auto overflow-x-auto`}>
             <table className="w-full min-w-[1100px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>

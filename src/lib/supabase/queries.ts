@@ -1968,13 +1968,27 @@ function jsonArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
 }
 
-async function fetchFantasyPlayerCardSummariesFromSupabase(): Promise<FantasyPlayerCardSummary[]> {
+interface FetchFantasyPlayerCardSummariesOptions {
+  limit?: number
+  orderBy?: "player" | "weeklyChangeDesc"
+}
+
+async function fetchFantasyPlayerCardSummariesFromSupabase(
+  options: FetchFantasyPlayerCardSummariesOptions = {}
+): Promise<FantasyPlayerCardSummary[]> {
+  const { limit = 1000, orderBy = "player" } = options
   const supabase = createServerSupabaseClient("summary");
-  const { data, error } = await supabase
+  let query = supabase
     .from("fantasy_player_card_summary")
     .select("*")
-    .order("player", { ascending: true })
-    .limit(1000);
+
+  query = orderBy === "weeklyChangeDesc"
+    ? query
+      .order("weekly_change", { ascending: false, nullsFirst: false })
+      .order("price", { ascending: false, nullsFirst: false })
+    : query.order("player", { ascending: true })
+
+  const { data, error } = await query.limit(limit);
 
   if (error) {
     const message = error.message.toLowerCase();
@@ -2292,6 +2306,15 @@ const fetchFantasyPlayerCardSummariesCached = unstable_cache(
   { revalidate: 300 }
 );
 
+const fetchTopWeeklyFantasyPlayerCardSummariesCached = unstable_cache(
+  async (): Promise<FantasyPlayerCardSummary[]> => fetchFantasyPlayerCardSummariesFromSupabase({
+    limit: 20,
+    orderBy: "weeklyChangeDesc",
+  }),
+  ["fantasy-player-card-summary-top-weekly-v2"],
+  { revalidate: 300 }
+);
+
 export async function fetchFantasyPlayerCardSummaries(): Promise<FantasyPlayerCardSummary[]> {
   try {
     if (process.env.NODE_ENV !== "production") {
@@ -2300,6 +2323,21 @@ export async function fetchFantasyPlayerCardSummaries(): Promise<FantasyPlayerCa
     return await fetchFantasyPlayerCardSummariesCached();
   } catch (error) {
     console.warn("Unable to fetch fantasy player card summaries; falling back to derived rows.", error);
+    return [];
+  }
+}
+
+export async function fetchTopWeeklyFantasyPlayerCardSummaries(): Promise<FantasyPlayerCardSummary[]> {
+  try {
+    if (process.env.NODE_ENV !== "production") {
+      return await fetchFantasyPlayerCardSummariesFromSupabase({
+        limit: 20,
+        orderBy: "weeklyChangeDesc",
+      });
+    }
+    return await fetchTopWeeklyFantasyPlayerCardSummariesCached();
+  } catch (error) {
+    console.warn("Unable to fetch top weekly fantasy player card summaries; falling back to empty preview.", error);
     return [];
   }
 }

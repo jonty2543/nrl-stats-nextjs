@@ -903,8 +903,8 @@ function LandingPublicHeader() {
   return (
     <header className="sticky top-0 z-50 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="relative flex items-center justify-between gap-4 border-b border-white/8 pb-4 pt-6">
-          <Link href="/" className="relative z-10 inline-flex min-w-0 items-center gap-3">
+        <div className="grid grid-cols-[auto_auto] items-center justify-between gap-4 border-b border-white/8 pb-4 pt-6 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-6">
+          <Link href="/" className="inline-flex min-w-0 items-center gap-3">
             <Image src="/logo-mark.svg" alt="Short Side logo" width={30} height={30} priority />
             <div className="min-w-0">
               <div className="truncate text-lg font-semibold text-white/92 sm:text-xl">
@@ -913,14 +913,14 @@ function LandingPublicHeader() {
             </div>
           </Link>
 
-          <nav className="pointer-events-none absolute inset-y-0 left-[calc(50%+3rem)] hidden -translate-x-1/2 lg:flex lg:items-center">
-            <div className="pointer-events-auto flex w-[62rem] max-w-[62rem] items-center justify-between rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur">
+          <nav className="hidden min-w-0 justify-self-center lg:block lg:w-full lg:max-w-[49rem] xl:max-w-[54rem]">
+            <div className="flex min-w-0 items-center justify-between rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur">
               {LANDING_NAV_LINKS.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
                   prefetch={false}
-                  className="whitespace-nowrap rounded-full px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-white/55 transition-colors hover:text-white"
+                  className="whitespace-nowrap rounded-full px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55 transition-colors hover:text-white xl:px-4 xl:text-xs xl:tracking-[0.18em]"
                 >
                   {link.label}
                 </Link>
@@ -930,7 +930,7 @@ function LandingPublicHeader() {
 
           <Link
             href="/sign-in"
-            className="relative z-10 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white sm:px-4 sm:py-2 sm:text-sm"
+            className="justify-self-end rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white sm:px-4 sm:py-2 sm:text-sm"
           >
             Sign in
           </Link>

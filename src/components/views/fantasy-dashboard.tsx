@@ -4647,7 +4647,7 @@ export function FantasyDashboard({
   )
 
   return (
-    <div className="space-y-6">
+    <div className={showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? "space-y-3" : "space-y-6"}>
       <div className="space-y-3">
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
           <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch">
@@ -4780,6 +4780,18 @@ export function FantasyDashboard({
             </div>
           </div>
         ) : null}
+        {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
+          <div className="rounded-xl border border-nrl-border bg-nrl-panel px-3 py-3">
+            <SearchableSelect
+              label=""
+              value={selectedFantasyName}
+              options={playerSearchOptions}
+              onChange={navigateToPlayer}
+              placeholder="Search player..."
+              showLoadingOnType
+            />
+          </div>
+        ) : null}
 
       </div>
 
@@ -4791,8 +4803,8 @@ export function FantasyDashboard({
 
       {showOwnedCards && showFantasyAnalytics && !showAllPlayersOnly ? (
         <section id="fantasy-analytics" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
-          <div className={`grid gap-3 ${showFantasyAnalyticsOnly ? "" : "xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]"}`}>
-              <div className={`${showFantasyAnalyticsOnly ? "min-w-0 space-y-3" : "order-2 min-w-0 space-y-3 xl:order-1"}`}>
+          <div className={`grid gap-3 ${showFantasyAnalyticsOnly ? "xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]" : "xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]"}`}>
+              <div className="min-w-0 space-y-3">
               <>
               <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 [contain-intrinsic-size:430px] [content-visibility:auto]">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
@@ -4913,7 +4925,7 @@ export function FantasyDashboard({
               ) : null}
               </>
               </div>
-              <div className={`${showFantasyAnalyticsOnly ? "min-w-0" : "order-1 min-w-0 xl:order-2 xl:sticky xl:top-3 xl:self-start"}`}>
+              <div className={`${showFantasyAnalyticsOnly ? "min-w-0 xl:sticky xl:top-3 xl:self-start" : "order-1 min-w-0 xl:order-2 xl:sticky xl:top-3 xl:self-start"}`}>
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>

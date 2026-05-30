@@ -1758,6 +1758,59 @@ async function fetchTryscorerPredictionRowsFromSupabase(rows: BettingOddsRow[]):
   return allRows;
 }
 
+async function fetchNamedLineupPlayersForTryscorers(rows: BettingOddsRow[]): Promise<Map<string, Set<string>>> {
+  const dateRange = bettingOddsDateRange(rows);
+  if (!dateRange) return new Map();
+
+  const supabase = createServerSupabaseClient("nrl");
+  const namedPlayersByMatch = new Map<string, Set<string>>();
+  let start = 0;
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("lineups")
+      .select("match_date,match,player")
+      .gte("match_date", dateRange.minDate)
+      .lte("match_date", dateRange.maxDate)
+      .range(start, end);
+
+    if (error) {
+      throw new Error(`Supabase fetch nrl.lineups for betting tryscorers: ${error.message}`);
+    }
+
+    const pageRows = (data ?? []) as Array<Record<string, unknown>>;
+    if (pageRows.length === 0) break;
+
+    for (const row of pageRows) {
+      const date = toIsoDate(row.match_date);
+      const match = matchKey(row.match);
+      const player = normaliseLookupKey(row.player);
+      if (!date || !match || !player) continue;
+
+      const key = `${date}|${match}`;
+      const players = namedPlayersByMatch.get(key) ?? new Set<string>();
+      players.add(player);
+      namedPlayersByMatch.set(key, players);
+    }
+
+    if (pageRows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  return namedPlayersByMatch;
+}
+
+function filterTryscorersToNamedLineups(rows: BettingOddsRow[], namedPlayersByMatch: Map<string, Set<string>>): BettingOddsRow[] {
+  if (namedPlayersByMatch.size === 0) return rows;
+
+  return rows.filter((row) => {
+    const namedPlayers = namedPlayersByMatch.get(`${row.date}|${matchKey(row.match)}`);
+    if (!namedPlayers) return true;
+    return namedPlayers.has(normaliseLookupKey(row.result));
+  });
+}
+
 export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
   const [h2hRaw, lineRaw, total, tryscorer] = await Promise.all([
     fetchBettingOddsTableOrEmpty("NRL Odds"),
@@ -1777,8 +1830,13 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
     console.warn("Unable to fetch betting tryscorer prediction rows; rendering try scorer odds without model values.", error);
     return [];
   });
+  const namedLineupPlayersByMatch = await fetchNamedLineupPlayersForTryscorers(tryscorer).catch((error) => {
+    console.warn("Unable to fetch betting lineup players; rendering try scorer odds without lineup filtering.", error);
+    return new Map<string, Set<string>>();
+  });
   const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
   const tryscorerPredictionLookup = buildTryscorerPredictionLookup(tryscorerPredictionRows);
+  const namedTryscorers = filterTryscorersToNamedLineups(tryscorer, namedLineupPlayersByMatch);
   const h2h = h2hRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
   const line = lineRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
 
@@ -1786,7 +1844,7 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
     h2h,
     line,
     total,
-    tryscorer: tryscorer.map((row) => applyTryscorerPredictionModelToRow(row, tryscorerPredictionLookup)),
+    tryscorer: namedTryscorers.map((row) => applyTryscorerPredictionModelToRow(row, tryscorerPredictionLookup)),
     generatedAt: new Date().toISOString(),
   };
 }

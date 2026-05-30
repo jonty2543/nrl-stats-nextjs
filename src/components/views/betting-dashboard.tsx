@@ -442,6 +442,35 @@ function BettingTeamLogos({
   return <MatchLogoCluster match={match} teamLogos={teamLogos} className={className} />;
 }
 
+function teamInitials(teamName: string | null | undefined): string {
+  return String(teamName ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase() || "?";
+}
+
+function TeamLogoBadge({
+  teamName,
+  teamLogos,
+}: {
+  teamName: string | null | undefined;
+  teamLogos: Record<string, string>;
+}) {
+  const logoUrl = resolveTeamLogoUrl(teamName, teamLogos);
+  if (logoUrl) {
+    return <TeamLogoImage teamName={teamName} teamLogos={teamLogos} className="h-7 w-7 rounded-full bg-[#0e1530] p-0.5 ring-1 ring-white/10" />;
+  }
+
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-nrl-panel-2 text-[9px] font-bold text-nrl-muted ring-1 ring-white/10">
+      {teamInitials(teamName)}
+    </span>
+  );
+}
+
 function TeamNameWithLogo({
   name,
   teamLogos,
@@ -572,6 +601,12 @@ function formatDateLabel(value: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatCompactDateLabel(value: string): string {
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}-${month}`;
 }
 
 function eventStartMs(
@@ -2975,6 +3010,131 @@ function BestBetsHero({
   );
 }
 
+function gameJumpAnchorId(group: EventGroup): string {
+  return `betting-game-${normaliseLookupKey(`${group.date} ${group.match} ${group.market}`).replace(/\s+/g, "-")}`;
+}
+
+function GameJumpSidebar({
+  groups,
+  teamLogos,
+}: {
+  groups: EventGroup[];
+  teamLogos: Record<string, string>;
+}) {
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const railRef = useRef<HTMLElement | null>(null);
+  const [pinState, setPinState] = useState({
+    pinned: false,
+    height: 0,
+    left: 0,
+    top: 0,
+    width: 0,
+  });
+
+  const groupsByDate = groups.reduce((acc, group) => {
+    const existing = acc.get(group.date);
+    if (existing) {
+      existing.push(group);
+      return acc;
+    }
+    acc.set(group.date, [group]);
+    return acc;
+  }, new Map<string, EventGroup[]>());
+
+  useEffect(() => {
+    const updatePinState = () => {
+      const sentinel = sentinelRef.current;
+      const rail = railRef.current;
+      const container = sentinel?.parentElement;
+      if (!sentinel || !rail || !container) return;
+
+      const headerBottom = document.querySelector("header")?.getBoundingClientRect().bottom ?? 0;
+      const top = Math.max(0, Math.round(headerBottom));
+      const containerRect = container.getBoundingClientRect();
+      const pinned = sentinel.getBoundingClientRect().top <= top;
+      const next = {
+        pinned,
+        height: rail.offsetHeight,
+        left: containerRect.left,
+        top,
+        width: containerRect.width,
+      };
+
+      setPinState((current) => (
+        current.pinned === next.pinned &&
+        current.height === next.height &&
+        current.left === next.left &&
+        current.top === next.top &&
+        current.width === next.width
+          ? current
+          : next
+      ));
+    };
+
+    updatePinState();
+    window.addEventListener("scroll", updatePinState, { passive: true });
+    window.addEventListener("resize", updatePinState);
+    return () => {
+      window.removeEventListener("scroll", updatePinState);
+      window.removeEventListener("resize", updatePinState);
+    };
+  }, []);
+
+  if (groups.length <= 1) return null;
+
+  return (
+    <div className="min-w-0">
+      <div ref={sentinelRef} aria-hidden="true" className="h-0" />
+      {pinState.pinned ? <div aria-hidden="true" style={{ height: pinState.height }} /> : null}
+      <aside
+        ref={railRef}
+        className="z-40 min-w-0"
+        style={pinState.pinned ? {
+          left: pinState.left,
+          position: "fixed",
+          top: pinState.top,
+          width: pinState.width,
+        } : undefined}
+      >
+        <div className="flex gap-2 overflow-x-auto rounded-xl border border-nrl-border bg-nrl-panel p-2 shadow-[0_10px_26px_rgba(0,0,0,0.22)] [scrollbar-width:thin]">
+          {[...groupsByDate.entries()].map(([date, dateGroups]) => (
+            <div key={`jump-date-${date}`} className="flex shrink-0 gap-1.5 rounded-lg border border-nrl-border/60 bg-nrl-panel-2/45 p-1.5">
+              <div className="flex w-6 shrink-0 rotate-180 items-center justify-center rounded bg-nrl-panel text-[9px] font-bold uppercase tracking-[0.12em] text-emerald-300 [writing-mode:vertical-rl] xl:h-auto xl:w-auto xl:rotate-0 xl:px-1.5 xl:py-1 xl:[writing-mode:horizontal-tb]">
+                {formatCompactDateLabel(date)}
+              </div>
+              <div className="flex gap-1.5">
+                {dateGroups.map((group) => {
+                  const { home, away } = parseMatch(group.match);
+                  const label = `${home}${away ? ` vs ${away}` : ""} - ${formatDateLabel(group.date)}`;
+
+                  return (
+                    <button
+                      key={`jump-${group.key}`}
+                      type="button"
+                      title={label}
+                      aria-label={`Skip to ${label}`}
+                      onClick={() => document.getElementById(gameJumpAnchorId(group))?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      className="flex min-w-[82px] shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-nrl-border bg-nrl-panel-2 px-2 py-2 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/10"
+                    >
+                      <TeamLogoBadge teamName={home || group.match} teamLogos={teamLogos} />
+                      {away ? (
+                        <>
+                          <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-nrl-muted xl:leading-none">vs</span>
+                          <TeamLogoBadge teamName={away} teamLogos={teamLogos} />
+                        </>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 function MarketSection({
   groups,
   canAccessPremium,
@@ -3065,11 +3225,14 @@ function MarketSection({
     && mobileBetSlip.odds > 1
     && Number.isFinite(mobileBetSlip.stake)
     && mobileBetSlip.stake > 0;
+  const showGameJumpSidebar = activeGroups.length > 1;
 
   return (
-    <div className="space-y-7">
-      {[...groupsByDate.entries()].map(([date, dateGroups]) => (
-        <section key={date} className="space-y-7 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
+    <div className="space-y-4">
+      {showGameJumpSidebar ? <GameJumpSidebar groups={activeGroups} teamLogos={teamLogos} /> : null}
+      <div className="space-y-7">
+        {[...groupsByDate.entries()].map(([date, dateGroups]) => (
+          <section key={date} className="space-y-7 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
           <div className="flex items-center gap-3">
             <h2 className={`${BETTING_PANEL_HEADER_CLASS} shrink-0 text-emerald-300`}>
               {formatDateLabel(date)}
@@ -3090,8 +3253,9 @@ function MarketSection({
             );
             return (
               <article
+                id={gameJumpAnchorId(group)}
                 key={group.key}
-                className={`${groupIndex === 0 ? "" : "border-t border-nrl-border/70 pt-8"} md:rounded-xl md:border md:border-nrl-border md:bg-nrl-panel-2/35 md:p-4`}
+                className={`scroll-mt-24 ${groupIndex === 0 ? "" : "border-t border-nrl-border/70 pt-8"} md:rounded-xl md:border md:border-nrl-border md:bg-nrl-panel-2/35 md:p-4`}
               >
                 <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
                   <div>
@@ -3587,8 +3751,9 @@ function MarketSection({
               </article>
             );
           })}
-        </section>
-      ))}
+          </section>
+        ))}
+      </div>
       {mobileBetSlip ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-black/55 px-3 py-4 md:hidden">
           <div className="w-full rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">

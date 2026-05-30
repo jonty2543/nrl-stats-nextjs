@@ -828,7 +828,7 @@ function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: 
           <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
             {score.homeScore ?? "-"} - {score.awayScore ?? "-"}
           </div>
-          <div className="mt-3 inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]">
+          <div className="mt-4 inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:mt-5 sm:text-[10px]">
             {matchStateLabel}{clock && showLiveBadge ? ` · ${clock}` : ""}
           </div>
         </>
@@ -837,7 +837,7 @@ function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: 
           <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
             {formatKickoffTime(match.kickoffUtc)}
           </div>
-          <div className="mt-3 inline-flex self-center rounded-full border border-emerald-300/35 bg-nrl-panel px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300 sm:text-[10px]">
+          <div className="mt-4 inline-flex self-center rounded-full border border-emerald-300/35 bg-nrl-panel px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300 sm:mt-5 sm:text-[10px]">
             {match.round}
           </div>
         </>
@@ -2237,9 +2237,8 @@ function LineupCard({
       <div className="relative z-[1] border-t border-blue-300/30 px-2 pb-3 sm:px-3">
         <div className="pt-5" />
         {detailStatus === "loading" && !detail ? (
-          <div className="flex items-center justify-center gap-3 rounded-lg border border-emerald-300/35 bg-emerald-400/8 px-4 py-5 text-sm font-semibold text-emerald-200 shadow-[0_0_24px_rgba(16,185,129,0.12)]">
-            <span className="h-5 w-5 animate-spin rounded-full border-[3px] border-emerald-300/25 border-t-emerald-300" aria-hidden="true" />
-            <span>Loading match details...</span>
+          <div className="flex items-center justify-center px-4 py-5">
+            <span className="h-5 w-5 animate-spin rounded-full border-[3px] border-emerald-300/25 border-t-emerald-300" aria-label="Loading match details" />
           </div>
         ) : detailStatus === "error" ? (
           <div className="rounded-lg border border-red-300/30 bg-red-500/10 px-4 py-5 text-sm text-red-100">

@@ -32,6 +32,7 @@ import {
 const PAGE_SIZE = 1000;
 const DAILY_REVALIDATE_SECONDS = 86400;
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
+const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
 
 export interface PlayerImageRecord {
   player: string;
@@ -642,6 +643,7 @@ interface PredictionModelRow extends Record<string, unknown> {
   win_prob?: unknown;
   pred_margin?: unknown;
   pred_margin_pre_manual?: unknown;
+  pred_total?: unknown;
   updated_at?: unknown;
 }
 
@@ -661,12 +663,14 @@ interface MarginOverrideRow extends Record<string, unknown> {
 interface PredictionLookupEntry {
   winProb: number | null;
   predMargin: number | null;
+  predTotal: number | null;
   updatedAtMs: number;
 }
 
 interface PredictionLookupMaps {
   byDateTeam: Map<string, PredictionLookupEntry>;
   byDateMatchTeam: Map<string, PredictionLookupEntry>;
+  byDateMatch: Map<string, PredictionLookupEntry>;
 }
 
 interface TryscorerPredictionEntry {
@@ -699,8 +703,8 @@ function choosePredictionEntry(
   if (!existing) return next;
   if (next.updatedAtMs > existing.updatedAtMs) return next;
   if (next.updatedAtMs < existing.updatedAtMs) return existing;
-  const existingCompleteness = Number(existing.winProb != null) + Number(existing.predMargin != null);
-  const nextCompleteness = Number(next.winProb != null) + Number(next.predMargin != null);
+  const existingCompleteness = Number(existing.winProb != null) + Number(existing.predMargin != null) + Number(existing.predTotal != null);
+  const nextCompleteness = Number(next.winProb != null) + Number(next.predMargin != null) + Number(next.predTotal != null);
   return nextCompleteness >= existingCompleteness ? next : existing;
 }
 
@@ -769,6 +773,7 @@ function effectivePredictionMargin(raw: PredictionModelRow, overrides: Map<strin
 function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginOverrideRow[] = []): PredictionLookupMaps {
   const byDateTeam = new Map<string, PredictionLookupEntry>();
   const byDateMatchTeam = new Map<string, PredictionLookupEntry>();
+  const byDateMatch = new Map<string, PredictionLookupEntry>();
   const overrides = buildOverrideLookup(overrideRows);
   const marginSigma = inferPredictionSigma(rows);
 
@@ -781,6 +786,7 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
     const entry: PredictionLookupEntry = {
       winProb: predMargin == null ? toNullableProbability(raw.win_prob) : normalCdf(predMargin / marginSigma),
       predMargin,
+      predTotal: toNullableFinite(raw.pred_total),
       updatedAtMs: toUpdatedAtMs(raw.updated_at),
     };
 
@@ -790,6 +796,9 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
     const normalizedMatchKey = matchKey(raw.match);
     if (!normalizedMatchKey) continue;
 
+    const dateMatchKey = `${date}|${normalizedMatchKey}`;
+    byDateMatch.set(dateMatchKey, choosePredictionEntry(byDateMatch.get(dateMatchKey), entry));
+
     const dateMatchTeamKey = `${date}|${normalizedMatchKey}|${teamKey}`;
     byDateMatchTeam.set(
       dateMatchTeamKey,
@@ -797,7 +806,7 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
     );
   }
 
-  return { byDateTeam, byDateMatchTeam };
+  return { byDateTeam, byDateMatchTeam, byDateMatch };
 }
 
 function buildTryscorerPredictionLookup(rows: TryscorerPredictionRow[]): TryscorerPredictionLookupMaps {
@@ -847,6 +856,17 @@ function findPredictionForOddsRow(
   return lookup.byDateTeam.get(`${date}|${teamKey}`) ?? null;
 }
 
+function findPredictionForTotalOddsRow(
+  row: BettingOddsRow,
+  lookup: PredictionLookupMaps
+): PredictionLookupEntry | null {
+  const date = toIsoDate(row.date);
+  const normalizedMatchKey = matchKey(row.match);
+  if (!date || !normalizedMatchKey) return null;
+
+  return lookup.byDateMatch.get(`${date}|${normalizedMatchKey}`) ?? null;
+}
+
 function findTryscorerPredictionForOddsRow(
   row: BettingOddsRow,
   lookup: TryscorerPredictionLookupMaps
@@ -865,7 +885,29 @@ function findTryscorerPredictionForOddsRow(
 }
 
 function applyPredictionModelToRow(row: BettingOddsRow, lookup: PredictionLookupMaps): BettingOddsRow {
-  if (row.market !== "H2H" && row.market !== "Line") return row;
+  if (row.market !== "H2H" && row.market !== "Line" && row.market !== "Total") return row;
+
+  if (row.market === "Total") {
+    const prediction = findPredictionForTotalOddsRow(row, lookup);
+    const result = row.result.trim().toLowerCase();
+    if (!prediction || prediction.predTotal == null || row.value == null) {
+      return {
+        ...row,
+        model: null,
+      };
+    }
+
+    const probability = result.startsWith("over")
+      ? normalCdf((prediction.predTotal - row.value) / FALLBACK_TOTAL_POINTS_SIGMA)
+      : result.startsWith("under")
+        ? normalCdf((row.value - prediction.predTotal) / FALLBACK_TOTAL_POINTS_SIGMA)
+        : null;
+
+    return {
+      ...row,
+      model: probability == null ? null : probability * 100,
+    };
+  }
 
   const prediction = findPredictionForOddsRow(row, lookup);
   if (!prediction) {
@@ -1666,7 +1708,7 @@ async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Pro
   const supabase = createServerSupabaseClient("nrl");
   const allRows: PredictionModelRow[] = [];
   let start = 0;
-  let select = "url,match_date,match,team,win_prob,pred_margin,pred_margin_pre_manual,updated_at";
+  let select = "url,match_date,match,team,win_prob,pred_margin,pred_margin_pre_manual,pred_total,updated_at";
 
   while (true) {
     const end = start + PAGE_SIZE - 1;
@@ -1679,7 +1721,13 @@ async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Pro
 
     if (error) {
       const message = error.message.toLowerCase();
-      if (select.includes("pred_margin_pre_manual") && (message.includes("column") || message.includes("schema cache"))) {
+      if (select.includes("pred_total") && (message.includes("pred_total") || message.includes("column") || message.includes("schema cache"))) {
+        select = select.replace(",pred_total", "");
+        start = 0;
+        allRows.length = 0;
+        continue;
+      }
+      if (select.includes("pred_margin_pre_manual") && (message.includes("pred_margin_pre_manual") || message.includes("column") || message.includes("schema cache"))) {
         select = "url,match_date,match,team,win_prob,pred_margin,updated_at";
         start = 0;
         allRows.length = 0;
@@ -1812,13 +1860,13 @@ function filterTryscorersToNamedLineups(rows: BettingOddsRow[], namedPlayersByMa
 }
 
 export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
-  const [h2hRaw, lineRaw, total, tryscorer] = await Promise.all([
+  const [h2hRaw, lineRaw, totalRaw, tryscorer] = await Promise.all([
     fetchBettingOddsTableOrEmpty("NRL Odds"),
     fetchBettingOddsTableOrEmpty("NRL Line Odds"),
     fetchBettingOddsTableOrEmpty("NRL Total Odds"),
     fetchBettingOddsTableOrEmpty("NRL Tryscorers"),
   ]);
-  const predictionRows = await fetchPredictionModelRowsFromSupabase([...h2hRaw, ...lineRaw]).catch((error) => {
+  const predictionRows = await fetchPredictionModelRowsFromSupabase([...h2hRaw, ...lineRaw, ...totalRaw]).catch((error) => {
     console.warn("Unable to fetch betting prediction rows; rendering odds without model values.", error);
     return [];
   });
@@ -1839,6 +1887,7 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
   const namedTryscorers = filterTryscorersToNamedLineups(tryscorer, namedLineupPlayersByMatch);
   const h2h = h2hRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
   const line = lineRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
+  const total = totalRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
 
   return {
     h2h,

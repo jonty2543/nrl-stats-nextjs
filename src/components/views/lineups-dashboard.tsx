@@ -847,7 +847,7 @@ function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: Line
           {splitScore && clock && showLiveBadge ? (
             <div className="text-xl font-semibold leading-none tabular-nums text-nrl-text sm:text-2xl">{clock}</div>
           ) : (
-            <div className={`${splitScore && showLiveBadge ? "mt-0" : "mt-4 sm:mt-5"} inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]`}>
+            <div className={`${splitScore ? "mt-0" : "mt-4 sm:mt-5"} inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]`}>
               {matchStateLabel}{clock && showLiveBadge && !splitScore ? ` · ${clock}` : ""}
             </div>
           )}

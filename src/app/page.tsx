@@ -6,6 +6,7 @@ import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-t
 import { LandingCarousel } from "@/components/views/landing-carousel"
 import { LandingHeroScrollShell } from "@/components/views/landing-hero-scroll-shell"
 import { LandingSuiteTabs } from "@/components/views/landing-suite-tabs"
+import { AppHeader } from "@/components/layout/app-header"
 import {
   PlayerImageCard,
   SimplePlayerPhotoTile,
@@ -41,15 +42,6 @@ const BOOKIE_LOGOS: Record<string, string> = {
   Palmerbet: "/logos/palmerbet.png",
   Betright: "/logos/betright.png",
 }
-
-const LANDING_NAV_LINKS = [
-  { label: "Fantasy", href: "/dashboard/fantasy" },
-  { label: "Lineups", href: "/dashboard/lineups" },
-  { label: "Betting", href: "/dashboard/betting" },
-  { label: "Stats", href: "/dashboard/players" },
-  { label: "NRL AI", href: "/dashboard/ai" },
-  { label: "Articles", href: "/dashboard/articles" },
-]
 
 interface BettingMatchPreview {
   dateLabel: string
@@ -899,62 +891,6 @@ function SectionEyebrow({ children }: { children: React.ReactNode }) {
   return <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">{children}</div>
 }
 
-function LandingPublicHeader() {
-  return (
-    <header className="sticky top-0 z-50 backdrop-blur">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-[auto_auto] items-center justify-between gap-4 border-b border-white/8 pb-4 pt-6 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-6">
-          <Link href="/" className="inline-flex min-w-0 items-center gap-3">
-            <Image src="/logo-mark.svg" alt="Short Side logo" width={30} height={30} priority />
-            <div className="min-w-0">
-              <div className="truncate text-lg font-semibold text-white/92 sm:text-xl">
-                Short Side
-              </div>
-            </div>
-          </Link>
-
-          <nav className="hidden min-w-0 justify-self-center lg:block lg:w-full lg:max-w-[49rem] xl:max-w-[54rem]">
-            <div className="flex min-w-0 items-center justify-between rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur">
-              {LANDING_NAV_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  prefetch={false}
-                  className="whitespace-nowrap rounded-full px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55 transition-colors hover:text-white xl:px-4 xl:text-xs xl:tracking-[0.18em]"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-          </nav>
-
-          <Link
-            href="/sign-in"
-            className="justify-self-end rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white sm:px-4 sm:py-2 sm:text-sm"
-          >
-            Sign in
-          </Link>
-        </div>
-
-        <nav className="-mx-1 mt-3 overflow-x-auto pb-1 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
-          <div className="inline-flex min-w-max items-center gap-x-1 rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur">
-            {LANDING_NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                prefetch={false}
-                className="whitespace-nowrap rounded-full px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.1em] text-white/55 transition-colors hover:text-white sm:px-4 sm:text-xs sm:tracking-[0.18em]"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
-      </div>
-    </header>
-  )
-}
-
 function FeatureSection({
   eyebrow,
   title,
@@ -1187,13 +1123,11 @@ export default function Home() {
   }))
 
   return (
-    <div className="relative overflow-hidden text-nrl-text">
+    <div className="relative overflow-x-clip text-nrl-text">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 sm:px-6 lg:px-8">
-        <div className="-mx-4 sm:-mx-6 lg:-mx-8">
-          <LandingPublicHeader />
-        </div>
+        <AppHeader sticky showBillingNav showStatsTabs className="-mx-4 sm:-mx-6 lg:-mx-8" />
 
         <LandingHeroScrollShell>
           <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">

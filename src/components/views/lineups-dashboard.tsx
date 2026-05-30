@@ -802,10 +802,12 @@ function weatherConditionEmoji(condition: string): string {
   return "🌤️"
 }
 
-function ScoreNumber({ value, align }: { value: number | null; align: "left" | "right" }) {
+function ScoreNumber({ value, align, isWinner }: { value: number | null; align: "left" | "right"; isWinner: boolean }) {
   return (
     <div
-      className={`min-w-[2.5rem] text-5xl font-black leading-none tabular-nums text-nrl-text sm:min-w-[4.75rem] sm:text-7xl lg:text-8xl ${
+      className={`min-w-[2.25rem] text-4xl leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-5xl lg:text-6xl ${
+        isWinner ? "font-black" : "font-normal"
+      } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
       }`}
     >
@@ -2144,6 +2146,8 @@ function LineupCard({
   const hasResultScore = detailMatch.homeScore != null || detailMatch.awayScore != null
   const headerScore = matchScore(detailMatch, displayLiveMatch)
   const showSplitScore = headerScore.homeScore != null || headerScore.awayScore != null
+  const homeScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.homeScore > headerScore.awayScore
+  const awayScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.awayScore > headerScore.homeScore
   const showPregameContent = !isLive && !hasResultScore
   const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
   const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(detailMatch, detailMatch.homeTeam, sportsbetOdds) : null
@@ -2235,16 +2239,16 @@ function LineupCard({
         <div
           className={`relative z-[1] mx-auto grid w-full items-center ${
             showSplitScore
-              ? "max-w-5xl grid-cols-[minmax(0,1fr)_minmax(2.5rem,auto)_minmax(5.5rem,auto)_minmax(2.5rem,auto)_minmax(0,1fr)] gap-1 sm:grid-cols-[minmax(6rem,1fr)_minmax(4.75rem,auto)_minmax(6.75rem,auto)_minmax(4.75rem,auto)_minmax(6rem,1fr)] sm:gap-4 lg:gap-8"
+              ? "max-w-5xl grid-cols-[minmax(0,1fr)_minmax(2.25rem,auto)_minmax(5.5rem,auto)_minmax(2.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(6rem,1fr)_minmax(3.75rem,auto)_minmax(6.75rem,auto)_minmax(3.75rem,auto)_minmax(6rem,1fr)] sm:gap-5 lg:gap-10"
               : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
           }`}
         >
           <div className="min-w-0 justify-self-start sm:justify-self-center">
             <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
-          {showSplitScore ? <ScoreNumber value={headerScore.homeScore} align="right" /> : null}
+          {showSplitScore ? <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} /> : null}
           <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore={showSplitScore} />
-          {showSplitScore ? <ScoreNumber value={headerScore.awayScore} align="left" /> : null}
+          {showSplitScore ? <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} /> : null}
           <div className="min-w-0 justify-self-end sm:justify-self-center">
             <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>

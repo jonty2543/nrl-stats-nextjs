@@ -249,6 +249,9 @@ const POSITION_BASELINE_LABELS: Record<string, string> = {
 }
 
 const LIVE_MATCH_FRESH_MS = 10 * 60 * 1000
+const LIVE_SUPPLEMENTAL_POLL_MS = 30 * 1000
+const LIVE_SUPPLEMENTAL_POLL_BEFORE_MS = 30 * 60 * 1000
+const LIVE_SUPPLEMENTAL_POLL_AFTER_MS = 4 * 60 * 60 * 1000
 
 function normaliseKey(value: string | null | undefined): string {
   return String(value ?? "")
@@ -524,6 +527,16 @@ function isLiveDataVisible(liveMatch: LineupLiveMatch | null | undefined): boole
     Object.keys(liveMatch?.playerStates ?? {}).length > 0 ||
     Object.keys(liveMatch?.playerStats ?? {}).length > 0
   )
+}
+
+function shouldPollLiveSupplemental(matches: LineupMatch[], now = new Date()): boolean {
+  const nowMs = now.getTime()
+  return matches.some((match) => {
+    if (!match.kickoffUtc) return false
+    const kickoffMs = Date.parse(match.kickoffUtc)
+    if (!Number.isFinite(kickoffMs)) return false
+    return nowMs >= kickoffMs - LIVE_SUPPLEMENTAL_POLL_BEFORE_MS && nowMs <= kickoffMs + LIVE_SUPPLEMENTAL_POLL_AFTER_MS
+  })
 }
 
 function dedupeScoringEvents(events: LineupLiveMatch["scoringEvents"]): LineupLiveMatch["scoringEvents"] {
@@ -2424,7 +2437,6 @@ export function LineupsDashboard({
   useEffect(() => {
     if (matches.length === 0) return
 
-    const controller = new AbortController()
     const payload = {
       matches: matches.map((match) => ({
         matchId: match.matchId,
@@ -2432,27 +2444,49 @@ export function LineupsDashboard({
         kickoffUtc: match.kickoffUtc,
       })),
     }
+    const controllers = new Set<AbortController>()
+    let stopped = false
 
-    fetch("/api/lineups/supplemental", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    })
-      .then((response) => response.ok ? response.json() : null)
-      .then((data: { liveMatches?: Record<string, LineupLiveMatch>; weatherForecasts?: Record<string, LineupWeatherForecast> } | null) => {
-        if (!data || controller.signal.aborted) return
-        setSupplementalData({
-          key: supplementalFetchKey,
-          liveMatches: data.liveMatches ?? {},
-          weatherForecasts: data.weatherForecasts ?? {},
+    const fetchSupplemental = () => {
+      const controller = new AbortController()
+      controllers.add(controller)
+
+      fetch("/api/lineups/supplemental", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+        signal: controller.signal,
+      })
+        .then((response) => response.ok ? response.json() : null)
+        .then((data: { liveMatches?: Record<string, LineupLiveMatch>; weatherForecasts?: Record<string, LineupWeatherForecast> } | null) => {
+          if (!data || controller.signal.aborted || stopped) return
+          setSupplementalData({
+            key: supplementalFetchKey,
+            liveMatches: data.liveMatches ?? {},
+            weatherForecasts: data.weatherForecasts ?? {},
+          })
         })
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) console.warn("Unable to load lineup supplemental data.", error)
-      })
+        .catch((error) => {
+          if (!controller.signal.aborted && !stopped) console.warn("Unable to load lineup supplemental data.", error)
+        })
+        .finally(() => {
+          controllers.delete(controller)
+        })
+    }
 
-    return () => controller.abort()
+    fetchSupplemental()
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return
+      if (shouldPollLiveSupplemental(matches)) fetchSupplemental()
+    }, LIVE_SUPPLEMENTAL_POLL_MS)
+
+    return () => {
+      stopped = true
+      window.clearInterval(intervalId)
+      controllers.forEach((controller) => controller.abort())
+      controllers.clear()
+    }
   }, [matches, supplementalFetchKey])
 
   const matchDateGroups = matches.reduce<Array<{ dateKey: string; matches: LineupMatch[] }>>(

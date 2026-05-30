@@ -83,7 +83,13 @@ export async function POST(request: NextRequest) {
     let hydratedMatchStats = detail?.matchStats ?? null
     const detailMatch = detail?.match ?? shellMatch
 
-    if (playerCount(detailMatch) === 0) {
+    const shouldHydrateRoundData =
+      playerCount(detailMatch) === 0 ||
+      hydratedMatchStats == null ||
+      hydratedMatchStats.home?.possessionPct == null ||
+      hydratedMatchStats.away?.possessionPct == null
+
+    if (shouldHydrateRoundData) {
       const roundLineups = await fetchLineupsForRound({
         round,
         year,

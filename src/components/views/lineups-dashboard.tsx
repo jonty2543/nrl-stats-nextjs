@@ -2398,8 +2398,11 @@ export function LineupsDashboard({
     () => matches.map((match) => [match.matchId, match.venue ?? "", match.kickoffUtc ?? ""].join(":")).join("|"),
     [matches]
   )
-  const liveMatches = supplementalData?.key === supplementalFetchKey ? supplementalData.liveMatches : initialLiveMatches
-  const weatherForecasts = supplementalData?.key === supplementalFetchKey ? supplementalData.weatherForecasts : initialWeatherForecasts
+  const activeSupplementalData = supplementalData?.key === supplementalFetchKey ? supplementalData : null
+  const liveMatches = activeSupplementalData ? { ...initialLiveMatches, ...activeSupplementalData.liveMatches } : initialLiveMatches
+  const weatherForecasts = activeSupplementalData
+    ? { ...initialWeatherForecasts, ...activeSupplementalData.weatherForecasts }
+    : initialWeatherForecasts
 
   function loadMatchDetail(match: LineupMatch) {
     const current = matchDetails[match.matchId]

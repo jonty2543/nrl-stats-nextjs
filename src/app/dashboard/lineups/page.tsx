@@ -4,6 +4,7 @@ import { LineupsDashboard } from "@/components/views/lineups-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import {
   fetchLineupRoundOptions,
+  fetchLiveLineupData,
   fetchLineupsForRound,
 } from "@/lib/lineups/nrl-lineups"
 import { fetchLatestLineupsPageShellSummary, fetchLineupsPageShellSummary, fetchTeamLogos } from "@/lib/supabase/queries"
@@ -197,6 +198,9 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
     ? summaryTeamLogos
     : fallbackData?.teamLogos ?? await withFallback(fetchTeamLogos(), {}, "Lineups team logos")
   const visibleMatches = matches.filter((match) => match.homeTeam || match.awayTeam || isDrawFallbackMatch(match) || !isPastMatch(match))
+  const initialLiveMatches = visibleMatches.length > 0
+    ? await withFallback(fetchLiveLineupData(visibleMatches.map((match) => match.matchId)), {}, "Live lineups data")
+    : {}
   const summaryDiagnostic = summaryMissReason && await shouldShowLineupsSummaryDiagnostic()
     ? `lineups_page_summary miss: ${summaryMissReason} Heavy fallback data path is active for ${year} ${selectedRound}.`
     : null
@@ -205,7 +209,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
     <LineupsDashboard
       matches={visibleMatches}
       year={year}
-      liveMatches={{}}
+      liveMatches={initialLiveMatches}
       weatherForecasts={{}}
       roundOptions={mergeRoundOptions(initialRoundOptions, summary?.roundOptions ?? [])}
       selectedRound={selectedRound}

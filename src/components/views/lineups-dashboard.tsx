@@ -805,7 +805,7 @@ function weatherConditionEmoji(condition: string): string {
 function ScoreNumber({ value, align, isWinner }: { value: number | null; align: "left" | "right"; isWinner: boolean }) {
   return (
     <div
-      className={`min-w-[2rem] -translate-y-2 text-3xl leading-none tabular-nums sm:min-w-[3rem] sm:text-4xl lg:text-5xl ${
+      className={`min-w-[2.25rem] -translate-y-2 text-4xl leading-none tabular-nums sm:min-w-[3.25rem] sm:text-5xl lg:text-6xl ${
         isWinner ? "font-black text-nrl-text" : "font-light text-nrl-text/80"
       } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"

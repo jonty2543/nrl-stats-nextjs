@@ -802,7 +802,19 @@ function weatherConditionEmoji(condition: string): string {
   return "🌤️"
 }
 
-function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: LineupLiveMatch | null }) {
+function ScoreNumber({ value, align }: { value: number | null; align: "left" | "right" }) {
+  return (
+    <div
+      className={`min-w-[2.5rem] text-5xl font-black leading-none tabular-nums text-nrl-text sm:min-w-[4.75rem] sm:text-7xl lg:text-8xl ${
+        align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
+      }`}
+    >
+      {value ?? "-"}
+    </div>
+  )
+}
+
+function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: LineupMatch; liveMatch: LineupLiveMatch | null; splitScore?: boolean }) {
   const state = liveMatch?.state
   const clock = formatGameClock(state?.gameSeconds ?? state?.liveSeconds)
   const score = matchScore(match, liveMatch)
@@ -816,21 +828,27 @@ function LiveScoreHeader({ match, liveMatch }: { match: LineupMatch; liveMatch: 
   const hasScore = score.homeScore != null || score.awayScore != null
 
   return (
-    <div className="flex min-w-[7.5rem] flex-col justify-center px-2 text-center sm:min-w-[10rem] sm:px-4">
+    <div className={`flex flex-col justify-center px-2 text-center ${splitScore ? "min-w-[5.5rem] sm:min-w-[6.75rem]" : "min-w-[7.5rem] sm:min-w-[10rem] sm:px-4"}`}>
       {hasScore ? (
         <>
           {showLiveBadge ? (
-            <div className="mb-2 inline-flex self-center items-center gap-1 rounded-full border border-red-300/30 bg-red-500/15 px-1.5 py-px text-[8px] font-black uppercase tracking-[0.14em] text-red-100">
+            <div className={`${splitScore ? "mb-2 px-2 py-1 text-[9px] sm:text-xs" : "mb-2 px-1.5 py-px text-[8px]"} inline-flex self-center items-center gap-1 rounded-md border border-red-300/30 bg-red-500/15 font-black uppercase tracking-[0.14em] text-red-100`}>
               <span className="h-1 w-1 rounded-full bg-red-300 shadow-[0_0_8px_rgba(252,165,165,0.85)]" aria-hidden="true" />
-              Live
+              {splitScore ? matchStateLabel : "Live"}
             </div>
           ) : null}
-          <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
-            {score.homeScore ?? "-"} - {score.awayScore ?? "-"}
-          </div>
-          <div className="mt-4 inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:mt-5 sm:text-[10px]">
-            {matchStateLabel}{clock && showLiveBadge ? ` · ${clock}` : ""}
-          </div>
+          {splitScore ? null : (
+            <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
+              {score.homeScore ?? "-"} - {score.awayScore ?? "-"}
+            </div>
+          )}
+          {splitScore && clock && showLiveBadge ? (
+            <div className="text-xl font-semibold leading-none tabular-nums text-nrl-text sm:text-2xl">{clock}</div>
+          ) : (
+            <div className={`${splitScore && showLiveBadge ? "mt-0" : "mt-4 sm:mt-5"} inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]`}>
+              {matchStateLabel}{clock && showLiveBadge && !splitScore ? ` · ${clock}` : ""}
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -2124,6 +2142,8 @@ function LineupCard({
   const activeDetailView = availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
   const isLive = hasMatchStarted(displayLiveMatch)
   const hasResultScore = detailMatch.homeScore != null || detailMatch.awayScore != null
+  const headerScore = matchScore(detailMatch, displayLiveMatch)
+  const showSplitScore = headerScore.homeScore != null || headerScore.awayScore != null
   const showPregameContent = !isLive && !hasResultScore
   const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
   const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(detailMatch, detailMatch.homeTeam, sportsbetOdds) : null
@@ -2212,11 +2232,19 @@ function LineupCard({
             </div>
           ) : null}
         </div>
-        <div className="relative z-[1] mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5">
+        <div
+          className={`relative z-[1] mx-auto grid w-full items-center ${
+            showSplitScore
+              ? "max-w-5xl grid-cols-[minmax(0,1fr)_minmax(2.5rem,auto)_minmax(5.5rem,auto)_minmax(2.5rem,auto)_minmax(0,1fr)] gap-1 sm:grid-cols-[minmax(6rem,1fr)_minmax(4.75rem,auto)_minmax(6.75rem,auto)_minmax(4.75rem,auto)_minmax(6rem,1fr)] sm:gap-4 lg:gap-8"
+              : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
+          }`}
+        >
           <div className="min-w-0 justify-self-start sm:justify-self-center">
             <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
-          <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} />
+          {showSplitScore ? <ScoreNumber value={headerScore.homeScore} align="right" /> : null}
+          <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore={showSplitScore} />
+          {showSplitScore ? <ScoreNumber value={headerScore.awayScore} align="left" /> : null}
           <div className="min-w-0 justify-self-end sm:justify-self-center">
             <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>

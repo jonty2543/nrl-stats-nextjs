@@ -3096,7 +3096,7 @@ function GameJumpSidebar({
           width: pinState.width,
         } : undefined}
       >
-        <div className="flex gap-2 overflow-x-auto rounded-xl border border-nrl-border bg-nrl-panel p-2 shadow-[0_10px_26px_rgba(0,0,0,0.22)] [scrollbar-width:thin]">
+        <div className="flex gap-6 overflow-x-auto rounded-xl border border-nrl-border bg-nrl-panel p-2 shadow-[0_10px_26px_rgba(0,0,0,0.22)] [scrollbar-width:thin] sm:gap-7">
           {[...groupsByDate.entries()].map(([date, dateGroups]) => (
             <div key={`jump-date-${date}`} className="flex shrink-0 gap-1.5 rounded-lg border border-nrl-border/60 bg-nrl-panel-2/45 p-1.5">
               <div className="flex w-6 shrink-0 rotate-180 items-center justify-center rounded bg-nrl-panel text-[9px] font-bold uppercase tracking-[0.12em] text-emerald-300 [writing-mode:vertical-rl] xl:h-auto xl:w-auto xl:rotate-0 xl:px-1.5 xl:py-1 xl:[writing-mode:horizontal-tb]">

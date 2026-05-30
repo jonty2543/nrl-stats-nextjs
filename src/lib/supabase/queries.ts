@@ -44,6 +44,47 @@ export interface PlayerImageRecord {
   last_seen_match_date: string | null;
 }
 
+export interface BettingSummaryGame {
+  round: number | null;
+  matchDate: string;
+  kickoffUtc: string | null;
+  releaseAtUtc: string | null;
+  matchCentreUrl: string | null;
+  match: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeTeamKey: string | null;
+  awayTeamKey: string | null;
+  matchKey: string;
+  homeLogoUrl: string | null;
+  awayLogoUrl: string | null;
+}
+
+export interface BettingTryscorerFormSummary {
+  player: string;
+  team: string | null;
+  position?: string | null;
+  gamesPlayed?: number;
+  tries2026?: number;
+  lastFive: number[];
+  average: number;
+  headImage?: string | null;
+  bodyImage?: string | null;
+  teamLogoUrl?: string | null;
+}
+
+export interface BettingPageSummary {
+  id: string;
+  year: number | null;
+  games: BettingSummaryGame[];
+  teamLogos: Record<string, string>;
+  playerTeamsByName: Record<string, string>;
+  tryscorerFormByPlayer: Record<string, BettingTryscorerFormSummary>;
+  tryscorerKickoffsByMatch: Record<string, string>;
+  lineupPlayersByMatch: Record<string, unknown>;
+  updatedAt: string | null;
+}
+
 export interface PlayerFantasySd5yRecord {
   player: string;
   primary_position: string | null;
@@ -1857,6 +1898,120 @@ function filterTryscorersToNamedLineups(rows: BettingOddsRow[], namedPlayersByMa
     if (!namedPlayers) return true;
     return namedPlayers.has(normaliseLookupKey(row.result));
   });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asStringRecord(value: unknown): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(asRecord(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+  );
+}
+
+function mapBettingSummaryGame(raw: unknown): BettingSummaryGame | null {
+  const row = asRecord(raw);
+  const matchDate = typeof row.matchDate === "string" ? row.matchDate : "";
+  const match = typeof row.match === "string" ? row.match : "";
+  const matchKey = typeof row.matchKey === "string" ? row.matchKey : "";
+  if (!matchDate || !match || !matchKey) return null;
+
+  return {
+    round: typeof row.round === "number" && Number.isFinite(row.round) ? row.round : null,
+    matchDate,
+    kickoffUtc: typeof row.kickoffUtc === "string" ? row.kickoffUtc : null,
+    releaseAtUtc: typeof row.releaseAtUtc === "string" ? row.releaseAtUtc : null,
+    matchCentreUrl: typeof row.matchCentreUrl === "string" ? row.matchCentreUrl : null,
+    match,
+    homeTeam: typeof row.homeTeam === "string" ? row.homeTeam : "",
+    awayTeam: typeof row.awayTeam === "string" ? row.awayTeam : "",
+    homeTeamKey: typeof row.homeTeamKey === "string" ? row.homeTeamKey : null,
+    awayTeamKey: typeof row.awayTeamKey === "string" ? row.awayTeamKey : null,
+    matchKey,
+    homeLogoUrl: typeof row.homeLogoUrl === "string" ? row.homeLogoUrl : null,
+    awayLogoUrl: typeof row.awayLogoUrl === "string" ? row.awayLogoUrl : null,
+  };
+}
+
+function mapBettingTryscorerForm(value: unknown): BettingTryscorerFormSummary | null {
+  const row = asRecord(value);
+  const player = typeof row.player === "string" ? row.player : "";
+  if (!player) return null;
+  const lastFive = Array.isArray(row.lastFive)
+    ? row.lastFive.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+    : [];
+
+  return {
+    player,
+    team: typeof row.team === "string" ? row.team : null,
+    position: typeof row.position === "string" ? row.position : null,
+    gamesPlayed: typeof row.gamesPlayed === "number" && Number.isFinite(row.gamesPlayed) ? row.gamesPlayed : undefined,
+    tries2026: typeof row.tries2026 === "number" && Number.isFinite(row.tries2026) ? row.tries2026 : undefined,
+    lastFive,
+    average: typeof row.average === "number" && Number.isFinite(row.average) ? row.average : 0,
+    headImage: typeof row.headImage === "string" ? row.headImage : null,
+    bodyImage: typeof row.bodyImage === "string" ? row.bodyImage : null,
+    teamLogoUrl: typeof row.teamLogoUrl === "string" ? row.teamLogoUrl : null,
+  };
+}
+
+function emptyBettingPageSummary(): BettingPageSummary {
+  return {
+    id: "current",
+    year: null,
+    games: [],
+    teamLogos: {},
+    playerTeamsByName: {},
+    tryscorerFormByPlayer: {},
+    tryscorerKickoffsByMatch: {},
+    lineupPlayersByMatch: {},
+    updatedAt: null,
+  };
+}
+
+export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPageSummary> {
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("betting_page_summary")
+    .select("id,year,games,team_logos,player_teams_by_name,tryscorer_form_by_player,tryscorer_kickoffs_by_match,lineup_players_by_match,updated_at")
+    .eq("id", "current")
+    .maybeSingle();
+
+  if (error) throw new Error(`Supabase fetch summary.betting_page_summary: ${error.message}`);
+  if (!data) return emptyBettingPageSummary();
+
+  const row = data as Record<string, unknown>;
+  const tryscorerFormByPlayer = Object.fromEntries(
+    Object.entries(asRecord(row.tryscorer_form_by_player)).flatMap(([key, value]) => {
+      const mapped = mapBettingTryscorerForm(value);
+      return mapped ? [[key, mapped]] : [];
+    })
+  );
+
+  return {
+    id: typeof row.id === "string" ? row.id : "current",
+    year: typeof row.year === "number" && Number.isFinite(row.year) ? row.year : null,
+    games: Array.isArray(row.games) ? row.games.flatMap((game) => {
+      const mapped = mapBettingSummaryGame(game);
+      return mapped ? [mapped] : [];
+    }) : [],
+    teamLogos: asStringRecord(row.team_logos),
+    playerTeamsByName: asStringRecord(row.player_teams_by_name),
+    tryscorerFormByPlayer,
+    tryscorerKickoffsByMatch: asStringRecord(row.tryscorer_kickoffs_by_match),
+    lineupPlayersByMatch: asRecord(row.lineup_players_by_match),
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+  };
+}
+
+export async function fetchBettingPageSummary(): Promise<BettingPageSummary> {
+  try {
+    return await fetchBettingPageSummaryFromSupabase();
+  } catch (error) {
+    console.warn("Unable to fetch betting page summary; rendering betting page with live odds only.", error);
+    return emptyBettingPageSummary();
+  }
 }
 
 export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {

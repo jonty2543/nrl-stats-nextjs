@@ -805,7 +805,7 @@ function weatherConditionEmoji(condition: string): string {
 function ScoreNumber({ value, align, isWinner }: { value: number | null; align: "left" | "right"; isWinner: boolean }) {
   return (
     <div
-      className={`min-w-[2.25rem] -translate-y-2 text-4xl leading-none tabular-nums sm:min-w-[3.25rem] sm:text-5xl lg:text-6xl ${
+      className={`min-w-[1.8rem] -translate-y-1 text-[2rem] leading-none tabular-nums sm:min-w-[3.25rem] sm:text-5xl lg:text-6xl ${
         isWinner ? "font-black text-nrl-text" : "font-light text-nrl-text/80"
       } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
@@ -1571,9 +1571,9 @@ function TeamBadge({
   const shortName = displayTeamBadgeName(team?.team ?? team?.teamName ?? "TBC")
 
   return (
-    <div className="flex min-h-[6.5rem] w-[5.75rem] min-w-0 max-w-full -translate-y-1 flex-col items-center justify-start gap-0.5 px-2 py-1 text-center sm:min-h-[7.5rem] sm:w-[6.75rem] sm:-translate-y-1.5 sm:px-2.5">
+    <div className="flex min-h-[5.85rem] w-[4.7rem] min-w-0 max-w-full -translate-y-0.5 flex-col items-center justify-start gap-0.5 px-1 py-1 text-center sm:min-h-[7.5rem] sm:w-[6.75rem] sm:-translate-y-1.5 sm:px-2.5">
       {logo ? (
-        <div className="relative grid h-16 w-16 place-items-center sm:h-20 sm:w-20">
+        <div className="relative grid h-14 w-14 place-items-center sm:h-20 sm:w-20">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logo}
@@ -2222,7 +2222,7 @@ function LineupCard({
           />
         ) : null}
         <div className="relative z-[1] pb-2 text-center">
-          <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-nrl-muted sm:text-xs">
+          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-nrl-muted sm:text-xs sm:tracking-[0.28em]">
             {detailMatch.round} · {formatCardDate(detailMatch)}
           </div>
           {detailMatch.venue || weatherForecast ? (
@@ -2239,7 +2239,7 @@ function LineupCard({
         <div
           className={`relative z-[1] mx-auto grid w-full items-center ${
             showSplitScore
-              ? "max-w-5xl grid-cols-[minmax(0,1fr)_minmax(2rem,auto)_minmax(7.25rem,auto)_minmax(2rem,auto)_minmax(0,1fr)] gap-x-4 sm:grid-cols-[minmax(6rem,1fr)_minmax(3rem,auto)_minmax(8.5rem,auto)_minmax(3rem,auto)_minmax(6rem,1fr)] sm:gap-x-8 lg:gap-x-14"
+              ? "max-w-5xl grid-cols-[minmax(4.7rem,1fr)_minmax(1.8rem,auto)_minmax(5.15rem,auto)_minmax(1.8rem,auto)_minmax(4.7rem,1fr)] gap-1.5 sm:grid-cols-[minmax(6rem,1fr)_minmax(3rem,auto)_minmax(8.5rem,auto)_minmax(3rem,auto)_minmax(6rem,1fr)] sm:gap-x-8 lg:gap-x-14"
               : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
           }`}
         >
@@ -2549,7 +2549,7 @@ export function LineupsDashboard({
       {matches.length > 0 ? (
         <div className="space-y-11">
           {matchDateGroups.map((group) => (
-            <section key={group.dateKey} className="space-y-6">
+            <section key={group.dateKey} className="space-y-8 sm:space-y-6">
               <div className="px-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300/90">
                 {formatMatchDateHeader(group.dateKey)}
               </div>

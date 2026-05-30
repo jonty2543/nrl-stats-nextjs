@@ -19,6 +19,7 @@ interface BettingDashboardProps {
   snapshot: BettingOddsSnapshot;
   canAccessPremium?: boolean;
   playerImages?: PlayerImageRecord[];
+  playerTeamsByName?: Record<string, string>;
   teamLogos?: Record<string, string>;
   tryscorerFormByPlayer?: Record<string, TryscorerFormSummary>;
   tryscorerKickoffsByMatch?: Record<string, string>;
@@ -260,31 +261,25 @@ function areLookupTokensClose(a: string, b: string): boolean {
 
 function normaliseTeamMatchKey(value: string): string {
   const key = normaliseLookupKey(value);
-  const aliases: Record<string, string> = {
-    broncos: "brisbane broncos",
-    bulldogs: "canterbury bankstown bulldogs",
-    "canterbury bulldogs": "canterbury bankstown bulldogs",
-    raiders: "canberra raiders",
-    sharks: "cronulla sutherland sharks",
-    "cronulla sharks": "cronulla sutherland sharks",
-    titans: "gold coast titans",
-    "sea eagles": "manly warringah sea eagles",
-    "manly sea eagles": "manly warringah sea eagles",
-    storm: "melbourne storm",
-    knights: "newcastle knights",
-    cowboys: "north queensland cowboys",
-    "nth queensland cowboys": "north queensland cowboys",
-    "north qld cowboys": "north queensland cowboys",
-    eels: "parramatta eels",
-    panthers: "penrith panthers",
-    rabbitohs: "south sydney rabbitohs",
-    dragons: "st george illawarra dragons",
-    roosters: "sydney roosters",
-    warriors: "new zealand warriors",
-    tigers: "wests tigers",
-    dolphins: "dolphins",
-  };
-  return aliases[key] ?? key;
+  if (!key) return "";
+  if (key.includes("broncos") || key === "brisbane") return "broncos";
+  if (key.includes("raiders") || key === "canberra") return "raiders";
+  if (key.includes("bulldogs") || key.includes("canterbury")) return "bulldogs";
+  if (key.includes("sharks") || key.includes("cronulla")) return "sharks";
+  if (key.includes("dolphins")) return "dolphins";
+  if (key.includes("titans") || key.includes("gold coast")) return "titans";
+  if (key.includes("sea eagles") || key.includes("manly")) return "sea eagles";
+  if (key.includes("storm") || key.includes("melbourne")) return "storm";
+  if (key.includes("knights") || key.includes("newcastle")) return "knights";
+  if (key.includes("warriors") || key.includes("zealand")) return "warriors";
+  if (key.includes("cowboys") || key.includes("north queensland") || key.includes("north qld") || key.includes("nth queensland")) return "cowboys";
+  if (key.includes("eels") || key.includes("parramatta")) return "eels";
+  if (key.includes("panthers") || key.includes("penrith")) return "panthers";
+  if (key.includes("rabbitohs") || key.includes("south sydney") || key === "souths") return "rabbitohs";
+  if (key.includes("dragons") || key.includes("st george")) return "dragons";
+  if (key.includes("roosters") || key.includes("sydney")) return "roosters";
+  if (key.includes("tigers") || key.includes("wests")) return "tigers";
+  return key;
 }
 
 function buildMatchKickoffKey(date: string, match: string): string | null {
@@ -1174,6 +1169,7 @@ export function BettingDashboard({
   snapshot,
   canAccessPremium = false,
   playerImages = [],
+  playerTeamsByName: playerTeamsByNameProp = {},
   teamLogos = {},
   tryscorerFormByPlayer = {},
   tryscorerKickoffsByMatch = {},
@@ -1210,13 +1206,16 @@ export function BettingDashboard({
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
   const playerTeamsByName = useMemo(() => {
     const out = new Map<string, string>();
+    for (const [key, team] of Object.entries(playerTeamsByNameProp)) {
+      if (key && team) out.set(key, team);
+    }
     for (const row of playerImages) {
       const key = normaliseLookupKey(row.player);
       if (!key || !row.team || out.has(key)) continue;
       out.set(key, row.team);
     }
     return out;
-  }, [playerImages]);
+  }, [playerImages, playerTeamsByNameProp]);
   const resolveTryscorerResult = useMemo(() => {
     const entries = Object.entries(tryscorerFormByPlayer);
     return (result: string, market: BettingMarket) => {

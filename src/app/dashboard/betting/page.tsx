@@ -2,11 +2,9 @@ import { auth } from "@clerk/nextjs/server";
 import { BettingDashboard } from "@/components/views/betting-dashboard";
 import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { fetchApprovedArticles } from "@/lib/articles";
-import { loadDraw2026Data } from "@/lib/draw/load-draw-2026";
-import { fetchBettingOddsSnapshot, fetchPlayerImages, fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries";
-import type { PlayerStat } from "@/lib/data/types";
-import type { Draw2026Row } from "@/lib/draw/types";
+import { fetchBettingOddsSnapshot, fetchBettingPageSummary } from "@/lib/supabase/queries";
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types";
+import type { BettingSummaryGame } from "@/lib/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -20,30 +18,28 @@ function normaliseArticleTitle(value: string): string {
 
 function normaliseTeamKey(value: string): string {
   const key = normalisePlayerKey(value);
-  const aliases: Record<string, string> = {
-    broncos: "brisbane broncos",
-    bulldogs: "canterbury bankstown bulldogs",
-    "canterbury bulldogs": "canterbury bankstown bulldogs",
-    raiders: "canberra raiders",
-    sharks: "cronulla sutherland sharks",
-    titans: "gold coast titans",
-    "sea eagles": "manly warringah sea eagles",
-    storm: "melbourne storm",
-    knights: "newcastle knights",
-    cowboys: "north queensland cowboys",
-    eels: "parramatta eels",
-    panthers: "penrith panthers",
-    rabbitohs: "south sydney rabbitohs",
-    dragons: "st george illawarra dragons",
-    roosters: "sydney roosters",
-    warriors: "new zealand warriors",
-    tigers: "wests tigers",
-    dolphins: "dolphins",
-  };
-  return aliases[key] ?? key;
+  if (!key) return "";
+  if (key.includes("broncos") || key === "brisbane") return "broncos";
+  if (key.includes("raiders") || key === "canberra") return "raiders";
+  if (key.includes("bulldogs") || key.includes("canterbury")) return "bulldogs";
+  if (key.includes("sharks") || key.includes("cronulla")) return "sharks";
+  if (key.includes("dolphins")) return "dolphins";
+  if (key.includes("titans") || key.includes("gold coast")) return "titans";
+  if (key.includes("sea eagles") || key.includes("manly")) return "sea eagles";
+  if (key.includes("storm") || key.includes("melbourne")) return "storm";
+  if (key.includes("knights") || key.includes("newcastle")) return "knights";
+  if (key.includes("warriors") || key.includes("zealand")) return "warriors";
+  if (key.includes("cowboys") || key.includes("north queensland")) return "cowboys";
+  if (key.includes("eels") || key.includes("parramatta")) return "eels";
+  if (key.includes("panthers") || key.includes("penrith")) return "panthers";
+  if (key.includes("rabbitohs") || key.includes("south sydney") || key === "souths") return "rabbitohs";
+  if (key.includes("dragons") || key.includes("st george")) return "dragons";
+  if (key.includes("roosters") || key.includes("sydney")) return "roosters";
+  if (key.includes("tigers") || key.includes("wests")) return "tigers";
+  return key;
 }
 
-function buildDrawMatchKey(home: string, away: string): string {
+function buildBettingMatchKey(home: string, away: string): string {
   return [normaliseTeamKey(home), normaliseTeamKey(away)].sort().join("|");
 }
 
@@ -53,83 +49,41 @@ function parseBettingMatch(match: string): { home: string; away: string } | null
   return { home: parts[0] ?? "", away: parts.slice(1).join(" v ") };
 }
 
-function addDaysToDateKey(dateKey: string, days: number): string {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  if (!year || !month || !day) return dateKey;
-  const date = new Date(Date.UTC(year, month - 1, day + days));
-  return date.toISOString().slice(0, 10);
-}
+function buildGameReleaseLookup(games: BettingSummaryGame[]): { byMatchDate: Map<string, string | null>; byDate: Map<string, string | null> } {
+  const byMatchDate = new Map<string, string | null>();
+  const byDate = new Map<string, string | null>();
 
-function brisbaneDateKeyFromUtc(value: string): string {
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return value.slice(0, 10);
-  return new Date(parsed + 10 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
-function roundReleaseUtcMs(firstKickoffUtc: string): number {
-  const firstKickoffDate = brisbaneDateKeyFromUtc(firstKickoffUtc);
-  const [year, month, day] = firstKickoffDate.split("-").map(Number);
-  if (!year || !month || !day) return 0;
-
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  const daysSinceReleaseSunday = weekday === 0 ? 7 : weekday;
-  const releaseDate = addDaysToDateKey(firstKickoffDate, -daysSinceReleaseSunday);
-  const [releaseYear, releaseMonth, releaseDay] = releaseDate.split("-").map(Number);
-  if (!releaseYear || !releaseMonth || !releaseDay) return 0;
-
-  // 8pm Australia/Brisbane is 10:00 UTC because Brisbane is UTC+10 year-round.
-  return Date.UTC(releaseYear, releaseMonth - 1, releaseDay, 10);
-}
-
-function buildRoundReleaseByRound(rows: Draw2026Row[]): Map<number, number> {
-  const firstKickoffByRound = new Map<number, string>();
-  for (const row of rows) {
-    const current = firstKickoffByRound.get(row.round);
-    if (!current || row.kickoff < current) firstKickoffByRound.set(row.round, row.kickoff);
-  }
-
-  return new Map(
-    [...firstKickoffByRound.entries()].map(([round, kickoff]) => [round, roundReleaseUtcMs(kickoff)])
-  );
-}
-
-function buildRoundByBettingKey(rows: Draw2026Row[]): { byMatchDate: Map<string, number>; byDate: Map<string, number> } {
-  const byMatchDate = new Map<string, number>();
-  const byDate = new Map<string, number>();
-
-  for (const row of rows) {
-    const date = brisbaneDateKeyFromUtc(row.kickoff);
-    byMatchDate.set(`${date}|${buildDrawMatchKey(row.home, row.away)}`, row.round);
-    if (!byDate.has(date)) byDate.set(date, row.round);
+  for (const game of games) {
+    byMatchDate.set(`${game.matchDate}|${game.matchKey}`, game.releaseAtUtc);
+    if (!byDate.has(game.matchDate)) byDate.set(game.matchDate, game.releaseAtUtc);
   }
 
   return { byMatchDate, byDate };
 }
 
-function roundForBettingRow(row: BettingOddsRow, roundLookup: ReturnType<typeof buildRoundByBettingKey>): number | null {
+function releaseAtForBettingRow(row: BettingOddsRow, lookup: ReturnType<typeof buildGameReleaseLookup>): string | null | undefined {
   const match = parseBettingMatch(row.match);
   if (match) {
-    const exactRound = roundLookup.byMatchDate.get(`${row.date}|${buildDrawMatchKey(match.home, match.away)}`);
-    if (exactRound != null) return exactRound;
+    const exactReleaseAt = lookup.byMatchDate.get(`${row.date}|${buildBettingMatchKey(match.home, match.away)}`);
+    if (exactReleaseAt !== undefined) return exactReleaseAt;
   }
-  return roundLookup.byDate.get(row.date) ?? null;
+  return lookup.byDate.get(row.date);
 }
 
 function filterUnreleasedBettingRounds(
   snapshot: BettingOddsSnapshot,
-  drawRows: Draw2026Row[],
+  games: BettingSummaryGame[],
   now = new Date()
 ): BettingOddsSnapshot {
-  if (drawRows.length === 0) return snapshot;
+  if (games.length === 0) return snapshot;
 
-  const roundLookup = buildRoundByBettingKey(drawRows);
-  const releaseByRound = buildRoundReleaseByRound(drawRows);
+  const releaseLookup = buildGameReleaseLookup(games);
   const nowMs = now.getTime();
   const filterRows = (rows: BettingOddsRow[]) => rows.filter((row) => {
-    const round = roundForBettingRow(row, roundLookup);
-    if (round == null) return true;
-    const releaseMs = releaseByRound.get(round);
-    return releaseMs == null || nowMs >= releaseMs;
+    const releaseAt = releaseAtForBettingRow(row, releaseLookup);
+    if (!releaseAt) return true;
+    const releaseMs = Date.parse(releaseAt);
+    return !Number.isFinite(releaseMs) || nowMs >= releaseMs;
   });
 
   return {
@@ -141,70 +95,27 @@ function filterUnreleasedBettingRounds(
   };
 }
 
-function buildTryscorerKickoffsByMatch(rows: Draw2026Row[]) {
-  return Object.fromEntries(
-    rows.flatMap((row) => {
-      if (!row.kickoff) return [];
-      const date = brisbaneDateKeyFromUtc(row.kickoff);
-      return [[`${date}|${buildDrawMatchKey(row.home, row.away)}`, row.kickoff]];
-    })
-  );
-}
-
-function buildTryscorerFormByPlayer(rows: PlayerStat[]) {
-  const byPlayer = new Map<string, PlayerStat[]>();
-  for (const row of rows) {
-    const key = normalisePlayerKey(row.Name);
-    if (!key) continue;
-    const existing = byPlayer.get(key);
-    if (existing) {
-      existing.push(row);
-    } else {
-      byPlayer.set(key, [row]);
-    }
-  }
-
-  return Object.fromEntries(
-    [...byPlayer.entries()].map(([key, playerRows]) => {
-      const sortedRows = playerRows.sort((a, b) => {
-          if (a.Year !== b.Year) return b.Year.localeCompare(a.Year);
-          return b.Round - a.Round;
-        });
-      const lastFive = sortedRows
-        .slice(0, 5)
-        .map((row) => row.Tries);
-      const average = lastFive.length > 0
-        ? lastFive.reduce((sum, tries) => sum + tries, 0) / lastFive.length
-        : 0;
-      return [key, { player: sortedRows[0]?.Name ?? "", team: sortedRows[0]?.Team ?? null, lastFive, average }];
-    })
-  );
-}
-
 export default async function BettingPage() {
   const { userId } = await auth();
-  const [snapshot, canAccessPremium, playerImages, teamLogos, playerStats, draw2026Data, approvedArticles] = await Promise.all([
+  const [snapshot, canAccessPremium, bettingSummary, approvedArticles] = await Promise.all([
     fetchBettingOddsSnapshot(),
     getServerPremiumAccess(userId),
-    fetchPlayerImages(),
-    fetchTeamLogos(),
-    fetchPlayerStats(["2025", "2026"]),
-    loadDraw2026Data().catch(() => null),
+    fetchBettingPageSummary(),
     fetchApprovedArticles(),
   ]);
   const marginModelArticle = approvedArticles.find((article) =>
     normaliseArticleTitle(article.title).includes("margin model")
   ) ?? null;
-  const visibleSnapshot = filterUnreleasedBettingRounds(snapshot, draw2026Data?.rows ?? []);
+  const visibleSnapshot = filterUnreleasedBettingRounds(snapshot, bettingSummary.games);
 
   return (
     <BettingDashboard
       snapshot={visibleSnapshot}
       canAccessPremium={canAccessPremium}
-      playerImages={playerImages}
-      teamLogos={teamLogos}
-      tryscorerFormByPlayer={buildTryscorerFormByPlayer(playerStats)}
-      tryscorerKickoffsByMatch={buildTryscorerKickoffsByMatch(draw2026Data?.rows ?? [])}
+      playerTeamsByName={bettingSummary.playerTeamsByName}
+      teamLogos={bettingSummary.teamLogos}
+      tryscorerFormByPlayer={bettingSummary.tryscorerFormByPlayer}
+      tryscorerKickoffsByMatch={bettingSummary.tryscorerKickoffsByMatch}
       marginModelArticle={
         marginModelArticle
           ? {

@@ -6,6 +6,7 @@ import { loadDraw2026Data } from "@/lib/draw/load-draw-2026";
 import { fetchBettingOddsSnapshot, fetchPlayerImages, fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries";
 import type { PlayerStat } from "@/lib/data/types";
 import type { Draw2026Row } from "@/lib/draw/types";
+import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +47,105 @@ function buildDrawMatchKey(home: string, away: string): string {
   return [normaliseTeamKey(home), normaliseTeamKey(away)].sort().join("|");
 }
 
+function parseBettingMatch(match: string): { home: string; away: string } | null {
+  const parts = match.split(/\s+v(?:s|\.)?\s+/i).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  return { home: parts[0] ?? "", away: parts.slice(1).join(" v ") };
+}
+
+function addDaysToDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) return dateKey;
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
+function brisbaneDateKeyFromUtc(value: string): string {
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return value.slice(0, 10);
+  return new Date(parsed + 10 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function roundReleaseUtcMs(firstKickoffUtc: string): number {
+  const firstKickoffDate = brisbaneDateKeyFromUtc(firstKickoffUtc);
+  const [year, month, day] = firstKickoffDate.split("-").map(Number);
+  if (!year || !month || !day) return 0;
+
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  const daysSinceReleaseSunday = weekday === 0 ? 7 : weekday;
+  const releaseDate = addDaysToDateKey(firstKickoffDate, -daysSinceReleaseSunday);
+  const [releaseYear, releaseMonth, releaseDay] = releaseDate.split("-").map(Number);
+  if (!releaseYear || !releaseMonth || !releaseDay) return 0;
+
+  // 8pm Australia/Brisbane is 10:00 UTC because Brisbane is UTC+10 year-round.
+  return Date.UTC(releaseYear, releaseMonth - 1, releaseDay, 10);
+}
+
+function buildRoundReleaseByRound(rows: Draw2026Row[]): Map<number, number> {
+  const firstKickoffByRound = new Map<number, string>();
+  for (const row of rows) {
+    const current = firstKickoffByRound.get(row.round);
+    if (!current || row.kickoff < current) firstKickoffByRound.set(row.round, row.kickoff);
+  }
+
+  return new Map(
+    [...firstKickoffByRound.entries()].map(([round, kickoff]) => [round, roundReleaseUtcMs(kickoff)])
+  );
+}
+
+function buildRoundByBettingKey(rows: Draw2026Row[]): { byMatchDate: Map<string, number>; byDate: Map<string, number> } {
+  const byMatchDate = new Map<string, number>();
+  const byDate = new Map<string, number>();
+
+  for (const row of rows) {
+    const date = brisbaneDateKeyFromUtc(row.kickoff);
+    byMatchDate.set(`${date}|${buildDrawMatchKey(row.home, row.away)}`, row.round);
+    if (!byDate.has(date)) byDate.set(date, row.round);
+  }
+
+  return { byMatchDate, byDate };
+}
+
+function roundForBettingRow(row: BettingOddsRow, roundLookup: ReturnType<typeof buildRoundByBettingKey>): number | null {
+  const match = parseBettingMatch(row.match);
+  if (match) {
+    const exactRound = roundLookup.byMatchDate.get(`${row.date}|${buildDrawMatchKey(match.home, match.away)}`);
+    if (exactRound != null) return exactRound;
+  }
+  return roundLookup.byDate.get(row.date) ?? null;
+}
+
+function filterUnreleasedBettingRounds(
+  snapshot: BettingOddsSnapshot,
+  drawRows: Draw2026Row[],
+  now = new Date()
+): BettingOddsSnapshot {
+  if (drawRows.length === 0) return snapshot;
+
+  const roundLookup = buildRoundByBettingKey(drawRows);
+  const releaseByRound = buildRoundReleaseByRound(drawRows);
+  const nowMs = now.getTime();
+  const filterRows = (rows: BettingOddsRow[]) => rows.filter((row) => {
+    const round = roundForBettingRow(row, roundLookup);
+    if (round == null) return true;
+    const releaseMs = releaseByRound.get(round);
+    return releaseMs == null || nowMs >= releaseMs;
+  });
+
+  return {
+    ...snapshot,
+    h2h: filterRows(snapshot.h2h),
+    line: filterRows(snapshot.line),
+    total: filterRows(snapshot.total),
+    tryscorer: filterRows(snapshot.tryscorer),
+  };
+}
+
 function buildTryscorerKickoffsByMatch(rows: Draw2026Row[]) {
   return Object.fromEntries(
     rows.flatMap((row) => {
       if (!row.kickoff) return [];
-      const date = row.kickoff.slice(0, 10);
+      const date = brisbaneDateKeyFromUtc(row.kickoff);
       return [[`${date}|${buildDrawMatchKey(row.home, row.away)}`, row.kickoff]];
     })
   );
@@ -100,10 +195,11 @@ export default async function BettingPage() {
   const marginModelArticle = approvedArticles.find((article) =>
     normaliseArticleTitle(article.title).includes("margin model")
   ) ?? null;
+  const visibleSnapshot = filterUnreleasedBettingRounds(snapshot, draw2026Data?.rows ?? []);
 
   return (
     <BettingDashboard
-      snapshot={snapshot}
+      snapshot={visibleSnapshot}
       canAccessPremium={canAccessPremium}
       playerImages={playerImages}
       teamLogos={teamLogos}

@@ -805,8 +805,8 @@ function weatherConditionEmoji(condition: string): string {
 function ScoreNumber({ value, align, isWinner }: { value: number | null; align: "left" | "right"; isWinner: boolean }) {
   return (
     <div
-      className={`min-w-[2.25rem] text-4xl leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-5xl lg:text-6xl ${
-        isWinner ? "font-black" : "font-normal"
+      className={`min-w-[2rem] -translate-y-1 text-3xl leading-none tabular-nums sm:min-w-[3rem] sm:text-4xl lg:text-5xl ${
+        isWinner ? "font-black text-nrl-text" : "font-light text-nrl-text/80"
       } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
       }`}
@@ -830,7 +830,7 @@ function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: Line
   const hasScore = score.homeScore != null || score.awayScore != null
 
   return (
-    <div className={`flex flex-col justify-center px-2 text-center ${splitScore ? "min-w-[5.5rem] sm:min-w-[6.75rem]" : "min-w-[7.5rem] sm:min-w-[10rem] sm:px-4"}`}>
+    <div className={`flex flex-col justify-center text-center ${splitScore ? "min-w-[6.75rem] -translate-y-1 px-1 sm:min-w-[7.75rem]" : "min-w-[7.5rem] px-2 sm:min-w-[10rem] sm:px-4"}`}>
       {hasScore ? (
         <>
           {showLiveBadge ? (
@@ -2239,7 +2239,7 @@ function LineupCard({
         <div
           className={`relative z-[1] mx-auto grid w-full items-center ${
             showSplitScore
-              ? "max-w-5xl grid-cols-[minmax(0,1fr)_minmax(2.25rem,auto)_minmax(5.5rem,auto)_minmax(2.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(6rem,1fr)_minmax(3.75rem,auto)_minmax(6.75rem,auto)_minmax(3.75rem,auto)_minmax(6rem,1fr)] sm:gap-5 lg:gap-10"
+              ? "max-w-5xl grid-cols-[minmax(0,1fr)_minmax(2rem,auto)_minmax(6.75rem,auto)_minmax(2rem,auto)_minmax(0,1fr)] gap-x-3 sm:grid-cols-[minmax(6rem,1fr)_minmax(3rem,auto)_minmax(7.75rem,auto)_minmax(3rem,auto)_minmax(6rem,1fr)] sm:gap-x-7 lg:gap-x-12"
               : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
           }`}
         >

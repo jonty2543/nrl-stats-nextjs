@@ -2313,7 +2313,7 @@ function lineupsPlayerKeys(match: LineupMatch): string[] {
     ...(match.homeTeam?.players ?? []),
     ...(match.awayTeam?.players ?? []),
   ];
-  return [...new Set(players.map((player) => normaliseNameForMatch(player.player)).filter(Boolean))];
+  return [...new Set(players.map((player) => normaliseLookupKey(player.player)).filter(Boolean))];
 }
 
 function filterRecordByKeys<T>(record: Record<string, T>, keys: Iterable<string>): Record<string, T> {

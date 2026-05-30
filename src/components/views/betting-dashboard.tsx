@@ -536,6 +536,11 @@ function formatPct(value: number | null): string {
   return `${value.toFixed(2)}%`;
 }
 
+function formatEdge(value: number | null): string {
+  if (value == null) return "-";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+
 function formatMoney(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}$${value.toFixed(2)}`;
@@ -3371,7 +3376,7 @@ function MarketSection({
                         : edgePp == null
                         ? "text-nrl-text"
                         : edgePp < 0
-                          ? "text-red-500"
+                          ? "text-red-300/80"
                           : overEdgeCliff
                             ? "text-orange-500"
                             : "text-emerald-300";
@@ -3390,11 +3395,28 @@ function MarketSection({
 
                     return (
                       <div key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`} className="border-t border-nrl-border/60 py-4 first:border-t-0 first:pt-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex min-w-0 items-start gap-1.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 flex-1 items-start gap-1.5">
                             <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} className="mt-0.5 h-4 w-4" />
-                            <div className="min-w-0">
-                              <div className="truncate text-xs font-semibold text-nrl-text">{row.result}</div>
+                            <div className="min-w-0 flex-1">
+                              <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 text-xs font-semibold text-nrl-text">
+                                <span className="min-w-0 truncate pr-1">{row.result}</span>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-nrl-muted">
+                                  Best:
+                                  <span className="text-nrl-text tabular-nums">{formatPrice(row.bestPriceComputed)}</span>
+                                  {row.bestBookiesComputed.map((bookie) => (
+                                    <BookieLogo key={`${group.key}-mobile-${row.result}-best-${bookie}`} bookie={bookie} compact />
+                                  ))}
+                                </span>
+                                {showModelColumns ? (
+                                  <span className={`inline-flex items-center justify-end gap-1 text-[10px] font-bold uppercase tracking-[0.08em] ${edgeClass}`}>
+                                    Edge:
+                                    <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : "tabular-nums"}>
+                                      {formatEdge(edgePp)}
+                                    </span>
+                                  </span>
+                                ) : null}
+                              </div>
                               <TryscorerForm form={tryscorerForm} />
                             </div>
                           </div>
@@ -3438,16 +3460,10 @@ function MarketSection({
                         >
                           {visibleBookieColumns.map((bookie) => {
                             const offer = row.bookieOffers[bookie];
-                            const isBest = offer != null
-                              && row.bestBookiesComputed.includes(bookie)
-                              && row.bestPriceComputed === offer.price
-                              && row.bestValueComputed === offer.value;
                             return (
                               <div
                                 key={`${group.key}-mobile-${row.result}-${bookie}`}
-                                className={`flex min-h-[34px] min-w-0 flex-col justify-center gap-1 rounded px-1.5 py-1 ${
-                                  isBest ? "text-emerald-300" : "text-nrl-text"
-                                }`}
+                                className="flex min-h-[34px] min-w-0 flex-col justify-center gap-1 rounded px-1.5 py-1 text-nrl-text"
                               >
                                 <div className="flex h-4 items-center opacity-90">
                                   <BookieLogo bookie={bookie} compact />
@@ -3461,39 +3477,6 @@ function MarketSection({
                               </div>
                             );
                           })}
-                        </div>
-
-                        <div className={`mt-3 grid ${showModelColumns ? "grid-cols-4" : "grid-cols-2"} gap-x-3 gap-y-2 text-[10px]`}>
-                          <div className="min-w-0">
-                            <div className="font-bold uppercase tracking-[0.08em] text-nrl-muted">Best</div>
-                            <div className="mt-1 truncate text-xs font-bold leading-none text-emerald-300 tabular-nums">
-                              {formatPrice(row.bestPriceComputed)}
-                            </div>
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-bold uppercase tracking-[0.08em] text-nrl-muted">Imp</div>
-                            <div className="mt-1 truncate text-xs font-semibold leading-none text-nrl-text tabular-nums">{formatPct(implied == null ? null : implied * 100)}</div>
-                          </div>
-                          {showModelColumns ? (
-                            <>
-                              <div className="min-w-0">
-                                <div className="font-bold uppercase tracking-[0.08em] text-nrl-muted">Model</div>
-                                <div className="mt-1 truncate text-xs font-semibold leading-none text-nrl-text tabular-nums">
-                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
-                                    {formatPct(modelProbability == null ? null : modelProbability * 100)}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="min-w-0">
-                                <div className="font-bold uppercase tracking-[0.08em] text-nrl-muted">Edge</div>
-                                <div className={`mt-1 truncate text-xs font-semibold leading-none tabular-nums ${edgeClass}`}>
-                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
-                                    {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
-                                  </span>
-                                </div>
-                              </div>
-                            </>
-                          ) : null}
                         </div>
 
                       </div>

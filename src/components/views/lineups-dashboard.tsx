@@ -2239,7 +2239,7 @@ function LineupCard({
         <div
           className={`relative z-[1] mx-auto grid w-full items-center ${
             showSplitScore
-              ? "max-w-5xl grid-cols-[minmax(4.7rem,1fr)_minmax(1.8rem,auto)_minmax(5.15rem,auto)_minmax(1.8rem,auto)_minmax(4.7rem,1fr)] gap-1.5 sm:grid-cols-[minmax(6rem,1fr)_minmax(3rem,auto)_minmax(8.5rem,auto)_minmax(3rem,auto)_minmax(6rem,1fr)] sm:gap-x-8 lg:gap-x-14"
+              ? "max-w-5xl grid-cols-[minmax(4.7rem,1fr)_3.25rem_minmax(5.15rem,auto)_3.25rem_minmax(4.7rem,1fr)] gap-1.5 sm:grid-cols-[minmax(6rem,1fr)_4.5rem_minmax(8.5rem,auto)_4.5rem_minmax(6rem,1fr)] sm:gap-x-8 lg:gap-x-14"
               : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
           }`}
         >

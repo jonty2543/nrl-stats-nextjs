@@ -1128,6 +1128,61 @@ function mapBettingRows(table: BettingOddsTable, raw: Record<string, unknown>): 
   return [mapLegacyBettingRow(table, raw)];
 }
 
+function isBettingOddsTable(value: unknown): value is BettingOddsTable {
+  return value === "NRL Odds" || value === "NRL Line Odds" || value === "NRL Total Odds" || value === "NRL Tryscorers";
+}
+
+function tableForBettingMarket(market: BettingMarket): BettingOddsTable {
+  if (market === "Line") return "NRL Line Odds";
+  if (market === "Total") return "NRL Total Odds";
+  if (market === "Tryscorer") return "NRL Tryscorers";
+  return "NRL Odds";
+}
+
+function mapBettingSnapshotRow(raw: unknown, fallbackMarket: BettingMarket): BettingOddsRow | null {
+  const row = asRecord(raw);
+  const table = isBettingOddsTable(row.table) ? row.table : tableForBettingMarket(fallbackMarket);
+  const market = mapBettingMarket(table, row.market ?? row.Market);
+  const mapped: BettingOddsRow = {
+    table,
+    market,
+    date: toIsoDate(row.date ?? row.Date),
+    match: toNullableString(row.match ?? row.Match) ?? "",
+    result: toNullableString(row.result ?? row.Result) ?? "",
+    value: toNullableFinite(row.value ?? row.Value),
+    model: toNullableFinite(row.model ?? row.Model),
+    bestBookie: toNullableString(row.bestBookie ?? row.best_bookie ?? row["Best Bookie"]),
+    bestPrice: toNullableOdds(row.bestPrice ?? row.best_price ?? row["Best Price"]),
+    marketPercentage: toNullableFinite(row.marketPercentage ?? row.market_percentage ?? row["Market %"]),
+    Sportsbet: toNullableOdds(row.Sportsbet ?? row.sportsbet),
+    Pointsbet: toNullableOdds(row.Pointsbet ?? row.pointsbet),
+    Unibet: toNullableOdds(row.Unibet ?? row.unibet),
+    Palmerbet: toNullableOdds(row.Palmerbet ?? row.palmerbet),
+    Betright: toNullableOdds(row.Betright ?? row.betright),
+    Betr: toNullableOdds(row.Betr ?? row.betr),
+  };
+
+  if (!mapped.date || !mapped.match || !mapped.result) return null;
+  return {
+    ...mapped,
+    ...computeBestBookieFromRow(mapped),
+  };
+}
+
+function mapBettingSnapshotRows(raw: unknown, market: BettingMarket): BettingOddsRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .flatMap((row) => {
+      const mapped = mapBettingSnapshotRow(row, market);
+      return mapped ? [mapped] : [];
+    })
+    .sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      if (a.match !== b.match) return a.match.localeCompare(b.match);
+      return a.result.localeCompare(b.result);
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Rename columns on a raw row
 // ---------------------------------------------------------------------------
@@ -2014,7 +2069,28 @@ export async function fetchBettingPageSummary(): Promise<BettingPageSummary> {
   }
 }
 
-export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
+export async function fetchBettingOddsSnapshotFromSummary(): Promise<BettingOddsSnapshot> {
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("betting_odds_snapshot")
+    .select("id,h2h,line,total,tryscorer,generated_at,updated_at")
+    .eq("id", "current")
+    .maybeSingle();
+
+  if (error) throw new Error(`Supabase fetch summary.betting_odds_snapshot: ${error.message}`);
+  if (!data) throw new Error("Supabase fetch summary.betting_odds_snapshot: current row not found");
+
+  const row = data as Record<string, unknown>;
+  return {
+    h2h: mapBettingSnapshotRows(row.h2h, "H2H"),
+    line: mapBettingSnapshotRows(row.line, "Line"),
+    total: mapBettingSnapshotRows(row.total, "Total"),
+    tryscorer: mapBettingSnapshotRows(row.tryscorer, "Tryscorer"),
+    generatedAt: toNullableString(row.generated_at) ?? toNullableString(row.updated_at) ?? new Date().toISOString(),
+  };
+}
+
+export async function fetchBettingOddsSnapshotFromRawTables(): Promise<BettingOddsSnapshot> {
   const [h2hRaw, lineRaw, totalRaw, tryscorer] = await Promise.all([
     fetchBettingOddsTableOrEmpty("NRL Odds"),
     fetchBettingOddsTableOrEmpty("NRL Line Odds"),
@@ -2055,16 +2131,21 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
 
 export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
   try {
-    return await fetchBettingOddsSnapshotFromSupabase();
+    return await fetchBettingOddsSnapshotFromSummary();
   } catch (error) {
-    console.warn("Unable to fetch betting odds snapshot; using empty odds lists.", error);
-    return {
-      h2h: [],
-      line: [],
-      total: [],
-      tryscorer: [],
-      generatedAt: new Date().toISOString(),
-    };
+    console.warn("Unable to fetch summary betting odds snapshot; falling back to raw odds tables.", error);
+    try {
+      return await fetchBettingOddsSnapshotFromRawTables();
+    } catch (rawError) {
+      console.warn("Unable to fetch betting odds snapshot; using empty odds lists.", rawError);
+      return {
+        h2h: [],
+        line: [],
+        total: [],
+        tryscorer: [],
+        generatedAt: new Date().toISOString(),
+      };
+    }
   }
 }
 

@@ -24,12 +24,50 @@ interface BettingDashboardProps {
   tryscorerFormByPlayer?: Record<string, TryscorerFormSummary>;
   tryscorerKickoffsByMatch?: Record<string, string>;
   marginModelArticle?: BettingArticleLink | null;
+  tryscorerArticle?: BettingArticleLink | null;
 }
 
 interface BettingArticleLink {
   title: string;
   slug: string;
   imageUrls: string[];
+}
+
+function BettingArticlePill({ article }: { article: BettingArticleLink }) {
+  return (
+    <Link
+      href={`/dashboard/articles/${article.slug}`}
+      aria-label={`Read ${article.title}`}
+      className="group relative flex min-h-[58px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.22)] bg-[#20284a]/80 text-white shadow-[0_8px_18px_rgba(8,10,18,0.16)] transition-colors hover:border-emerald-300/40"
+    >
+      <div className={`absolute inset-0 grid ${article.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+        {article.imageUrls.slice(0, 2).map((url, index) => (
+          <div key={`${url}-${index}`} className="min-w-0 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt=""
+              className="h-full w-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-[1.03]"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.92),rgba(14,19,48,0.78),rgba(14,19,48,0.56))]" />
+      <div className="relative flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-2">
+        <div className="min-w-0">
+          <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+            Article
+          </div>
+          <div className="mt-0.5 overflow-hidden text-[10px] font-bold uppercase leading-tight tracking-[0.08em] text-white/85 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+            {article.title}
+          </div>
+        </div>
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel-2/60 text-sm text-nrl-text/80">
+          →
+        </span>
+      </div>
+    </Link>
+  );
 }
 
 interface BettingPreferences {
@@ -1174,6 +1212,7 @@ export function BettingDashboard({
   tryscorerFormByPlayer = {},
   tryscorerKickoffsByMatch = {},
   marginModelArticle = null,
+  tryscorerArticle = null,
 }: BettingDashboardProps) {
   const { isLoaded, userId } = useAuth();
   const { user } = useUser();
@@ -1787,6 +1826,9 @@ export function BettingDashboard({
   }, [bets]);
   const stakingPreferencesLoading = !isLoaded || !preferencesHydrated;
   const betTrackerLoading = hasPremiumBettingAccess && (!betsHydrated || betsLoading);
+  const bettingArticleLinks = [marginModelArticle, tryscorerArticle].filter(
+    (article): article is BettingArticleLink => article !== null
+  );
 
   return (
     <div className="space-y-6">
@@ -1799,39 +1841,12 @@ export function BettingDashboard({
         onAddBet={handleAddBet}
       />
 
-      {marginModelArticle ? (
-        <Link
-          href={`/dashboard/articles/${marginModelArticle.slug}`}
-          aria-label={`Read ${marginModelArticle.title}`}
-          className="group relative flex min-h-[58px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.22)] bg-[#20284a]/80 text-white shadow-[0_8px_18px_rgba(8,10,18,0.16)] transition-colors hover:border-emerald-300/40"
-        >
-          <div className={`absolute inset-0 grid ${marginModelArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-            {marginModelArticle.imageUrls.slice(0, 2).map((url, index) => (
-              <div key={`${url}-${index}`} className="min-w-0 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt=""
-                  className="h-full w-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-[1.03]"
-                />
-              </div>
-            ))}
-          </div>
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.92),rgba(14,19,48,0.78),rgba(14,19,48,0.56))]" />
-          <div className="relative flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-2">
-            <div className="min-w-0">
-              <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-emerald-300">
-                Article
-              </div>
-              <div className="mt-0.5 overflow-hidden text-[10px] font-bold uppercase leading-tight tracking-[0.08em] text-white/85 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                {marginModelArticle.title}
-              </div>
-            </div>
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel-2/60 text-sm text-nrl-text/80">
-              →
-            </span>
-          </div>
-        </Link>
+      {bettingArticleLinks.length > 0 ? (
+        <div className={bettingArticleLinks.length > 1 ? "grid gap-3 md:grid-cols-2" : ""}>
+          {bettingArticleLinks.map((article) => (
+            <BettingArticlePill key={article.slug} article={article} />
+          ))}
+        </div>
       ) : null}
 
       <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
@@ -2023,7 +2038,7 @@ export function BettingDashboard({
               </div>
             )}
 
-            {!betTrackerLoading && bets.length >= 5 ? (
+            {trackerOpen && !betTrackerLoading && bets.length >= 5 ? (
               <div className="mt-5 rounded-lg border border-white/8 bg-[#0f1732]/70 px-3 py-3">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Performance</div>

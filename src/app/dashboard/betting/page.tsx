@@ -106,6 +106,13 @@ export default async function BettingPage() {
   const marginModelArticle = approvedArticles.find((article) =>
     normaliseArticleTitle(article.title).includes("margin model")
   ) ?? null;
+  const tryscorerArticle = approvedArticles.find((article) => {
+    const title = normaliseArticleTitle(article.title);
+    return (
+      article.slug !== marginModelArticle?.slug &&
+      (title.includes("tryscorer") || title.includes("try scorer") || title.includes("try scoring") || title.includes("tryscore"))
+    );
+  }) ?? null;
   const visibleSnapshot = filterUnreleasedBettingRounds(snapshot, bettingSummary.games);
 
   return (
@@ -122,6 +129,15 @@ export default async function BettingPage() {
               title: marginModelArticle.title,
               slug: marginModelArticle.slug,
               imageUrls: marginModelArticle.imageUrls,
+            }
+          : null
+      }
+      tryscorerArticle={
+        tryscorerArticle
+          ? {
+              title: tryscorerArticle.title,
+              slug: tryscorerArticle.slug,
+              imageUrls: tryscorerArticle.imageUrls,
             }
           : null
       }

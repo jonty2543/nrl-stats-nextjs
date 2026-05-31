@@ -2236,23 +2236,35 @@ function LineupCard({
             </div>
           ) : null}
         </div>
-        <div
-          className={`relative z-[1] mx-auto grid w-full items-center ${
-            showSplitScore
-              ? "max-w-5xl grid-cols-[minmax(4.7rem,1fr)_3.25rem_minmax(5.15rem,auto)_3.25rem_minmax(4.7rem,1fr)] gap-1.5 sm:grid-cols-[minmax(6rem,1fr)_4.5rem_minmax(8.5rem,auto)_4.5rem_minmax(6rem,1fr)] sm:gap-x-8 lg:gap-x-14"
-              : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
-          }`}
-        >
-          <div className="min-w-0 justify-self-start sm:justify-self-center">
-            <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
+        {showSplitScore ? (
+          <div className="relative z-[1] mx-auto w-full max-w-5xl">
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center">
+              <div className="min-w-0 justify-self-start">
+                <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
+              </div>
+              <div className="min-w-0 justify-self-end">
+                <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
+              </div>
+            </div>
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 grid -translate-y-1/2 grid-cols-[minmax(0,1fr)_3.25rem_minmax(7.25rem,auto)_3.25rem_minmax(0,1fr)] items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_4.5rem_minmax(8.5rem,auto)_4.5rem_minmax(0,1fr)] sm:gap-x-8 lg:gap-x-14">
+              <div />
+              <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} />
+              <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore />
+              <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} />
+              <div />
+            </div>
           </div>
-          {showSplitScore ? <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} /> : null}
-          <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore={showSplitScore} />
-          {showSplitScore ? <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} /> : null}
-          <div className="min-w-0 justify-self-end sm:justify-self-center">
-            <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
+        ) : (
+          <div className="relative z-[1] mx-auto grid w-full max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5">
+            <div className="min-w-0 justify-self-start sm:justify-self-center">
+              <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
+            </div>
+            <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} />
+            <div className="min-w-0 justify-self-end sm:justify-self-center">
+              <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
+            </div>
           </div>
-        </div>
+        )}
         <span className="absolute bottom-1 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text sm:bottom-1.5">
           <span className="sr-only">Toggle match details</span>
           <svg

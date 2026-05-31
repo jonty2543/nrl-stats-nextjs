@@ -32,7 +32,7 @@ const STARTER_ROWS = [
 const MY_TEAM_MAJOR_BYE_ROUNDS = [12, 15, 18] as const
 const MY_TEAM_PROJECTION_ROUNDS = Array.from({ length: 19 }, (_, index) => index + 1)
 const MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS = [12, 13, 15, 16, 18, 19] as const
-const MY_TEAM_AI_ENABLED = false
+const MY_TEAM_AI_ENABLED = true
 const FANTASY_SQUAD_ID_TO_TEAM: Record<number, string> = {
   500001: "Roosters",
   500002: "Sea Eagles",
@@ -604,7 +604,7 @@ function buildMyTeamAiPrompt({
   const recentHistory = history.slice(-6).map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`).join("\n")
   const tradeSuggestorMetricInstructions = hasFantasyPlotAccess
     ? [
-      "Use live fantasy data for both buys and sells: weekly ownership change, breakeven, projection, priced at, L3 average, and projection vs priced at. Projection vs priced at is important.",
+      "Use live fantasy data for both buys and sells: weekly ownership change, breakeven, projection, priced at, L3 average, projection vs priced at, role security, and expected job length. Projection vs priced at is useful but should not dominate the ranking.",
       "Try to list 3 Sell watch candidates every time. Use owned squad players only, prioritising confirmed injury/unavailability, notable outs from lineups/casualty data, negative ownership change, high BE, projection below priced at, weak L3/projection, poor bye coverage, Origin risk, or a clear cash/squad problem. If fewer than 3 owned players have meaningful sell signals, list fewer rather than inventing names.",
       "Unless a player is injured, out, suspended, not named, misses the target major bye, or has another clear availability problem, their BE must be above priced at before they can be listed in Sell watch.",
       "If projection is 50+ and projection vs priced at is -5.0 or better, do not list them in Sell watch unless there is a clear offsetting issue like injury, not named, missing an upcoming major bye, likely Origin selection, or another serious squad/cash constraint.",
@@ -613,7 +613,7 @@ function buildMyTeamAiPrompt({
       "If a player is -1.0% or worse in ownership delta but BE is lower than priced at, projection is similar to priced at, L3 is sound, and they play the next major bye, frame them as Hold / Possible sell rather than a hard sell.",
       "Do not say recent form has slipped when L3 average is above priced at.",
       "Describe form as strong only when L3 average supports that versus priced at. If L3 is below priced at, describe the case as projection-backed, role-backed, or avoid saying form.",
-      "For each sell or buy, include Ownership change, BE, priced at, L3 average, projection vs priced at, major-bye availability across rounds 12/15/18, and one short reason.",
+      "For each sell or buy, include Ownership change, BE, priced at, L3 average, projection vs priced at, major-bye availability across rounds 12/15/18, role/security note, and one short reason.",
       "Mention any notable outs from the user's owned team before or inside Sell watch, but only when live lineup/casualty data supports the out.",
       "Use casualty ward and Origin chance context behind ownership, form, value, injury, bye and lineup signals; however, likely Origin players missing multiple major bye rounds should be treated as a major bye-coverage problem, not a minor tie-breaker.",
       "Major-bye trade-count rule for rounds 12, 15 and 18: first count active owned players who play the bye round and have projection >=35. If the user has 13 or more such players, recommend no trade unless there is a clear injury/Origin/high-BE/value problem. If they have 12, recommend one trade to reach 13 or upgrade a sub-35 scorer. If they have 11 or fewer, recommend 2-3 trades to reach 13. If they have 13 active scorers but one or more projected under 35, suggest at most one upgrade rather than forcing multiple trades.",
@@ -657,7 +657,7 @@ function buildMyTeamAiPrompt({
       ? "Sell watch should only include owned players. Prioritise confirmed injury/out/suspension from casualty ward or lineups, Origin-risk players from origin_chance, live confirmed bye/DNP, high BE, poor projection vs pricedAt, highly traded-out/negative ownership delta, or bad major-bye coverage. If a player is a hold, say hold rather than forcing a sale."
       : "Sell watch should only include owned players. Prioritise negative ownership delta, weak L3/season average for the price, poor bye coverage, visible lineup/bye issues, or bad squad/cash fit. If a player is a hold, say hold rather than forcing a sale.",
     hasFantasyPlotAccess
-      ? "Trade-ins must be real live-data candidates and not already owned. Prefer players who play as many major bye rounds as possible, avoid Origin-risk players unless the upside clearly justifies it, then rank by traded-in/ownership delta, projection vs pricedAt, low BE, role security, and sensible price fit."
+      ? "Trade-ins must be real live-data candidates and not already owned. Prefer players who play as many major bye rounds as possible, avoid Origin-risk players unless the upside clearly justifies it, then rank by traded-in/ownership delta, role security, expected job length, low BE, projection, sensible price fit, and projection vs pricedAt. For cheap players, do not over-rank value alone because many are 1-2 week replacements; only push them high when role security, minutes, bye coverage, ownership momentum, and job length are sound."
       : "Trade-ins must be real live-data candidates and not already owned. Prefer players who play as many major bye rounds as possible, then rank by traded-in/ownership delta, recent form, role security, price, and sensible squad fit. Do not mention projection, BE, projection vs priced at, Origin or casualty ward.",
     "For Top 5 trade-ins, lean heavily on traded-in ownership delta: clearly rising ownership should lift a player up the list when bye coverage and role are sound. Do not bury a strongly traded-in player behind a lower-momentum option unless the lower-momentum player is clearly better on bye availability, role security, or value.",
     "When prices/bank are unknown, avoid pretending you can afford exact moves. Give ranked targets and say affordability needs checking.",
@@ -1483,6 +1483,16 @@ function actualScoreForPlayerRound(
   return typeof score === "number" && Number.isFinite(score) ? score : null
 }
 
+function effectiveActualScoreForPlayerRound(
+  player: MyTeamPlayer,
+  round: MyTeamProjectionRound | null,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+): number | null {
+  const score = actualScoreForPlayerRound(player, round, fantasyPlayersById)
+  if (score == null) return null
+  return player.isCaptain ? score * 2 : score
+}
+
 function playerCanCoverSlot(
   player: MyTeamPlayer,
   slot: string,
@@ -1809,9 +1819,10 @@ function PlayerToken({
       ? player.squadRole === "emergency" ? "border-[#f16161]" : "border-[#a85db5]"
       : "border-[#f1f3f5]"
   const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) ?? null : null
-  const actualScore = showProjections ? actualScoreForPlayerRound(player, scoreRound, fantasyPlayersById) : null
+  const effectiveActualScore = showProjections ? effectiveActualScoreForPlayerRound(player, scoreRound, fantasyPlayersById) : null
+  const hasActualScore = showProjections && actualScoreForPlayerRound(player, scoreRound, fantasyPlayersById) != null
   const displayedProjection = showProjections
-    ? actualScore ?? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
+    ? effectiveActualScore ?? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
     : null
   const canSetCaptain = showCaptainStyling && player.squadRole === "starter"
   const isEligibleSwapTarget = swapMenuOpen && playerIndex != null && eligibleSwapPlayers.some(({ index }) => index === playerIndex)
@@ -1838,7 +1849,7 @@ function PlayerToken({
       ) : null}
       {showProjections ? (
         <span className={`absolute right-[5%] top-[27%] grid h-6 w-6 place-items-center rounded-full border text-[8px] font-black shadow-[0_8px_18px_rgba(10,22,38,0.22)] lg:h-9 lg:w-9 lg:text-xs ${
-          actualScore != null
+          hasActualScore
             ? "border-emerald-200/80 bg-[#159a5a] text-white"
             : showCaptainStyling && player.isCaptain
             ? "border-orange-300/80 bg-[#5a2f1d] text-orange-200"
@@ -2145,7 +2156,7 @@ function TeamBoard({
   const activeHeaderRound = selectedProjectionRound ?? currentRoundForHeader ?? currentMajorRound
   const actualRoundScore = activeHeaderRound == null
     ? 0
-    : scoringSide.reduce((sum, entry) => sum + (actualScoreForPlayerRound(entry.player, activeHeaderRound, fantasyPlayersById) ?? 0), 0)
+    : scoringSide.reduce((sum, entry) => sum + (effectiveActualScoreForPlayerRound(entry.player, activeHeaderRound, fantasyPlayersById) ?? 0), 0)
   const showCaptainStyling = selectedProjectionRound == null
   const markerOverrideForIndex = (index: number | null): "available" | "unavailable" | "bye" | null => {
     if (activeHeaderRound == null || index == null) return null

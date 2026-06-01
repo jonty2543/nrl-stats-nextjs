@@ -2069,6 +2069,42 @@ export async function fetchBettingPageSummary(): Promise<BettingPageSummary> {
   }
 }
 
+function shouldEnrichBettingSnapshotModels(snapshot: BettingOddsSnapshot): boolean {
+  return [...snapshot.h2h, ...snapshot.line, ...snapshot.total, ...snapshot.tryscorer]
+    .some((row) => row.model == null);
+}
+
+async function enrichBettingSnapshotModels(snapshot: BettingOddsSnapshot): Promise<BettingOddsSnapshot> {
+  if (!shouldEnrichBettingSnapshotModels(snapshot)) return snapshot;
+
+  const predictionRows = await fetchPredictionModelRowsFromSupabase([
+    ...snapshot.h2h,
+    ...snapshot.line,
+    ...snapshot.total,
+  ]).catch((error) => {
+    console.warn("Unable to enrich summary betting odds with prediction rows.", error);
+    return [];
+  });
+  const marginOverrideRows = await fetchMarginOverrideRowsFromSupabase(predictionRows).catch((error) => {
+    console.warn("Unable to fetch betting margin overrides for summary enrichment; using saved prediction margins.", error);
+    return [];
+  });
+  const tryscorerPredictionRows = await fetchTryscorerPredictionRowsFromSupabase(snapshot.tryscorer).catch((error) => {
+    console.warn("Unable to enrich summary tryscorer odds with prediction rows.", error);
+    return [];
+  });
+  const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
+  const tryscorerPredictionLookup = buildTryscorerPredictionLookup(tryscorerPredictionRows);
+
+  return {
+    ...snapshot,
+    h2h: snapshot.h2h.map((row) => applyPredictionModelToRow(row, predictionLookup)),
+    line: snapshot.line.map((row) => applyPredictionModelToRow(row, predictionLookup)),
+    total: snapshot.total.map((row) => applyPredictionModelToRow(row, predictionLookup)),
+    tryscorer: snapshot.tryscorer.map((row) => applyTryscorerPredictionModelToRow(row, tryscorerPredictionLookup)),
+  };
+}
+
 export async function fetchBettingOddsSnapshotFromSummary(): Promise<BettingOddsSnapshot> {
   const supabase = createServerSupabaseClient("summary");
   const { data, error } = await supabase
@@ -2081,13 +2117,14 @@ export async function fetchBettingOddsSnapshotFromSummary(): Promise<BettingOdds
   if (!data) throw new Error("Supabase fetch summary.betting_odds_snapshot: current row not found");
 
   const row = data as Record<string, unknown>;
-  return {
+  const snapshot = {
     h2h: mapBettingSnapshotRows(row.h2h, "H2H"),
     line: mapBettingSnapshotRows(row.line, "Line"),
     total: mapBettingSnapshotRows(row.total, "Total"),
     tryscorer: mapBettingSnapshotRows(row.tryscorer, "Tryscorer"),
     generatedAt: toNullableString(row.generated_at) ?? toNullableString(row.updated_at) ?? new Date().toISOString(),
   };
+  return enrichBettingSnapshotModels(snapshot);
 }
 
 export async function fetchBettingOddsSnapshotFromRawTables(): Promise<BettingOddsSnapshot> {

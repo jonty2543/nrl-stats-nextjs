@@ -652,6 +652,9 @@ function buildMyTeamAiPrompt({
       : null,
     "Use clean section titles only. Do not put ranking explanations, data-source notes, metric lists, or backend selection wording in section headings.",
     "For who-to-play or looping questions, return exactly these sections when relevant: Best 13/17 setup, Loop options, Risks.",
+    hasFantasyPlotAccess
+      ? "For captaincy questions, base the recommendation on projection first, then ceiling/floor, role, matchup, availability, and whether the player is in the scoring side. Do not prefer a safer-looking player over a clearly higher projected captain unless there is a real availability or role risk."
+      : "For captaincy questions for free users, do not use projections, breakevens, casualty ward, or Origin context. Base the recommendation on price/priced-at, L3/recent scoring, season average, role, availability, and whether the player is in the scoring side.",
     "Do not use squad placement as a sell reason. Bench, INT, EMG, or emergency status is not bad by itself. Good players can sit anywhere in the squad.",
     hasFantasyPlotAccess
       ? "Sell watch should only include owned players. Prioritise confirmed injury/out/suspension from casualty ward or lineups, Origin-risk players from origin_chance, live confirmed bye/DNP, high BE, poor projection vs pricedAt, highly traded-out/negative ownership delta, or bad major-bye coverage. If a player is a hold, say hold rather than forcing a sale."
@@ -699,7 +702,7 @@ function FormattedAiMessage({ content }: { content: string }) {
         const numbered = line.match(/^(\d+)[).]\s*(.+)$/)
         if (numbered) {
           return (
-            <div key={index} className="flex gap-2 rounded-lg border border-[#5f4aa4]/35 bg-[#4d3a87]/15 px-2.5 py-2">
+            <div key={index} className="flex gap-2 rounded-lg border border-[#5f4aa4] bg-[#211a3a] px-2.5 py-2">
               <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#6d54b8] text-[10px] font-black text-white">
                 {numbered[1]}
               </span>
@@ -931,7 +934,7 @@ function MyTeamAiChatPanel({
             </div>
           </div>
 
-          <div className="space-y-4 bg-[#111832]/52 px-4 py-4 lg:px-6 lg:py-5">
+          <div className="space-y-4 bg-[#111832] px-4 py-4 lg:px-6 lg:py-5">
             {messages.length > 0 || isSending ? (
               <div ref={chatScrollRef} className="max-h-80 space-y-4 overflow-y-auto pr-1">
                 {messages.map((message, index) => (
@@ -939,8 +942,8 @@ function MyTeamAiChatPanel({
                     key={`${message.role}-${index}`}
                     className={`rounded-lg border px-3 py-2 text-sm leading-6 ${
                       message.role === "user"
-                        ? "ml-auto max-w-[88%] border-nrl-accent/35 bg-[#123f3a]/62 text-nrl-text"
-                        : "mr-auto max-w-[94%] border-nrl-border/75 bg-[#101936]/70 text-nrl-text"
+                        ? "ml-auto max-w-[88%] border-nrl-accent/50 bg-[#123f3a] text-nrl-text"
+                        : "mr-auto max-w-[94%] border-nrl-border bg-[#101936] text-nrl-text"
                     }`}
                   >
                     {message.role === "assistant" ? <FormattedAiMessage content={message.content} /> : message.content}

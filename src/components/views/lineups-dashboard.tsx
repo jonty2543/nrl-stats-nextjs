@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react"
+import Link from "next/link"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type {
@@ -28,6 +29,7 @@ interface LineupsDashboardProps {
   roundOptions: LineupRoundOption[]
   selectedRound: string
   teamLogos: Record<string, string>
+  sportsbetOdds?: Record<string, LineupSportsbetOdds>
   canAccessFantasyProjections: boolean
   summaryDiagnostic?: string | null
 }
@@ -289,6 +291,34 @@ function teamAliases(value: string | null | undefined): string[] {
     if (group.includes(key)) group.forEach((alias) => aliases.add(alias))
   }
   return [...aliases]
+}
+
+function bettingTeamKey(value: string | null | undefined): string {
+  const key = normaliseKey(value)
+  if (!key) return ""
+  const group = TEAM_ALIAS_GROUPS.find((aliases) => aliases.includes(key))
+  return group?.[0] ?? key
+}
+
+function lineupsMatchTeams(match: LineupMatch): { home: string; away: string } {
+  const parts = match.match.split(/\s+v(?:s|\.)?\s+/i).map((part) => part.trim()).filter(Boolean)
+  return {
+    home: match.homeTeam?.teamName || match.homeTeam?.team || parts[0] || "",
+    away: match.awayTeam?.teamName || match.awayTeam?.team || parts.slice(1).join(" v ") || "",
+  }
+}
+
+function lineupBettingMatchKey(match: LineupMatch): string {
+  const { home, away } = lineupsMatchTeams(match)
+  return [bettingTeamKey(home), bettingTeamKey(away)].filter(Boolean).sort().join("|")
+}
+
+function lineupsMatchAnchorId(match: LineupMatch): string {
+  return `lineups-match-${normaliseKey(`${matchDateKey(match)} ${lineupBettingMatchKey(match)}`).replace(/\s+/g, "-")}`
+}
+
+function bettingMatchAnchorId(match: LineupMatch): string {
+  return `betting-game-${normaliseKey(`${matchDateKey(match)} ${match.match} H2H`).replace(/\s+/g, "-")}`
 }
 
 function livePlayerKey(player: LineupPlayer): string {
@@ -805,8 +835,8 @@ function weatherConditionEmoji(condition: string): string {
 function ScoreNumber({ value, align, isWinner }: { value: number | null; align: "left" | "right"; isWinner: boolean }) {
   return (
     <div
-      className={`min-w-[1.8rem] -translate-y-1 text-[2rem] leading-none tabular-nums sm:min-w-[3.25rem] sm:text-5xl lg:text-6xl ${
-        isWinner ? "font-black text-nrl-text" : "font-light text-nrl-text/80"
+      className={`min-w-[1.8rem] text-[2rem] leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-5xl lg:text-6xl ${
+        isWinner ? "font-black" : "font-normal"
       } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
       }`}
@@ -830,7 +860,7 @@ function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: Line
   const hasScore = score.homeScore != null || score.awayScore != null
 
   return (
-    <div className={`flex flex-col justify-center text-center ${splitScore ? "min-w-[7.25rem] -translate-y-2 px-1 sm:min-w-[8.5rem]" : "min-w-[7.5rem] px-2 sm:min-w-[10rem] sm:px-4"}`}>
+    <div className={`flex flex-col justify-center px-2 text-center ${splitScore ? "min-w-[5.5rem] sm:min-w-[6.75rem]" : "min-w-[7.5rem] sm:min-w-[10rem] sm:px-4"}`}>
       {hasScore ? (
         <>
           {showLiveBadge ? (
@@ -847,7 +877,7 @@ function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: Line
           {splitScore && clock && showLiveBadge ? (
             <div className="text-xl font-semibold leading-none tabular-nums text-nrl-text sm:text-2xl">{clock}</div>
           ) : (
-            <div className={`${splitScore ? "mt-0" : "mt-4 sm:mt-5"} inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]`}>
+            <div className={`${splitScore && showLiveBadge ? "mt-0" : "mt-4 sm:mt-5"} inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]`}>
               {matchStateLabel}{clock && showLiveBadge && !splitScore ? ` · ${clock}` : ""}
             </div>
           )}
@@ -2102,6 +2132,7 @@ function LineupCard({
   canAccessFantasyProjections,
   detail,
   detailStatus,
+  initialSportsbetOdds,
   onOpen,
 }: {
   match: LineupMatch
@@ -2114,12 +2145,16 @@ function LineupCard({
   canAccessFantasyProjections: boolean
   detail: LineupMatchDetailData | null
   detailStatus: "idle" | "loading" | "loaded" | "error"
+  initialSportsbetOdds: Record<string, LineupSportsbetOdds>
   onOpen: () => void
 }) {
   const detailMatch = detail?.match ?? match
+  const detailsRef = useRef<HTMLDetailsElement | null>(null)
+  const anchorId = lineupsMatchAnchorId(match)
+  const bettingHref = `/dashboard/betting#${bettingMatchAnchorId(detailMatch)}`
   const matchStats = detail?.matchStats ?? null
   const tryscorerOdds = detail?.tryscorerOdds ?? {}
-  const sportsbetOdds = detail?.sportsbetOdds ?? {}
+  const sportsbetOdds = { ...initialSportsbetOdds, ...(detail?.sportsbetOdds ?? {}) }
   const casualtyWardOuts = detail?.casualtyWardOuts ?? {}
   const playerAverages = detail?.playerAverages ?? {}
   const playerTryHistory = detail?.playerTryHistory ?? {}
@@ -2187,8 +2222,16 @@ function LineupCard({
       })
   const freeInsightCategoryPriority = FREE_INSIGHT_CATEGORY_ROTATION[matchIndex % FREE_INSIGHT_CATEGORY_ROTATION.length]
 
+  useEffect(() => {
+    if (window.location.hash !== `#${anchorId}`) return
+    if (detailsRef.current) detailsRef.current.open = true
+    onOpen()
+  }, [anchorId, onOpen])
+
   return (
     <details
+      ref={detailsRef}
+      id={anchorId}
       className="group relative origin-top overflow-hidden rounded-lg border border-transparent shadow-[0_24px_54px_rgba(0,0,0,0.48)] transform-gpu [transform:perspective(1100px)_rotateX(3.2deg)_scaleY(0.965)]"
       style={BLUE_GRADIENT_BORDER_STYLE}
       onToggle={(event) => {
@@ -2236,35 +2279,23 @@ function LineupCard({
             </div>
           ) : null}
         </div>
-        {showSplitScore ? (
-          <div className="relative z-[1] mx-auto w-full max-w-5xl">
-            <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center">
-              <div className="min-w-0 justify-self-start">
-                <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
-              </div>
-              <div className="min-w-0 justify-self-end">
-                <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
-              </div>
-            </div>
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 grid -translate-y-1/2 grid-cols-[minmax(0,1fr)_3.25rem_minmax(7.25rem,auto)_3.25rem_minmax(0,1fr)] items-center gap-1.5 sm:grid-cols-[minmax(0,1fr)_4.5rem_minmax(8.5rem,auto)_4.5rem_minmax(0,1fr)] sm:gap-x-8 lg:gap-x-14">
-              <div />
-              <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} />
-              <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore />
-              <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} />
-              <div />
-            </div>
+        <div
+          className={`relative z-[1] mx-auto grid w-full items-center ${
+            showSplitScore
+              ? "max-w-5xl grid-cols-[minmax(4.7rem,1fr)_3.25rem_minmax(5.15rem,auto)_3.25rem_minmax(4.7rem,1fr)] gap-1.5 sm:grid-cols-[minmax(6rem,1fr)_4.5rem_minmax(6.75rem,auto)_4.5rem_minmax(6rem,1fr)] sm:gap-5 lg:gap-10"
+              : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
+          }`}
+        >
+          <div className="min-w-0 justify-self-start sm:justify-self-center">
+            <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
-        ) : (
-          <div className="relative z-[1] mx-auto grid w-full max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5">
-            <div className="min-w-0 justify-self-start sm:justify-self-center">
-              <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
-            </div>
-            <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} />
-            <div className="min-w-0 justify-self-end sm:justify-self-center">
-              <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
-            </div>
+          {showSplitScore ? <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} /> : null}
+          <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore={showSplitScore} />
+          {showSplitScore ? <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} /> : null}
+          <div className="min-w-0 justify-self-end sm:justify-self-center">
+            <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
-        )}
+        </div>
         <span className="absolute bottom-1 left-1/2 z-10 inline-grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-nrl-muted shadow-[0_10px_24px_rgba(0,0,0,0.28)] transition-colors group-hover:text-nrl-text sm:bottom-1.5">
           <span className="sr-only">Toggle match details</span>
           <svg
@@ -2280,6 +2311,14 @@ function LineupCard({
 
       <div className="relative z-[1] border-t border-blue-300/30 px-2 pb-3 sm:px-3">
         <div className="pt-5" />
+        <div className="mb-3 flex justify-end">
+          <Link
+            href={bettingHref}
+            className="rounded-md border border-nrl-border bg-nrl-panel px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+          >
+            Betting
+          </Link>
+        </div>
         {detailStatus === "loading" && !detail ? (
           <div className="flex items-center justify-center px-4 py-5">
             <span className="h-5 w-5 animate-spin rounded-full border-[3px] border-emerald-300/25 border-t-emerald-300" aria-label="Loading match details" />
@@ -2428,6 +2467,7 @@ export function LineupsDashboard({
   roundOptions,
   selectedRound,
   teamLogos,
+  sportsbetOdds: initialSportsbetOdds = {},
   canAccessFantasyProjections,
   summaryDiagnostic,
 }: LineupsDashboardProps) {
@@ -2578,6 +2618,7 @@ export function LineupsDashboard({
                   canAccessFantasyProjections={canAccessFantasyProjections}
                   detail={matchDetails[match.matchId]?.detail ?? null}
                   detailStatus={matchDetails[match.matchId]?.status ?? "idle"}
+                  initialSportsbetOdds={initialSportsbetOdds}
                   onOpen={() => loadMatchDetail(match)}
                 />
               ))}

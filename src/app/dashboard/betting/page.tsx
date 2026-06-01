@@ -8,6 +8,8 @@ import type { BettingSummaryGame } from "@/lib/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
+const SUNDAY_BETTING_RELEASE_UTC_HOUR = 11;
+
 function normalisePlayerKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -70,6 +72,19 @@ function releaseAtForBettingRow(row: BettingOddsRow, lookup: ReturnType<typeof b
   return lookup.byDate.get(row.date);
 }
 
+function bettingReleaseMs(releaseAt: string): number {
+  const releaseMs = Date.parse(releaseAt);
+  if (!Number.isFinite(releaseMs)) return releaseMs;
+
+  const releaseDate = new Date(releaseMs);
+  if (releaseDate.getUTCDay() === 0 && releaseDate.getUTCHours() < SUNDAY_BETTING_RELEASE_UTC_HOUR) {
+    releaseDate.setUTCHours(SUNDAY_BETTING_RELEASE_UTC_HOUR, 0, 0, 0);
+    return releaseDate.getTime();
+  }
+
+  return releaseMs;
+}
+
 function filterUnreleasedBettingRounds(
   snapshot: BettingOddsSnapshot,
   games: BettingSummaryGame[],
@@ -82,7 +97,7 @@ function filterUnreleasedBettingRounds(
   const filterRows = (rows: BettingOddsRow[]) => rows.filter((row) => {
     const releaseAt = releaseAtForBettingRow(row, releaseLookup);
     if (!releaseAt) return true;
-    const releaseMs = Date.parse(releaseAt);
+    const releaseMs = bettingReleaseMs(releaseAt);
     return !Number.isFinite(releaseMs) || nowMs >= releaseMs;
   });
 
@@ -93,6 +108,19 @@ function filterUnreleasedBettingRounds(
     total: filterRows(snapshot.total),
     tryscorer: filterRows(snapshot.tryscorer),
   };
+}
+
+function lineupsMatchAnchorId(game: BettingSummaryGame): string {
+  return `lineups-match-${normalisePlayerKey(`${game.matchDate} ${game.matchKey}`).replace(/\s+/g, "-")}`;
+}
+
+function buildLineupLinksByMatchKey(games: BettingSummaryGame[]): Record<string, string> {
+  return Object.fromEntries(
+    games.map((game) => {
+      const roundParam = game.round == null ? "" : `?round=${encodeURIComponent(`Round ${game.round}`)}`;
+      return [`${game.matchDate}|${game.matchKey}`, `/dashboard/lineups${roundParam}#${lineupsMatchAnchorId(game)}`];
+    })
+  );
 }
 
 export default async function BettingPage() {
@@ -123,6 +151,7 @@ export default async function BettingPage() {
       teamLogos={bettingSummary.teamLogos}
       tryscorerFormByPlayer={bettingSummary.tryscorerFormByPlayer}
       tryscorerKickoffsByMatch={bettingSummary.tryscorerKickoffsByMatch}
+      lineupLinksByMatchKey={buildLineupLinksByMatchKey(bettingSummary.games)}
       marginModelArticle={
         marginModelArticle
           ? {

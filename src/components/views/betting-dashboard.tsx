@@ -23,6 +23,7 @@ interface BettingDashboardProps {
   teamLogos?: Record<string, string>;
   tryscorerFormByPlayer?: Record<string, TryscorerFormSummary>;
   tryscorerKickoffsByMatch?: Record<string, string>;
+  lineupLinksByMatchKey?: Record<string, string>;
   marginModelArticle?: BettingArticleLink | null;
   tryscorerArticle?: BettingArticleLink | null;
 }
@@ -159,9 +160,32 @@ interface ArbitrageCandidate {
 
 type StakingMode = "percentage" | "targetProfit" | "kelly";
 type TrackedBetStatus = "pending" | "won" | "lost" | "push";
+type TrackedBetType = "single" | "multi" | "sgm";
+
+interface BetLeg {
+  market: BettingMarket;
+  matchDate: string;
+  matchName: string;
+  selection: string;
+  lineValue: number | null;
+  odds: number;
+  bookie: string | null;
+}
+
+interface ManualBetLegDraft {
+  id: string;
+  market: BettingMarket;
+  matchDate: string;
+  matchName: string;
+  selection: string;
+  lineValue: string;
+  odds: string;
+  bookie: string;
+}
 
 interface TrackedBet {
   id: string;
+  betType?: TrackedBetType;
   market: BettingMarket;
   matchDate: string;
   matchName: string;
@@ -176,9 +200,11 @@ interface TrackedBet {
   profit: number | null;
   placedAt: string;
   settledAt: string | null;
+  legs?: BetLeg[];
 }
 
 interface BetDraft {
+  betType?: TrackedBetType;
   market: BettingMarket;
   matchDate: string;
   matchName: string;
@@ -190,6 +216,7 @@ interface BetDraft {
   modelProb: number | null;
   impliedProb: number | null;
   edgePp: number | null;
+  legs?: BetLeg[];
 }
 
 interface MobileBetSlip {
@@ -595,6 +622,55 @@ function computeBetProfit(status: TrackedBetStatus, stake: number, odds: number)
   if (status === "push") return 0;
   if (status === "won") return Number((stake * Math.max(0, odds - 1)).toFixed(2));
   return Number((-stake).toFixed(2));
+}
+
+function createManualLegDraft(todayIso: string): ManualBetLegDraft {
+  return {
+    id: `leg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    market: "H2H",
+    matchDate: todayIso,
+    matchName: "",
+    selection: "",
+    lineValue: "",
+    odds: "1.90",
+    bookie: "",
+  };
+}
+
+function parseManualLegs(legs: ManualBetLegDraft[]): BetLeg[] {
+  return legs.flatMap((leg) => {
+    const odds = Number(leg.odds);
+    const lineValue = leg.lineValue.trim() ? Number(leg.lineValue) : null;
+    if (!leg.matchDate.trim() || !leg.matchName.trim() || !leg.selection.trim() || !Number.isFinite(odds) || odds <= 1) {
+      return [];
+    }
+    if (lineValue != null && !Number.isFinite(lineValue)) return [];
+    return [{
+      market: leg.market,
+      matchDate: leg.matchDate.trim(),
+      matchName: leg.matchName.trim(),
+      selection: leg.selection.trim(),
+      lineValue,
+      odds,
+      bookie: leg.bookie.trim() || null,
+    }];
+  });
+}
+
+function combinedMultiOdds(legs: BetLeg[]): number | null {
+  if (legs.length < 2) return null;
+  const product = legs.reduce((value, leg) => value * leg.odds, 1);
+  return Number.isFinite(product) && product > 1 ? Number(product.toFixed(2)) : null;
+}
+
+function normaliseMatchLabel(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function betTypeLabel(type: TrackedBetType | undefined): string {
+  if (type === "multi") return "Multi";
+  if (type === "sgm") return "SGM";
+  return "Single";
 }
 
 function betStatusPillClass(status: TrackedBetStatus): string {
@@ -1211,6 +1287,7 @@ export function BettingDashboard({
   teamLogos = {},
   tryscorerFormByPlayer = {},
   tryscorerKickoffsByMatch = {},
+  lineupLinksByMatchKey = {},
   marginModelArticle = null,
   tryscorerArticle = null,
 }: BettingDashboardProps) {
@@ -1235,6 +1312,12 @@ export function BettingDashboard({
   const [betsError, setBetsError] = useState<string | null>(null);
   const [betAddedMessage, setBetAddedMessage] = useState<string | null>(null);
   const [betRemovedMessage, setBetRemovedMessage] = useState<string | null>(null);
+  const [manualBetType, setManualBetType] = useState<TrackedBetType>("single");
+  const [manualLegs, setManualLegs] = useState<ManualBetLegDraft[]>(() => [
+    createManualLegDraft(todayIso),
+    createManualLegDraft(todayIso),
+  ]);
+  const [manualOddsEdited, setManualOddsEdited] = useState(false);
   const [manualMatchDate, setManualMatchDate] = useState(todayIso);
   const [manualMatchName, setManualMatchName] = useState("");
   const [manualSelection, setManualSelection] = useState("");
@@ -1556,6 +1639,26 @@ export function BettingDashboard({
     }));
   };
 
+  const parsedManualLegs = useMemo(() => parseManualLegs(manualLegs), [manualLegs]);
+  const manualMultiOdds = useMemo(() => combinedMultiOdds(parsedManualLegs), [parsedManualLegs]);
+
+  useEffect(() => {
+    if (manualBetType !== "multi" || manualOddsEdited || manualMultiOdds == null) return;
+    setManualOdds(manualMultiOdds.toFixed(2));
+  }, [manualBetType, manualMultiOdds, manualOddsEdited]);
+
+  const updateManualLeg = (id: string, updates: Partial<ManualBetLegDraft>) => {
+    setManualLegs((prev) => prev.map((leg) => (leg.id === id ? { ...leg, ...updates } : leg)));
+  };
+
+  const addManualLeg = () => {
+    setManualLegs((prev) => [...prev, createManualLegDraft(todayIso)]);
+  };
+
+  const removeManualLeg = (id: string) => {
+    setManualLegs((prev) => (prev.length <= 2 ? prev : prev.filter((leg) => leg.id !== id)));
+  };
+
   const handleAddBet = async (draft: BetDraft) => {
     if (!hasPremiumBettingAccess) return;
     if (!Number.isFinite(draft.stake) || draft.stake <= 0) return;
@@ -1565,6 +1668,8 @@ export function BettingDashboard({
     if (!userId) {
       const localBet: TrackedBet = {
         id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        betType: draft.betType ?? "single",
+        legs: draft.legs ?? [],
         status,
         profit: computeBetProfit(status, draft.stake, draft.odds),
         placedAt: new Date().toISOString(),
@@ -1673,6 +1778,77 @@ export function BettingDashboard({
     if (!hasPremiumBettingAccess) return false;
     setManualError(null);
 
+    if (manualBetType !== "single") {
+      const expectedLegs = manualLegs.length;
+      const validLegs = parsedManualLegs;
+      if (validLegs.length !== expectedLegs) {
+        setManualError("Each leg needs a date, match, selection, and odds greater than 1.");
+        return false;
+      }
+      if (validLegs.length < 2) {
+        setManualError(`${manualBetType === "sgm" ? "SGM" : "Multi"} bets need at least 2 legs.`);
+        return false;
+      }
+      if (manualBetType === "multi") {
+        const bookies = new Set(validLegs.map((leg) => leg.bookie).filter(Boolean));
+        if (bookies.size !== 1 || validLegs.some((leg) => !leg.bookie)) {
+          setManualError("Multi legs must all use the same bookie.");
+          return false;
+        }
+        const gameKeys = new Set(validLegs.map((leg) => `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}`));
+        if (gameKeys.size !== validLegs.length) {
+          setManualError("Use SGM for legs from the same game. Multis must use different games.");
+          return false;
+        }
+      }
+      if (manualBetType === "sgm") {
+        const gameKeys = new Set(validLegs.map((leg) => `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}`));
+        if (gameKeys.size !== 1) {
+          setManualError("SGM legs must be from the same game.");
+          return false;
+        }
+      }
+
+      const parsedOdds = Number(manualOdds);
+      const parsedStake = Number(manualStake);
+      if (!Number.isFinite(parsedOdds) || parsedOdds <= 1) {
+        setManualError("Odds must be greater than 1.");
+        return false;
+      }
+      if (!Number.isFinite(parsedStake) || parsedStake <= 0) {
+        setManualError("Stake must be greater than 0.");
+        return false;
+      }
+      const firstLeg = validLegs[0];
+      const selectionLabel = manualBetType === "multi"
+        ? `${validLegs.length}-leg Multi`
+        : `${validLegs.length}-leg SGM`;
+      const matchLabel = manualBetType === "multi" ? "Multiple games" : firstLeg.matchName;
+
+      await handleAddBet({
+        betType: manualBetType,
+        market: firstLeg.market,
+        matchDate: firstLeg.matchDate,
+        matchName: matchLabel,
+        selection: selectionLabel,
+        lineValue: null,
+        odds: parsedOdds,
+        stake: parsedStake,
+        status: manualStatus,
+        modelProb: null,
+        impliedProb: null,
+        edgePp: null,
+        legs: validLegs,
+      });
+
+      setManualLegs([createManualLegDraft(todayIso), createManualLegDraft(todayIso)]);
+      setManualOdds(manualBetType === "multi" ? "1.90" : "");
+      setManualStake("10");
+      setManualStatus("pending");
+      setManualOddsEdited(false);
+      return true;
+    }
+
     if (!manualMatchDate.trim()) {
       setManualError("Date is required.");
       return false;
@@ -1698,6 +1874,7 @@ export function BettingDashboard({
     }
 
     await handleAddBet({
+      betType: "single",
       market: selectedMarket,
       matchDate: manualMatchDate,
       matchName: manualMatchName.trim(),
@@ -1716,6 +1893,7 @@ export function BettingDashboard({
     setManualOdds("1.90");
     setManualStake("10");
     setManualStatus("pending");
+    setManualOddsEdited(false);
     return true;
   };
 
@@ -2140,13 +2318,15 @@ export function BettingDashboard({
                                 {betStatusIconLabel(bet.status)}
                               </div>
                               <div className="flex min-w-0 flex-1 items-center gap-2">
-                                <BettingTeamLogos selection={bet.selection} match={bet.matchName} market={bet.market} teamLogos={teamLogos} className="h-6 w-6" />
+                                {(bet.betType ?? "single") === "single" ? (
+                                  <BettingTeamLogos selection={bet.selection} match={bet.matchName} market={bet.market} teamLogos={teamLogos} className="h-6 w-6" />
+                                ) : null}
                                 <div className="min-w-0">
                                   <div className="truncate text-sm font-bold leading-tight text-white">
                                     {bet.selection}{bet.lineValue != null ? ` ${formatLineValue(bet.lineValue)}` : ""}
                                   </div>
                                   <div className="mt-0.5 truncate text-[10px] font-semibold text-nrl-muted">
-                                    {bet.market} | {bet.matchName}
+                                    {betTypeLabel(bet.betType)} | {bet.matchName}
                                   </div>
                                   <div className="mt-0.5 text-[10px] text-nrl-muted">{formatDateLabel(bet.matchDate)}</div>
                                 </div>
@@ -2158,6 +2338,23 @@ export function BettingDashboard({
                                 <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">{bet.status}</div>
                               </div>
                             </div>
+                            {(bet.betType === "multi" || bet.betType === "sgm") && (bet.legs?.length ?? 0) > 0 ? (
+                              <div className="mt-3 space-y-1 rounded-md border border-white/8 bg-[#0e1530]/70 px-2.5 py-2">
+                                {bet.legs!.map((leg, index) => (
+                                  <div key={`${bet.id}-leg-${index}`} className="flex items-start justify-between gap-2 text-[10px] text-nrl-muted">
+                                    <div className="min-w-0">
+                                      <span className="font-semibold text-nrl-text">{index + 1}. {leg.selection}</span>
+                                      {leg.lineValue != null ? <span> {formatLineValue(leg.lineValue)}</span> : null}
+                                      <span> | {leg.market} | {leg.matchName}</span>
+                                    </div>
+                                    <div className="shrink-0 text-right tabular-nums">
+                                      <div className="font-semibold text-nrl-text">{formatPrice(leg.odds)}</div>
+                                      {leg.bookie ? <div>{leg.bookie}</div> : null}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
                             <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                               <div>
                                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Odds</div>
@@ -2247,7 +2444,7 @@ export function BettingDashboard({
 
       {quickAddOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 px-4 py-6">
-          <div className="w-full max-w-2xl rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Quick Add</div>
@@ -2263,56 +2460,128 @@ export function BettingDashboard({
               </button>
             </div>
 
+            <div className="mt-4 flex rounded-md border border-white/10 bg-[#0e1530] p-1">
+              {(["single", "multi", "sgm"] as TrackedBetType[]).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    setManualBetType(type);
+                    setManualError(null);
+                    setManualOddsEdited(false);
+                    if (type === "single") setManualOdds("1.90");
+                    if (type === "sgm") setManualOdds("");
+                  }}
+                  className={`h-8 flex-1 rounded px-2 text-[10px] font-bold uppercase tracking-[0.12em] ${
+                    manualBetType === type ? "bg-emerald-400/12 text-emerald-300" : "text-nrl-muted"
+                  }`}
+                >
+                  {betTypeLabel(type)}
+                </button>
+              ))}
+            </div>
+
+            {manualBetType === "single" ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Date</span>
+                  <input
+                    type="date"
+                    value={manualMatchDate}
+                    onChange={(event) => setManualMatchDate(event.target.value)}
+                    className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Market</span>
+                  <select
+                    value={selectedMarket}
+                    onChange={(event) => handleMarketChange(event.target.value)}
+                    className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40"
+                  >
+                    {MARKET_TABS.map((marketOption) => (
+                      <option key={marketOption} value={marketOption}>{marketOption}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 sm:col-span-2">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Match</span>
+                  <input
+                    type="text"
+                    value={manualMatchName}
+                    onChange={(event) => setManualMatchName(event.target.value)}
+                    placeholder="Team A vs Team B"
+                    className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 sm:col-span-2">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Selection</span>
+                  <input
+                    type="text"
+                    value={manualSelection}
+                    onChange={(event) => setManualSelection(event.target.value)}
+                    placeholder="Selection"
+                    className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {manualBetType === "multi" ? (
+                  <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] text-nrl-muted">
+                    Multi odds are multiplied from leg odds when every leg uses the same bookie. You can still edit the final odds.
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] text-nrl-muted">
+                    SGM prices are not calculated here. Enter the final SGM odds from your bookie.
+                  </div>
+                )}
+                {manualLegs.map((leg, index) => (
+                  <div key={leg.id} className="rounded-lg border border-white/8 bg-[#0e1530] p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Leg {index + 1}</div>
+                      <button
+                        type="button"
+                        onClick={() => removeManualLeg(leg.id)}
+                        disabled={manualLegs.length <= 2}
+                        className="cursor-pointer rounded border border-white/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <input type="date" value={leg.matchDate} onChange={(event) => updateManualLeg(leg.id, { matchDate: event.target.value })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                      <select value={leg.market} onChange={(event) => updateManualLeg(leg.id, { market: event.target.value as BettingMarket })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40">
+                        {MARKET_TABS.map((marketOption) => <option key={marketOption} value={marketOption}>{marketOption}</option>)}
+                      </select>
+                      <input type="text" value={leg.matchName} onChange={(event) => updateManualLeg(leg.id, { matchName: event.target.value })} placeholder="Match" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40 sm:col-span-2" />
+                      <input type="text" value={leg.selection} onChange={(event) => updateManualLeg(leg.id, { selection: event.target.value })} placeholder="Selection" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                      <input type="number" value={leg.lineValue} onChange={(event) => updateManualLeg(leg.id, { lineValue: event.target.value })} placeholder="Line" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                      <input type="number" value={leg.odds} min={1.01} step={0.01} onChange={(event) => updateManualLeg(leg.id, { odds: event.target.value })} placeholder="Leg odds" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                      <input type="text" value={leg.bookie} onChange={(event) => updateManualLeg(leg.id, { bookie: event.target.value })} placeholder={manualBetType === "multi" ? "Bookie required" : "Bookie"} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                    </div>
+                  </div>
+                ))}
+                <button type="button" onClick={addManualLeg} className="cursor-pointer rounded-md border border-emerald-300/40 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:bg-emerald-400/12">
+                  Add Leg
+                </button>
+              </div>
+            )}
+
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1">
-                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Date</span>
-                <input
-                  type="date"
-                  value={manualMatchDate}
-                  onChange={(event) => setManualMatchDate(event.target.value)}
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Market</span>
-                <select
-                  value={selectedMarket}
-                  onChange={(event) => handleMarketChange(event.target.value)}
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40"
-                >
-                  {MARKET_TABS.map((marketOption) => (
-                    <option key={marketOption} value={marketOption}>{marketOption}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 sm:col-span-2">
-                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Match</span>
-                <input
-                  type="text"
-                  value={manualMatchName}
-                  onChange={(event) => setManualMatchName(event.target.value)}
-                  placeholder="Team A vs Team B"
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
-                />
-              </label>
-              <label className="flex flex-col gap-1 sm:col-span-2">
-                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Selection</span>
-                <input
-                  type="text"
-                  value={manualSelection}
-                  onChange={(event) => setManualSelection(event.target.value)}
-                  placeholder="Selection"
-                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Odds</span>
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                  {manualBetType === "sgm" ? "SGM Odds" : manualBetType === "multi" ? "Multi Odds" : "Odds"}
+                </span>
                 <input
                   type="number"
                   value={manualOdds}
                   min={1.01}
                   step={0.01}
-                  onChange={(event) => setManualOdds(event.target.value)}
+                  onChange={(event) => {
+                    setManualOdds(event.target.value);
+                    setManualOddsEdited(true);
+                  }}
                   className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
@@ -2433,6 +2702,7 @@ export function BettingDashboard({
             teamLogos={teamLogos}
             tryscorerFormByPlayer={tryscorerFormByPlayer}
             tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
+            lineupLinksByMatchKey={lineupLinksByMatchKey}
             market={selectedMarket}
             onStakeOverride={handleStakeOverride}
             onOddsOverride={handleOddsOverride}
@@ -3169,6 +3439,7 @@ function MarketSection({
   teamLogos,
   tryscorerFormByPlayer,
   tryscorerKickoffsByMatch,
+  lineupLinksByMatchKey,
   market,
   onStakeOverride,
   onOddsOverride,
@@ -3188,6 +3459,7 @@ function MarketSection({
   teamLogos: Record<string, string>;
   tryscorerFormByPlayer: Record<string, TryscorerFormSummary>;
   tryscorerKickoffsByMatch: Record<string, string>;
+  lineupLinksByMatchKey: Record<string, string>;
   market: BettingMarket;
   onStakeOverride: (key: string, value: number) => void;
   onOddsOverride: (key: string, value: number) => void;
@@ -3260,6 +3532,7 @@ function MarketSection({
           </div>
           {dateGroups.map((group, groupIndex) => {
             const { home, away } = parseMatch(group.match);
+            const lineupHref = lineupLinksByMatchKey[`${group.date}|${buildMatchGroupKey(group.match)}`] ?? null;
             const showModelColumns = group.market !== "Tryscorer" || group.outcomes.some((row) => row.bestModelComputed != null);
             const blurPremiumColumns = !canAccessPremium && showModelColumns;
             const collapsed = group.market === "Tryscorer" && collapsedTryscorerGroups[group.key] === true;
@@ -3289,24 +3562,34 @@ function MarketSection({
                     </div>
                     <div className="text-xs text-nrl-muted">{group.market}</div>
                   </div>
-                  {group.market === "Tryscorer" ? (
-                    <button
-                      type="button"
-                      aria-label={collapsed ? "Expand game" : "Collapse game"}
-                      onClick={() => setCollapsedTryscorerGroups((current) => ({
-                        ...current,
-                        [group.key]: !current[group.key],
-                      }))}
-                      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
-                    >
-                      <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
-                    </button>
-                  ) : group.marketPctFromBest != null ? (
-                    <div className="text-xs text-nrl-muted">
-                      Best-book market %:{" "}
-                      <span className="font-semibold text-nrl-text">{formatPct(group.marketPctFromBest)}</span>
-                    </div>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    {lineupHref ? (
+                      <Link
+                        href={lineupHref}
+                        className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+                      >
+                        Lineups
+                      </Link>
+                    ) : null}
+                    {group.market === "Tryscorer" ? (
+                      <button
+                        type="button"
+                        aria-label={collapsed ? "Expand game" : "Collapse game"}
+                        onClick={() => setCollapsedTryscorerGroups((current) => ({
+                          ...current,
+                          [group.key]: !current[group.key],
+                        }))}
+                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+                      >
+                        <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
+                      </button>
+                    ) : group.marketPctFromBest != null ? (
+                      <div className="text-xs text-nrl-muted">
+                        Best-book market %:{" "}
+                        <span className="font-semibold text-nrl-text">{formatPct(group.marketPctFromBest)}</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 {group.market === "Tryscorer" ? (
                   <div className="mb-3 flex flex-wrap gap-2">
@@ -3393,7 +3676,7 @@ function MarketSection({
                           ? "text-red-300/80"
                           : overEdgeCliff
                             ? "text-orange-500"
-                            : "text-emerald-300";
+                            : "text-nrl-accent";
                     const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                     const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
                     const canOpenMobileBet = oddsValue != null
@@ -3459,7 +3742,7 @@ function MarketSection({
                               }}
                               className={`shrink-0 rounded border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${
                                 canOpenMobileBet
-                                  ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
+                                  ? "cursor-pointer border-nrl-accent/55 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/18"
                                   : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                               }`}
                             >
@@ -3592,7 +3875,7 @@ function MarketSection({
                               ? "text-red-500"
                               : overEdgeCliff
                                 ? "text-orange-500"
-                                : "text-emerald-300";
+                                : "text-nrl-accent";
                         const outcomeLabel = row.result;
                         const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                         const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
@@ -3631,7 +3914,7 @@ function MarketSection({
                               return (
                                 <td
                                   key={`${group.key}-${row.result}-${bookie}`}
-                                  className={`py-2 pr-3 ${group.market === "Tryscorer" && bookieIndex === 0 ? "pl-5" : ""} ${isBest ? "font-semibold text-emerald-300" : "text-nrl-text"}`}
+                                  className={`py-2 pr-3 ${group.market === "Tryscorer" && bookieIndex === 0 ? "pl-5" : ""} ${isBest ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
                                 >
                                   {offer == null ? "-" : (
                                     <div className="leading-tight">
@@ -3730,7 +4013,7 @@ function MarketSection({
                                   }}
                                   className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                                     canPlaceBet
-                                      ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
+                                      ? "cursor-pointer border-nrl-accent/55 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/18"
                                       : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                                   }`}
                                 >

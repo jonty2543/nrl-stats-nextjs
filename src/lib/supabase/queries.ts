@@ -1173,7 +1173,12 @@ function mapBettingSnapshotRows(raw: unknown, market: BettingMarket): BettingOdd
   if (!Array.isArray(raw)) return [];
   return raw
     .flatMap((row) => {
-      const mapped = mapBettingSnapshotRow(row, market);
+      const record = asRecord(row);
+      const table = isBettingOddsTable(record.table) ? record.table : tableForBettingMarket(market);
+      if ((table === "NRL Line Odds" || table === "NRL Total Odds") && hasBookSpecificOddsColumns(record)) {
+        return mapBookSpecificBettingRows(table, record).filter((mapped) => mapped.date && mapped.match && mapped.result);
+      }
+      const mapped = mapBettingSnapshotRow(record, market);
       return mapped ? [mapped] : [];
     })
     .sort((a, b) => {

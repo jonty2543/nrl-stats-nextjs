@@ -4602,7 +4602,7 @@ export function FantasyDashboard({
   }, [])
 
   const draw2026Panel = (
-    <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel">
       <div className="border-b border-nrl-border bg-nrl-panel-2 px-3 py-3">
         <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">2026 Draw</div>
         <div className="mt-1 text-[10px] text-nrl-muted">
@@ -4611,7 +4611,7 @@ export function FantasyDashboard({
             : "No draw available"}
         </div>
       </div>
-      <div className="p-2">
+      <div className="flex min-h-0 flex-1 flex-col p-2">
         {draw2026StripRows.length === 0 ? (
           <div className="px-1 py-2 text-xs text-nrl-muted">
             {matchedLocalName
@@ -4619,7 +4619,7 @@ export function FantasyDashboard({
               : "No local player-team match found for 2026 draw."}
           </div>
         ) : (
-          <div className="space-y-2 xl:max-h-[620px] xl:overflow-y-auto xl:pr-1">
+          <div className="min-h-0 flex-1 space-y-2 xl:overflow-y-auto xl:pr-1">
             {draw2026StripRows.map((row) => (
               <div
                 key={`draw-2026-sidebar-${row.round}`}
@@ -5508,7 +5508,7 @@ export function FantasyDashboard({
 
       {showPlayerDetails && selectedFantasyPlayer ? (
         <section ref={playerDetailsRef} id="fantasy-player-details" className="scroll-mt-24">
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_252px] xl:items-start">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_252px] xl:items-stretch">
             <div className="flex min-w-0 flex-col gap-4">
               <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel p-3">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_28%,rgba(71,255,182,0.16),transparent_30%),radial-gradient(circle_at_82%_76%,rgba(129,92,255,0.18),transparent_34%),linear-gradient(135deg,rgba(13,21,44,0.18),rgba(13,21,44,0))]" />
@@ -6591,7 +6591,7 @@ export function FantasyDashboard({
                 ) : null}
               </div>
             </div>
-            <div className="xl:sticky xl:top-24">{draw2026Panel}</div>
+            <div className="xl:sticky xl:top-24 xl:self-start xl:h-[calc(100vh-7rem)]">{draw2026Panel}</div>
           </div>
         </section>
       ) : null}

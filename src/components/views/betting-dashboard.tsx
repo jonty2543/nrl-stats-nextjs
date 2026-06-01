@@ -3710,17 +3710,16 @@ function MarketSection({
                                   disabled={!canPlaceBet}
                                   onClick={() => {
                                     if (!canPlaceBet || oddsValue == null) return;
-                                    void onAddBet({
+                                    setMobileBetSlip({
+                                      key: betRowKey,
                                       market: group.market,
-                                      matchDate: group.date,
-                                      matchName: group.match,
+                                      date: group.date,
+                                      match: group.match,
                                       selection: row.result,
                                       lineValue: row.bestValueComputed,
                                       odds: oddsValue,
                                       stake: stakeValue,
                                       modelProb: modelProbability,
-                                      impliedProb: implied,
-                                      edgePp,
                                     });
                                   }}
                                   className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
@@ -3752,8 +3751,8 @@ function MarketSection({
         ))}
       </div>
       {mobileBetSlip ? (
-        <div className="fixed inset-0 z-50 grid place-items-end bg-black/55 px-3 py-4 md:hidden">
-          <div className="w-full rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+        <div className="fixed inset-0 z-50 grid place-items-end bg-black/55 px-3 py-4 md:place-items-center">
+          <div className="w-full max-w-md rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">

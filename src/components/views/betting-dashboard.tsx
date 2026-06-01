@@ -3253,7 +3253,7 @@ function MarketSection({
         {[...groupsByDate.entries()].map(([date, dateGroups]) => (
           <section key={date} className="space-y-7 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
           <div className="flex items-center gap-3">
-            <h2 className={`${BETTING_PANEL_HEADER_CLASS} shrink-0 text-emerald-300`}>
+            <h2 className={`${BETTING_PANEL_HEADER_CLASS} shrink-0 text-white`}>
               {formatDateLabel(date)}
             </h2>
             <div className="h-px flex-1 bg-nrl-border/70" />
@@ -3408,28 +3408,32 @@ function MarketSection({
                     const outcomeLogoTeam = group.market === "Tryscorer" ? playerTeam : row.result;
 
                     return (
-                      <div key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`} className="border-t border-nrl-border/60 py-4 first:border-t-0 first:pt-0">
+                      <div key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`} className="rounded-lg border border-nrl-border/70 bg-nrl-panel-2/45 px-3 py-4 shadow-[0_10px_24px_rgba(2,6,23,0.12)]">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex min-w-0 flex-1 items-start gap-1.5">
                             <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} className="mt-0.5 h-4 w-4" />
                             <div className="min-w-0 flex-1">
-                              <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 text-xs font-semibold text-nrl-text">
+                              <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-y-2 text-xs font-semibold text-nrl-text">
                                 <span className="min-w-0 truncate pr-1">{row.result}</span>
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-nrl-muted">
-                                  Best:
-                                  <span className="text-nrl-text tabular-nums">{formatPrice(row.bestPriceComputed)}</span>
-                                  {row.bestBookiesComputed.map((bookie) => (
-                                    <BookieLogo key={`${group.key}-mobile-${row.result}-best-${bookie}`} bookie={bookie} compact />
-                                  ))}
-                                </span>
-                                {showModelColumns ? (
-                                  <span className={`inline-flex items-center justify-end gap-1 text-[10px] font-bold uppercase tracking-[0.08em] ${edgeClass}`}>
-                                    Edge:
-                                    <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : "tabular-nums"}>
-                                      {formatEdge(edgePp)}
+                                <div className="grid grid-cols-[minmax(0,9.75rem)_minmax(0,7.75rem)] items-center gap-x-4">
+                                  <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] text-nrl-muted">
+                                    Best:
+                                    <span className="text-nrl-text tabular-nums">{formatPrice(row.bestPriceComputed)}</span>
+                                    <span className="inline-flex min-w-0 items-center gap-1 overflow-hidden">
+                                      {row.bestBookiesComputed.map((bookie) => (
+                                        <BookieLogo key={`${group.key}-mobile-${row.result}-best-${bookie}`} bookie={bookie} compact />
+                                      ))}
                                     </span>
                                   </span>
-                                ) : null}
+                                  {showModelColumns ? (
+                                    <span className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] ${edgeClass}`}>
+                                      Edge:
+                                      <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : "tabular-nums"}>
+                                        {formatEdge(edgePp)}
+                                      </span>
+                                    </span>
+                                  ) : null}
+                                </div>
                               </div>
                               <TryscorerForm form={tryscorerForm} />
                             </div>
@@ -3469,7 +3473,7 @@ function MarketSection({
                         </div>
 
                         <div
-                          className="mt-3 grid items-stretch gap-1.5 text-[11px]"
+                          className="mt-5 grid items-stretch gap-1.5 text-[11px]"
                           style={{ gridTemplateColumns: `repeat(${Math.max(1, visibleBookieColumns.length)}, minmax(0, 1fr))` }}
                         >
                           {visibleBookieColumns.map((bookie) => {
@@ -3477,17 +3481,19 @@ function MarketSection({
                             return (
                               <div
                                 key={`${group.key}-mobile-${row.result}-${bookie}`}
-                                className="flex min-h-[34px] min-w-0 flex-col justify-center gap-1 rounded px-1.5 py-1 text-nrl-text"
+                                className="flex min-h-[34px] min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-nrl-text"
                               >
-                                <div className="flex h-4 items-center opacity-90">
+                                <div className="flex h-4 shrink-0 items-center opacity-90">
                                   <BookieLogo bookie={bookie} compact />
                                 </div>
-                                <div className="truncate text-xs font-semibold leading-none tabular-nums">
-                                  {offer == null ? "-" : formatPrice(offer.price)}
+                                <div className="min-w-0 leading-none">
+                                  <div className="truncate text-xs font-semibold tabular-nums">
+                                    {offer == null ? "-" : formatPrice(offer.price)}
+                                  </div>
+                                  {offer != null && (group.market === "Line" || group.market === "Total") && offer.value != null ? (
+                                    <div className="mt-1 truncate text-[9px] leading-none text-nrl-muted tabular-nums">{formatLineValue(offer.value)}</div>
+                                  ) : null}
                                 </div>
-                                {offer != null && (group.market === "Line" || group.market === "Total") && offer.value != null ? (
-                                  <div className="truncate text-[9px] leading-none text-nrl-muted tabular-nums">{formatLineValue(offer.value)}</div>
-                                ) : null}
                               </div>
                             );
                           })}

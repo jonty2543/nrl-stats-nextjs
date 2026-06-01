@@ -156,9 +156,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const latestSummaryForOptions = requestedRound
     ? await withFallback(fetchLatestLineupsPageShellSummary(year), null, "Latest lineups page shell summary")
     : initialSummary
-  const fallbackRoundOptions = initialSummary?.roundOptions.length || latestSummaryForOptions?.roundOptions.length
-    ? []
-    : await withFallback(fetchLineupRoundOptions(year), [], "Lineups round options")
+  const fallbackRoundOptions = await withFallback(fetchLineupRoundOptions(year), [], "Lineups round options")
   const initialRoundOptions = mergeRoundOptions(
     initialSummary?.roundOptions ?? [],
     latestSummaryForOptions?.roundOptions ?? [],

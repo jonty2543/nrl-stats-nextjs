@@ -4662,7 +4662,7 @@ export function FantasyDashboard({
 
   return (
     <div className={showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? "space-y-3" : "space-y-6"}>
-      <div className="space-y-3">
+      <div className="space-y-8 xl:space-y-12">
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
           <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch">
             <Link

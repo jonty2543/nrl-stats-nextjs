@@ -73,22 +73,19 @@ function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | n
     month: "2-digit",
     day: "2-digit",
   }).format(now)
-  const activeRound = options.find((option) => today >= option.startDate && today <= option.endDate)
-  if (activeRound) return activeRound
-
   const weekday = new Intl.DateTimeFormat("en-US", {
     timeZone: "Australia/Brisbane",
     weekday: "short",
   }).format(now)
-  const hour = Number(new Intl.DateTimeFormat("en-AU", {
-    timeZone: "Australia/Brisbane",
-    hour: "numeric",
-    hour12: false,
-  }).format(now))
-  const shouldRollToUpcoming = weekday !== "Mon" || hour >= 12
+  const nextFutureRound = options.find((option) => option.startDate >= today)
+
+  if (weekday === "Mon" && nextFutureRound) return nextFutureRound
+
+  const activeRound = options.find((option) => today >= option.startDate && today <= option.endDate)
+  if (activeRound) return activeRound
 
   return (
-    (shouldRollToUpcoming ? options.find((option) => option.startDate >= today) : null) ??
+    nextFutureRound ??
     options.findLast((option) => option.startDate <= today) ??
     options.at(0) ??
     null

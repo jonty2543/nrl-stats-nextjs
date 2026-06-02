@@ -2348,8 +2348,9 @@ function LineupCard({
           <>
         <LiveTryScorersStrip match={detailMatch} liveMatch={displayLiveMatch} />
         {availableDetailViews.length > 0 ? (
-          <div className="mb-3 flex justify-center">
-            <div className="inline-flex rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
+          <div className="mb-3 grid items-center gap-2 sm:grid-cols-[1fr_auto_1fr]">
+            <div className="hidden sm:block" aria-hidden="true" />
+            <div className="inline-flex justify-self-center rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
               {availableDetailViews.map((view) => (
                 <button
                   key={view}
@@ -2362,9 +2363,11 @@ function LineupCard({
                   {view === "lineup" ? "Lineup" : "Match stats"}
                 </button>
               ))}
+            </div>
+            <div className="flex justify-center sm:justify-end">
               <Link
                 href={bettingHref}
-                className="rounded-md px-3 py-1.5 transition-colors hover:text-nrl-text"
+                className="rounded-md border border-nrl-border bg-nrl-panel/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
               >
                 Betting
               </Link>

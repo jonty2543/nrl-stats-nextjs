@@ -1401,6 +1401,29 @@ export function BettingDashboard({
     }
   };
 
+  useEffect(() => {
+    const scrollToGameHash = () => {
+      const hash = window.location.hash.replace(/^#/, "");
+      if (!hash.startsWith("betting-game-")) return;
+
+      const hashMarket = MARKET_TABS.find((market) =>
+        hash.endsWith(`-${normaliseLookupKey(market).replace(/\s+/g, "-")}`)
+      );
+      if (hashMarket && hashMarket !== selectedMarket) {
+        setSelectedMarket(hashMarket);
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        document.getElementById(hash)?.scrollIntoView({ behavior: "auto", block: "start" });
+      });
+    };
+
+    scrollToGameHash();
+    window.addEventListener("hashchange", scrollToGameHash);
+    return () => window.removeEventListener("hashchange", scrollToGameHash);
+  }, [selectedMarket, selectedMarketGroups]);
+
   const handleStakingModeChange = (mode: StakingMode) => {
     if (!hasPremiumBettingAccess && mode === "kelly") {
       return;

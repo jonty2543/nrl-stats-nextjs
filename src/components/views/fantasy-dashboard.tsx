@@ -3383,13 +3383,13 @@ export function FantasyDashboard({
   }, [allData, selectedYears])
 
   const teammateLookupSourceRows = useMemo(
-    () => (preloadedPlayerAllYears || preloadSelectedPlayerAllYears ? teammateLookupRows : selectedYearData),
-    [preloadSelectedPlayerAllYears, preloadedPlayerAllYears, teammateLookupRows, selectedYearData]
+    () => (teammateLookupRows.length > 0 ? teammateLookupRows : selectedYearData),
+    [teammateLookupRows, selectedYearData]
   )
 
   const allLocalNames = useMemo(
-    () => Array.from(new Set(allData.map((row) => row.Name))).sort(),
-    [allData]
+    () => Array.from(new Set([...allData, ...teammateLookupRows].map((row) => row.Name))).sort(),
+    [allData, teammateLookupRows]
   )
 
   const matchedLocalName = useMemo(

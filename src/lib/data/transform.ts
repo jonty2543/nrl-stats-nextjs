@@ -97,6 +97,10 @@ export function filterByFinals(
 // Teammate filtering (inner/anti join on Team+Round+Year)
 // ---------------------------------------------------------------------------
 
+function normaliseTeammateName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+}
+
 /**
  * Filter a player's rows to only games where they played with/without a teammate.
  * Mirrors Python _filter_by_teammate().
@@ -131,12 +135,13 @@ export function getTeammateOptions(
   sourceDf: Array<Pick<TeammateLookupRow, "Name" | "Team">>,
   fantasyRank: Map<string, number>
 ): string[] {
+  const playerKey = normaliseTeammateName(playerName);
   const teams = new Set(
-    sourceDf.filter((r) => r.Name === playerName).map((r) => r.Team)
+    sourceDf.filter((r) => normaliseTeammateName(r.Name) === playerKey).map((r) => r.Team)
   );
   const teammates = new Set<string>();
   for (const r of sourceDf) {
-    if (teams.has(r.Team) && r.Name !== playerName) {
+    if (teams.has(r.Team) && normaliseTeammateName(r.Name) !== playerKey) {
       teammates.add(r.Name);
     }
   }

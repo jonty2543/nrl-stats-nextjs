@@ -1397,6 +1397,9 @@ export function BettingDashboard({
 
   const handleMarketChange = (value: string) => {
     if (value === "H2H" || value === "Line" || value === "Total" || value === "Tryscorer") {
+      if (window.location.hash.startsWith("#betting-game-")) {
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      }
       setSelectedMarket(value);
     }
   };

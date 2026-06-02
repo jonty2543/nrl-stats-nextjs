@@ -297,7 +297,8 @@ function bettingTeamKey(value: string | null | undefined): string {
   const key = normaliseKey(value)
   if (!key) return ""
   const group = TEAM_ALIAS_GROUPS.find((aliases) => aliases.includes(key))
-  return group?.[0] ?? key
+  const canonical = group?.[0] ?? key
+  return canonical === "wests tigers" ? "tigers" : canonical
 }
 
 function lineupsMatchTeams(match: LineupMatch): { home: string; away: string } {
@@ -313,12 +314,23 @@ function lineupBettingMatchKey(match: LineupMatch): string {
   return [bettingTeamKey(home), bettingTeamKey(away)].filter(Boolean).sort().join("|")
 }
 
+function bettingMatchKeyFromMatchName(matchName: string): string {
+  const parts = matchName.split(/\s+v(?:s|\.)?\s+/i).map((part) => part.trim()).filter(Boolean)
+  return [bettingTeamKey(parts[0]), bettingTeamKey(parts.slice(1).join(" v "))].filter(Boolean).sort().join("|")
+}
+
 function lineupsMatchAnchorId(match: LineupMatch): string {
   return `lineups-match-${normaliseKey(`${matchDateKey(match)} ${lineupBettingMatchKey(match)}`).replace(/\s+/g, "-")}`
 }
 
-function bettingMatchAnchorId(match: LineupMatch): string {
-  return `betting-game-${normaliseKey(`${matchDateKey(match)} ${match.match} H2H`).replace(/\s+/g, "-")}`
+function bettingMatchAnchorId(match: LineupMatch, sportsbetOdds: Record<string, LineupSportsbetOdds>): string {
+  const dateKey = matchDateKey(match).slice(0, 10)
+  const matchKey = lineupBettingMatchKey(match)
+  const oddsMatch = Object.values(sportsbetOdds).find((odds) =>
+    odds.matchDate.slice(0, 10) === dateKey &&
+    bettingMatchKeyFromMatchName(odds.match) === matchKey
+  )?.match
+  return `betting-game-${normaliseKey(`${dateKey} ${oddsMatch ?? match.match} H2H`).replace(/\s+/g, "-")}`
 }
 
 function livePlayerKey(player: LineupPlayer): string {
@@ -2151,10 +2163,10 @@ function LineupCard({
   const detailMatch = detail?.match ?? match
   const detailsRef = useRef<HTMLDetailsElement | null>(null)
   const anchorId = lineupsMatchAnchorId(match)
-  const bettingHref = `/dashboard/betting#${bettingMatchAnchorId(detailMatch)}`
   const matchStats = detail?.matchStats ?? null
   const tryscorerOdds = detail?.tryscorerOdds ?? {}
   const sportsbetOdds = { ...initialSportsbetOdds, ...(detail?.sportsbetOdds ?? {}) }
+  const bettingHref = `/dashboard/betting#${bettingMatchAnchorId(detailMatch, sportsbetOdds)}`
   const casualtyWardOuts = detail?.casualtyWardOuts ?? {}
   const playerAverages = detail?.playerAverages ?? {}
   const playerTryHistory = detail?.playerTryHistory ?? {}
@@ -2178,6 +2190,7 @@ function LineupCard({
   const availableDetailViews: LineupDetailView[] = hasLineupData ? ["lineup", "stats"] : ["stats"]
   const activeDetailView = availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
   const isLive = hasMatchStarted(displayLiveMatch)
+  const hasOpenedHashTargetRef = useRef(false)
   const hasResultScore = detailMatch.homeScore != null || detailMatch.awayScore != null
   const headerScore = matchScore(detailMatch, displayLiveMatch)
   const showSplitScore = headerScore.homeScore != null || headerScore.awayScore != null
@@ -2224,9 +2237,21 @@ function LineupCard({
 
   useEffect(() => {
     if (window.location.hash !== `#${anchorId}`) return
+    if (hasOpenedHashTargetRef.current) return
+    hasOpenedHashTargetRef.current = true
     if (detailsRef.current) detailsRef.current.open = true
     onOpen()
+    window.requestAnimationFrame(() => {
+      detailsRef.current?.scrollIntoView({ behavior: "auto", block: "start" })
+    })
   }, [anchorId, onOpen])
+
+  useEffect(() => {
+    if (detailStatus !== "loaded" || window.location.hash !== `#${anchorId}`) return
+    window.requestAnimationFrame(() => {
+      detailsRef.current?.scrollIntoView({ behavior: "auto", block: "start" })
+    })
+  }, [anchorId, detailStatus])
 
   return (
     <details
@@ -2311,14 +2336,6 @@ function LineupCard({
 
       <div className="relative z-[1] border-t border-blue-300/30 px-2 pb-3 sm:px-3">
         <div className="pt-5" />
-        <div className="mb-3 flex justify-end">
-          <Link
-            href={bettingHref}
-            className="rounded-md border border-nrl-border bg-nrl-panel px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
-          >
-            Betting
-          </Link>
-        </div>
         {detailStatus === "loading" && !detail ? (
           <div className="flex items-center justify-center px-4 py-5">
             <span className="h-5 w-5 animate-spin rounded-full border-[3px] border-emerald-300/25 border-t-emerald-300" aria-label="Loading match details" />
@@ -2330,7 +2347,7 @@ function LineupCard({
         ) : (
           <>
         <LiveTryScorersStrip match={detailMatch} liveMatch={displayLiveMatch} />
-        {availableDetailViews.length > 1 ? (
+        {availableDetailViews.length > 0 ? (
           <div className="mb-3 flex justify-center">
             <div className="inline-flex rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
               {availableDetailViews.map((view) => (
@@ -2345,6 +2362,12 @@ function LineupCard({
                   {view === "lineup" ? "Lineup" : "Match stats"}
                 </button>
               ))}
+              <Link
+                href={bettingHref}
+                className="rounded-md px-3 py-1.5 transition-colors hover:text-nrl-text"
+              >
+                Betting
+              </Link>
             </div>
           </div>
         ) : null}

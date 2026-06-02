@@ -154,7 +154,7 @@ export function PlayerComments({ playerId, playerSlug, playerName }: PlayerComme
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel">
+    <div className="overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel-2">
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}

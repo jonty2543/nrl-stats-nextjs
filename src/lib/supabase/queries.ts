@@ -168,6 +168,7 @@ export interface LineupsPageShellSummary {
   roundOptions: LineupRoundOption[];
   matches: LineupMatch[];
   teamLogos: Record<string, string>;
+  sportsbetOdds: Record<string, LineupSportsbetOdds>;
   updatedAt: string | null;
 }
 
@@ -685,6 +686,14 @@ interface PredictionModelRow extends Record<string, unknown> {
   pred_margin?: unknown;
   pred_margin_pre_manual?: unknown;
   pred_total?: unknown;
+  updated_at?: unknown;
+}
+
+interface TryscorerPredictionRow extends Record<string, unknown> {
+  match_date?: unknown;
+  match?: unknown;
+  player?: unknown;
+  anytime_prob?: unknown;
   updated_at?: unknown;
 }
 
@@ -2356,16 +2365,21 @@ function jsonArray<T>(value: unknown): T[] {
 interface FetchFantasyPlayerCardSummariesOptions {
   limit?: number
   orderBy?: "player" | "weeklyChangeDesc"
+  requirePositiveWeeklyChange?: boolean
 }
 
 async function fetchFantasyPlayerCardSummariesFromSupabase(
   options: FetchFantasyPlayerCardSummariesOptions = {}
 ): Promise<FantasyPlayerCardSummary[]> {
-  const { limit = 1000, orderBy = "player" } = options
+  const { limit = 1000, orderBy = "player", requirePositiveWeeklyChange = false } = options
   const supabase = createServerSupabaseClient("summary");
   let query = supabase
     .from("fantasy_player_card_summary")
     .select("*")
+
+  if (requirePositiveWeeklyChange) {
+    query = query.gt("weekly_change", 0)
+  }
 
   query = orderBy === "weeklyChangeDesc"
     ? query
@@ -2484,11 +2498,12 @@ function mapLineupsPageShellSummary(row: Record<string, unknown>): LineupsPageSh
     roundOptions: jsonArray<LineupRoundOption>(row.round_options),
     matches: jsonArray<LineupMatch>(row.matches),
     teamLogos: jsonRecord<string>(row.team_logos),
+    sportsbetOdds: jsonRecord<LineupSportsbetOdds>(row.sportsbet_odds),
     updatedAt: toNullableString(row.updated_at),
   };
 }
 
-const LINEUPS_PAGE_SHELL_COLUMNS = "year,round,round_options,matches,team_logos,updated_at";
+const LINEUPS_PAGE_SHELL_COLUMNS = "year,round,round_options,matches,team_logos,sportsbet_odds,updated_at";
 
 async function fetchLineupsPageSummaryFromSupabase(year: number, round: string): Promise<LineupsPageSummary | null> {
   const supabase = createServerSupabaseClient("summary");

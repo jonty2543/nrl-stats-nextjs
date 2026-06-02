@@ -2027,7 +2027,7 @@ export function BettingDashboard({
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
+      <section className="rounded-xl border border-nrl-border bg-[#10162f]/96 p-4 sm:p-5">
         <h2 className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>Staking Calculator</h2>
         {stakingPreferencesLoading ? (
           <div className="mt-4 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-4 text-xs text-nrl-muted">
@@ -2043,7 +2043,7 @@ export function BettingDashboard({
               return (
                 <div
                   key={option.mode}
-                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-left text-nrl-muted opacity-65"
+                  className="rounded-md border border-nrl-border bg-[#10162f]/96 px-3 py-2 text-left text-nrl-muted opacity-65"
                 >
                   <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
                     <span>{option.label}</span>
@@ -2065,8 +2065,8 @@ export function BettingDashboard({
                 onClick={() => handleStakingModeChange(option.mode)}
                 className={`rounded-md border px-3 py-2 text-left transition-colors ${
                   active
-                    ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
-                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
+                    ? "border-emerald-300/40 bg-[#10162f]/96 text-emerald-300"
+                    : "cursor-pointer border-nrl-border bg-[#10162f]/96 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
@@ -2086,7 +2086,7 @@ export function BettingDashboard({
               min={0}
               step={10}
               onChange={(event) => setBankroll(Math.max(0, Number(event.target.value) || 0))}
-              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
+              className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
             />
           </label>
           {stakingMode === "percentage" ? (
@@ -2099,7 +2099,7 @@ export function BettingDashboard({
                 max={100}
                 step={0.1}
                 onChange={(event) => setPercentageStakePct(clamp(Number(event.target.value) || 0, 0, 100))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
+                className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -2113,7 +2113,7 @@ export function BettingDashboard({
                 max={100}
                 step={0.1}
                 onChange={(event) => setTargetProfitPct(clamp(Number(event.target.value) || 0, 0, 100))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
+                className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -2127,7 +2127,7 @@ export function BettingDashboard({
                 max={1}
                 step={0.05}
                 onChange={(event) => setKellyScale(clamp(Number(event.target.value) || 0, 0, 1))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
+                className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -2141,7 +2141,7 @@ export function BettingDashboard({
                 max={1}
                 step={0.01}
                 onChange={(event) => setMaxEdge(clamp(Number(event.target.value) || 0, 0, 1))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
+                className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -2152,7 +2152,7 @@ export function BettingDashboard({
 
       {hasPremiumBettingAccess ? (
         <section className="overflow-hidden rounded-xl border border-nrl-border bg-[#10162f]/96 shadow-[0_18px_42px_rgba(0,0,0,0.24)]">
-          <div className="border-b border-white/8 bg-[#111936] px-4 py-4 sm:px-5">
+          <div className="border-b border-white/8 bg-[#10162f]/96 px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>Bet Tracker</div>

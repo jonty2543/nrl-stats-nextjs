@@ -15,7 +15,7 @@ export function FantasyBackLink({ href = "/dashboard/fantasy", label = "Back to 
     <Link
       href={href}
       onClick={() => setIsPending(true)}
-      className="inline-flex items-center rounded-md border border-nrl-border bg-nrl-panel px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:text-nrl-accent"
+      className="inline-flex items-center rounded-md border border-nrl-border bg-[#1b2444] px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:bg-[#202a4d] hover:text-nrl-accent"
     >
       {label}
       {isPending ? (

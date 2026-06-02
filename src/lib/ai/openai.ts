@@ -82,7 +82,7 @@ Rules:
 - For fantasy buy, trade, or ownership-momentum questions, use get_fantasy_snapshot with sortBy="ownership_delta_desc" and requireOwnershipRise=true.
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
 - For fantasy trade advice from screenshots, also use draw/upcoming fixture context where available so the answer accounts for who each player/team faces next and whether they are home or away.
-- In NRL Fantasy major bye rounds 12, 15, and 18, only the best 13 selected scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
+- In NRL Fantasy major bye rounds 13, 16, and 19, only the starting 13 scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
 - In fantasy snapshot data, "priced at" means the fantasy points average implied by the player's current price, calculated as price / 12725. For "projection vs priced at", compare projection or projected average against pricedAt.
 - For fantasy ranking questions about "projection vs priced at" or "projection minus priced at", use get_fantasy_snapshot with sortBy="projection_vs_priced_at_desc" and requireOwnershipRise=false.
 - In fantasy snapshot data, exclude locked players only when the user is asking for actionable buy/trade targets right now. For general rankings and value lists, include locked players.
@@ -154,7 +154,7 @@ Rules:
 - For fantasy buy, trade, or ownership-momentum questions, use get_fantasy_snapshot with sortBy="ownership_delta_desc" and requireOwnershipRise=true.
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
 - For fantasy trade advice from screenshots, also use draw/upcoming fixture context where available so the answer accounts for who each player/team faces next and whether they are home or away.
-- In NRL Fantasy major bye rounds 12, 15, and 18, only the best 13 selected scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
+- In NRL Fantasy major bye rounds 13, 16, and 19, only the starting 13 scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
 - In fantasy snapshot data, "priced at" means the fantasy points average implied by the player's current price, calculated as price / 12725. For "projection vs priced at", compare projection or projected average against pricedAt.
 - For fantasy ranking questions about "projection vs priced at" or "projection minus priced at", use get_fantasy_snapshot with sortBy="projection_vs_priced_at_desc" and requireOwnershipRise=false.
 - In fantasy snapshot data, exclude locked players only when the user is asking for actionable buy/trade targets right now. For general rankings and value lists, include locked players.
@@ -779,7 +779,7 @@ function formatFantasyPlayerTagContext({
 
   return [
     "Player tag context, using the same tag types shown on the fantasy dashboard and player pages:",
-    "Tag meanings: ✕ Rd12/15/18 is a negative major-bye availability tag, ✓ Rd12/15/18 is useful bye coverage, Origin is an availability risk, and Relevant out names a same-team/same-position player whose return date may affect role security.",
+    "Tag meanings: ✕ Rd13/16/19 is a negative major-bye availability tag, ✓ Rd13/16/19 is useful bye coverage, Origin is an availability risk, and Relevant out names a same-team/same-position player whose return date may affect role security.",
     includeProTags
       ? "When a suggested player has Origin or Relevant out, mention that tag's implication briefly in the player's reason. Treat Relevant out as secondary and not automatically negative."
       : "Free-user tag context only includes major-bye availability. Do not mention Origin or Relevant out without Pro data access.",
@@ -1270,7 +1270,7 @@ When suggesting trades:
 - Do not recommend hard sells with positive ownership delta. Low breakeven is a hold signal, not a reason to omit a player with ownership delta <= -1% from Sell Watch.
 - Maintain a legal fieldable squad: cover 17 selected players first, then bench depth.
 - Use the draw/upcoming fixtures where available: account for each player/team’s next opponent, home/away status, and near-term fixture run.
-- Build with the 2026 draw and major bye rounds in mind: rounds 12, 15, and 18 only count the best 13 selected scorers, so warn when buying a player whose team does not play in the next major bye round.
+- Build with the 2026 draw and major bye rounds in mind: rounds 13, 16, and 19 only count the starting 13 scorers, so warn when buying a player whose team does not play in the next major bye round.
 - Respect actual fantasy position labels, captain/vice-captain, and any visible round, but do not treat bench or emergency placement as a sell signal.
 - When recommending trade paths, try to keep remaining bank below 100k when visible bank and prices make that possible; prefer efficient use of spare salary over leaving excess cash unused.
 - If budget, bank, trade count, or exact prices are not visible, state the assumption and give conditional trade paths instead of pretending it is known.

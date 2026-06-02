@@ -84,7 +84,7 @@ const SUPPORTED_CHART_TYPES = ["line", "bar", "table"] as const;
 const SUPPORTED_ENTITY_TYPES = ["player", "team"] as const;
 const SUPPORTED_BETTING_MARKETS = ["H2H", "Line", "Total", "Tryscorer"] as const;
 const PRO_ONLY_PLAYER_STAT_PATTERNS = [/breakeven/i, /\bbev?\b/i, /projection/i, /projected/i];
-const FANTASY_MAJOR_BYE_ROUNDS = [12, 15, 18] as const;
+const FANTASY_MAJOR_BYE_ROUNDS = [13, 16, 19] as const;
 
 const BASE_FANTASY_RATIO_DEFINITION = [
   "floor(All Run Metres / 10)",

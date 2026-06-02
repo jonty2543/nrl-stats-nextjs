@@ -68,7 +68,7 @@ const PlayerComments = dynamic(
   () => import("@/components/fantasy/player-comments").then((mod) => mod.PlayerComments),
   {
     loading: () => (
-      <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4 text-xs text-nrl-muted">
+      <div className="rounded-xl border border-nrl-border bg-nrl-panel-2 p-4 text-xs text-nrl-muted">
         Loading comments…
       </div>
     ),
@@ -1598,7 +1598,7 @@ function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
   if (rows.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
+    <div className="rounded-xl border border-nrl-border bg-nrl-panel-2 p-4">
       <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-300">
         <span aria-hidden="true">⚠</span>
         <span>Relevant Outs</span>
@@ -2599,7 +2599,7 @@ function MetricCard({
 
   return (
     <div
-      className={`h-full rounded-lg border border-nrl-border bg-nrl-panel-2 ${compact
+      className={`h-full rounded-lg border border-nrl-border bg-[#1b2444] ${compact
         ? mobileTight
           ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
           : "px-2 py-2 sm:px-2.5 sm:py-2.5 xl:px-2.5 xl:py-2.5"
@@ -4697,10 +4697,10 @@ export function FantasyDashboard({
                 <Link
                   href="/dashboard/fantasy/analytics"
                   onClick={() => setIsFantasyAnalyticsPending(true)}
-                  className={`relative flex h-full min-h-[44px] w-full cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
+                  className={`relative flex h-full min-h-[44px] w-full cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
                     showFantasyAnalytics
-                      ? "border-nrl-accent bg-[#20284a]"
-                      : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
+                      ? "border-nrl-accent bg-[#111832]"
+                      : "border-[rgba(123,92,255,0.35)] bg-[#111832]"
                   }`}
                 >
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
@@ -4715,7 +4715,7 @@ export function FantasyDashboard({
                     </span>
                   ) : null}
                 </Link>
-                <div className="group h-full self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] p-0 shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f]">
+                <div className="group h-full self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] p-0 shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d]">
                   {hasFantasyPlotAccess ? (
                     <Link
                       href="/dashboard/fantasy/draft"
@@ -4759,7 +4759,7 @@ export function FantasyDashboard({
                 <Link
                   href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
                   aria-label={`Read ${fantasyProjectionArticle.title}`}
-                  className="group relative flex h-full min-h-[44px] w-full cursor-pointer overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:min-h-[108px]"
+                  className="group relative flex h-full min-h-[44px] w-full cursor-pointer overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:min-h-[108px]"
                 >
                   <div className={`absolute inset-0 grid ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                     {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
@@ -5288,7 +5288,7 @@ export function FantasyDashboard({
                     key={row.player.id}
                     type="button"
                     onClick={() => navigateToPlayer(row.player.name)}
-	                    className="block w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-left transition-colors hover:border-white/25 md:flex md:items-center md:gap-4"
+	                    className="block w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-left transition-colors hover:border-white/25 hover:bg-nrl-panel md:flex md:items-center md:gap-4"
 	                  >
 	                    <div className="flex items-start justify-between gap-3 md:w-[250px] md:shrink-0 md:items-center">
                       <div className="flex min-w-0 items-start gap-2.5">
@@ -5510,7 +5510,7 @@ export function FantasyDashboard({
         <section ref={playerDetailsRef} id="fantasy-player-details" className="scroll-mt-24">
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_252px] xl:items-stretch">
             <div className="flex min-w-0 flex-col gap-4">
-              <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel p-3">
+              <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel-2 p-3">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_28%,rgba(71,255,182,0.16),transparent_30%),radial-gradient(circle_at_82%_76%,rgba(129,92,255,0.18),transparent_34%),linear-gradient(135deg,rgba(13,21,44,0.18),rgba(13,21,44,0))]" />
                 <div className="pointer-events-none absolute left-[10%] top-[18%] h-28 w-28 rounded-full bg-emerald-300/8 blur-3xl" />
                 <div className="pointer-events-none absolute bottom-[8%] right-[14%] h-32 w-32 rounded-full bg-violet-400/10 blur-3xl" />
@@ -5625,7 +5625,7 @@ export function FantasyDashboard({
 
               <RelevantOutsList rows={selectedRelevantOuts} />
 
-              <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
+              <div className="rounded-xl border border-nrl-border bg-nrl-panel-2 p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Filters</div>
                   <div className="text-[10px] text-nrl-muted">Applies to player game log and filtered analysis</div>
@@ -5732,7 +5732,7 @@ export function FantasyDashboard({
               </div>
 
               <div
-                className={`order-6 relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel"
+                className={`order-6 relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel-2"
                   }`}
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -6347,7 +6347,7 @@ export function FantasyDashboard({
 
               </div>
 
-              <div className="order-5 overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel">
+              <div className="order-5 overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel-2">
                 <div className="border-b border-nrl-border bg-nrl-panel-2 px-4 py-3">
                   <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
                     Player Game Log

@@ -29,7 +29,7 @@ const STARTER_ROWS = [
   { slot: "CTR", count: 2 },
   { slot: "WFB", count: 3 },
 ] as const
-const MY_TEAM_MAJOR_BYE_ROUNDS = [12, 15, 18] as const
+const MY_TEAM_MAJOR_BYE_ROUNDS = [13, 16, 19] as const
 const MY_TEAM_PROJECTION_ROUNDS = Array.from({ length: 19 }, (_, index) => index + 1)
 const MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS = [12, 13, 15, 16, 18, 19] as const
 const MY_TEAM_AI_ENABLED = true
@@ -608,7 +608,7 @@ function buildMyTeamAiPrompt({
       "Try to list 3 Sell watch candidates every time. Use owned squad players only, prioritising confirmed injury/unavailability, notable outs from lineups/casualty data, negative ownership change, high BE, projection below priced at, weak L3/projection, poor bye coverage, Origin risk, or a clear cash/squad problem. If fewer than 3 owned players have meaningful sell signals, list fewer rather than inventing names.",
       "Unless a player is injured, out, suspended, not named, misses the target major bye, or has another clear availability problem, their BE must be above priced at before they can be listed in Sell watch.",
       "If projection is 50+ and projection vs priced at is -5.0 or better, do not list them in Sell watch unless there is a clear offsetting issue like injury, not named, missing an upcoming major bye, likely Origin selection, or another serious squad/cash constraint.",
-      "Origin players who are likely to miss all three major bye rounds 12, 15 and 18 are priority sell/avoid candidates even if they play the next single round. Treat Tolu Koula-style cases as bad major-bye coverage, not as simply plays next bye.",
+      "Origin players who are likely to miss all three major bye rounds 13, 16 and 19 are priority sell/avoid candidates even if they play the next single round. Treat Tolu Koula-style cases as bad major-bye coverage, not as simply plays next bye.",
       "List an owned player in Sell watch when live data shows their ownership delta is -1.0% or worse, BE is high, projection is below priced at, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using projection, priced at, BE, L3 average, ownership delta, injury/availability markers, and next major bye availability.",
       "If a player is -1.0% or worse in ownership delta but BE is lower than priced at, projection is similar to priced at, L3 is sound, and they play the next major bye, frame them as Hold / Possible sell rather than a hard sell.",
       "Do not say recent form has slipped when L3 average is above priced at.",
@@ -616,7 +616,7 @@ function buildMyTeamAiPrompt({
       "For each sell or buy, include Ownership change, BE, priced at, L3 average, projection vs priced at, major-bye availability across rounds 12/15/18, role/security note, and one short reason.",
       "Mention any notable outs from the user's owned team before or inside Sell watch, but only when live lineup/casualty data supports the out.",
       "Use casualty ward and Origin chance context behind ownership, form, value, injury, bye and lineup signals; however, likely Origin players missing multiple major bye rounds should be treated as a major bye-coverage problem, not a minor tie-breaker.",
-      "Major-bye trade-count rule for rounds 12, 15 and 18: first count active owned players who play the bye round and have projection >=35. If the user has 13 or more such players, recommend no trade unless there is a clear injury/Origin/high-BE/value problem. If they have 12, recommend one trade to reach 13 or upgrade a sub-35 scorer. If they have 11 or fewer, recommend 2-3 trades to reach 13. If they have 13 active scorers but one or more projected under 35, suggest at most one upgrade rather than forcing multiple trades.",
+      "Major-bye trade-count rule for rounds 13, 16 and 19: first count active owned players who play the bye round and have projection >=35. If the user has 13 or more such players, recommend no trade unless there is a clear injury/Origin/high-BE/value problem. If they have 12, recommend one trade to reach 13 or upgrade a sub-35 scorer. If they have 11 or fewer, recommend 2-3 trades to reach 13. If they have 13 active scorers but one or more projected under 35, suggest at most one upgrade rather than forcing multiple trades.",
     ]
     : [
       "For free users, do not use projections, breakevens, projection vs priced at, casualty ward context, or Origin context as trade reasons.",
@@ -627,7 +627,7 @@ function buildMyTeamAiPrompt({
       "If a player is -1.0% or worse in ownership delta but L3 is sound, bye coverage is useful, and there is no visible availability issue, frame them as Hold / Possible sell rather than a hard sell.",
       "Describe form as strong only when recent L3/average form supports that versus price. If recent form is weak for price, do not describe them as in form.",
       "For each sell or buy, include Ownership change, priced at, average/L3 form, next major bye availability, and one short reason. Do not include projections, breakevens, projection vs priced at, casualty ward, or Origin for free users.",
-      "Major-bye trade-count rule for rounds 12, 15 and 18: first count owned players who the live database says play the bye round. If the user has 13 or more active players and no clear traded-out/form/bye-fit issue, recommend no trade. If they have 12, recommend one trade to reach 13. If they have 11 or fewer, recommend 2-3 trades to reach 13. Use L3/season average instead of projection thresholds.",
+      "Major-bye trade-count rule for rounds 13, 16 and 19: first count owned players who the live database says play the bye round. If the user has 13 or more active players and no clear traded-out/form/bye-fit issue, recommend no trade. If they have 12, recommend one trade to reach 13. If they have 11 or fewer, recommend 2-3 trades to reach 13. Use L3/season average instead of projection thresholds.",
     ]
 
   return [
@@ -664,7 +664,7 @@ function buildMyTeamAiPrompt({
       : "Trade-ins must be real live-data candidates and not already owned. Prefer players who play as many major bye rounds as possible, then rank by traded-in/ownership delta, recent form, role security, price, and sensible squad fit. Do not mention projection, BE, projection vs priced at, Origin or casualty ward.",
     "For Top 5 trade-ins, lean heavily on traded-in ownership delta: clearly rising ownership should lift a player up the list when bye coverage and role are sound. Do not bury a strongly traded-in player behind a lower-momentum option unless the lower-momentum player is clearly better on bye availability, role security, or value.",
     "When prices/bank are unknown, avoid pretending you can afford exact moves. Give ranked targets and say affordability needs checking.",
-    "Major bye/scoring rule: rounds 12, 15, and 18 only use 13 scoring players. In those rounds, prioritise getting 13 strong active scorers rather than a normal 17.",
+    "Major bye/scoring rule: rounds 13, 16, and 19 only use the starting 13 scoring players. In those rounds, prioritise getting 13 strong active scorers rather than a normal 17.",
     "Looping rule: a bench/emergency score can be accepted by leaving a non-playing red-dot/DNP player in the scoring side. For a non-playing starter in the 13, cover must be position-compatible from INT/EMG. During major bye rounds, actively check starter-to-INT loops because the 13 scorers can come from starters and interchange, not just EMG-to-INT.",
     "Starter/INT loop practical advice: if two active INT/EMG players can cover a non-playing starter's position, put the earlier-playing option in the first relevant INT/bench slot as the trial score. If that score is good, leave the non-playing starter setup so it counts; if not, swap the later-playing cover option into the scoring path before lockout.",
     "Loop red-dot quality: bye players are the best loop anchors because they do not lock. Injured, suspended, or otherwise red-marked players lock when their NRL team plays, so mention that lockout risk if recommending them as the anchor.",
@@ -1369,6 +1369,7 @@ function buildMajorRoundDisplayLineup(
   const indexedPlayers = players.map((player, index) => ({ player, index }))
   const usedIndexes = new Set<number>()
   const scoringIndexes = new Set<number>()
+  const isMajorRound = MY_TEAM_MAJOR_BYE_ROUNDS.includes(round as MyTeamMajorByeRound)
   const activeScore = ({ player, index }: IndexedMyTeamPlayer) => {
     const active = isAvailableForProjectionRound(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames) ? 1 : 0
     const originalStarter = player.squadRole === "starter" ? 0.4 : 0
@@ -1430,7 +1431,7 @@ function buildMajorRoundDisplayLineup(
     const isAvailable = isAvailableForProjectionRound(entry.player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
     const isInterchange = benchIndex < 4 && isAvailable
     const squadRole: SquadRole = isInterchange ? "interchange" : "emergency"
-    if (isInterchange) scoringIndexes.add(entry.index)
+    if (isInterchange && !isMajorRound) scoringIndexes.add(entry.index)
     return {
       index: entry.index,
       player: {
@@ -1915,7 +1916,7 @@ function PlayerToken({
         </span>
       ) : null}
       {selected && !swapMenuOpen ? (
-        <div className={`absolute left-1/2 top-full z-40 mt-2 w-40 max-w-[calc(100vw-1rem)] -translate-x-1/2 rounded-lg border border-nrl-border bg-[#0e1530] p-1.5 text-left shadow-[0_18px_34px_rgba(2,6,23,0.48)] ${bench ? "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2" : "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2"}`}>
+        <div className={`absolute left-1/2 top-full z-40 mt-2 flex w-72 max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col rounded-lg border border-nrl-border bg-[#0e1530] p-1.5 text-left shadow-[0_18px_34px_rgba(2,6,23,0.48)] sm:w-[22rem] sm:flex-row ${bench ? "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2" : "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2"}`}>
           <div className="shrink-0 sm:w-40">
             <button
               type="button"

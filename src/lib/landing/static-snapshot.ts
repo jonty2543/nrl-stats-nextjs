@@ -99,7 +99,7 @@ function oddsRow(values: Partial<BettingOddsRow> & Pick<BettingOddsRow, "date" |
 
 function lineupPlayer(values: Partial<LineupPlayer> & Pick<LineupPlayer, "team" | "teamName" | "teamType" | "number" | "position" | "player">): LineupPlayer {
   return {
-    matchId: "landing-r13-panthers-eels",
+    matchId: "landing-r13-panthers-warriors",
     teamId: null,
     playerId: null,
     isCaptain: false,
@@ -112,6 +112,28 @@ function lineupPlayer(values: Partial<LineupPlayer> & Pick<LineupPlayer, "team" 
     ...values,
   }
 }
+
+function nrlPlayerImage(sourceUrl: string): string {
+  return `https://www.nrl.com/remote.axd?${encodeURIComponent(sourceUrl)}&preset=player-profile-large`
+}
+
+const PLAYER_IMAGES = {
+  dylanEdwards: nrlPlayerImage("https://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500014/Dylan Edwards _260123_Panthers_MK2086.png?center=0.5,0.5"),
+  thomasJenkins: nrlPlayerImage("https://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500014/Tom Jenkins _260123_Panthers_MK004.png?center=0.5,0.5"),
+  izackTago: nrlPlayerImage("https://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500014/Izack Tago _260123_Panthers_MK1983.png?center=0.5,0.5"),
+  lukeGarner: nrlPlayerImage("https://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500014/Luke Garner _260123_Panthers_MK1889.png?center=0.5,0.5"),
+  paulAlamoti: nrlPlayerImage("https://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500014/Paul Alamoti _260123_Panthers_MK1222.png?center=0.5,0.5"),
+  blaizeTalagi: nrlPlayerImage("https://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500014/Blaize Talagi _260123_Panthers_MK1291.png?center=0.5,0.5"),
+  mosesLeota: nrlPlayerImage("https://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500014/Moses Leota _260123_Panthers_MK2424.png?center=0.5,0.5"),
+  taineTuaupiki: nrlPlayerImage("http://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500032/Taine Tuaupiki-003.png?center=0.5,0.5"),
+  dallinWateneZelezniak: nrlPlayerImage("http://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500032/Dallin Watene-Zelezniak-003.png?center=0.5,0.5"),
+  aliLeiataua: nrlPlayerImage("http://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500032/Ali Leiataua-003.png?center=0.5,0.5"),
+  adamPompey: nrlPlayerImage("http://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500032/Adam Pompey-004.png?center=0.5,0.5"),
+  alofianaKhanPereira: nrlPlayerImage("http://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500032/Alofiana Khan-Pereira-003.png?center=0.5,0.5"),
+  chanelHarrisTavita: nrlPlayerImage("http://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500032/Chanel Harris-Tavita_003.png?center=0.5,0.5"),
+  teMaireMartin: nrlPlayerImage("http://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500032/Te Maire Martin-004.png?center=0.5,0.5"),
+  jamesFisherHarris: nrlPlayerImage("http://rugbyimages.statsperform.com/Player Bodyshots/111/2026/500032/James Fisher-Harris-003.png?center=0.5,0.5"),
+} as const
 
 const STATIC_DATA: LandingStaticSnapshotData = {
   fantasyPlayers: [
@@ -157,11 +179,11 @@ const STATIC_DATA: LandingStaticSnapshotData = {
     tryscorer: [],
   },
   playerImages: [
-    { player: "Nathan Cleary", team: "Panthers", number: "7", position: "HLF", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
+    { player: "Nathan Cleary", team: "Panthers", number: "23", position: "HLF", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-31" },
     { player: "Nicholas Hynes", team: "Sharks", number: "7", position: "HLF", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
     { player: "Payne Haas", team: "Broncos", number: "10", position: "MID", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
     { player: "Harry Grant", team: "Storm", number: "9", position: "HOK", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
-    { player: "Dylan Edwards", team: "Panthers", number: "1", position: "WFB", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
+    { player: "Dylan Edwards", team: "Panthers", number: "1", position: "WFB", head_image: null, body_image: PLAYER_IMAGES.dylanEdwards, last_seen_match_date: "2026-05-31" },
     { player: "Kalyn Ponga", team: "Knights", number: "1", position: "WFB", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
   ],
   approvedArticles: [
@@ -202,19 +224,19 @@ const STATIC_DATA: LandingStaticSnapshotData = {
   draw2026Data: {
     teamLogos: {},
     rows: [
-      { round: 13, kickoff: "2026-05-29T10:00:00.000Z", matchCentreUrl: "", home: "Panthers", away: "Eels" },
+      { round: 13, kickoff: "2026-05-31T08:15:00.000Z", matchCentreUrl: "", home: "Panthers", away: "Warriors" },
       { round: 14, kickoff: "2026-06-05T10:00:00.000Z", matchCentreUrl: "", home: "Panthers", away: "Storm" },
       { round: 15, kickoff: "2026-06-12T10:00:00.000Z", matchCentreUrl: "", home: "Broncos", away: "Panthers" },
     ],
   },
   lineups: [
     {
-      matchId: "landing-r13-panthers-eels",
-      matchDate: "2026-05-29",
-      kickoffUtc: "2026-05-29T10:00:00.000Z",
+      matchId: "landing-r13-panthers-warriors",
+      matchDate: "2026-05-31",
+      kickoffUtc: "2026-05-31T08:15:00.000Z",
       round: "Round 13",
-      venue: "BlueBet Stadium",
-      match: "Panthers v Eels",
+      venue: "CommBank Stadium",
+      match: "Panthers v Warriors",
       matchUrl: null,
       homeTeam: {
         team: "Panthers",
@@ -222,36 +244,47 @@ const STATIC_DATA: LandingStaticSnapshotData = {
         teamId: null,
         teamType: "Home",
         players: [
-          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 1, position: "Fullback", player: "Dylan Edwards", playerId: 5, fantasyProjection: 62 }),
-          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 6, position: "Five-eighth", player: "Jarome Luai", fantasyProjection: 43 }),
-          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 7, position: "Halfback", player: "Nathan Cleary", playerId: 1, fantasyProjection: 76, isCaptain: true }),
-          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 8, position: "Prop", player: "Moses Leota", fantasyProjection: 42 }),
-          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 9, position: "Hooker", player: "Mitch Kenny", fantasyProjection: 49 }),
-          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 10, position: "Prop", player: "James Fisher-Harris", fantasyProjection: 51 }),
-          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 13, position: "Lock", player: "Isaah Yeo", playerId: 8, fantasyProjection: 55 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 1, position: "Fullback", player: "Dylan Edwards", playerId: 5, bodyImage: PLAYER_IMAGES.dylanEdwards, fantasyProjection: 62 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 2, position: "Winger", player: "Thomas Jenkins", bodyImage: PLAYER_IMAGES.thomasJenkins, fantasyProjection: 49 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 3, position: "Centre", player: "Izack Tago", bodyImage: PLAYER_IMAGES.izackTago, fantasyProjection: 42 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 4, position: "Centre", player: "Luke Garner", bodyImage: PLAYER_IMAGES.lukeGarner, fantasyProjection: 37 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 5, position: "Winger", player: "Paul Alamoti", bodyImage: PLAYER_IMAGES.paulAlamoti, fantasyProjection: 38 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 6, position: "Five-eighth", player: "Blaize Talagi", bodyImage: PLAYER_IMAGES.blaizeTalagi, fantasyProjection: 51 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 7, position: "Halfback", player: "Jack Cogger", fantasyProjection: 36 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 8, position: "Prop", player: "Moses Leota", bodyImage: PLAYER_IMAGES.mosesLeota, fantasyProjection: 42 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 14, position: "Interchange", player: "Jack Cole", isOnField: false, fantasyProjection: 25 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 15, position: "Interchange", player: "Scott Sorensen", isOnField: false, fantasyProjection: 36 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 16, position: "Interchange", player: "Billy Phillips", isOnField: false, fantasyProjection: 22 }),
+          lineupPlayer({ team: "Panthers", teamName: "Panthers", teamType: "Home", number: 17, position: "Interchange", player: "Luron Patea", isOnField: false, fantasyProjection: 21 }),
         ],
       },
       awayTeam: {
-        team: "Eels",
-        teamName: "Eels",
+        team: "Warriors",
+        teamName: "Warriors",
         teamId: null,
         teamType: "Away",
         players: [
-          lineupPlayer({ team: "Eels", teamName: "Eels", teamType: "Away", number: 1, position: "Fullback", player: "Clint Gutherson", fantasyProjection: 47 }),
-          lineupPlayer({ team: "Eels", teamName: "Eels", teamType: "Away", number: 6, position: "Five-eighth", player: "Dylan Brown", fantasyProjection: 52 }),
-          lineupPlayer({ team: "Eels", teamName: "Eels", teamType: "Away", number: 7, position: "Halfback", player: "Mitchell Moses", fantasyProjection: 57 }),
-          lineupPlayer({ team: "Eels", teamName: "Eels", teamType: "Away", number: 8, position: "Prop", player: "Junior Paulo", fantasyProjection: 43 }),
-          lineupPlayer({ team: "Eels", teamName: "Eels", teamType: "Away", number: 9, position: "Hooker", player: "Josh Hodgson", fantasyProjection: 44 }),
-          lineupPlayer({ team: "Eels", teamName: "Eels", teamType: "Away", number: 10, position: "Prop", player: "Reagan Campbell-Gillard", fantasyProjection: 46 }),
-          lineupPlayer({ team: "Eels", teamName: "Eels", teamType: "Away", number: 13, position: "Lock", player: "J'maine Hopgood", fantasyProjection: 58 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 1, position: "Fullback", player: "Taine Tuaupiki", bodyImage: PLAYER_IMAGES.taineTuaupiki, fantasyProjection: 47 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 2, position: "Winger", player: "Dallin Watene-Zelezniak", bodyImage: PLAYER_IMAGES.dallinWateneZelezniak, fantasyProjection: 44 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 3, position: "Centre", player: "Ali Leiataua", bodyImage: PLAYER_IMAGES.aliLeiataua, fantasyProjection: 36 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 4, position: "Centre", player: "Adam Pompey", bodyImage: PLAYER_IMAGES.adamPompey, fantasyProjection: 38 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 5, position: "Winger", player: "Alofiana Khan-Pereira", bodyImage: PLAYER_IMAGES.alofianaKhanPereira, fantasyProjection: 41 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 6, position: "Five-eighth", player: "Chanel Harris-Tavita", bodyImage: PLAYER_IMAGES.chanelHarrisTavita, fantasyProjection: 42 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 7, position: "Halfback", player: "Te Maire Martin", bodyImage: PLAYER_IMAGES.teMaireMartin, fantasyProjection: 39 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 8, position: "Prop", player: "James Fisher-Harris", bodyImage: PLAYER_IMAGES.jamesFisherHarris, fantasyProjection: 51, isCaptain: true }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 14, position: "Interchange", player: "Sam Healey", isOnField: false, fantasyProjection: 25 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 15, position: "Interchange", player: "Tanner Stowers-Smith", isOnField: false, fantasyProjection: 30 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 16, position: "Interchange", player: "Demitric Vaimauga", isOnField: false, fantasyProjection: 27 }),
+          lineupPlayer({ team: "Warriors", teamName: "Warriors", teamType: "Away", number: 17, position: "Interchange", player: "Marata Niukore", isOnField: false, fantasyProjection: 37 }),
         ],
       },
     },
   ],
   tryscorerOdds: {
     "dylan edwards": { player: "Dylan Edwards", bestBookie: "Sportsbet", bestPrice: 2.45 },
-    "nathan cleary": { player: "Nathan Cleary", bestBookie: "Unibet", bestPrice: 3.7 },
-    "clint gutherson": { player: "Clint Gutherson", bestBookie: "Pointsbet", bestPrice: 2.8 },
+    "thomas jenkins": { player: "Thomas Jenkins", bestBookie: "Unibet", bestPrice: 2.1 },
+    "dallin watene zelezniak": { player: "Dallin Watene-Zelezniak", bestBookie: "Pointsbet", bestPrice: 2.25 },
+    "alofiana khan pereira": { player: "Alofiana Khan-Pereira", bestBookie: "Sportsbet", bestPrice: 2.35 },
   },
 }
 

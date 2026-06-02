@@ -847,8 +847,12 @@ function nominalSide(number) {
   return "unknown";
 }
 
-function currentRoundOption(options) {
+function currentRoundOption(options, preferredRoundNumber = null) {
   if (options.length === 0) return null;
+  if (preferredRoundNumber != null) {
+    const preferredRound = options.find((option) => option.roundNumber === preferredRoundNumber);
+    if (preferredRound) return preferredRound;
+  }
   const now = new Date();
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Australia/Brisbane",
@@ -884,6 +888,68 @@ function resultBeforeMatch(result, matchDate) {
   const resultDate = String(result.matchDate ?? "").slice(0, 10);
   const currentDate = String(matchDate ?? "").slice(0, 10);
   return Boolean(resultDate && currentDate && resultDate < currentDate);
+}
+
+async function loadDraw2026Rows() {
+  const drawPath = path.join(process.cwd(), "data", "draw_2026.csv");
+  const raw = await readFile(drawPath, "utf8");
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const rows = [];
+  for (const line of lines.slice(1)) {
+    const [round, kickoff, matchCentreUrl, home, away] = line.split(",");
+    const roundNumber = Number.parseInt(round ?? "", 10);
+    if (!Number.isFinite(roundNumber)) continue;
+    rows.push({
+      round: roundNumber,
+      kickoff: kickoff ?? "",
+      matchCentreUrl: matchCentreUrl ?? "",
+      home: home ?? "",
+      away: away ?? "",
+    });
+  }
+  return rows.sort((a, b) => a.round - b.round || a.kickoff.localeCompare(b.kickoff));
+}
+
+function addLineupRoundOption(options, round, roundNumber, matchDate) {
+  if (!round || !matchDate) return;
+  const current = options.get(round) ?? {
+    value: round,
+    label: round,
+    roundNumber,
+    startDate: matchDate,
+    endDate: matchDate,
+  };
+  current.roundNumber = Number.isFinite(current.roundNumber) ? current.roundNumber : roundNumber;
+  if (matchDate < current.startDate) current.startDate = matchDate;
+  if (matchDate > current.endDate) current.endDate = matchDate;
+  options.set(round, current);
+}
+
+function drawRowsForRound(rows, round) {
+  const roundNumber = Number.parseInt(String(round ?? "").match(/\d+/)?.[0] ?? "", 10);
+  if (!Number.isFinite(roundNumber)) return [];
+  return rows.filter((row) => row.round === roundNumber);
+}
+
+function drawMatchId(row) {
+  return `draw-2026-${row.round}-${teamGroup(row.home)}-${teamGroup(row.away)}`;
+}
+
+function matchFromDrawRow(row) {
+  const matchDate = String(row.kickoff ?? "").slice(0, 10);
+  return {
+    matchId: drawMatchId(row),
+    matchDate,
+    kickoffUtc: row.kickoff || null,
+    round: `Round ${row.round}`,
+    venue: null,
+    match: `${row.home} vs ${row.away}`,
+    matchUrl: row.matchCentreUrl || null,
+    homeTeam: { team: row.home, teamName: row.home, teamId: null, teamType: "Home", players: [] },
+    awayTeam: { team: row.away, teamName: row.away, teamId: null, teamType: "Away", players: [] },
+    homeScore: null,
+    awayScore: null,
+  };
 }
 
 function addRecentResults(match, results) {
@@ -929,14 +995,20 @@ async function fetchRecentMatchResultsSummary(supabase, year) {
 }
 
 async function fetchLineupRoundOptionsSummary(supabase, year) {
-  const rows = await fetchAllRows(
+  const matchRows = await fetchAllRows(
     supabase,
     "matches",
     "round,round_number,match_date",
     (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("match_date", { ascending: true })
   );
+  const lineupRows = await fetchAllRows(
+    supabase,
+    "lineups",
+    "round,match_date,kickoff_utc",
+    (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("match_date", { ascending: true })
+  );
   const byRound = new Map();
-  for (const row of rows) {
+  for (const row of matchRows) {
     const round = text(row.round);
     if (!round) continue;
     const current = byRound.get(round) ?? {
@@ -947,11 +1019,19 @@ async function fetchLineupRoundOptionsSummary(supabase, year) {
       endDate: text(row.match_date).slice(0, 10),
     };
     const date = text(row.match_date).slice(0, 10);
-    if (date) {
-      if (!current.startDate || date < current.startDate) current.startDate = date;
-      if (!current.endDate || date > current.endDate) current.endDate = date;
+    addLineupRoundOption(byRound, round, current.roundNumber, date);
+  }
+  for (const row of lineupRows) {
+    const round = text(row.round);
+    if (!round) continue;
+    const date = text(row.match_date || row.kickoff_utc).slice(0, 10);
+    addLineupRoundOption(byRound, round, parseRoundNumber(round), date);
+  }
+  if (year === 2026) {
+    const drawRows = await loadDraw2026Rows();
+    for (const row of drawRows) {
+      addLineupRoundOption(byRound, `Round ${row.round}`, row.round, String(row.kickoff ?? "").slice(0, 10));
     }
-    byRound.set(round, current);
   }
   return [...byRound.values()].sort((a, b) => a.roundNumber - b.roundNumber);
 }
@@ -1056,14 +1136,14 @@ async function fetchLineupMatchesSummary(supabase, round, year) {
   });
 }
 
-async function fetchFixtureMatchesSummary(supabase, round, year) {
+async function fetchFixtureMatchesSummary(supabase, round, year, drawRows = []) {
   const rows = await fetchAllRows(
     supabase,
     "matches",
     "url,match_date,round,team,opponent_team,is_home,score,opponent_score",
     (query) => query.eq("round", round).gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("match_date", { ascending: true })
   );
-  return rows
+  const matches = rows
     .filter((row) => booleanValue(row.is_home))
     .map((row) => {
       const matchDate = text(row.match_date);
@@ -1085,6 +1165,15 @@ async function fetchFixtureMatchesSummary(supabase, round, year) {
       };
     })
     .filter((match) => match.matchDate && match.homeTeam.team && match.awayTeam.team);
+  const seenKeys = new Set(matches.map((match) => matchMergeKey(match.matchDate, match.homeTeam.team, match.awayTeam.team)));
+  for (const drawRow of drawRowsForRound(drawRows, round)) {
+    const key = matchMergeKey(drawRow.kickoff, drawRow.home, drawRow.away);
+    if (!seenKeys.has(key)) {
+      matches.push(matchFromDrawRow(drawRow));
+      seenKeys.add(key);
+    }
+  }
+  return matches.sort((a, b) => a.matchDate.localeCompare(b.matchDate) || String(a.kickoffUtc ?? "").localeCompare(String(b.kickoffUtc ?? "")));
 }
 
 function mergeFixtureAndLineupMatches(fixtureMatches, lineupMatches) {
@@ -1111,8 +1200,9 @@ async function fetchLineupsSummaryTeamLogos(supabase) {
     const logo = nullableText(row.short_side_logo_url) ?? nullableText(row.side_logo_url) ?? nullableText(row.short_logo_url) ?? nullableText(row.logo_url);
     if (!logo) continue;
     for (const name of [row.team, row.team_name, row.name, row.short_name]) {
-      const key = normaliseName(text(name));
-      if (key && !logos.has(key)) logos.set(key, logo);
+      for (const key of [normaliseName(text(name)), normaliseTeamKey(name), teamGroup(name)]) {
+        if (key && !logos.has(key)) logos.set(key, logo);
+      }
     }
   }
   return Object.fromEntries(logos);
@@ -1248,14 +1338,18 @@ async function main() {
     console.warn("Unable to fetch lineups round options for page summary.", error);
     return [];
   });
-  const lineupsRound = currentRoundOption(lineupsRoundOptions);
+  const draw2026Rows = currentYear === 2026 ? await loadDraw2026Rows().catch((error) => {
+    console.warn("Unable to load 2026 draw for lineups page summary.", error);
+    return [];
+  }) : [];
+  const lineupsRound = currentRoundOption(lineupsRoundOptions, lineups.round);
   const today = getTodayInBrisbane();
   const lineupsPageSummaryRow = lineupsRound ? await Promise.all([
     fetchLineupMatchesSummary(supabaseNrl, lineupsRound.value, currentYear).catch((error) => {
       console.warn("Unable to fetch lineups matches for page summary.", error);
       return [];
     }),
-    fetchFixtureMatchesSummary(supabaseNrl, lineupsRound.value, currentYear).catch((error) => {
+    fetchFixtureMatchesSummary(supabaseNrl, lineupsRound.value, currentYear, draw2026Rows).catch((error) => {
       console.warn("Unable to fetch fixture matches for lineups page summary.", error);
       return [];
     }),

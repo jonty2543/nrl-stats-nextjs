@@ -209,6 +209,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       roundOptions={mergeRoundOptions(initialRoundOptions, summary?.roundOptions ?? [])}
       selectedRound={selectedRound}
       teamLogos={teamLogos}
+      sportsbetOdds={summary?.sportsbetOdds ?? {}}
       canAccessFantasyProjections={hasProAccess}
       summaryDiagnostic={summaryDiagnostic}
     />

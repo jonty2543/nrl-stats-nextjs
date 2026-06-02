@@ -73,7 +73,7 @@ function ArticleCard({ article, compact = false }: { article: Article; compact?:
   const previewText = articlePreviewText(article.body, compact ? 45 : 120);
 
   return (
-    <article className="overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel">
+    <article className="flex h-full flex-col overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel">
       {article.imageUrls.length > 0 ? (
         <div className={`grid ${article.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
           {article.imageUrls.map((url, index) => (
@@ -88,7 +88,7 @@ function ArticleCard({ article, compact = false }: { article: Article; compact?:
           ))}
         </div>
       ) : null}
-      <div className="space-y-3 p-4 sm:p-5">
+      <div className="flex flex-1 flex-col space-y-3 p-4 sm:p-5">
         <div>
           <div className="flex items-center gap-2">
             {article.authorImageUrl ? (
@@ -115,7 +115,7 @@ function ArticleCard({ article, compact = false }: { article: Article; compact?:
         <Link
           href={`/dashboard/articles/${article.slug}`}
           aria-label={compact ? `Read and review ${article.title}` : `Read ${article.title}`}
-          className="inline-grid h-8 w-8 place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 text-lg font-bold leading-none text-nrl-text transition-colors hover:border-white/25 hover:bg-nrl-border/35"
+          className="mt-auto inline-grid h-8 w-8 place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 text-lg font-bold leading-none text-nrl-text transition-colors hover:border-white/25 hover:bg-nrl-border/35"
         >
           <span aria-hidden="true">→</span>
         </Link>
@@ -428,7 +428,7 @@ export function ArticlesPageClient({
       ) : null}
 
       <section className="space-y-6">
-        <div className="grid items-start gap-5 xl:grid-cols-2">
+        <div className="grid items-stretch gap-5 xl:grid-cols-2">
           {resolvedApprovedArticles.length === 0 ? (
             <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-sm text-nrl-muted xl:col-span-2">
               No approved articles yet.

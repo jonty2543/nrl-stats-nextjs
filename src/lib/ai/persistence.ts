@@ -9,6 +9,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/client";
 const MAX_THREAD_TITLE_LENGTH = 80;
 const MAX_THREAD_LIST_ITEMS = 20;
 export const MY_TEAM_AI_PROMPT_PREFIX = "My Team NRL Fantasy AI request.";
+const MY_TEAM_AI_THREAD_TITLE = "My Team NRL AI";
 
 export interface AiChoiceOption {
   label: string;
@@ -358,23 +359,28 @@ export async function ensureAiThreadForUser(
 }
 
 export async function loadLatestAiThreadForUser(
-  userId: string | null | undefined
+  userId: string | null | undefined,
+  options?: { includeMyTeamThreads?: boolean }
 ): Promise<AiThreadSnapshot | null> {
   if (!userId) return null;
 
   try {
     const supabase = getAiSupabaseClient();
-    const { data: thread, error: threadError } = await supabase
+    const { data: threads, error: threadError } = await supabase
       .from("ai_threads")
       .select("id,title")
       .eq("clerk_user_id", userId)
       .order("last_message_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<AiThreadRow>();
+      .limit(options?.includeMyTeamThreads === false ? MAX_THREAD_LIST_ITEMS : 1)
+      .returns<AiThreadRow[]>();
 
     if (threadError) {
       throw new Error(threadError.message);
     }
+
+    const thread = (threads ?? []).find(
+      (row) => options?.includeMyTeamThreads !== false || row.title !== MY_TEAM_AI_THREAD_TITLE
+    );
 
     return thread ? loadAiThreadForUser(userId, thread.id) : null;
   } catch (error) {
@@ -389,7 +395,8 @@ export async function loadLatestAiThreadForUser(
 }
 
 export async function loadAiThreadListForUser(
-  userId: string | null | undefined
+  userId: string | null | undefined,
+  options?: { includeMyTeamThreads?: boolean }
 ): Promise<AiThreadListItem[]> {
   if (!userId) return [];
 
@@ -400,18 +407,21 @@ export async function loadAiThreadListForUser(
       .select("id,title,last_message_at")
       .eq("clerk_user_id", userId)
       .order("last_message_at", { ascending: false })
-      .limit(MAX_THREAD_LIST_ITEMS)
+      .limit(options?.includeMyTeamThreads === false ? MAX_THREAD_LIST_ITEMS * 2 : MAX_THREAD_LIST_ITEMS)
       .returns<AiThreadRow[]>();
 
     if (error) {
       throw new Error(error.message);
     }
 
-    return (data ?? []).map((row) => ({
-      threadId: row.id,
-      title: row.title,
-      lastMessageAt: typeof row.last_message_at === "string" ? row.last_message_at : "",
-    }));
+    return (data ?? [])
+      .filter((row) => options?.includeMyTeamThreads !== false || row.title !== MY_TEAM_AI_THREAD_TITLE)
+      .slice(0, MAX_THREAD_LIST_ITEMS)
+      .map((row) => ({
+        threadId: row.id,
+        title: row.title,
+        lastMessageAt: typeof row.last_message_at === "string" ? row.last_message_at : "",
+      }));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn("AI thread list unavailable.", message);

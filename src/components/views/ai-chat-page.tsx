@@ -10,6 +10,8 @@ import type { AiPersistedMessage, AiThreadListItem } from "@/lib/ai/persistence"
 import type { AiToolDefinition } from "@/lib/ai/tools/types";
 import { AiLineChart } from "@/components/charts/ai-line-chart";
 
+const MY_TEAM_AI_THREAD_TITLE = "My Team NRL AI";
+
 interface AiChatPageProps {
   plan: AiPlan;
   chatLimit: number | null;
@@ -799,6 +801,9 @@ export function AiChatPage({
 
         const fallbackTitle = trimmed.length <= 80 ? trimmed : `${trimmed.slice(0, 79)}…`;
         const nextTitle = payload.threadTitle?.trim() || fallbackTitle;
+        if (nextTitle === MY_TEAM_AI_THREAD_TITLE) {
+          return current.filter((entry) => entry.threadId !== nextThreadId);
+        }
         const nextEntry = {
           threadId: nextThreadId,
           title: nextTitle,

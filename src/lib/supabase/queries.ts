@@ -32,6 +32,7 @@ import {
 const PAGE_SIZE = 1000;
 const DAILY_REVALIDATE_SECONDS = 86400;
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
+const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
 
 export interface PlayerImageRecord {
   player: string;
@@ -41,6 +42,47 @@ export interface PlayerImageRecord {
   head_image: string | null;
   body_image: string | null;
   last_seen_match_date: string | null;
+}
+
+export interface BettingSummaryGame {
+  round: number | null;
+  matchDate: string;
+  kickoffUtc: string | null;
+  releaseAtUtc: string | null;
+  matchCentreUrl: string | null;
+  match: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeTeamKey: string | null;
+  awayTeamKey: string | null;
+  matchKey: string;
+  homeLogoUrl: string | null;
+  awayLogoUrl: string | null;
+}
+
+export interface BettingTryscorerFormSummary {
+  player: string;
+  team: string | null;
+  position?: string | null;
+  gamesPlayed?: number;
+  tries2026?: number;
+  lastFive: number[];
+  average: number;
+  headImage?: string | null;
+  bodyImage?: string | null;
+  teamLogoUrl?: string | null;
+}
+
+export interface BettingPageSummary {
+  id: string;
+  year: number | null;
+  games: BettingSummaryGame[];
+  teamLogos: Record<string, string>;
+  playerTeamsByName: Record<string, string>;
+  tryscorerFormByPlayer: Record<string, BettingTryscorerFormSummary>;
+  tryscorerKickoffsByMatch: Record<string, string>;
+  lineupPlayersByMatch: Record<string, unknown>;
+  updatedAt: string | null;
 }
 
 export interface PlayerFantasySd5yRecord {
@@ -118,6 +160,27 @@ export interface LineupsPageSummary {
   positionPpmBaselines: Record<string, number>;
   playerTryHistory: PlayerTryHistory;
   updatedAt: string | null;
+}
+
+export interface LineupsPageShellSummary {
+  year: number;
+  round: string;
+  roundOptions: LineupRoundOption[];
+  matches: LineupMatch[];
+  teamLogos: Record<string, string>;
+  sportsbetOdds: Record<string, LineupSportsbetOdds>;
+  updatedAt: string | null;
+}
+
+export interface LineupsMatchDetailSummary {
+  match: LineupMatch;
+  matchStats: LineupMatchStats | null;
+  tryscorerOdds: Record<string, LineupTryscorerOdds>;
+  sportsbetOdds: Record<string, LineupSportsbetOdds>;
+  casualtyWardOuts: Record<string, LineupCasualtyOut[]>;
+  playerAverages: Record<string, Record<string, number>>;
+  positionPpmBaselines: Record<string, number>;
+  playerTryHistory: PlayerTryHistory;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -625,6 +688,14 @@ interface PredictionModelRow extends Record<string, unknown> {
   updated_at?: unknown;
 }
 
+interface TryscorerPredictionRow extends Record<string, unknown> {
+  match_date?: unknown;
+  match?: unknown;
+  player?: unknown;
+  anytime_prob?: unknown;
+  updated_at?: unknown;
+}
+
 interface MarginOverrideRow extends Record<string, unknown> {
   url?: unknown;
   margin_override_points?: unknown;
@@ -633,12 +704,24 @@ interface MarginOverrideRow extends Record<string, unknown> {
 interface PredictionLookupEntry {
   winProb: number | null;
   predMargin: number | null;
+  predTotal: number | null;
   updatedAtMs: number;
 }
 
 interface PredictionLookupMaps {
   byDateTeam: Map<string, PredictionLookupEntry>;
   byDateMatchTeam: Map<string, PredictionLookupEntry>;
+  byDateMatch: Map<string, PredictionLookupEntry>;
+}
+
+interface TryscorerPredictionEntry {
+  anytimeProb: number | null;
+  updatedAtMs: number;
+}
+
+interface TryscorerPredictionLookupMaps {
+  byDatePlayer: Map<string, TryscorerPredictionEntry>;
+  byDateMatchPlayer: Map<string, TryscorerPredictionEntry>;
 }
 
 function predictionHomeTeam(raw: PredictionModelRow): string | null {
@@ -661,8 +744,20 @@ function choosePredictionEntry(
   if (!existing) return next;
   if (next.updatedAtMs > existing.updatedAtMs) return next;
   if (next.updatedAtMs < existing.updatedAtMs) return existing;
-  const existingCompleteness = Number(existing.winProb != null) + Number(existing.predMargin != null);
-  const nextCompleteness = Number(next.winProb != null) + Number(next.predMargin != null);
+  const existingCompleteness = Number(existing.winProb != null) + Number(existing.predMargin != null) + Number(existing.predTotal != null);
+  const nextCompleteness = Number(next.winProb != null) + Number(next.predMargin != null) + Number(next.predTotal != null);
+  return nextCompleteness >= existingCompleteness ? next : existing;
+}
+
+function chooseTryscorerPredictionEntry(
+  existing: TryscorerPredictionEntry | undefined,
+  next: TryscorerPredictionEntry
+): TryscorerPredictionEntry {
+  if (!existing) return next;
+  if (next.updatedAtMs > existing.updatedAtMs) return next;
+  if (next.updatedAtMs < existing.updatedAtMs) return existing;
+  const existingCompleteness = Number(existing.anytimeProb != null);
+  const nextCompleteness = Number(next.anytimeProb != null);
   return nextCompleteness >= existingCompleteness ? next : existing;
 }
 
@@ -719,6 +814,7 @@ function effectivePredictionMargin(raw: PredictionModelRow, overrides: Map<strin
 function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginOverrideRow[] = []): PredictionLookupMaps {
   const byDateTeam = new Map<string, PredictionLookupEntry>();
   const byDateMatchTeam = new Map<string, PredictionLookupEntry>();
+  const byDateMatch = new Map<string, PredictionLookupEntry>();
   const overrides = buildOverrideLookup(overrideRows);
   const marginSigma = inferPredictionSigma(rows);
 
@@ -731,6 +827,7 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
     const entry: PredictionLookupEntry = {
       winProb: predMargin == null ? toNullableProbability(raw.win_prob) : normalCdf(predMargin / marginSigma),
       predMargin,
+      predTotal: toNullableFinite(raw.pred_total),
       updatedAtMs: toUpdatedAtMs(raw.updated_at),
     };
 
@@ -740,6 +837,9 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
     const normalizedMatchKey = matchKey(raw.match);
     if (!normalizedMatchKey) continue;
 
+    const dateMatchKey = `${date}|${normalizedMatchKey}`;
+    byDateMatch.set(dateMatchKey, choosePredictionEntry(byDateMatch.get(dateMatchKey), entry));
+
     const dateMatchTeamKey = `${date}|${normalizedMatchKey}|${teamKey}`;
     byDateMatchTeam.set(
       dateMatchTeamKey,
@@ -747,7 +847,37 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
     );
   }
 
-  return { byDateTeam, byDateMatchTeam };
+  return { byDateTeam, byDateMatchTeam, byDateMatch };
+}
+
+function buildTryscorerPredictionLookup(rows: TryscorerPredictionRow[]): TryscorerPredictionLookupMaps {
+  const byDatePlayer = new Map<string, TryscorerPredictionEntry>();
+  const byDateMatchPlayer = new Map<string, TryscorerPredictionEntry>();
+
+  for (const raw of rows) {
+    const date = toIsoDate(raw.match_date);
+    const playerKey = normaliseLookupKey(raw.player);
+    if (!date || !playerKey) continue;
+
+    const entry: TryscorerPredictionEntry = {
+      anytimeProb: toNullableProbability(raw.anytime_prob),
+      updatedAtMs: toUpdatedAtMs(raw.updated_at),
+    };
+
+    const datePlayerKey = `${date}|${playerKey}`;
+    byDatePlayer.set(datePlayerKey, chooseTryscorerPredictionEntry(byDatePlayer.get(datePlayerKey), entry));
+
+    const normalizedMatchKey = matchKey(raw.match);
+    if (!normalizedMatchKey) continue;
+
+    const dateMatchPlayerKey = `${date}|${normalizedMatchKey}|${playerKey}`;
+    byDateMatchPlayer.set(
+      dateMatchPlayerKey,
+      chooseTryscorerPredictionEntry(byDateMatchPlayer.get(dateMatchPlayerKey), entry)
+    );
+  }
+
+  return { byDatePlayer, byDateMatchPlayer };
 }
 
 function findPredictionForOddsRow(
@@ -767,8 +897,58 @@ function findPredictionForOddsRow(
   return lookup.byDateTeam.get(`${date}|${teamKey}`) ?? null;
 }
 
+function findPredictionForTotalOddsRow(
+  row: BettingOddsRow,
+  lookup: PredictionLookupMaps
+): PredictionLookupEntry | null {
+  const date = toIsoDate(row.date);
+  const normalizedMatchKey = matchKey(row.match);
+  if (!date || !normalizedMatchKey) return null;
+
+  return lookup.byDateMatch.get(`${date}|${normalizedMatchKey}`) ?? null;
+}
+
+function findTryscorerPredictionForOddsRow(
+  row: BettingOddsRow,
+  lookup: TryscorerPredictionLookupMaps
+): TryscorerPredictionEntry | null {
+  const date = toIsoDate(row.date);
+  const playerKey = normaliseLookupKey(row.result);
+  if (!date || !playerKey) return null;
+
+  const normalizedMatchKey = matchKey(row.match);
+  if (normalizedMatchKey) {
+    const byMatch = lookup.byDateMatchPlayer.get(`${date}|${normalizedMatchKey}|${playerKey}`);
+    if (byMatch) return byMatch;
+  }
+
+  return lookup.byDatePlayer.get(`${date}|${playerKey}`) ?? null;
+}
+
 function applyPredictionModelToRow(row: BettingOddsRow, lookup: PredictionLookupMaps): BettingOddsRow {
-  if (row.market !== "H2H" && row.market !== "Line") return row;
+  if (row.market !== "H2H" && row.market !== "Line" && row.market !== "Total") return row;
+
+  if (row.market === "Total") {
+    const prediction = findPredictionForTotalOddsRow(row, lookup);
+    const result = row.result.trim().toLowerCase();
+    if (!prediction || prediction.predTotal == null || row.value == null) {
+      return {
+        ...row,
+        model: null,
+      };
+    }
+
+    const probability = result.startsWith("over")
+      ? normalCdf((prediction.predTotal - row.value) / FALLBACK_TOTAL_POINTS_SIGMA)
+      : result.startsWith("under")
+        ? normalCdf((row.value - prediction.predTotal) / FALLBACK_TOTAL_POINTS_SIGMA)
+        : null;
+
+    return {
+      ...row,
+      model: probability == null ? null : probability * 100,
+    };
+  }
 
   const prediction = findPredictionForOddsRow(row, lookup);
   if (!prediction) {
@@ -797,6 +977,29 @@ function applyPredictionModelToRow(row: BettingOddsRow, lookup: PredictionLookup
   return {
     ...row,
     model: coverProbability * 100,
+  };
+}
+
+function applyTryscorerPredictionModelToRow(
+  row: BettingOddsRow,
+  lookup: TryscorerPredictionLookupMaps
+): BettingOddsRow {
+  if (row.market !== "Tryscorer") return row;
+
+  const prediction = findTryscorerPredictionForOddsRow(row, lookup);
+  if (!prediction) {
+    return {
+      ...row,
+      model: null,
+    };
+  }
+
+  const targetTries = Math.max(1, Math.round(row.value ?? 1));
+  const probability = targetTries <= 1 ? prediction.anytimeProb : null;
+
+  return {
+    ...row,
+    model: probability == null ? null : probability * 100,
   };
 }
 
@@ -923,6 +1126,66 @@ function mapBettingRows(table: BettingOddsTable, raw: Record<string, unknown>): 
   }
 
   return [mapLegacyBettingRow(table, raw)];
+}
+
+function isBettingOddsTable(value: unknown): value is BettingOddsTable {
+  return value === "NRL Odds" || value === "NRL Line Odds" || value === "NRL Total Odds" || value === "NRL Tryscorers";
+}
+
+function tableForBettingMarket(market: BettingMarket): BettingOddsTable {
+  if (market === "Line") return "NRL Line Odds";
+  if (market === "Total") return "NRL Total Odds";
+  if (market === "Tryscorer") return "NRL Tryscorers";
+  return "NRL Odds";
+}
+
+function mapBettingSnapshotRow(raw: unknown, fallbackMarket: BettingMarket): BettingOddsRow | null {
+  const row = asRecord(raw);
+  const table = isBettingOddsTable(row.table) ? row.table : tableForBettingMarket(fallbackMarket);
+  const market = mapBettingMarket(table, row.market ?? row.Market);
+  const mapped: BettingOddsRow = {
+    table,
+    market,
+    date: toIsoDate(row.date ?? row.Date),
+    match: toNullableString(row.match ?? row.Match) ?? "",
+    result: toNullableString(row.result ?? row.Result) ?? "",
+    value: toNullableFinite(row.value ?? row.Value),
+    model: toNullableFinite(row.model ?? row.Model),
+    bestBookie: toNullableString(row.bestBookie ?? row.best_bookie ?? row["Best Bookie"]),
+    bestPrice: toNullableOdds(row.bestPrice ?? row.best_price ?? row["Best Price"]),
+    marketPercentage: toNullableFinite(row.marketPercentage ?? row.market_percentage ?? row["Market %"]),
+    Sportsbet: toNullableOdds(row.Sportsbet ?? row.sportsbet),
+    Pointsbet: toNullableOdds(row.Pointsbet ?? row.pointsbet),
+    Unibet: toNullableOdds(row.Unibet ?? row.unibet),
+    Palmerbet: toNullableOdds(row.Palmerbet ?? row.palmerbet),
+    Betright: toNullableOdds(row.Betright ?? row.betright),
+    Betr: toNullableOdds(row.Betr ?? row.betr),
+  };
+
+  if (!mapped.date || !mapped.match || !mapped.result) return null;
+  return {
+    ...mapped,
+    ...computeBestBookieFromRow(mapped),
+  };
+}
+
+function mapBettingSnapshotRows(raw: unknown, market: BettingMarket): BettingOddsRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .flatMap((row) => {
+      const record = asRecord(row);
+      const table = isBettingOddsTable(record.table) ? record.table : tableForBettingMarket(market);
+      if ((table === "NRL Line Odds" || table === "NRL Total Odds") && hasBookSpecificOddsColumns(record)) {
+        return mapBookSpecificBettingRows(table, record).filter((mapped) => mapped.date && mapped.match && mapped.result);
+      }
+      const mapped = mapBettingSnapshotRow(record, market);
+      return mapped ? [mapped] : [];
+    })
+    .sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      if (a.match !== b.match) return a.match.localeCompare(b.match);
+      return a.result.localeCompare(b.result);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1546,7 +1809,7 @@ async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Pro
   const supabase = createServerSupabaseClient("nrl");
   const allRows: PredictionModelRow[] = [];
   let start = 0;
-  let select = "url,match_date,match,team,win_prob,pred_margin,pred_margin_pre_manual,updated_at";
+  let select = "url,match_date,match,team,win_prob,pred_margin,pred_margin_pre_manual,pred_total,updated_at";
 
   while (true) {
     const end = start + PAGE_SIZE - 1;
@@ -1559,7 +1822,13 @@ async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Pro
 
     if (error) {
       const message = error.message.toLowerCase();
-      if (select.includes("pred_margin_pre_manual") && (message.includes("column") || message.includes("schema cache"))) {
+      if (select.includes("pred_total") && (message.includes("pred_total") || message.includes("column") || message.includes("schema cache"))) {
+        select = select.replace(",pred_total", "");
+        start = 0;
+        allRows.length = 0;
+        continue;
+      }
+      if (select.includes("pred_margin_pre_manual") && (message.includes("pred_margin_pre_manual") || message.includes("column") || message.includes("schema cache"))) {
         select = "url,match_date,match,team,win_prob,pred_margin,updated_at";
         start = 0;
         allRows.length = 0;
@@ -1607,14 +1876,270 @@ async function fetchMarginOverrideRowsFromSupabase(rows: PredictionModelRow[]): 
   return allRows;
 }
 
-export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOddsSnapshot> {
-  const [h2hRaw, lineRaw, total, tryscorer] = await Promise.all([
+async function fetchTryscorerPredictionRowsFromSupabase(rows: BettingOddsRow[]): Promise<TryscorerPredictionRow[]> {
+  const dateRange = bettingOddsDateRange(rows);
+  if (!dateRange) return [];
+
+  const supabase = createServerSupabaseClient("nrl");
+  const allRows: TryscorerPredictionRow[] = [];
+  let start = 0;
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("tryscorer_predictions")
+      .select("match_date,match,player,anytime_prob,updated_at")
+      .gte("match_date", dateRange.minDate)
+      .lte("match_date", dateRange.maxDate)
+      .range(start, end);
+
+    if (error) {
+      throw new Error(`Supabase fetch nrl.tryscorer_predictions: ${error.message}`);
+    }
+
+    const pageRows = (data ?? []) as unknown as TryscorerPredictionRow[];
+    if (pageRows.length === 0) break;
+    allRows.push(...pageRows);
+    if (pageRows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
+async function fetchNamedLineupPlayersForTryscorers(rows: BettingOddsRow[]): Promise<Map<string, Set<string>>> {
+  const dateRange = bettingOddsDateRange(rows);
+  if (!dateRange) return new Map();
+
+  const supabase = createServerSupabaseClient("nrl");
+  const namedPlayersByMatch = new Map<string, Set<string>>();
+  let start = 0;
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("lineups")
+      .select("match_date,match,player")
+      .gte("match_date", dateRange.minDate)
+      .lte("match_date", dateRange.maxDate)
+      .range(start, end);
+
+    if (error) {
+      throw new Error(`Supabase fetch nrl.lineups for betting tryscorers: ${error.message}`);
+    }
+
+    const pageRows = (data ?? []) as Array<Record<string, unknown>>;
+    if (pageRows.length === 0) break;
+
+    for (const row of pageRows) {
+      const date = toIsoDate(row.match_date);
+      const match = matchKey(row.match);
+      const player = normaliseLookupKey(row.player);
+      if (!date || !match || !player) continue;
+
+      const key = `${date}|${match}`;
+      const players = namedPlayersByMatch.get(key) ?? new Set<string>();
+      players.add(player);
+      namedPlayersByMatch.set(key, players);
+    }
+
+    if (pageRows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  return namedPlayersByMatch;
+}
+
+function filterTryscorersToNamedLineups(rows: BettingOddsRow[], namedPlayersByMatch: Map<string, Set<string>>): BettingOddsRow[] {
+  if (namedPlayersByMatch.size === 0) return rows;
+
+  return rows.filter((row) => {
+    const namedPlayers = namedPlayersByMatch.get(`${row.date}|${matchKey(row.match)}`);
+    if (!namedPlayers) return true;
+    return namedPlayers.has(normaliseLookupKey(row.result));
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asStringRecord(value: unknown): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(asRecord(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+  );
+}
+
+function mapBettingSummaryGame(raw: unknown): BettingSummaryGame | null {
+  const row = asRecord(raw);
+  const matchDate = typeof row.matchDate === "string" ? row.matchDate : "";
+  const match = typeof row.match === "string" ? row.match : "";
+  const matchKey = typeof row.matchKey === "string" ? row.matchKey : "";
+  if (!matchDate || !match || !matchKey) return null;
+
+  return {
+    round: typeof row.round === "number" && Number.isFinite(row.round) ? row.round : null,
+    matchDate,
+    kickoffUtc: typeof row.kickoffUtc === "string" ? row.kickoffUtc : null,
+    releaseAtUtc: typeof row.releaseAtUtc === "string" ? row.releaseAtUtc : null,
+    matchCentreUrl: typeof row.matchCentreUrl === "string" ? row.matchCentreUrl : null,
+    match,
+    homeTeam: typeof row.homeTeam === "string" ? row.homeTeam : "",
+    awayTeam: typeof row.awayTeam === "string" ? row.awayTeam : "",
+    homeTeamKey: typeof row.homeTeamKey === "string" ? row.homeTeamKey : null,
+    awayTeamKey: typeof row.awayTeamKey === "string" ? row.awayTeamKey : null,
+    matchKey,
+    homeLogoUrl: typeof row.homeLogoUrl === "string" ? row.homeLogoUrl : null,
+    awayLogoUrl: typeof row.awayLogoUrl === "string" ? row.awayLogoUrl : null,
+  };
+}
+
+function mapBettingTryscorerForm(value: unknown): BettingTryscorerFormSummary | null {
+  const row = asRecord(value);
+  const player = typeof row.player === "string" ? row.player : "";
+  if (!player) return null;
+  const lastFive = Array.isArray(row.lastFive)
+    ? row.lastFive.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+    : [];
+
+  return {
+    player,
+    team: typeof row.team === "string" ? row.team : null,
+    position: typeof row.position === "string" ? row.position : null,
+    gamesPlayed: typeof row.gamesPlayed === "number" && Number.isFinite(row.gamesPlayed) ? row.gamesPlayed : undefined,
+    tries2026: typeof row.tries2026 === "number" && Number.isFinite(row.tries2026) ? row.tries2026 : undefined,
+    lastFive,
+    average: typeof row.average === "number" && Number.isFinite(row.average) ? row.average : 0,
+    headImage: typeof row.headImage === "string" ? row.headImage : null,
+    bodyImage: typeof row.bodyImage === "string" ? row.bodyImage : null,
+    teamLogoUrl: typeof row.teamLogoUrl === "string" ? row.teamLogoUrl : null,
+  };
+}
+
+function emptyBettingPageSummary(): BettingPageSummary {
+  return {
+    id: "current",
+    year: null,
+    games: [],
+    teamLogos: {},
+    playerTeamsByName: {},
+    tryscorerFormByPlayer: {},
+    tryscorerKickoffsByMatch: {},
+    lineupPlayersByMatch: {},
+    updatedAt: null,
+  };
+}
+
+export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPageSummary> {
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("betting_page_summary")
+    .select("id,year,games,team_logos,player_teams_by_name,tryscorer_form_by_player,tryscorer_kickoffs_by_match,lineup_players_by_match,updated_at")
+    .eq("id", "current")
+    .maybeSingle();
+
+  if (error) throw new Error(`Supabase fetch summary.betting_page_summary: ${error.message}`);
+  if (!data) return emptyBettingPageSummary();
+
+  const row = data as Record<string, unknown>;
+  const tryscorerFormByPlayer = Object.fromEntries(
+    Object.entries(asRecord(row.tryscorer_form_by_player)).flatMap(([key, value]) => {
+      const mapped = mapBettingTryscorerForm(value);
+      return mapped ? [[key, mapped]] : [];
+    })
+  );
+
+  return {
+    id: typeof row.id === "string" ? row.id : "current",
+    year: typeof row.year === "number" && Number.isFinite(row.year) ? row.year : null,
+    games: Array.isArray(row.games) ? row.games.flatMap((game) => {
+      const mapped = mapBettingSummaryGame(game);
+      return mapped ? [mapped] : [];
+    }) : [],
+    teamLogos: asStringRecord(row.team_logos),
+    playerTeamsByName: asStringRecord(row.player_teams_by_name),
+    tryscorerFormByPlayer,
+    tryscorerKickoffsByMatch: asStringRecord(row.tryscorer_kickoffs_by_match),
+    lineupPlayersByMatch: asRecord(row.lineup_players_by_match),
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+  };
+}
+
+export async function fetchBettingPageSummary(): Promise<BettingPageSummary> {
+  try {
+    return await fetchBettingPageSummaryFromSupabase();
+  } catch (error) {
+    console.warn("Unable to fetch betting page summary; rendering betting page with live odds only.", error);
+    return emptyBettingPageSummary();
+  }
+}
+
+function shouldEnrichBettingSnapshotModels(snapshot: BettingOddsSnapshot): boolean {
+  return [...snapshot.h2h, ...snapshot.line, ...snapshot.total, ...snapshot.tryscorer]
+    .some((row) => row.model == null);
+}
+
+async function enrichBettingSnapshotModels(snapshot: BettingOddsSnapshot): Promise<BettingOddsSnapshot> {
+  if (!shouldEnrichBettingSnapshotModels(snapshot)) return snapshot;
+
+  const predictionRows = await fetchPredictionModelRowsFromSupabase([
+    ...snapshot.h2h,
+    ...snapshot.line,
+    ...snapshot.total,
+  ]).catch((error) => {
+    console.warn("Unable to enrich summary betting odds with prediction rows.", error);
+    return [];
+  });
+  const marginOverrideRows = await fetchMarginOverrideRowsFromSupabase(predictionRows).catch((error) => {
+    console.warn("Unable to fetch betting margin overrides for summary enrichment; using saved prediction margins.", error);
+    return [];
+  });
+  const tryscorerPredictionRows = await fetchTryscorerPredictionRowsFromSupabase(snapshot.tryscorer).catch((error) => {
+    console.warn("Unable to enrich summary tryscorer odds with prediction rows.", error);
+    return [];
+  });
+  const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
+  const tryscorerPredictionLookup = buildTryscorerPredictionLookup(tryscorerPredictionRows);
+
+  return {
+    ...snapshot,
+    h2h: snapshot.h2h.map((row) => applyPredictionModelToRow(row, predictionLookup)),
+    line: snapshot.line.map((row) => applyPredictionModelToRow(row, predictionLookup)),
+    total: snapshot.total.map((row) => applyPredictionModelToRow(row, predictionLookup)),
+    tryscorer: snapshot.tryscorer.map((row) => applyTryscorerPredictionModelToRow(row, tryscorerPredictionLookup)),
+  };
+}
+
+export async function fetchBettingOddsSnapshotFromSummary(): Promise<BettingOddsSnapshot> {
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("betting_odds_snapshot")
+    .select("id,h2h,line,total,tryscorer,generated_at,updated_at")
+    .eq("id", "current")
+    .maybeSingle();
+
+  if (error) throw new Error(`Supabase fetch summary.betting_odds_snapshot: ${error.message}`);
+  if (!data) throw new Error("Supabase fetch summary.betting_odds_snapshot: current row not found");
+
+  const row = data as Record<string, unknown>;
+  const snapshot = {
+    h2h: mapBettingSnapshotRows(row.h2h, "H2H"),
+    line: mapBettingSnapshotRows(row.line, "Line"),
+    total: mapBettingSnapshotRows(row.total, "Total"),
+    tryscorer: mapBettingSnapshotRows(row.tryscorer, "Tryscorer"),
+    generatedAt: toNullableString(row.generated_at) ?? toNullableString(row.updated_at) ?? new Date().toISOString(),
+  };
+  return enrichBettingSnapshotModels(snapshot);
+}
+
+export async function fetchBettingOddsSnapshotFromRawTables(): Promise<BettingOddsSnapshot> {
+  const [h2hRaw, lineRaw, totalRaw, tryscorer] = await Promise.all([
     fetchBettingOddsTableOrEmpty("NRL Odds"),
     fetchBettingOddsTableOrEmpty("NRL Line Odds"),
     fetchBettingOddsTableOrEmpty("NRL Total Odds"),
     fetchBettingOddsTableOrEmpty("NRL Tryscorers"),
   ]);
-  const predictionRows = await fetchPredictionModelRowsFromSupabase([...h2hRaw, ...lineRaw]).catch((error) => {
+  const predictionRows = await fetchPredictionModelRowsFromSupabase([...h2hRaw, ...lineRaw, ...totalRaw]).catch((error) => {
     console.warn("Unable to fetch betting prediction rows; rendering odds without model values.", error);
     return [];
   });
@@ -1622,31 +2147,47 @@ export async function fetchBettingOddsSnapshotFromSupabase(): Promise<BettingOdd
     console.warn("Unable to fetch betting margin overrides; using saved prediction margins.", error);
     return [];
   });
+  const tryscorerPredictionRows = await fetchTryscorerPredictionRowsFromSupabase(tryscorer).catch((error) => {
+    console.warn("Unable to fetch betting tryscorer prediction rows; rendering try scorer odds without model values.", error);
+    return [];
+  });
+  const namedLineupPlayersByMatch = await fetchNamedLineupPlayersForTryscorers(tryscorer).catch((error) => {
+    console.warn("Unable to fetch betting lineup players; rendering try scorer odds without lineup filtering.", error);
+    return new Map<string, Set<string>>();
+  });
   const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
+  const tryscorerPredictionLookup = buildTryscorerPredictionLookup(tryscorerPredictionRows);
+  const namedTryscorers = filterTryscorersToNamedLineups(tryscorer, namedLineupPlayersByMatch);
   const h2h = h2hRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
   const line = lineRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
+  const total = totalRaw.map((row) => applyPredictionModelToRow(row, predictionLookup));
 
   return {
     h2h,
     line,
     total,
-    tryscorer,
+    tryscorer: namedTryscorers.map((row) => applyTryscorerPredictionModelToRow(row, tryscorerPredictionLookup)),
     generatedAt: new Date().toISOString(),
   };
 }
 
 export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
   try {
-    return await fetchBettingOddsSnapshotFromSupabase();
+    return await fetchBettingOddsSnapshotFromSummary();
   } catch (error) {
-    console.warn("Unable to fetch betting odds snapshot; using empty odds lists.", error);
-    return {
-      h2h: [],
-      line: [],
-      total: [],
-      tryscorer: [],
-      generatedAt: new Date().toISOString(),
-    };
+    console.warn("Unable to fetch summary betting odds snapshot; falling back to raw odds tables.", error);
+    try {
+      return await fetchBettingOddsSnapshotFromRawTables();
+    } catch (rawError) {
+      console.warn("Unable to fetch betting odds snapshot; using empty odds lists.", rawError);
+      return {
+        h2h: [],
+        line: [],
+        total: [],
+        tryscorer: [],
+        generatedAt: new Date().toISOString(),
+      };
+    }
   }
 }
 
@@ -1812,13 +2353,32 @@ function jsonArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
 }
 
-async function fetchFantasyPlayerCardSummariesFromSupabase(): Promise<FantasyPlayerCardSummary[]> {
+interface FetchFantasyPlayerCardSummariesOptions {
+  limit?: number
+  orderBy?: "player" | "weeklyChangeDesc"
+  requirePositiveWeeklyChange?: boolean
+}
+
+async function fetchFantasyPlayerCardSummariesFromSupabase(
+  options: FetchFantasyPlayerCardSummariesOptions = {}
+): Promise<FantasyPlayerCardSummary[]> {
+  const { limit = 1000, orderBy = "player", requirePositiveWeeklyChange = false } = options
   const supabase = createServerSupabaseClient("summary");
-  const { data, error } = await supabase
+  let query = supabase
     .from("fantasy_player_card_summary")
     .select("*")
-    .order("player", { ascending: true })
-    .limit(1000);
+
+  if (requirePositiveWeeklyChange) {
+    query = query.gt("weekly_change", 0)
+  }
+
+  query = orderBy === "weeklyChangeDesc"
+    ? query
+      .order("weekly_change", { ascending: false, nullsFirst: false })
+      .order("price", { ascending: false, nullsFirst: false })
+    : query.order("player", { ascending: true })
+
+  const { data, error } = await query.limit(limit);
 
   if (error) {
     const message = error.message.toLowerCase();
@@ -1918,6 +2478,24 @@ function mapLineupsPageSummary(row: Record<string, unknown>): LineupsPageSummary
   };
 }
 
+function mapLineupsPageShellSummary(row: Record<string, unknown>): LineupsPageShellSummary | null {
+  const year = toFiniteNumber(row.year);
+  const round = toNullableString(row.round);
+  if (year == null || !round) return null;
+
+  return {
+    year: Math.trunc(year),
+    round,
+    roundOptions: jsonArray<LineupRoundOption>(row.round_options),
+    matches: jsonArray<LineupMatch>(row.matches),
+    teamLogos: jsonRecord<string>(row.team_logos),
+    sportsbetOdds: jsonRecord<LineupSportsbetOdds>(row.sportsbet_odds),
+    updatedAt: toNullableString(row.updated_at),
+  };
+}
+
+const LINEUPS_PAGE_SHELL_COLUMNS = "year,round,round_options,matches,team_logos,sportsbet_odds,updated_at";
+
 async function fetchLineupsPageSummaryFromSupabase(year: number, round: string): Promise<LineupsPageSummary | null> {
   const supabase = createServerSupabaseClient("summary");
   const { data, error } = await supabase
@@ -1938,6 +2516,47 @@ async function fetchLineupsPageSummaryFromSupabase(year: number, round: string):
   return data ? mapLineupsPageSummary(data as Record<string, unknown>) : null;
 }
 
+async function fetchLineupsPageShellSummaryFromSupabase(year: number, round: string): Promise<LineupsPageShellSummary | null> {
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("lineups_page_summary")
+    .select(LINEUPS_PAGE_SHELL_COLUMNS)
+    .eq("year", year)
+    .eq("round", round)
+    .maybeSingle();
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+      return null;
+    }
+    throw new Error(`Supabase fetch summary.lineups_page_summary shell: ${error.message}`);
+  }
+
+  return data ? mapLineupsPageShellSummary(data as Record<string, unknown>) : null;
+}
+
+async function fetchLatestLineupsPageShellSummaryFromSupabase(year: number): Promise<LineupsPageShellSummary | null> {
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("lineups_page_summary")
+    .select(LINEUPS_PAGE_SHELL_COLUMNS)
+    .eq("year", year)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+      return null;
+    }
+    throw new Error(`Supabase fetch latest summary.lineups_page_summary shell: ${error.message}`);
+  }
+
+  return data ? mapLineupsPageShellSummary(data as Record<string, unknown>) : null;
+}
+
 export async function fetchLineupsPageSummary(year: number, round: string): Promise<LineupsPageSummary | null> {
   try {
     return await fetchLineupsPageSummaryFromSupabase(year, round);
@@ -1947,9 +2566,135 @@ export async function fetchLineupsPageSummary(year: number, round: string): Prom
   }
 }
 
+export async function fetchLineupsPageShellSummary(year: number, round: string): Promise<LineupsPageShellSummary | null> {
+  try {
+    return await fetchLineupsPageShellSummaryFromSupabase(year, round);
+  } catch (error) {
+    console.warn("Unable to fetch lineups page shell summary.", error);
+    return null;
+  }
+}
+
+export async function fetchLatestLineupsPageShellSummary(year: number): Promise<LineupsPageShellSummary | null> {
+  try {
+    return await fetchLatestLineupsPageShellSummaryFromSupabase(year);
+  } catch (error) {
+    console.warn("Unable to fetch latest lineups page shell summary.", error);
+    return null;
+  }
+}
+
+function lineupsPlayerKeys(match: LineupMatch): string[] {
+  const players = [
+    ...(match.homeTeam?.players ?? []),
+    ...(match.awayTeam?.players ?? []),
+  ];
+  return [...new Set(players.map((player) => normaliseLookupKey(player.player)).filter(Boolean))];
+}
+
+function filterRecordByKeys<T>(record: Record<string, T>, keys: Iterable<string>): Record<string, T> {
+  const filtered: Record<string, T> = {};
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(record, key)) filtered[key] = record[key];
+  }
+  return filtered;
+}
+
+async function fetchLineupPlayerTryHistoryForKeys(playerKeys: string[]): Promise<PlayerTryHistory> {
+  const keys = [...new Set(playerKeys)].filter(Boolean);
+  if (keys.length === 0) return {};
+
+  const supabase = createServerSupabaseClient("summary");
+  const { data, error } = await supabase
+    .from("lineup_player_try_history_summary")
+    .select("player_key,history")
+    .in("player_key", keys);
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+      return {};
+    }
+    throw new Error(`Supabase fetch summary.lineup_player_try_history_summary by keys: ${error.message}`);
+  }
+
+  return Object.fromEntries(
+    ((data ?? []) as Record<string, unknown>[])
+      .map(mapLineupPlayerTryHistoryRow)
+      .filter((entry): entry is [string, PlayerTryHistory[string]] => entry !== null)
+  );
+}
+
+export async function fetchLineupsMatchDetailSummary(
+  year: number,
+  round: string,
+  matchId: string
+): Promise<LineupsMatchDetailSummary | null> {
+  try {
+    const supabase = createServerSupabaseClient("summary");
+    const { data, error } = await supabase
+      .from("lineups_page_summary")
+      .select("matches,match_stats,tryscorer_odds,sportsbet_odds,casualty_ward_outs,player_averages,position_ppm_baselines")
+      .eq("year", year)
+      .eq("round", round)
+      .maybeSingle();
+
+    if (error) {
+      const message = error.message.toLowerCase();
+      if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+        return null;
+      }
+      throw new Error(`Supabase fetch summary.lineups_page_summary match detail: ${error.message}`);
+    }
+    if (!data) return null;
+
+    const row = data as Record<string, unknown>;
+    const match = jsonArray<LineupMatch>(row.matches).find((candidate) => candidate.matchId === matchId) ?? null;
+    if (!match) return null;
+
+    const playerKeys = lineupsPlayerKeys(match);
+    const teamKeys = [
+      normaliseLookupKey(match.homeTeam?.team),
+      normaliseLookupKey(match.homeTeam?.teamName),
+      normaliseLookupKey(match.awayTeam?.team),
+      normaliseLookupKey(match.awayTeam?.teamName),
+    ].filter(Boolean);
+    const sportsbetOdds = jsonRecord<LineupSportsbetOdds>(row.sportsbet_odds);
+    const matchStats = jsonRecord<LineupMatchStats>(row.match_stats)[matchId] ?? null;
+
+    return {
+      match,
+      matchStats,
+      tryscorerOdds: filterRecordByKeys(jsonRecord<LineupTryscorerOdds>(row.tryscorer_odds), playerKeys),
+      sportsbetOdds: Object.fromEntries(
+        Object.entries(sportsbetOdds).filter(([key, odds]) =>
+          key.includes(String(match.matchDate ?? "").slice(0, 10)) ||
+          teamKeys.includes(normaliseLookupKey(odds.team))
+        )
+      ),
+      casualtyWardOuts: filterRecordByKeys(jsonRecord<LineupCasualtyOut[]>(row.casualty_ward_outs), teamKeys),
+      playerAverages: filterRecordByKeys(jsonRecord<Record<string, number>>(row.player_averages), playerKeys),
+      positionPpmBaselines: jsonRecord<number>(row.position_ppm_baselines),
+      playerTryHistory: await fetchLineupPlayerTryHistoryForKeys(playerKeys),
+    };
+  } catch (error) {
+    console.warn("Unable to fetch lineups match detail summary.", error);
+    return null;
+  }
+}
+
 const fetchFantasyPlayerCardSummariesCached = unstable_cache(
   async (): Promise<FantasyPlayerCardSummary[]> => fetchFantasyPlayerCardSummariesFromSupabase(),
   ["fantasy-player-card-summary-v2"],
+  { revalidate: 300 }
+);
+
+const fetchTopWeeklyFantasyPlayerCardSummariesCached = unstable_cache(
+  async (): Promise<FantasyPlayerCardSummary[]> => fetchFantasyPlayerCardSummariesFromSupabase({
+    limit: 20,
+    orderBy: "weeklyChangeDesc",
+  }),
+  ["fantasy-player-card-summary-top-weekly-v2"],
   { revalidate: 300 }
 );
 
@@ -1961,6 +2706,21 @@ export async function fetchFantasyPlayerCardSummaries(): Promise<FantasyPlayerCa
     return await fetchFantasyPlayerCardSummariesCached();
   } catch (error) {
     console.warn("Unable to fetch fantasy player card summaries; falling back to derived rows.", error);
+    return [];
+  }
+}
+
+export async function fetchTopWeeklyFantasyPlayerCardSummaries(): Promise<FantasyPlayerCardSummary[]> {
+  try {
+    if (process.env.NODE_ENV !== "production") {
+      return await fetchFantasyPlayerCardSummariesFromSupabase({
+        limit: 20,
+        orderBy: "weeklyChangeDesc",
+      });
+    }
+    return await fetchTopWeeklyFantasyPlayerCardSummariesCached();
+  } catch (error) {
+    console.warn("Unable to fetch top weekly fantasy player card summaries; falling back to empty preview.", error);
     return [];
   }
 }

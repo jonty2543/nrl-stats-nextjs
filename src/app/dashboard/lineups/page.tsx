@@ -3,38 +3,16 @@ import { headers } from "next/headers"
 import { LineupsDashboard } from "@/components/views/lineups-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import {
-  fetchCasualtyWardOuts,
   fetchLineupRoundOptions,
+  fetchLiveLineupData,
   fetchLineupsForRound,
-  fetchUpcomingSportsbetH2HOdds,
-  fetchUpcomingTryscorerOdds,
 } from "@/lib/lineups/nrl-lineups"
-import { fetchLineupPlayerTryHistorySummary, fetchLineupsPageSummary, fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
-import type { PlayerStat } from "@/lib/data/types"
+import { fetchLatestLineupsPageShellSummary, fetchLineupsPageShellSummary, fetchTeamLogos } from "@/lib/supabase/queries"
 import type { LineupMatch, LineupRoundOption } from "@/lib/lineups/nrl-lineups"
 
 export const dynamic = "force-dynamic"
 
 const LINEUPS_PAGE_FETCH_TIMEOUT_MS = 2500
-
-const AVERAGE_KEYS = [
-  "Tries",
-  "Try Assists",
-  "All Run Metres",
-  "Post Contact Metres",
-  "Tackles Made",
-  "Tackle Efficiency",
-  "Line Breaks",
-  "Line Break Assists",
-  "Errors",
-  "Missed Tackles",
-  "Receipts",
-  "Tackle Breaks",
-  "Offloads",
-] as const
-
-type AverageKey = (typeof AVERAGE_KEYS)[number]
-type PositionBaselineKey = "FB" | "W" | "C" | "FE" | "HLF" | "HK" | "PR" | "2RF" | "LK"
 
 function withFallback<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null
@@ -54,83 +32,6 @@ function withFallback<T>(promise: Promise<T>, fallback: T, label: string): Promi
   ]).finally(() => {
     if (timeout) clearTimeout(timeout)
   })
-}
-
-function normaliseName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
-}
-
-function buildPlayerAverages(rows: PlayerStat[]): Record<string, Record<AverageKey, number>> {
-  const totals = new Map<string, { games: number; values: Record<AverageKey, number> }>()
-
-  for (const row of rows) {
-    const key = normaliseName(row.Name)
-    if (!key) continue
-
-    const bucket = totals.get(key) ?? {
-      games: 0,
-      values: Object.fromEntries(AVERAGE_KEYS.map((stat) => [stat, 0])) as Record<AverageKey, number>,
-    }
-    bucket.games += 1
-    for (const stat of AVERAGE_KEYS) {
-      bucket.values[stat] += Number(row[stat] ?? 0)
-    }
-    totals.set(key, bucket)
-  }
-
-  return Object.fromEntries(
-    [...totals.entries()].map(([key, bucket]) => [
-      key,
-      Object.fromEntries(
-        AVERAGE_KEYS.map((stat) => [stat, bucket.games > 0 ? bucket.values[stat] / bucket.games : 0])
-      ) as Record<AverageKey, number>,
-    ])
-  )
-}
-
-function positionBaselineKey(position: string | null | undefined, number: string | number | null | undefined): PositionBaselineKey | null {
-  const rawNumber = Number(number)
-  if (rawNumber === 1) return "FB"
-  if (rawNumber === 2 || rawNumber === 5) return "W"
-  if (rawNumber === 3 || rawNumber === 4) return "C"
-  if (rawNumber === 6) return "FE"
-  if (rawNumber === 7) return "HLF"
-  if (rawNumber === 8 || rawNumber === 10) return "PR"
-  if (rawNumber === 9) return "HK"
-  if (rawNumber === 11 || rawNumber === 12) return "2RF"
-  if (rawNumber === 13) return "LK"
-
-  const key = String(position ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
-  if (key.includes("fullback")) return "FB"
-  if (key.includes("wing")) return "W"
-  if (key.includes("centre") || key.includes("center")) return "C"
-  if (key.includes("five eighth")) return "FE"
-  if (key.includes("halfback")) return "HLF"
-  if (key.includes("hooker")) return "HK"
-  if (key.includes("prop")) return "PR"
-  if (key.includes("row")) return "2RF"
-  if (key.includes("lock")) return "LK"
-  return null
-}
-
-function buildPositionPpmBaselines(rows: PlayerStat[]): Record<string, number> {
-  const totals = new Map<PositionBaselineKey, { fantasy: number; minutes: number }>()
-
-  for (const row of rows) {
-    const key = positionBaselineKey(row.Position, row.Number)
-    const minutes = Number(row["Mins Played"] ?? 0)
-    const fantasy = Number(row.Fantasy ?? 0)
-    if (!key || !Number.isFinite(minutes) || minutes <= 0 || !Number.isFinite(fantasy)) continue
-
-    const bucket = totals.get(key) ?? { fantasy: 0, minutes: 0 }
-    bucket.fantasy += fantasy
-    bucket.minutes += minutes
-    totals.set(key, bucket)
-  }
-
-  return Object.fromEntries(
-    [...totals.entries()].map(([key, bucket]) => [key, bucket.minutes > 0 ? bucket.fantasy / bucket.minutes : 0])
-  )
 }
 
 function parseKickoff(value: string | null): Date | null {
@@ -172,26 +73,47 @@ function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | n
     month: "2-digit",
     day: "2-digit",
   }).format(now)
-  const activeRound = options.find((option) => today >= option.startDate && today <= option.endDate)
-  if (activeRound) return activeRound
-
   const weekday = new Intl.DateTimeFormat("en-US", {
     timeZone: "Australia/Brisbane",
     weekday: "short",
   }).format(now)
-  const hour = Number(new Intl.DateTimeFormat("en-AU", {
-    timeZone: "Australia/Brisbane",
-    hour: "numeric",
-    hour12: false,
-  }).format(now))
-  const shouldRollToUpcoming = weekday !== "Mon" || hour >= 12
+  const nextFutureRound = options.find((option) => option.startDate >= today)
+
+  if (weekday === "Mon" && nextFutureRound) return nextFutureRound
+
+  const activeRound = options.find((option) => today >= option.startDate && today <= option.endDate)
+  if (activeRound) return activeRound
 
   return (
-    (shouldRollToUpcoming ? options.find((option) => option.startDate >= today) : null) ??
+    nextFutureRound ??
     options.findLast((option) => option.startDate <= today) ??
     options.at(0) ??
     null
   )
+}
+
+function mergeRoundOptions(...optionGroups: LineupRoundOption[][]): LineupRoundOption[] {
+  const byRound = new Map<string, LineupRoundOption>()
+  for (const options of optionGroups) {
+    for (const option of options) {
+      const existing = byRound.get(option.value)
+      if (!existing) {
+        byRound.set(option.value, option)
+        continue
+      }
+      byRound.set(option.value, {
+        ...existing,
+        ...option,
+        startDate: existing.startDate && option.startDate
+          ? existing.startDate < option.startDate ? existing.startDate : option.startDate
+          : existing.startDate || option.startDate,
+        endDate: existing.endDate && option.endDate
+          ? existing.endDate > option.endDate ? existing.endDate : option.endDate
+          : existing.endDate || option.endDate,
+      })
+    }
+  }
+  return [...byRound.values()].sort((a, b) => a.roundNumber - b.roundNumber || a.label.localeCompare(b.label))
 }
 
 async function shouldShowLineupsSummaryDiagnostic(): Promise<boolean> {
@@ -208,10 +130,18 @@ async function shouldShowLineupsSummaryDiagnostic(): Promise<boolean> {
   )
 }
 
-function lineupsSummaryMissReason(summary: Awaited<ReturnType<typeof fetchLineupsPageSummary>>): string | null {
+function lineupsSummaryMissReason(summary: Awaited<ReturnType<typeof fetchLineupsPageShellSummary>>): string | null {
   if (!summary) return "No row returned from summary.lineups_page_summary for this year/round."
   if (summary.matches.length === 0) return "Summary row returned zero matches."
   return null
+}
+
+function matchShell(match: LineupMatch): LineupMatch {
+  return {
+    ...match,
+    homeTeam: match.homeTeam ? { ...match.homeTeam, players: [] } : null,
+    awayTeam: match.awayTeam ? { ...match.awayTeam, players: [] } : null,
+  }
 }
 
 export default async function LineupsPage({ searchParams }: LineupsPageProps) {
@@ -219,19 +149,33 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const { userId } = await auth()
   const hasProAccess = await getServerProPlotAccess(userId)
   const year = currentYearInBrisbane()
-  const roundOptions = await fetchLineupRoundOptions(year)
-  const selectedRound = roundOptions.find((option) => option.value === params.round)?.value ?? currentRoundOption(roundOptions)?.value ?? "Round 1"
-  const rawSummary = await withFallback(fetchLineupsPageSummary(year, selectedRound), null, "Lineups page summary")
+  const requestedRound = params.round?.trim()
+  const initialSummary = requestedRound
+    ? await withFallback(fetchLineupsPageShellSummary(year, requestedRound), null, "Lineups page shell summary")
+    : await withFallback(fetchLatestLineupsPageShellSummary(year), null, "Latest lineups page shell summary")
+  const latestSummaryForOptions = requestedRound
+    ? await withFallback(fetchLatestLineupsPageShellSummary(year), null, "Latest lineups page shell summary")
+    : initialSummary
+  const fallbackRoundOptions = await withFallback(fetchLineupRoundOptions(year), [], "Lineups round options")
+  const initialRoundOptions = mergeRoundOptions(
+    initialSummary?.roundOptions ?? [],
+    latestSummaryForOptions?.roundOptions ?? [],
+    fallbackRoundOptions
+  )
+  const selectedRound =
+    (requestedRound && initialRoundOptions.some((option) => option.value === requestedRound) ? requestedRound : null) ??
+    currentRoundOption(initialRoundOptions)?.value ??
+    requestedRound ??
+    initialSummary?.round ??
+    "Round 1"
+  const rawSummary = initialSummary?.round === selectedRound
+    ? initialSummary
+    : await withFallback(fetchLineupsPageShellSummary(year, selectedRound), null, "Lineups page shell summary")
   const summaryMissReason = lineupsSummaryMissReason(rawSummary)
   const summary = summaryMissReason ? null : rawSummary
   const fallbackData = summary ? null : await (async () => {
-    const [teamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, playerStatsCurrentYear, playerTryHistory, lineupRound] = await Promise.all([
+    const [teamLogos, lineupRound] = await Promise.all([
       withFallback(fetchTeamLogos(), {}, "Lineups team logos"),
-      withFallback(fetchUpcomingTryscorerOdds(), {}, "Lineups tryscorer odds"),
-      withFallback(fetchUpcomingSportsbetH2HOdds(), {}, "Lineups H2H odds"),
-      withFallback(fetchCasualtyWardOuts(), {}, "Lineups casualty ward"),
-      withFallback(fetchPlayerStats([String(year)]), [], "Lineups player stats"),
-      withFallback(fetchLineupPlayerTryHistorySummary(), {}, "Lineups player try history summary"),
       fetchLineupsForRound({
         round: selectedRound,
         year,
@@ -240,19 +184,18 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
     ])
     return {
       teamLogos,
-      tryscorerOdds,
-      sportsbetOdds,
-      casualtyWardOuts,
-      playerAverages: buildPlayerAverages(playerStatsCurrentYear),
-      playerTryHistory,
-      positionPpmBaselines: buildPositionPpmBaselines(playerStatsCurrentYear),
       matches: lineupRound.matches,
-      matchStats: lineupRound.matchStats,
     }
   })()
-  const matches = summary?.matches ?? fallbackData?.matches ?? []
-  const matchStats = summary?.matchStats ?? fallbackData?.matchStats ?? {}
-  const visibleMatches = matches.filter((match) => match.homeTeam?.players.length || match.awayTeam?.players.length || matchStats[match.matchId] || isDrawFallbackMatch(match) || !isPastMatch(match))
+  const matches = (summary?.matches ?? fallbackData?.matches ?? []).map(matchShell)
+  const summaryTeamLogos = summary?.teamLogos ?? {}
+  const teamLogos = Object.keys(summaryTeamLogos).length > 0
+    ? summaryTeamLogos
+    : fallbackData?.teamLogos ?? await withFallback(fetchTeamLogos(), {}, "Lineups team logos")
+  const visibleMatches = matches.filter((match) => match.homeTeam || match.awayTeam || isDrawFallbackMatch(match) || !isPastMatch(match))
+  const initialLiveMatches = visibleMatches.length > 0
+    ? await withFallback(fetchLiveLineupData(visibleMatches.map((match) => match.matchId)), {}, "Live lineups data")
+    : {}
   const summaryDiagnostic = summaryMissReason && await shouldShowLineupsSummaryDiagnostic()
     ? `lineups_page_summary miss: ${summaryMissReason} Heavy fallback data path is active for ${year} ${selectedRound}.`
     : null
@@ -260,19 +203,14 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   return (
     <LineupsDashboard
       matches={visibleMatches}
-      liveMatches={{}}
+      year={year}
+      liveMatches={initialLiveMatches}
       weatherForecasts={{}}
-      matchStats={matchStats}
-      roundOptions={summary?.roundOptions.length ? summary.roundOptions : roundOptions}
+      roundOptions={mergeRoundOptions(initialRoundOptions, summary?.roundOptions ?? [])}
       selectedRound={selectedRound}
-      teamLogos={summary?.teamLogos ?? fallbackData?.teamLogos ?? {}}
-      tryscorerOdds={summary?.tryscorerOdds ?? fallbackData?.tryscorerOdds ?? {}}
-      sportsbetOdds={summary?.sportsbetOdds ?? fallbackData?.sportsbetOdds ?? {}}
+      teamLogos={teamLogos}
+      sportsbetOdds={summary?.sportsbetOdds ?? {}}
       canAccessFantasyProjections={hasProAccess}
-      casualtyWardOuts={summary?.casualtyWardOuts ?? fallbackData?.casualtyWardOuts ?? {}}
-      playerAverages={(summary?.playerAverages ?? fallbackData?.playerAverages ?? {}) as Record<string, Record<AverageKey, number>>}
-      playerTryHistory={summary?.playerTryHistory ?? fallbackData?.playerTryHistory ?? {}}
-      positionPpmBaselines={summary?.positionPpmBaselines ?? fallbackData?.positionPpmBaselines ?? {}}
       summaryDiagnostic={summaryDiagnostic}
     />
   )

@@ -37,6 +37,7 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { PillRadio } from "@/components/ui/pill-radio"
 import { YearRangeSlider } from "@/components/ui/year-range-slider"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
+import { FantasyBackLink } from "@/components/fantasy/fantasy-back-link"
 import {
   PlayerImageCard,
   primaryTeamForRows,
@@ -67,7 +68,7 @@ const PlayerComments = dynamic(
   () => import("@/components/fantasy/player-comments").then((mod) => mod.PlayerComments),
   {
     loading: () => (
-      <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4 text-xs text-nrl-muted">
+      <div className="rounded-xl border border-nrl-border bg-nrl-panel-2 p-4 text-xs text-nrl-muted">
         Loading comments…
       </div>
     ),
@@ -111,6 +112,7 @@ interface FantasyDashboardProps {
   initialPlayerStats: PlayerStat[]
   initialAllPlayerStats?: PlayerStat[]
   precomputedAllPlayersRows?: FantasyPlayerCardSummary[]
+  precomputedAllPlayersRowsArePreview?: boolean
   playerImages?: PlayerImageRecord[]
   teamLogos?: Record<string, string>
   preloadedPlayerAllYears?: boolean
@@ -118,6 +120,9 @@ interface FantasyDashboardProps {
   draw2026Data?: Draw2026Data | null
   initialSelectedFantasyName?: string
   showOwnedCards?: boolean
+  showFantasyActions?: boolean
+  showAllPlayersOnly?: boolean
+  showFantasyAnalyticsOnly?: boolean
   showPlayerDetails?: boolean
   showPlayerComments?: boolean
   initialShowFantasyAnalytics?: boolean
@@ -458,7 +463,11 @@ const GAME_LOG_COLUMNS: { key: GameLogColumn; label: string; align?: "left" | "r
 ]
 
 const GAME_LOG_BASE_UPSIDE_COLUMN_WIDTH_PX = 190
+const GAME_LOG_COLLAPSED_VISIBLE_ROWS = 5
+const GAME_LOG_COLLAPSED_MAX_HEIGHT_PX = 260
+const GAME_LOG_COLLAPSED_BASE_UPSIDE_MAX_HEIGHT_PX = 356
 const ALL_PLAYERS_STATS_YEAR = "2026"
+const ALL_PLAYERS_PREVIEW_LIMIT = 20
 
 const ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS = new Set<AllPlayersSortKey>()
 
@@ -1589,7 +1598,7 @@ function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
   if (rows.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
+    <div className="rounded-xl border border-nrl-border bg-nrl-panel-2 p-4">
       <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-300">
         <span aria-hidden="true">⚠</span>
         <span>Relevant Outs</span>
@@ -2590,7 +2599,7 @@ function MetricCard({
 
   return (
     <div
-      className={`h-full rounded-lg border border-nrl-border bg-nrl-panel-2 ${compact
+      className={`h-full rounded-lg border border-nrl-border bg-[#1b2444] ${compact
         ? mobileTight
           ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
           : "px-2 py-2 sm:px-2.5 sm:py-2.5 xl:px-2.5 xl:py-2.5"
@@ -2848,6 +2857,7 @@ export function FantasyDashboard({
   initialPlayerStats,
   initialAllPlayerStats = [],
   precomputedAllPlayersRows = [],
+  precomputedAllPlayersRowsArePreview = false,
   playerImages = [],
   teamLogos = {},
   preloadedPlayerAllYears = false,
@@ -2855,6 +2865,9 @@ export function FantasyDashboard({
   draw2026Data,
   initialSelectedFantasyName,
   showOwnedCards = true,
+  showFantasyActions = true,
+  showAllPlayersOnly = false,
+  showFantasyAnalyticsOnly = false,
   showPlayerDetails = true,
   showPlayerComments = false,
   initialShowFantasyAnalytics = false,
@@ -2900,6 +2913,7 @@ export function FantasyDashboard({
   const [selectedRollingAverageStat, setSelectedRollingAverageStat] = useState<string>("Fantasy")
   const [selectedStatVsFantasyLabel, setSelectedStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [showWithWithoutPlot, setShowWithWithoutPlot] = useState(false)
+  const [isGameLogExpanded, setIsGameLogExpanded] = useState(false)
   const [gameLogSort, setGameLogSort] = useState<{ column: GameLogColumn; direction: GameLogSortDirection } | null>(
     null
   )
@@ -2907,6 +2921,7 @@ export function FantasyDashboard({
     column: "weeklyChange",
     direction: "desc",
   })
+  const [allPlayerCardSummaryRows, setAllPlayerCardSummaryRows] = useState<FantasyPlayerCardSummary[]>(precomputedAllPlayersRows)
   const [allPlayersView, setAllPlayersView] = useState<"cards" | "table">("cards")
   const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
   const [allPlayersTagFilters, setAllPlayersTagFilters] = useState<string[]>([])
@@ -2921,6 +2936,7 @@ export function FantasyDashboard({
   const [isFantasyAnalyticsPending, setIsFantasyAnalyticsPending] = useState(false)
   const [isFantasyDraftPending, setIsFantasyDraftPending] = useState(false)
   const [isMyTeamPending, setIsMyTeamPending] = useState(false)
+  const [isAllPlayersPending, setIsAllPlayersPending] = useState(false)
   const [isTradeSuggestorOpen, setIsTradeSuggestorOpen] = useState(false)
   const [tradeScreenshots, setTradeScreenshots] = useState<Record<TradeScreenshotSlot, FantasyTradeScreenshot | null>>({
     starters: null,
@@ -2939,10 +2955,13 @@ export function FantasyDashboard({
     () => hasAllPlayerStatsForYear(allData, ALL_PLAYERS_STATS_YEAR) ? allData : allPlayersStatsData,
     [allData, allPlayersStatsData]
   )
-  const hasPrecomputedAllPlayersRows = precomputedAllPlayersRows.length > 0
+  const hasLoadedFullAllPlayersRows = !precomputedAllPlayersRowsArePreview
+  const isAllPlayersPreview = precomputedAllPlayersRowsArePreview
+  const hasPrecomputedAllPlayersRows = allPlayerCardSummaryRows.length > 0
+  const effectiveAllPlayersView = hasLoadedFullAllPlayersRows ? allPlayersView : "cards"
   const precomputedAllPlayersRowsByKey = useMemo(() => {
     const map = new Map<string, FantasyPlayerCardSummary>()
-    for (const row of precomputedAllPlayersRows) {
+    for (const row of allPlayerCardSummaryRows) {
       if (row.playerId !== null) map.set(`id:${row.playerId}`, row)
       const playerKey = normaliseName(row.player)
       if (playerKey) map.set(`name:${playerKey}`, row)
@@ -2950,6 +2969,9 @@ export function FantasyDashboard({
       if (localNameKey) map.set(`name:${localNameKey}`, row)
     }
     return map
+  }, [allPlayerCardSummaryRows])
+  useEffect(() => {
+    setAllPlayerCardSummaryRows(precomputedAllPlayersRows)
   }, [precomputedAllPlayersRows])
   const { user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
@@ -3227,13 +3249,14 @@ export function FantasyDashboard({
   const navigateToPlayer = useCallback(
     (name: string) => {
       if (playerRouteBasePath) {
-        router.push(`${playerRouteBasePath}/${encodeURIComponent(fantasyPlayerSlug(name))}`)
+        const sourceQuery = showAllPlayersOnly ? "?from=all-players" : ""
+        router.push(`${playerRouteBasePath}/${encodeURIComponent(fantasyPlayerSlug(name))}${sourceQuery}`)
         return
       }
       setSelectedFantasyName(name)
       scrollToPlayerDetails()
     },
-    [playerRouteBasePath, router, scrollToPlayerDetails]
+    [playerRouteBasePath, router, scrollToPlayerDetails, showAllPlayersOnly]
   )
 
   const loadTeammateLookupRows = useCallback(async (years: string[]) => {
@@ -3824,9 +3847,66 @@ export function FantasyDashboard({
       rowsByName.set(name, rows)
     }
 
-    const sourceFantasyPlayers = fantasyPlayers.length > 0
+    const baseFantasyPlayers = fantasyPlayers.length > 0
       ? fantasyPlayers
       : buildFallbackFantasyPlayersFromStats(rowsByName)
+    const fantasyPlayerById = new Map(baseFantasyPlayers.map((player) => [player.id, player]))
+    const fantasyPlayerByNormalizedName = new Map(
+      baseFantasyPlayers.map((player) => [normaliseName(player.name), player])
+    )
+    const previewFallbackCandidates = baseFantasyPlayers.map((player) => ({
+      player,
+      weeklyChange: ownershipDeltaByPlayerId.get(player.id),
+    }))
+    const hasPositiveWeeklyChange = previewFallbackCandidates.some((entry) => entry.weeklyChange != null && entry.weeklyChange > 0)
+    const previewFallbackPlayers = previewFallbackCandidates
+      .filter((entry) => !hasPositiveWeeklyChange || (entry.weeklyChange != null && entry.weeklyChange > 0))
+      .sort((a, b) => {
+        if (hasPositiveWeeklyChange) {
+          const aChange = a.weeklyChange ?? -Infinity
+          const bChange = b.weeklyChange ?? -Infinity
+          if (aChange !== bChange) return bChange - aChange
+        }
+        return (b.player.cost ?? -1) - (a.player.cost ?? -1)
+      })
+      .slice(0, ALL_PLAYERS_PREVIEW_LIMIT)
+      .map((entry) => entry.player)
+    const sourceFantasyPlayers = isAllPlayersPreview
+      ? allPlayerCardSummaryRows.length > 0
+        ? allPlayerCardSummaryRows.map((row, index): FantasyPlayerSnapshot => {
+          const existingPlayer =
+            (row.playerId !== null ? fantasyPlayerById.get(row.playerId) : undefined) ??
+            fantasyPlayerByNormalizedName.get(normaliseName(row.player))
+          if (existingPlayer) return existingPlayer
+          const positionLabel = row.position || "POS"
+          return {
+            id: row.playerId ?? -100000 - index,
+            firstName: "",
+            lastName: row.player,
+            name: row.player,
+            squadId: null,
+            cost: row.price,
+            status: null,
+            positions: [],
+            positionLabels: positionLabel ? [positionLabel] : [],
+            positionLabel,
+            ownedBy: row.ownedBy,
+            selections: null,
+            avgPoints: row.avg2026,
+            projectedAvg: row.projection,
+            gamesPlayed: row.gamesPlayed,
+            totalPoints: null,
+            tog: null,
+            be: row.breakeven,
+            pricedAt: row.pricedAt,
+            isBye: false,
+            locked: false,
+            priceHistory: {},
+            scoreHistory: {},
+          }
+        })
+        : previewFallbackPlayers
+      : baseFantasyPlayers
     const namedLineupPlayers = new Set(lineupsProjections?.roleByPlayerName.keys() ?? [])
     const fantasyPlayerByName = new Map(
       sourceFantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
@@ -3853,13 +3933,17 @@ export function FantasyDashboard({
           gamesPlayed: precomputedRow.gamesPlayed ?? player.gamesPlayed,
         }
         : player
-      const localName = precomputedRow?.localName ?? findLocalPlayerMatch(player.name, localNames)
+      const precomputedLocalNameMatches = precomputedRow?.localName
+        ? findLocalPlayerMatch(player.name, [precomputedRow.localName]) === precomputedRow.localName
+        : false
+      const precomputedStatsRow = precomputedLocalNameMatches ? precomputedRow : null
+      const localName = precomputedStatsRow?.localName ?? findLocalPlayerMatch(player.name, localNames)
       const playerRows = localName ? rowsByName.get(localName) ?? [] : []
       const fantasyScores = playerRows.map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
       const minutes = playerRows.map((row) => playerStatMetricValue(row, "Mins Played", "mins_played"))
       const totalFantasy = fantasyScores.reduce<number>((sum, value) => sum + (value ?? 0), 0)
       const totalMinutes = minutes.reduce<number>((sum, value) => sum + (value ?? 0), 0)
-      const recentScores = precomputedRow?.last3 != null
+      const recentScores = precomputedStatsRow?.last3 != null
         ? []
         : [...playerRows]
           .sort(sortRoundsDesc)
@@ -3919,9 +4003,9 @@ export function FantasyDashboard({
         player: displayPlayer,
         localName,
         imageRow,
-        avg2026: precomputedRow?.avg2026 ?? averageNumbers(fantasyScores) ?? player.avgPoints,
-        last3: precomputedRow?.last3 ?? averageNumbers(recentScores),
-        ppm: precomputedRow?.ppm ?? (totalMinutes > 0 ? totalFantasy / totalMinutes : null),
+        avg2026: precomputedStatsRow?.avg2026 ?? averageNumbers(fantasyScores) ?? player.avgPoints,
+        last3: precomputedStatsRow?.last3 ?? averageNumbers(recentScores),
+        ppm: precomputedStatsRow?.ppm ?? (totalMinutes > 0 ? totalFantasy / totalMinutes : null),
         weeklyChange: precomputedRow?.weeklyChange ?? ownershipDelta,
         pricedAt: effectivePricedAt,
         projection,
@@ -3936,10 +4020,10 @@ export function FantasyDashboard({
         nextMajorByeRound,
         playsNextMajorBye,
         originChance: precomputedRow?.originChance ?? originChance,
-        gamesPlayed: Math.trunc(precomputedRow?.gamesPlayed ?? (playerRows.length || player.gamesPlayed || 0)),
+        gamesPlayed: Math.trunc(precomputedStatsRow?.gamesPlayed ?? (playerRows.length || player.gamesPlayed || 0)),
       }
     })
-  }, [allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
+  }, [allPlayerCardSummaryRows, allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, isAllPlayersPreview, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
 
   const selectedAllPlayersTableRow = useMemo(
     () => selectedFantasyPlayer
@@ -4087,21 +4171,24 @@ export function FantasyDashboard({
 
   const sortedAllPlayersTableRows = useMemo(() => {
     let filteredRows =
-      allPlayersPositionFilter === "All Positions"
+      !hasLoadedFullAllPlayersRows || allPlayersPositionFilter === "All Positions"
         ? allPlayersTableRows
         : allPlayersTableRows.filter((row) => row.player.positionLabels.includes(allPlayersPositionFilter))
-    if (allPlayersTagFilters.length > 0) {
+    if (hasLoadedFullAllPlayersRows && allPlayersTagFilters.length > 0) {
       filteredRows = filteredRows.filter(
         (row) => matchesFantasyTagFilters(getFantasyFilterTags(row), allPlayersTagFilters)
       )
     }
+    const activeAllPlayersSort = hasLoadedFullAllPlayersRows
+      ? allPlayersSort
+      : { column: "weeklyChange" as const, direction: "desc" as const }
     const weeklyChangeUnavailable = filteredRows.every((row) => row.weeklyChange === null || row.weeklyChange === 0)
     const projectionUnavailable = filteredRows.every((row) => row.projection === null)
     const effectiveSort =
-      (allPlayersSort.column === "weeklyChange" && weeklyChangeUnavailable) ||
-      (allPlayersSort.column === "projection" && projectionUnavailable)
+      (activeAllPlayersSort.column === "weeklyChange" && weeklyChangeUnavailable) ||
+      (activeAllPlayersSort.column === "projection" && projectionUnavailable)
         ? { column: "price" as const, direction: "desc" as const }
-        : allPlayersSort
+        : activeAllPlayersSort
 
     const getSortValue = (row: AllPlayersTableRow): number | string | null => {
       if (effectiveSort.column === "name") return row.player.name.toLowerCase()
@@ -4136,7 +4223,7 @@ export function FantasyDashboard({
 
       return String(aValue).localeCompare(String(bValue)) * direction
     })
-  }, [allPlayersPositionFilter, allPlayersSort, allPlayersTableRows, allPlayersTagFilters])
+  }, [allPlayersPositionFilter, allPlayersSort, allPlayersTableRows, allPlayersTagFilters, hasLoadedFullAllPlayersRows])
 
   const allPlayersTagFilterOptions = useMemo(() => {
     const byeOptions = new Set<string>()
@@ -4206,25 +4293,25 @@ export function FantasyDashboard({
   )
   const selectedProjectionBand = useMemo(
     () => {
-      const projectionPosition = selectedLineupRole?.position ?? selectedFantasyPlayer?.positionLabel ?? null
+      if (lineupsProjections?.source === "lineups" && !selectedLineupRole) return null
       return resolveProjectionBand(
         selectedAdjustedProjection,
-        projectionPosition,
+        selectedLineupRole?.position,
         fantasyProjectionSigmas
       )
     },
-    [fantasyProjectionSigmas, selectedAdjustedProjection, selectedFantasyPlayer, selectedLineupRole]
+    [fantasyProjectionSigmas, lineupsProjections?.source, selectedAdjustedProjection, selectedLineupRole]
   )
   const selectedProjectionDistribution = useMemo(
     () => {
-      const projectionPosition = selectedLineupRole?.position ?? selectedFantasyPlayer?.positionLabel ?? null
+      if (lineupsProjections?.source === "lineups" && !selectedLineupRole) return null
       return resolveProjectionDistribution(
         selectedAdjustedProjection,
-        projectionPosition,
+        selectedLineupRole?.position,
         fantasyProjectionSigmas
       )
     },
-    [fantasyProjectionSigmas, selectedAdjustedProjection, selectedFantasyPlayer, selectedLineupRole]
+    [fantasyProjectionSigmas, lineupsProjections?.source, selectedAdjustedProjection, selectedLineupRole]
   )
   const selectedAdjustedBreakEven = useMemo(
     () =>
@@ -4495,6 +4582,15 @@ export function FantasyDashboard({
       compareGameLogRows(a, b, gameLogSort.column, gameLogSort.direction)
     )
   }, [filteredRows, gameLogSort])
+  const shouldCollapseGameLog = sortedFilteredRows.length > GAME_LOG_COLLAPSED_VISIBLE_ROWS
+  const isGameLogCollapsed = shouldCollapseGameLog && !isGameLogExpanded
+  const gameLogCollapsedMaxHeight = showBaseUpsideBars
+    ? GAME_LOG_COLLAPSED_BASE_UPSIDE_MAX_HEIGHT_PX
+    : GAME_LOG_COLLAPSED_MAX_HEIGHT_PX
+
+  useEffect(() => {
+    setIsGameLogExpanded(false)
+  }, [selectedFantasyName])
 
   const toggleGameLogSort = useCallback((column: GameLogColumn) => {
     setGameLogSort((prev) => {
@@ -4506,7 +4602,7 @@ export function FantasyDashboard({
   }, [])
 
   const draw2026Panel = (
-    <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel">
       <div className="border-b border-nrl-border bg-nrl-panel-2 px-3 py-3">
         <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">2026 Draw</div>
         <div className="mt-1 text-[10px] text-nrl-muted">
@@ -4515,7 +4611,7 @@ export function FantasyDashboard({
             : "No draw available"}
         </div>
       </div>
-      <div className="p-2">
+      <div className="flex min-h-0 flex-1 flex-col p-2">
         {draw2026StripRows.length === 0 ? (
           <div className="px-1 py-2 text-xs text-nrl-muted">
             {matchedLocalName
@@ -4523,7 +4619,7 @@ export function FantasyDashboard({
               : "No local player-team match found for 2026 draw."}
           </div>
         ) : (
-          <div className="space-y-2 xl:max-h-[620px] xl:overflow-y-auto xl:pr-1">
+          <div className="min-h-0 flex-1 space-y-2 xl:overflow-y-auto xl:pr-1">
             {draw2026StripRows.map((row) => (
               <div
                 key={`draw-2026-sidebar-${row.round}`}
@@ -4565,95 +4661,105 @@ export function FantasyDashboard({
   )
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        {showOwnedCards ? (
-          <div className="grid gap-5 xl:grid-cols-4 xl:items-stretch xl:gap-3">
+    <div className={showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? "space-y-3" : "space-y-6"}>
+      <div className="space-y-8 xl:space-y-12">
+        {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
+          <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch">
             <Link
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}
-              className="relative flex min-h-[68px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-full border border-violet-300/55 bg-violet-700 px-5 py-2.5 text-center text-white shadow-[0_14px_30px_rgba(124,58,237,0.24)] transition-colors hover:border-violet-200 hover:bg-violet-600 xl:order-1 xl:min-h-[64px] xl:py-2"
+              className="relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-violet-300/25 bg-[linear-gradient(135deg,rgba(82,43,168,0.72),rgba(33,39,83,0.92))] px-5 py-4 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-violet-200/55 hover:bg-[#34296f] xl:min-h-[108px] xl:py-3"
             >
-              <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
-                <span className="absolute -left-2 top-2 h-14 w-36 rounded-full opacity-45 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
-                <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-35 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
+              <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+                <span className="absolute -left-2 top-2 h-14 w-36 rounded-full opacity-25 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
+                <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-20 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
               </span>
-              <span className="absolute -right-1 -top-2 rounded-full border border-emerald-200 bg-nrl-accent px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.28)]">
+              <span className="absolute right-3 top-3 rounded-full border border-emerald-200 bg-nrl-accent px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.22)]">
                 New
               </span>
-              <span className="relative z-10 inline-flex items-center gap-2 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
-                <PersonIcon className="h-5 w-5" />
-                <span className="text-sm font-black">My Team</span>
+              <span className="relative z-10 inline-flex items-center gap-2 pr-12 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10">
+                  <PersonIcon className="h-5 w-5" />
+                </span>
+                <span className="text-base font-black leading-none">My Team</span>
               </span>
-              <span className="relative z-10 px-5 text-[10px] font-black leading-tight text-white drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
+              <span className="relative z-10 max-w-[280px] text-[11px] font-bold leading-snug text-white/95 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
                 Upload screenshots, save your team and get personalised advice
               </span>
               {isMyTeamPending ? (
-                <span className="absolute inset-x-5 bottom-2 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                <span className="absolute inset-x-5 bottom-3 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
                   <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
                 </span>
               ) : null}
             </Link>
-            <div className={`grid items-center gap-2 sm:gap-3 xl:contents ${fantasyProjectionArticle ? "grid-cols-3" : "grid-cols-2"}`}>
-              <Link
-                href={showFantasyAnalytics ? "/dashboard/fantasy" : "/dashboard/fantasy/analytics"}
-                onClick={() => setIsFantasyAnalyticsPending(true)}
-                className={`relative flex min-h-[44px] w-full cursor-pointer flex-col items-center justify-center rounded-full border px-2 py-1.5 text-center text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[#29335f] sm:min-h-[52px] sm:px-4 xl:order-2 xl:col-span-1 xl:min-h-[64px] xl:py-2 ${
-                  showFantasyAnalytics
-                    ? "border-nrl-accent bg-[#20284a]"
-                    : "border-[rgba(123,92,255,0.35)] bg-[#20284a]"
-                }`}
-              >
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold leading-tight sm:text-sm">
-                  <TrendGraphIcon className="h-4 w-4 text-nrl-accent" />
-                  Find Value
-                </span>
-                {isFantasyAnalyticsPending ? (
-                  <span className="absolute inset-x-5 bottom-2 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
-                    <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+            <div className={`grid items-stretch gap-2 sm:gap-3 xl:order-2 xl:col-span-2 ${fantasyProjectionArticle ? "grid-cols-3 xl:grid-cols-2" : "grid-cols-2 xl:grid-cols-1"}`}>
+              <div className="contents xl:grid xl:grid-rows-2 xl:gap-3">
+                <Link
+                  href="/dashboard/fantasy/analytics"
+                  onClick={() => setIsFantasyAnalyticsPending(true)}
+                  className={`relative flex h-full min-h-[44px] w-full cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
+                    showFantasyAnalytics
+                      ? "border-nrl-accent bg-[#111832]"
+                      : "border-[rgba(123,92,255,0.35)] bg-[#111832]"
+                  }`}
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
+                    <TrendGraphIcon className="h-4 w-4 text-nrl-accent" />
                   </span>
-                ) : null}
-              </Link>
-              <div className="group self-stretch rounded-full border border-[rgba(123,92,255,0.35)] bg-[linear-gradient(135deg,rgba(84,50,143,0.32),rgba(16,119,88,0.24))] p-1 shadow-[0_0_0_1px_rgba(0,245,138,0.05),0_16px_36px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 hover:bg-[linear-gradient(135deg,rgba(84,50,143,0.48),rgba(16,119,88,0.38))] sm:p-1.5 xl:order-3 xl:col-span-1">
-                {hasFantasyPlotAccess ? (
-                  <Link
-                    href="/dashboard/fantasy/draft"
-                    onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative inline-flex h-full min-h-[36px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-2 py-1.5 text-center leading-tight text-white transition-colors hover:text-white group-hover:bg-[#29335f] sm:min-h-[44px] sm:px-4 xl:min-h-[52px]"
-                  >
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold sm:gap-1.5 sm:text-[11px]">
-                      <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
-                      Draft / H2H Odds
+                  <span className="text-[12px] font-bold leading-tight sm:text-sm">
+                    Find Value
+                  </span>
+                  {isFantasyAnalyticsPending ? (
+                    <span className="absolute inset-x-5 bottom-2 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                      <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
                     </span>
-                    {isFantasyDraftPending ? (
-                      <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
-                        <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                  ) : null}
+                </Link>
+                <div className="group h-full self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] p-0 shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d]">
+                  {hasFantasyPlotAccess ? (
+                    <Link
+                      href="/dashboard/fantasy/draft"
+                      onClick={() => setIsFantasyDraftPending(true)}
+                      className="relative inline-flex h-full min-h-[44px] w-full items-center justify-start gap-3 rounded-xl px-4 py-3 text-left leading-tight text-white transition-colors hover:text-white sm:min-h-[52px] xl:min-h-0 xl:py-2"
+                    >
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
+                        <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
                       </span>
-                    ) : null}
-                  </Link>
-                ) : (
-                  <Link
-                    href="/dashboard/fantasy/draft"
-                    onClick={() => setIsFantasyDraftPending(true)}
-                    className="relative flex h-full min-h-[36px] w-full flex-col items-center justify-center rounded-full border border-transparent bg-[#20284a] px-2 py-1.5 text-center transition-colors group-hover:bg-[#29335f] sm:min-h-[44px] sm:px-4 xl:min-h-[52px]"
-                  >
-                    <div className="inline-flex items-center gap-1 text-[10px] font-semibold leading-tight text-white sm:gap-1.5 sm:text-[11px]">
-                      <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
-                      Draft / H2H Odds
-                    </div>
-                    {isFantasyDraftPending ? (
-                      <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
-                        <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                      <span className="text-[12px] font-bold sm:text-sm">
+                        Draft / H2H Odds
                       </span>
-                    ) : null}
-                  </Link>
-                )}
+                      {isFantasyDraftPending ? (
+                        <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                          <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                        </span>
+                      ) : null}
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/dashboard/fantasy/draft"
+                      onClick={() => setIsFantasyDraftPending(true)}
+                      className="relative flex h-full min-h-[44px] w-full items-center justify-start gap-3 rounded-xl px-4 py-3 text-left transition-colors sm:min-h-[52px] xl:min-h-0 xl:py-2"
+                    >
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
+                        <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
+                      </span>
+                      <div className="text-[12px] font-bold leading-tight text-white sm:text-sm">
+                        Draft / H2H Odds
+                      </div>
+                      {isFantasyDraftPending ? (
+                        <span className="absolute inset-x-2 bottom-1 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
+                          <span className="block h-full w-full animate-pulse rounded-full bg-nrl-accent" />
+                        </span>
+                      ) : null}
+                    </Link>
+                  )}
+                </div>
               </div>
               {fantasyProjectionArticle ? (
                 <Link
                   href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
                   aria-label={`Read ${fantasyProjectionArticle.title}`}
-                  className="group relative flex min-h-[44px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.35)] bg-[#20284a] text-white shadow-[0_14px_30px_rgba(8,10,18,0.28)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:order-4 xl:col-span-1 xl:min-h-[64px]"
+                  className="group relative flex h-full min-h-[44px] w-full cursor-pointer overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:min-h-[108px]"
                 >
                   <div className={`absolute inset-0 grid ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                     {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
@@ -4670,7 +4776,7 @@ export function FantasyDashboard({
                     ))}
                   </div>
                   <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.95),rgba(14,19,48,0.74),rgba(14,19,48,0.45))]" />
-                  <div className="relative flex h-full min-h-[44px] w-full items-center justify-between gap-2 px-3 py-1.5 sm:min-h-[52px] sm:px-4 xl:min-h-[64px] xl:gap-3 xl:px-5 xl:py-2">
+                  <div className="relative flex h-full min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 sm:min-h-[52px] sm:px-4 xl:min-h-[108px] xl:gap-3 xl:px-5 xl:py-3">
                     <div className="min-w-0">
                       <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent">
                         Article
@@ -4688,13 +4794,31 @@ export function FantasyDashboard({
             </div>
           </div>
         ) : null}
+        {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
+          <div className="rounded-xl border border-nrl-border bg-nrl-panel px-3 py-3">
+            <SearchableSelect
+              label=""
+              value={selectedFantasyName}
+              options={playerSearchOptions}
+              onChange={navigateToPlayer}
+              placeholder="Search player..."
+              showLoadingOnType
+            />
+          </div>
+        ) : null}
 
       </div>
 
-      {showOwnedCards && showFantasyAnalytics ? (
+      {showOwnedCards && showFantasyAnalyticsOnly ? (
+        <div>
+          <FantasyBackLink href="/dashboard/fantasy" label="Back to Fantasy Dashboard" />
+        </div>
+      ) : null}
+
+      {showOwnedCards && showFantasyAnalytics && !showAllPlayersOnly ? (
         <section id="fantasy-analytics" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
-              <div className="order-2 min-w-0 space-y-3 xl:order-1">
+          <div className={`grid gap-3 ${showFantasyAnalyticsOnly ? "xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]" : "xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]"}`}>
+              <div className="min-w-0 space-y-3">
               <>
               <div className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 p-2 [contain-intrinsic-size:430px] [content-visibility:auto]">
                 <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
@@ -4815,7 +4939,7 @@ export function FantasyDashboard({
               ) : null}
               </>
               </div>
-              <div className="order-1 min-w-0 xl:order-2 xl:sticky xl:top-3 xl:self-start">
+              <div className={`${showFantasyAnalyticsOnly ? "min-w-0 xl:sticky xl:top-3 xl:self-start" : "order-1 min-w-0 xl:order-2 xl:sticky xl:top-3 xl:self-start"}`}>
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -4932,65 +5056,94 @@ export function FantasyDashboard({
         </section>
       ) : null}
 
-      {showOwnedCards ? (
+      {showOwnedCards && showAllPlayersOnly ? (
+        <div>
+          <FantasyBackLink href="/dashboard/fantasy" label="Back to Fantasy Dashboard" />
+        </div>
+      ) : null}
+
+      {showOwnedCards && !showFantasyAnalyticsOnly ? (
         <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-accent/10 px-3 py-2">
             <div>
-              <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">All Players</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
+                {hasLoadedFullAllPlayersRows ? "All Players" : "Top Weekly Buys"}
+              </div>
             </div>
-            <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-0.5 min-[360px]:gap-1 sm:w-auto sm:justify-end sm:gap-1.5">
-              <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-[2px]">
-                {(["cards", "table"] as const).map((view) => (
-                  <button
-                    key={view}
-                    type="button"
-                    onClick={() => setAllPlayersView(view)}
-                    className={`rounded-full px-1.5 py-1 text-[8px] font-bold uppercase tracking-wide transition-colors sm:px-2 sm:text-[9px] ${
-                      allPlayersView === view
-                        ? "bg-nrl-accent text-[#07131f]"
-                        : "text-nrl-muted hover:text-nrl-text"
-                    }`}
-                  >
-                    {view === "cards" ? "Cards" : "Table"}
-                  </button>
-                ))}
-              </div>
-              <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[126px]">
-                <Select
-                  label=""
-                  value={allPlayersPositionFilter}
-                  options={["All Positions", ...POSITION_TABLES.map((position) => position.label)]}
-                  onChange={setAllPlayersPositionFilter}
-                />
-              </div>
-              <label className="inline-flex shrink-0 cursor-pointer rounded-full bg-[linear-gradient(90deg,#071632,#1d4ed8,#7dd3fc,#bfdbfe,#1d4ed8,#071632)] p-[1px] shadow-[0_0_0_1px_rgba(125,211,252,0.28),0_0_14px_rgba(37,99,235,0.22)]">
-                <span className="inline-flex min-h-[28px] items-center justify-center gap-1 rounded-full bg-nrl-panel-2 px-1.5 text-[8px] font-bold uppercase tracking-wide text-nrl-muted min-[360px]:px-2 sm:gap-1.5 sm:text-[9px]">
-                  <span>Tags</span>
-                  <input
-                    type="checkbox"
-                    checked={showAllPlayersCardTags}
-                    onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
-                    className="sr-only"
+            {hasLoadedFullAllPlayersRows ? (
+              <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-0.5 min-[360px]:gap-1 sm:w-auto sm:justify-end sm:gap-1.5">
+                <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-[2px]">
+                  {(["cards", "table"] as const).map((view) => (
+                    <button
+                      key={view}
+                      type="button"
+                      onClick={() => {
+                        setAllPlayersView(view)
+                      }}
+                      className={`rounded-full px-1.5 py-1 text-[8px] font-bold uppercase tracking-wide transition-colors sm:px-2 sm:text-[9px] ${
+                        effectiveAllPlayersView === view
+                          ? "bg-nrl-accent text-[#07131f]"
+                          : "text-nrl-muted hover:text-nrl-text"
+                      }`}
+                    >
+                      {view === "cards" ? "Cards" : "Table"}
+                    </button>
+                  ))}
+                </div>
+                <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[126px]">
+                  <Select
+                    label=""
+                    value={allPlayersPositionFilter}
+                    options={["All Positions", ...POSITION_TABLES.map((position) => position.label)]}
+                    onChange={setAllPlayersPositionFilter}
                   />
-                  <span className={`relative h-3.5 w-5 rounded-full border transition-colors sm:w-6 ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
-                    <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-2.5 bg-nrl-accent sm:translate-x-3" : "translate-x-0.5 bg-nrl-muted"}`} />
+                </div>
+                <label className="inline-flex shrink-0 cursor-pointer rounded-full bg-[linear-gradient(90deg,#071632,#1d4ed8,#7dd3fc,#bfdbfe,#1d4ed8,#071632)] p-[1px] shadow-[0_0_0_1px_rgba(125,211,252,0.28),0_0_14px_rgba(37,99,235,0.22)]">
+                  <span className="inline-flex min-h-[28px] items-center justify-center gap-1 rounded-full bg-nrl-panel-2 px-1.5 text-[8px] font-bold uppercase tracking-wide text-nrl-muted min-[360px]:px-2 sm:gap-1.5 sm:text-[9px]">
+                    <span>Tags</span>
+                    <input
+                      type="checkbox"
+                      checked={showAllPlayersCardTags}
+                      onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
+                      className="sr-only"
+                    />
+                    <span className={`relative h-3.5 w-5 rounded-full border transition-colors sm:w-6 ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                      <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-2.5 bg-nrl-accent sm:translate-x-3" : "translate-x-0.5 bg-nrl-muted"}`} />
+                    </span>
                   </span>
-                </span>
-              </label>
-              <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[116px]">
-                <MultiSelect
-                  label=""
-                  value={allPlayersTagFilters}
-                  options={allPlayersTagFilterOptions}
-                  onChange={(value) => {
-                    setAllPlayersTagFilters(value)
-                  }}
-                  placeholder="All Tags"
-                />
+                </label>
+                <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[116px]">
+                  <MultiSelect
+                    label=""
+                    value={allPlayersTagFilters}
+                    options={allPlayersTagFilterOptions}
+                    onChange={setAllPlayersTagFilters}
+                    placeholder="All Tags"
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/dashboard/fantasy/players"
+                  onClick={() => setIsAllPlayersPending(true)}
+                  className="inline-flex min-h-[30px] items-center gap-1.5 rounded-full border border-nrl-accent/50 bg-nrl-accent/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent"
+                >
+                  See all players
+                  {isAllPlayersPending ? (
+                    <span className="inline-flex items-center gap-0.5" aria-hidden="true">
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-current" />
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-current [animation-delay:120ms]" />
+                      <span className="h-1 w-1 animate-pulse rounded-full bg-current [animation-delay:240ms]" />
+                    </span>
+                  ) : (
+                    <span aria-hidden="true">→</span>
+                  )}
+                </Link>
+              </div>
+            )}
           </div>
-          <div className={`${allPlayersView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2`}>
+          <div className={`${hasLoadedFullAllPlayersRows && effectiveAllPlayersView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2`}>
             <div className="mb-2 max-w-2xl">
               <SearchableSelect
                 label=""
@@ -5032,10 +5185,10 @@ export function FantasyDashboard({
               </button>
             </div>
           </div>
-          <div className={`${allPlayersView === "cards" ? "grid" : "hidden"} max-h-[760px] grid-cols-1 gap-2 overflow-y-auto p-2.5`}>
+          <div className={`${effectiveAllPlayersView === "cards" ? "grid" : "hidden"} ${showAllPlayersOnly ? "" : "max-h-[760px]"} grid-cols-1 gap-2 overflow-y-auto p-2.5`}>
             {sortedAllPlayersTableRows.length === 0 ? (
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
-                No {ALL_PLAYERS_STATS_YEAR} player stats available.
+                {isAllPlayersPreview ? "No weekly ownership movers available." : `No ${ALL_PLAYERS_STATS_YEAR} player stats available.`}
               </div>
             ) : (
               sortedAllPlayersTableRows.map((row) => {
@@ -5135,7 +5288,7 @@ export function FantasyDashboard({
                     key={row.player.id}
                     type="button"
                     onClick={() => navigateToPlayer(row.player.name)}
-	                    className="block w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-left transition-colors hover:border-white/25 md:flex md:items-center md:gap-4"
+	                    className="block w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-left transition-colors hover:border-white/25 hover:bg-nrl-panel md:flex md:items-center md:gap-4"
 	                  >
 	                    <div className="flex items-start justify-between gap-3 md:w-[250px] md:shrink-0 md:items-center">
                       <div className="flex min-w-0 items-start gap-2.5">
@@ -5213,7 +5366,7 @@ export function FantasyDashboard({
               })
             )}
           </div>
-          <div className={`${allPlayersView === "table" ? "block" : "hidden"} h-[756px] overflow-y-auto overflow-x-auto`}>
+          <div className={`${effectiveAllPlayersView === "table" ? "block" : "hidden"} ${showAllPlayersOnly ? "" : "h-[756px]"} overflow-y-auto overflow-x-auto`}>
             <table className="w-full min-w-[1100px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>
@@ -5355,9 +5508,9 @@ export function FantasyDashboard({
 
       {showPlayerDetails && selectedFantasyPlayer ? (
         <section ref={playerDetailsRef} id="fantasy-player-details" className="scroll-mt-24">
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_252px] xl:items-start">
-            <div className="min-w-0 space-y-4">
-              <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel p-3">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_252px] xl:items-stretch">
+            <div className="flex min-w-0 flex-col gap-4">
+              <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel-2 p-3">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_28%,rgba(71,255,182,0.16),transparent_30%),radial-gradient(circle_at_82%_76%,rgba(129,92,255,0.18),transparent_34%),linear-gradient(135deg,rgba(13,21,44,0.18),rgba(13,21,44,0))]" />
                 <div className="pointer-events-none absolute left-[10%] top-[18%] h-28 w-28 rounded-full bg-emerald-300/8 blur-3xl" />
                 <div className="pointer-events-none absolute bottom-[8%] right-[14%] h-32 w-32 rounded-full bg-violet-400/10 blur-3xl" />
@@ -5472,7 +5625,7 @@ export function FantasyDashboard({
 
               <RelevantOutsList rows={selectedRelevantOuts} />
 
-              <div className="rounded-xl border border-nrl-border bg-nrl-panel p-4">
+              <div className="rounded-xl border border-nrl-border bg-nrl-panel-2 p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Filters</div>
                   <div className="text-[10px] text-nrl-muted">Applies to player game log and filtered analysis</div>
@@ -5579,7 +5732,7 @@ export function FantasyDashboard({
               </div>
 
               <div
-                className={`relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel"
+                className={`order-6 relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel-2"
                   }`}
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -5594,7 +5747,7 @@ export function FantasyDashboard({
                   </div>
                 </div>
                 <div className={analysisLocked ? "select-none" : undefined}>
-                  <div className="mb-5 grid grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
+                  <div className="mx-auto mb-5 grid w-full grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
                     {selectedProjectionBand ? (
                       <ProjectionBandMetricCard
                         label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
@@ -6194,22 +6347,26 @@ export function FantasyDashboard({
 
               </div>
 
-              <div className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
+              <div className="order-5 overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel-2">
                 <div className="border-b border-nrl-border bg-nrl-panel-2 px-4 py-3">
                   <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
                     Player Game Log
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table
-                    className="table-fixed border-collapse"
-                    style={{
-                      minWidth: `${GAME_LOG_COLUMNS.reduce(
-                        (sum, column) => sum + getGameLogColumnWidthPx(column.key),
-                        0
-                      ) + (showBaseUpsideBars ? GAME_LOG_BASE_UPSIDE_COLUMN_WIDTH_PX : 0)}px`,
-                    }}
+                <div className="relative">
+                  <div
+                    className={`overflow-x-auto ${isGameLogCollapsed ? "overflow-y-hidden" : ""}`}
+                    style={isGameLogCollapsed ? { maxHeight: `${gameLogCollapsedMaxHeight}px` } : undefined}
                   >
+                    <table
+                      className="table-fixed border-collapse"
+                      style={{
+                        minWidth: `${GAME_LOG_COLUMNS.reduce(
+                          (sum, column) => sum + getGameLogColumnWidthPx(column.key),
+                          0
+                        ) + (showBaseUpsideBars ? GAME_LOG_BASE_UPSIDE_COLUMN_WIDTH_PX : 0)}px`,
+                      }}
+                    >
                     <colgroup>
                       {GAME_LOG_COLUMNS.map((column) => (
                         <Fragment key={column.key}>
@@ -6385,11 +6542,56 @@ export function FantasyDashboard({
                         </>
                       )}
                     </tbody>
-                  </table>
+                    </table>
+                  </div>
+                  {isGameLogCollapsed ? (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-gradient-to-b from-transparent via-nrl-panel/55 to-nrl-panel/90 pb-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsGameLogExpanded(true)}
+                        className="pointer-events-auto inline-flex h-8 w-8 cursor-pointer items-center justify-center text-nrl-muted transition-colors hover:text-nrl-accent"
+                        aria-label="Expand player game log"
+                        aria-expanded={false}
+                      >
+                        <svg viewBox="0 0 20 20" aria-hidden="true" className="h-5 w-5">
+                          <path
+                            d="M5 7.5 10 12.5 15 7.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
+                {shouldCollapseGameLog && isGameLogExpanded ? (
+                  <div className="flex justify-center border-t border-nrl-border bg-nrl-panel-2/45 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsGameLogExpanded(false)}
+                      className="inline-flex h-8 w-8 cursor-pointer items-center justify-center text-nrl-muted transition-colors hover:text-nrl-accent"
+                      aria-label="Collapse player game log"
+                      aria-expanded={true}
+                    >
+                      <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4">
+                        <path
+                          d="M5 12.5 10 7.5 15 12.5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
-            <div className="xl:sticky xl:top-24">{draw2026Panel}</div>
+            <div className="xl:sticky xl:top-24 xl:self-start xl:h-[calc(100vh-7rem)]">{draw2026Panel}</div>
           </div>
         </section>
       ) : null}

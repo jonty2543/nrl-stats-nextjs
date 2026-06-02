@@ -1,15 +1,21 @@
 import { auth } from "@clerk/nextjs/server"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { fetchApprovedArticles } from "@/lib/articles"
 import { isAccessibleSeason } from "@/lib/access/season-access"
+import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
   fetchLatestFantasyOwnershipBaselineSnapshot,
   fetchLineupsProjectionsByPlayerId,
 } from "@/lib/fantasy/nrl"
-import { fetchAvailableYears, fetchFantasyPlayerCardSummaries, fetchOriginChances, fetchPlayerImages, fetchPlayerStats } from "@/lib/supabase/queries"
+import {
+  fetchAvailableYears,
+  fetchFantasyPlayerCardSummaries,
+  fetchOriginChances,
+  fetchPlayerImages,
+  fetchRelevantCasualtyWardOutCandidates,
+} from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -17,31 +23,34 @@ function defaultRecentYears(years: string[], maxYears = 4): string[] {
   return years.slice(0, Math.min(maxYears, years.length))
 }
 
-function normaliseArticleTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
-}
-
-export default async function FantasyAnalyticsPage() {
+export default async function FantasyPlayersPage() {
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticles, originChances, precomputedAllPlayersRows, initialAllPlayerStats] = await Promise.all([
+  const [
+    fantasyPlayers,
+    fantasyCoachPlayers,
+    lineupsProjections,
+    availableYears,
+    ownershipBaselineSnapshot,
+    playerImages,
+    relevantOutCandidates,
+    draw2026Data,
+    originChances,
+    precomputedAllPlayersRows,
+  ] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     fetchLineupsProjectionsByPlayerId(),
     fetchAvailableYears(),
     fetchLatestFantasyOwnershipBaselineSnapshot(),
     fetchPlayerImages(),
-    fetchApprovedArticles(),
+    fetchRelevantCasualtyWardOutCandidates(),
+    loadDraw2026Data(),
     fetchOriginChances(),
     fetchFantasyPlayerCardSummaries(),
-    fetchPlayerStats(["2026"]),
   ])
-  const fantasyProjectionArticle = approvedArticles.find((article) => {
-    const title = normaliseArticleTitle(article.title)
-    return title.includes("fantasy projection model") || (title.includes("fantasy") && title.includes("model"))
-  }) ?? null
 
   const unlockedYears = canAccessLoginSeason
     ? availableYears
@@ -49,6 +58,7 @@ export default async function FantasyAnalyticsPage() {
   const initialYears = defaultRecentYears(
     unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
   )
+
   return (
     <FantasyDashboard
       fantasyPlayers={fantasyPlayers}
@@ -57,27 +67,19 @@ export default async function FantasyAnalyticsPage() {
       availableYears={unlockedYears}
       defaultYears={initialYears}
       initialPlayerStats={[]}
-      initialAllPlayerStats={initialAllPlayerStats}
+      initialAllPlayerStats={[]}
       precomputedAllPlayersRows={precomputedAllPlayersRows}
       canAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
-      initialShowFantasyAnalytics
       showFantasyActions={false}
-      showFantasyAnalyticsOnly
+      showAllPlayersOnly
       showPlayerDetails={false}
       playerRouteBasePath="/dashboard/fantasy"
       ownershipBaselineSnapshot={ownershipBaselineSnapshot}
       playerImages={playerImages}
+      relevantOutCandidates={relevantOutCandidates}
+      draw2026Data={draw2026Data}
       originChances={originChances}
-      fantasyProjectionArticle={
-        fantasyProjectionArticle
-          ? {
-              title: fantasyProjectionArticle.title,
-              slug: fantasyProjectionArticle.slug,
-              imageUrls: fantasyProjectionArticle.imageUrls,
-            }
-          : null
-      }
     />
   )
 }

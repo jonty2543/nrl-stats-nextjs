@@ -4,10 +4,36 @@ import ENVIRONMENT_VARIABLES as EV
 from collections import defaultdict
 import re
 import itertools
+import os
+from pathlib import Path
 from supabase import create_client, Client
 
-SUPABASE_URL = "https://glrzwxpxkckxaogpkwmn.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdscnp3eHB4a2NreGFvZ3Brd21uIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjA3OTU3NiwiZXhwIjoyMDcxNjU1NTc2fQ.YOF9ryJbhBoKKHT0n4eZDMGrR9dczR8INHVs_By4vRU"
+def _load_local_env():
+    root_dir = Path(__file__).resolve().parents[1]
+    env_paths = (Path.cwd() / ".env.local", Path.cwd() / ".env", root_dir / ".env.local", root_dir / ".env")
+
+    for env_path in env_paths:
+        if not env_path.exists():
+            continue
+        for raw_line in env_path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+def _required_env(*names):
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            return value
+    raise RuntimeError(f"Missing required environment variable. Set one of: {', '.join(names)}")
+
+
+_load_local_env()
+SUPABASE_URL = _required_env("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL")
+SUPABASE_KEY = _required_env("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def player_data_cleaner(df):
@@ -528,5 +554,4 @@ def map_position(n):
         return 'Interchange'
     else:
         return 'Interchange'
-
 

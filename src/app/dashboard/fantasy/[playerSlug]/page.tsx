@@ -88,6 +88,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
   const { playerSlug } = await params
   const query = await searchParams
   const fromMyTeam = query?.from === "my-team"
+  const fromAllPlayers = query?.from === "all-players"
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
@@ -159,8 +160,8 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
     <div className="space-y-4">
       <div>
         <FantasyBackLink
-          href={fromMyTeam ? "/dashboard/fantasy/my-team" : "/dashboard/fantasy"}
-          label={fromMyTeam ? "Back to My Team" : "Back to Fantasy Dashboard"}
+          href={fromMyTeam ? "/dashboard/fantasy/my-team" : fromAllPlayers ? "/dashboard/fantasy/players" : "/dashboard/fantasy"}
+          label={fromMyTeam ? "Back to My Team" : fromAllPlayers ? "Back to All Players" : "Back to Fantasy Dashboard"}
         />
       </div>
 

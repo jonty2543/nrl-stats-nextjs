@@ -32,7 +32,7 @@ const STARTER_ROWS = [
 const MY_TEAM_MAJOR_BYE_ROUNDS = [13, 16, 19] as const
 const MY_TEAM_PROJECTION_ROUNDS = Array.from({ length: 19 }, (_, index) => index + 1)
 const MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS = [12, 13, 15, 16, 18, 19] as const
-const MY_TEAM_AI_ENABLED = false
+const MY_TEAM_AI_ENABLED = true
 const FANTASY_SQUAD_ID_TO_TEAM: Record<number, string> = {
   500001: "Roosters",
   500002: "Sea Eagles",
@@ -603,7 +603,7 @@ function buildMyTeamAiPrompt({
   const recentHistory = history.slice(-6).map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`).join("\n")
   const tradeSuggestorMetricInstructions = hasFantasyPlotAccess
     ? [
-      "Use live fantasy data for both buys and sells: weekly ownership change, breakeven, projection, priced at, L3 average, and projection vs priced at. Projection vs priced at is important.",
+      "Use live fantasy data for both buys and sells: weekly ownership change, breakeven, projection, priced at, L3 average, projection vs priced at, role security, and expected job length. Projection vs priced at is useful but should not dominate the ranking.",
       "Try to list 3 Sell watch candidates every time. Use owned squad players only, prioritising confirmed injury/unavailability, notable outs from lineups/casualty data, negative ownership change, high BE, projection below priced at, weak L3/projection, poor bye coverage, Origin risk, or a clear cash/squad problem. If fewer than 3 owned players have meaningful sell signals, list fewer rather than inventing names.",
       "Unless a player is injured, out, suspended, not named, misses the target major bye, or has another clear availability problem, their BE must be above priced at before they can be listed in Sell watch.",
       "If projection is 50+ and projection vs priced at is -5.0 or better, do not list them in Sell watch unless there is a clear offsetting issue like injury, not named, missing an upcoming major bye, likely Origin selection, or another serious squad/cash constraint.",
@@ -612,7 +612,7 @@ function buildMyTeamAiPrompt({
       "If a player is -1.0% or worse in ownership delta but BE is lower than priced at, projection is similar to priced at, L3 is sound, and they play the next major bye, frame them as Hold / Possible sell rather than a hard sell.",
       "Do not say recent form has slipped when L3 average is above priced at.",
       "Describe form as strong only when L3 average supports that versus priced at. If L3 is below priced at, describe the case as projection-backed, role-backed, or avoid saying form.",
-      "For each sell or buy, include Ownership change, BE, priced at, L3 average, projection vs priced at, major-bye availability across rounds 13/16/19, and one short reason.",
+      "For each sell or buy, include Ownership change, BE, priced at, L3 average, projection vs priced at, major-bye availability across rounds 13/16/19, role/security note, and one short reason.",
       "Mention any notable outs from the user's owned team before or inside Sell watch, but only when live lineup/casualty data supports the out.",
       "Use casualty ward and Origin chance context behind ownership, form, value, injury, bye and lineup signals; however, likely Origin players missing multiple major bye rounds should be treated as a major bye-coverage problem, not a minor tie-breaker.",
       "Major-bye trade-count rule for rounds 13, 16 and 19: first count active owned players who play the bye round and have projection >=35. If the user has 13 or more such players, recommend no trade unless there is a clear injury/Origin/high-BE/value problem. If they have 12, recommend one trade to reach 13 or upgrade a sub-35 scorer. If they have 11 or fewer, recommend 2-3 trades to reach 13. If they have 13 active scorers but one or more projected under 35, suggest at most one upgrade rather than forcing multiple trades.",
@@ -651,12 +651,15 @@ function buildMyTeamAiPrompt({
       : null,
     "Use clean section titles only. Do not put ranking explanations, data-source notes, metric lists, or backend selection wording in section headings.",
     "For who-to-play or looping questions, return exactly these sections when relevant: Best 13/17 setup, Loop options, Risks.",
+    hasFantasyPlotAccess
+      ? "For captaincy questions, base the recommendation on projection first, then ceiling/floor, role, matchup, availability, and whether the player is in the scoring side. Do not prefer a safer-looking player over a clearly higher projected captain unless there is a real availability or role risk."
+      : "For captaincy questions for free users, do not use projections, breakevens, casualty ward, or Origin context. Base the recommendation on price/priced-at, L3/recent scoring, season average, role, availability, and whether the player is in the scoring side.",
     "Do not use squad placement as a sell reason. Bench, INT, EMG, or emergency status is not bad by itself. Good players can sit anywhere in the squad.",
     hasFantasyPlotAccess
       ? "Sell watch should only include owned players. Prioritise confirmed injury/out/suspension from casualty ward or lineups, Origin-risk players from origin_chance, live confirmed bye/DNP, high BE, poor projection vs pricedAt, highly traded-out/negative ownership delta, or bad major-bye coverage. If a player is a hold, say hold rather than forcing a sale."
       : "Sell watch should only include owned players. Prioritise negative ownership delta, weak L3/season average for the price, poor bye coverage, visible lineup/bye issues, or bad squad/cash fit. If a player is a hold, say hold rather than forcing a sale.",
     hasFantasyPlotAccess
-      ? "Trade-ins must be real live-data candidates and not already owned. Prefer players who play as many major bye rounds as possible, avoid Origin-risk players unless the upside clearly justifies it, then rank by traded-in/ownership delta, projection vs pricedAt, low BE, role security, and sensible price fit."
+      ? "Trade-ins must be real live-data candidates and not already owned. Prefer players who play as many major bye rounds as possible, avoid Origin-risk players unless the upside clearly justifies it, then rank by traded-in/ownership delta, role security, expected job length, low BE, projection, sensible price fit, and projection vs pricedAt. For cheap players, do not over-rank value alone because many are 1-2 week replacements; only push them high when role security, minutes, bye coverage, ownership momentum, and job length are sound."
       : "Trade-ins must be real live-data candidates and not already owned. Prefer players who play as many major bye rounds as possible, then rank by traded-in/ownership delta, recent form, role security, price, and sensible squad fit. Do not mention projection, BE, projection vs priced at, Origin or casualty ward.",
     "For Top 5 trade-ins, lean heavily on traded-in ownership delta: clearly rising ownership should lift a player up the list when bye coverage and role are sound. Do not bury a strongly traded-in player behind a lower-momentum option unless the lower-momentum player is clearly better on bye availability, role security, or value.",
     "When prices/bank are unknown, avoid pretending you can afford exact moves. Give ranked targets and say affordability needs checking.",
@@ -698,7 +701,7 @@ function FormattedAiMessage({ content }: { content: string }) {
         const numbered = line.match(/^(\d+)[).]\s*(.+)$/)
         if (numbered) {
           return (
-            <div key={index} className="flex gap-2 rounded-lg border border-[#5f4aa4]/35 bg-[#4d3a87]/15 px-2.5 py-2">
+            <div key={index} className="flex gap-2 rounded-lg border border-[#5f4aa4] bg-[#211a3a] px-2.5 py-2">
               <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#6d54b8] text-[10px] font-black text-white">
                 {numbered[1]}
               </span>
@@ -930,7 +933,7 @@ function MyTeamAiChatPanel({
             </div>
           </div>
 
-          <div className="space-y-4 bg-[#111832]/52 px-4 py-4 lg:px-6 lg:py-5">
+          <div className="space-y-4 bg-[#111832] px-4 py-4 lg:px-6 lg:py-5">
             {messages.length > 0 || isSending ? (
               <div ref={chatScrollRef} className="max-h-80 space-y-4 overflow-y-auto pr-1">
                 {messages.map((message, index) => (
@@ -938,8 +941,8 @@ function MyTeamAiChatPanel({
                     key={`${message.role}-${index}`}
                     className={`rounded-lg border px-3 py-2 text-sm leading-6 ${
                       message.role === "user"
-                        ? "ml-auto max-w-[88%] border-nrl-accent/35 bg-[#123f3a]/62 text-nrl-text"
-                        : "mr-auto max-w-[94%] border-nrl-border/75 bg-[#101936]/70 text-nrl-text"
+                        ? "ml-auto max-w-[88%] border-nrl-accent/50 bg-[#123f3a] text-nrl-text"
+                        : "mr-auto max-w-[94%] border-nrl-border bg-[#101936] text-nrl-text"
                     }`}
                   >
                     {message.role === "assistant" ? <FormattedAiMessage content={message.content} /> : message.content}
@@ -1189,7 +1192,6 @@ function modelProjectionForFantasyPlayer(
   }
 
   if (lineupsProjections.source === "lineup_unaware") {
-    if (isFantasyPlayerUnavailableForProjectionFallback(fantasyPlayer)) return null
     return (
       lineupsProjections.projectionByPlayerId.get(fantasyPlayer.id) ??
       lineupsProjections.projectionByPlayerName.get(playerNameKey) ??
@@ -1482,6 +1484,16 @@ function actualScoreForPlayerRound(
   const fantasyPlayer = fantasyPlayersById.get(player.playerId)
   const score = fantasyPlayer?.scoreHistory?.[String(round)]
   return typeof score === "number" && Number.isFinite(score) ? score : null
+}
+
+function effectiveActualScoreForPlayerRound(
+  player: MyTeamPlayer,
+  round: MyTeamProjectionRound | null,
+  fantasyPlayersById: Map<number, FantasyPlayerSnapshot>,
+): number | null {
+  const score = actualScoreForPlayerRound(player, round, fantasyPlayersById)
+  if (score == null) return null
+  return player.isCaptain ? score * 2 : score
 }
 
 function playerCanCoverSlot(
@@ -1808,10 +1820,13 @@ function PlayerToken({
       ? player.squadRole === "emergency" ? "border-[#f16161]" : "border-[#a85db5]"
       : "border-[#f1f3f5]"
   const fantasyPlayer = player.playerId != null ? fantasyPlayersById.get(player.playerId) ?? null : null
-  const actualScore = showProjections ? actualScoreForPlayerRound(player, scoreRound, fantasyPlayersById) : null
+  const effectiveActualScore = showProjections ? effectiveActualScoreForPlayerRound(player, scoreRound, fantasyPlayersById) : null
+  const hasActualScore = showProjections && actualScoreForPlayerRound(player, scoreRound, fantasyPlayersById) != null
   const displayedProjection = showProjections
-    ? actualScore ?? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
+    ? effectiveActualScore ?? effectiveProjectionForPlayer(player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections)
     : null
+  const isEligibleSwapTarget = swapMenuOpen && playerIndex != null && eligibleSwapPlayers.some(({ index }) => index === playerIndex)
+  const isSwapSource = swapMenuOpen && selected
 
   const content = (
     <>
@@ -1834,7 +1849,7 @@ function PlayerToken({
       ) : null}
       {showProjections ? (
         <span className={`absolute right-[5%] top-[27%] grid h-6 w-6 place-items-center rounded-full border text-[8px] font-black shadow-[0_8px_18px_rgba(10,22,38,0.22)] lg:h-9 lg:w-9 lg:text-xs ${
-          actualScore != null
+          hasActualScore
             ? "border-emerald-200/80 bg-[#159a5a] text-white"
             : showCaptainStyling && player.isCaptain
             ? "border-orange-300/80 bg-[#5a2f1d] text-orange-200"
@@ -1867,19 +1882,36 @@ function PlayerToken({
     </>
   )
 
-  const className = `relative mx-auto flex min-h-[72px] w-full max-w-[6rem] flex-col items-center justify-end rounded-md text-center outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-nrl-accent/70 lg:min-h-[100px] lg:max-w-[7.75rem] ${selected ? "ring-2 ring-nrl-accent/70" : ""}`
+  const className = `relative mx-auto flex min-h-[72px] w-full max-w-[6rem] flex-col items-center justify-end rounded-md text-center outline-none transition-opacity hover:opacity-85 focus-visible:ring-2 focus-visible:ring-nrl-accent/70 lg:min-h-[100px] lg:max-w-[7.75rem] ${
+    isEligibleSwapTarget
+      ? "ring-2 ring-emerald-400/90 shadow-[0_0_0_4px_rgba(16,185,129,0.18),0_18px_36px_rgba(16,185,129,0.18)]"
+      : isSwapSource
+        ? "ring-2 ring-nrl-accent/70"
+        : selected ? "ring-2 ring-nrl-accent/70" : ""
+  }`
   if (playerIndex == null) return <div className={className}>{content}</div>
 
   return (
     <div className="relative" data-my-team-player-interactive="true">
       <button
         type="button"
-        onClick={() => onSelectPlayer(playerIndex)}
+        onClick={() => {
+          if (isEligibleSwapTarget) {
+            onSwapWithPlayer(playerIndex)
+          } else {
+            onSelectPlayer(playerIndex)
+          }
+        }}
         className={className}
       >
         {content}
       </button>
-      {selected ? (
+      {isEligibleSwapTarget ? (
+        <span className="pointer-events-none absolute -top-2 left-1/2 z-30 -translate-x-1/2 rounded-full bg-emerald-400 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-[#06131f] shadow-[0_10px_22px_rgba(16,185,129,0.28)]">
+          Swap
+        </span>
+      ) : null}
+      {selected && !swapMenuOpen ? (
         <div className={`absolute left-1/2 top-full z-40 mt-2 flex w-72 max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col rounded-lg border border-nrl-border bg-[#0e1530] p-1.5 text-left shadow-[0_18px_34px_rgba(2,6,23,0.48)] sm:w-[22rem] sm:flex-row ${bench ? "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2" : "lg:left-full lg:top-1/2 lg:ml-2 lg:mt-0 lg:-translate-x-0 lg:-translate-y-1/2"}`}>
           <div className="shrink-0 sm:w-40">
             <button
@@ -1924,32 +1956,6 @@ function PlayerToken({
               </Link>
             ) : null}
           </div>
-          {swapMenuOpen ? (
-            <div className="mt-1 max-h-44 overflow-y-auto border-t border-nrl-border pt-1 sm:ml-1 sm:mt-0 sm:w-44 sm:border-l sm:border-t-0 sm:pl-1 sm:pt-0">
-              {eligibleSwapPlayers.length > 0 ? (
-                eligibleSwapPlayers.map(({ player: swapPlayer, index }) => {
-                  const swapFantasyPlayer = swapPlayer.playerId != null ? fantasyPlayersById.get(swapPlayer.playerId) : null
-                  return (
-                    <button
-                      key={`${swapPlayer.displayName}-${index}`}
-                      type="button"
-                      onClick={() => onSwapWithPlayer(index)}
-                      className="block w-full rounded-md px-2.5 py-2 text-left text-[11px] font-semibold text-nrl-text transition-colors hover:bg-nrl-accent/10 hover:text-nrl-accent"
-                    >
-                      <span className="block truncate">{swapFantasyPlayer?.name ?? swapPlayer.displayName}</span>
-                      <span className="text-[9px] uppercase tracking-wide text-nrl-muted">
-                        {swapPlayer.squadRole === "starter" ? swapPlayer.slot : swapPlayer.squadRole}
-                      </span>
-                    </button>
-                  )
-                })
-              ) : (
-                <div className="px-2.5 py-2 text-[11px] font-semibold text-nrl-muted">
-                  No eligible swaps.
-                </div>
-              )}
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>
@@ -2150,7 +2156,7 @@ function TeamBoard({
   const activeHeaderRound = selectedProjectionRound ?? currentRoundForHeader ?? currentMajorRound
   const actualRoundScore = activeHeaderRound == null
     ? 0
-    : scoringSide.reduce((sum, entry) => sum + (actualScoreForPlayerRound(entry.player, activeHeaderRound, fantasyPlayersById) ?? 0), 0)
+    : scoringSide.reduce((sum, entry) => sum + (effectiveActualScoreForPlayerRound(entry.player, activeHeaderRound, fantasyPlayersById) ?? 0), 0)
   const showCaptainStyling = selectedProjectionRound == null
   const markerOverrideForIndex = (index: number | null): "available" | "unavailable" | "bye" | null => {
     if (activeHeaderRound == null || index == null) return null
@@ -2760,6 +2766,7 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
     setError(null)
     setStatus(null)
     setTeam(result.team)
+    setSelectedPlayerIndex(null)
     setIsSwapMenuOpen(false)
     setIsTradeMenuOpen(false)
   }

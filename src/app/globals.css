@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --color-nrl-bg: #0b1020;
-  --color-nrl-panel: #161c32;
-  --color-nrl-panel-2: #1e2542;
+  --color-nrl-bg: #10162a;
+  --color-nrl-panel: #111832;
+  --color-nrl-panel-2: #18213c;
   --color-nrl-accent: #00f58a;
   --color-nrl-text: #f5f7ff;
   --color-nrl-muted: #9aa4bf;
@@ -48,11 +48,12 @@ html[data-theme="light"] {
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --app-bg-base: #060816;
+  --app-bg-base: #10162a;
   --app-bg-gradient:
-    radial-gradient(circle at top left, rgba(137, 97, 255, 0.18), transparent 32%),
-    radial-gradient(circle at 72% 18%, rgba(0, 245, 138, 0.12), transparent 22%),
-    radial-gradient(circle at bottom right, rgba(116, 78, 255, 0.14), transparent 28%);
+    radial-gradient(circle at top left, rgba(98, 128, 255, 0.22), transparent 36%),
+    radial-gradient(circle at 72% 18%, rgba(0, 245, 138, 0.12), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(66, 133, 244, 0.2), transparent 34%),
+    linear-gradient(180deg, #10162a 0%, #0e1427 48%, #0c1124 100%);
 }
 
 body {

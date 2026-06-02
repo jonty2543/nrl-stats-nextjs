@@ -27,7 +27,7 @@ export default async function AiPage({ searchParams }: AiPageProps) {
   const requestedThreadId = typeof params.thread === "string" ? params.thread : null;
   const startNewThread = params.new === "1";
   const [threadList, usage, thread, fantasyCoachPlayers] = await Promise.all([
-    loadAiThreadListForUser(userId),
+    loadAiThreadListForUser(userId, { includeMyTeamThreads: false }),
     getAiUsageForUser(
       userId,
       access.chatLimit,
@@ -38,7 +38,7 @@ export default async function AiPage({ searchParams }: AiPageProps) {
       ? Promise.resolve(null)
       : requestedThreadId
       ? loadAiThreadForUser(userId, requestedThreadId)
-      : loadLatestAiThreadForUser(userId),
+      : loadLatestAiThreadForUser(userId, { includeMyTeamThreads: false }),
     fetchFantasyCoachPlayersSnapshot(),
   ]);
   const nextUpcomingRound = fantasyCoachPlayers

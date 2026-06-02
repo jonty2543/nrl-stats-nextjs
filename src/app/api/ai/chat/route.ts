@@ -724,6 +724,10 @@ export async function POST(request: Request) {
   const imageAttachments = toImageAttachments(body.imageAttachments);
   const toolName = typeof body.toolName === "string" ? body.toolName.trim() : "";
   const shouldPersist = body.persist !== false;
+  const canBypassUsageTrackingFailure =
+    process.env.NODE_ENV !== "production" &&
+    isMyTeamRequest &&
+    !shouldPersist;
   const allowAnonymousFindTrades =
     !userId &&
     !shouldPersist &&
@@ -803,7 +807,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (access.chatLimit != null && !usage.trackingAvailable) {
+  if (access.chatLimit != null && !usage.trackingAvailable && !canBypassUsageTrackingFailure) {
     logAiAuditEvent("ai_usage_tracking_unavailable", {
       userId,
       plan: access.plan,
@@ -834,7 +838,7 @@ export async function POST(request: Request) {
     ? await getAiUsageForUserByMessagePrefix(userId, MY_TEAM_AI_PROMPT_PREFIX, 3, 7, "week")
     : null;
 
-  if (myTeamUsage && !myTeamUsage.trackingAvailable) {
+  if (myTeamUsage && !myTeamUsage.trackingAvailable && !canBypassUsageTrackingFailure) {
     logAiAuditEvent("my_team_ai_usage_tracking_unavailable", {
       userId,
       plan: access.plan,

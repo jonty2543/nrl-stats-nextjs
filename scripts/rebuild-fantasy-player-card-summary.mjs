@@ -653,6 +653,7 @@ function isZeroProjectionPosition(value) {
 async function fetchLineupProjectionSnapshot(supabase) {
   const cutoffUtc = getProjectionFixtureCutoffUtc();
   const empty = {
+    source: "none",
     round: null,
     projectionByPlayerId: new Map(),
     projectionByPlayerName: new Map(),
@@ -696,7 +697,7 @@ async function fetchLineupProjectionSnapshot(supabase) {
     }
   }
 
-  const snapshot = { ...empty, round: parseRoundNumber(roundLabel) };
+  const snapshot = { ...empty, source: "lineups", round: parseRoundNumber(roundLabel) };
   for (const row of data) {
     const id = row.player_id == null ? null : Number(row.player_id);
     const nameKey = normaliseProjectionPlayerName(row.player);
@@ -742,7 +743,7 @@ async function fetchLineupUnawareProjectionSnapshot(supabase, cutoffUtc, empty) 
       return Number.isFinite(kickoffMs) && kickoffMs >= firstKickoffMs && kickoffMs < firstKickoffMs + 6 * 24 * 60 * 60 * 1000;
     });
 
-  const snapshot = { ...empty, round: parseRoundNumber(rows[0]?.round) };
+  const snapshot = { ...empty, source: "lineup_unaware", round: parseRoundNumber(rows[0]?.round) };
   for (const row of rows) {
     const nameKey = normaliseProjectionPlayerName(row.player);
     const projection = toNum(row.projection) ?? toNum(row.model_projection);
@@ -846,8 +847,12 @@ function nominalSide(number) {
   return "unknown";
 }
 
-function currentRoundOption(options) {
+function currentRoundOption(options, preferredRoundNumber = null) {
   if (options.length === 0) return null;
+  if (preferredRoundNumber != null) {
+    const preferredRound = options.find((option) => option.roundNumber === preferredRoundNumber);
+    if (preferredRound) return preferredRound;
+  }
   const now = new Date();
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Australia/Brisbane",
@@ -990,14 +995,20 @@ async function fetchRecentMatchResultsSummary(supabase, year) {
 }
 
 async function fetchLineupRoundOptionsSummary(supabase, year) {
-  const rows = await fetchAllRows(
+  const matchRows = await fetchAllRows(
     supabase,
     "matches",
     "round,round_number,match_date",
     (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("match_date", { ascending: true })
   );
+  const lineupRows = await fetchAllRows(
+    supabase,
+    "lineups",
+    "round,match_date,kickoff_utc",
+    (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("match_date", { ascending: true })
+  );
   const byRound = new Map();
-  for (const row of rows) {
+  for (const row of matchRows) {
     const round = text(row.round);
     if (!round) continue;
     const current = byRound.get(round) ?? {
@@ -1009,6 +1020,12 @@ async function fetchLineupRoundOptionsSummary(supabase, year) {
     };
     const date = text(row.match_date).slice(0, 10);
     addLineupRoundOption(byRound, round, current.roundNumber, date);
+  }
+  for (const row of lineupRows) {
+    const round = text(row.round);
+    if (!round) continue;
+    const date = text(row.match_date || row.kickoff_utc).slice(0, 10);
+    addLineupRoundOption(byRound, round, parseRoundNumber(round), date);
   }
   if (year === 2026) {
     const drawRows = await loadDraw2026Rows();
@@ -1183,8 +1200,9 @@ async function fetchLineupsSummaryTeamLogos(supabase) {
     const logo = nullableText(row.short_side_logo_url) ?? nullableText(row.side_logo_url) ?? nullableText(row.short_logo_url) ?? nullableText(row.logo_url);
     if (!logo) continue;
     for (const name of [row.team, row.team_name, row.name, row.short_name]) {
-      const key = normaliseName(text(name));
-      if (key && !logos.has(key)) logos.set(key, logo);
+      for (const key of [normaliseName(text(name)), normaliseTeamKey(name), teamGroup(name)]) {
+        if (key && !logos.has(key)) logos.set(key, logo);
+      }
     }
   }
   return Object.fromEntries(logos);
@@ -1324,7 +1342,7 @@ async function main() {
     console.warn("Unable to load 2026 draw for lineups page summary.", error);
     return [];
   }) : [];
-  const lineupsRound = currentRoundOption(lineupsRoundOptions);
+  const lineupsRound = currentRoundOption(lineupsRoundOptions, lineups.round);
   const today = getTodayInBrisbane();
   const lineupsPageSummaryRow = lineupsRound ? await Promise.all([
     fetchLineupMatchesSummary(supabaseNrl, lineupsRound.value, currentYear).catch((error) => {
@@ -1374,13 +1392,22 @@ async function main() {
     const nameKey = normaliseProjectionPlayerName(player.name);
     const coach = coachPlayersById.get(player.id);
     const role = lineups.roleByPlayerId.get(player.id) ?? lineups.roleByPlayerName.get(nameKey) ?? null;
-    const projection =
+    const lineupProjection =
       lineups.projectionByPlayerId.get(player.id) ??
       lineups.projectionByPlayerName.get(nameKey) ??
-      coach?.projection ??
-      player.projectedAvg ??
-      player.avgPoints ??
       null;
+    const isNamedInCurrentLineups =
+      lineups.roleByPlayerId.has(player.id) ||
+      lineups.roleByPlayerName.has(nameKey);
+    const projection = lineups.source === "lineups"
+      ? isNamedInCurrentLineups
+        ? lineupProjection ?? 0
+        : null
+      : lineupProjection ??
+        coach?.projection ??
+        player.projectedAvg ??
+        player.avgPoints ??
+        null;
     const breakeven = coach?.breakeven ?? player.be ?? null;
     const weeklyChange =
       player.ownedBy == null || ownershipBaselineById.get(player.id) == null

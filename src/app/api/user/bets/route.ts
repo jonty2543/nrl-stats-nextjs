@@ -5,10 +5,24 @@ import { createServerSupabaseClient } from "@/lib/supabase/client";
 
 type BetMarket = "H2H" | "Line" | "Total" | "Tryscorer";
 type BetStatus = "pending" | "won" | "lost" | "push";
+type BetType = "single" | "multi" | "sgm";
+
+const USER_BET_COLUMNS = "id, clerk_user_id, bet_type, market, match_date, match_name, selection, line_value, odds, stake, model_prob, implied_prob, edge_pp, status, profit, placed_at, settled_at, legs";
+
+interface BetLeg {
+  market: BetMarket;
+  matchDate: string;
+  matchName: string;
+  selection: string;
+  lineValue: number | null;
+  odds: number;
+  bookie: string | null;
+}
 
 interface UserBetRow {
   id: string;
   clerk_user_id: string;
+  bet_type?: BetType | null;
   market: BetMarket;
   match_date: string;
   match_name: string;
@@ -23,6 +37,7 @@ interface UserBetRow {
   profit: number | null;
   placed_at: string;
   settled_at: string | null;
+  legs?: unknown;
 }
 
 interface MatchResult {
@@ -70,6 +85,63 @@ function toFinite(value: unknown): number | null {
 
 function isBetStatus(value: unknown): value is BetStatus {
   return value === "pending" || value === "won" || value === "lost" || value === "push";
+}
+
+function isBetType(value: unknown): value is BetType {
+  return value === "single" || value === "multi" || value === "sgm";
+}
+
+function isBetMarket(value: unknown): value is BetMarket {
+  return value === "H2H" || value === "Line" || value === "Total" || value === "Tryscorer";
+}
+
+function normaliseBetLeg(raw: unknown): BetLeg | null {
+  if (!isJsonObject(raw)) return null;
+  const market = raw.market;
+  const matchDate = raw.matchDate;
+  const matchName = raw.matchName;
+  const selection = raw.selection;
+  const odds = toFinite(raw.odds);
+  if (!isBetMarket(market)) return null;
+  if (typeof matchDate !== "string" || matchDate.trim().length === 0) return null;
+  if (typeof matchName !== "string" || matchName.trim().length === 0) return null;
+  if (typeof selection !== "string" || selection.trim().length === 0) return null;
+  if (odds == null || odds <= 1) return null;
+  return {
+    market,
+    matchDate: matchDate.trim(),
+    matchName: matchName.trim(),
+    selection: selection.trim(),
+    lineValue: toFinite(raw.lineValue),
+    odds,
+    bookie: typeof raw.bookie === "string" && raw.bookie.trim() ? raw.bookie.trim() : null,
+  };
+}
+
+function normaliseBetLegs(value: unknown): BetLeg[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const leg = normaliseBetLeg(item);
+    return leg ? [leg] : [];
+  });
+}
+
+function matchLegKey(leg: BetLeg): string {
+  return `${leg.matchDate}|${normaliseTeam(leg.matchName)}`;
+}
+
+function validateLegsForBetType(betType: BetType, legs: BetLeg[]): string | null {
+  if (betType === "single") return null;
+  if (legs.length < 2) return `${betType === "sgm" ? "SGM" : "Multi"} bets require at least 2 legs`;
+  if (betType === "multi") {
+    const bookies = new Set(legs.map((leg) => leg.bookie).filter(Boolean));
+    if (bookies.size !== 1 || legs.some((leg) => !leg.bookie)) return "multi legs must use the same bookie";
+    if (new Set(legs.map(matchLegKey)).size !== legs.length) return "multi legs must be from different games";
+  }
+  if (betType === "sgm" && new Set(legs.map(matchLegKey)).size !== 1) {
+    return "sgm legs must be from the same game";
+  }
+  return null;
 }
 
 function computeProfitForStatus(status: BetStatus, stake: number, odds: number): number | null {
@@ -140,8 +212,10 @@ function teamsMatchByLastWord(
 }
 
 function mapRowToResponse(row: UserBetRow) {
+  const betType = isBetType(row.bet_type) ? row.bet_type : "single";
   return {
     id: row.id,
+    betType,
     market: row.market,
     matchDate: row.match_date,
     matchName: row.match_name,
@@ -156,6 +230,7 @@ function mapRowToResponse(row: UserBetRow) {
     profit: row.profit,
     placedAt: row.placed_at,
     settledAt: row.settled_at,
+    legs: normaliseBetLegs(row.legs),
   };
 }
 
@@ -257,7 +332,7 @@ async function buildMatchResultMap(dates: string[]): Promise<Map<string, MatchRe
 }
 
 async function settlePendingBets(rows: UserBetRow[], userId: string): Promise<UserBetRow[]> {
-  const pendingRows = rows.filter((row) => row.status === "pending");
+  const pendingRows = rows.filter((row) => row.status === "pending" && (row.bet_type == null || row.bet_type === "single"));
   if (pendingRows.length === 0) return rows;
 
   const dates = Array.from(new Set(pendingRows.map((row) => row.match_date).filter(Boolean)));
@@ -338,7 +413,7 @@ export async function GET() {
     const { data, error } = await supabase
       .schema("shortside")
       .from("user_bets")
-      .select("id, clerk_user_id, market, match_date, match_name, selection, line_value, odds, stake, model_prob, implied_prob, edge_pp, status, profit, placed_at, settled_at")
+      .select(USER_BET_COLUMNS)
       .eq("clerk_user_id", userId)
       .order("placed_at", { ascending: false });
 
@@ -376,6 +451,8 @@ export async function POST(request: NextRequest) {
   }
 
   const market = body.market;
+  const betType: BetType = isBetType(body.betType) ? body.betType : "single";
+  const legs = normaliseBetLegs(body.legs);
   const matchDate = body.matchDate;
   const matchName = body.matchName;
   const selection = body.selection;
@@ -387,8 +464,12 @@ export async function POST(request: NextRequest) {
   const edgePp = body.edgePp;
   const status = body.status;
 
-  if (market !== "H2H" && market !== "Line" && market !== "Total" && market !== "Tryscorer") {
+  if (!isBetMarket(market)) {
     return NextResponse.json({ error: "market must be H2H, Line, Total, or Tryscorer" }, { status: 400 });
+  }
+  const legsError = validateLegsForBetType(betType, legs);
+  if (legsError) {
+    return NextResponse.json({ error: legsError }, { status: 400 });
   }
   if (typeof matchDate !== "string" || matchDate.trim().length === 0) {
     return NextResponse.json({ error: "matchDate is required" }, { status: 400 });
@@ -416,6 +497,7 @@ export async function POST(request: NextRequest) {
     .from("user_bets")
     .insert({
       clerk_user_id: userId,
+      bet_type: betType,
       market,
       match_date: matchDate,
       match_name: matchName,
@@ -430,8 +512,9 @@ export async function POST(request: NextRequest) {
       profit: computeProfitForStatus(parsedStatus, parsedStake, parsedOdds),
       placed_at: new Date().toISOString(),
       settled_at: computeSettledAtForStatus(parsedStatus),
+      legs,
     })
-    .select("id, clerk_user_id, market, match_date, match_name, selection, line_value, odds, stake, model_prob, implied_prob, edge_pp, status, profit, placed_at, settled_at")
+    .select(USER_BET_COLUMNS)
     .single();
 
   if (error) {
@@ -489,7 +572,7 @@ export async function PATCH(request: NextRequest) {
   const { data: existing, error: existingError } = await supabase
     .schema("shortside")
     .from("user_bets")
-    .select("id, clerk_user_id, market, match_date, match_name, selection, line_value, odds, stake, model_prob, implied_prob, edge_pp, status, profit, placed_at, settled_at")
+    .select(USER_BET_COLUMNS)
     .eq("id", id)
     .eq("clerk_user_id", userId)
     .maybeSingle();
@@ -526,7 +609,7 @@ export async function PATCH(request: NextRequest) {
     })
     .eq("id", id)
     .eq("clerk_user_id", userId)
-    .select("id, clerk_user_id, market, match_date, match_name, selection, line_value, odds, stake, model_prob, implied_prob, edge_pp, status, profit, placed_at, settled_at")
+    .select(USER_BET_COLUMNS)
     .single();
 
   if (error) {

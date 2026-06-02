@@ -5,19 +5,19 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Ball Running Fullback",
-                    "count": 16,
+                    "count": 21,
                     "description": "Fullbacks who are quick and able to break the defensive line, and opt for game breaking runs over tough carries."
                 },
                 {
                     "id": 1,
                     "name": "Balanced Fullback",
-                    "count": 14,
+                    "count": 13,
                     "description": "These well rounded fullbacks balance workrate, playmaking and elusiveness making them the complete package."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Fullback",
-                    "count": 23,
+                    "count": 19,
                     "description": "High-effort players who are always around the ball. They rack up high run metres and support plays."
                 },
                 {
@@ -109,25 +109,25 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 6,
+                    "count": 5,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 47,
+                    "count": 65,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
                     "id": 2,
                     "name": "Support Centre",
-                    "count": 77,
+                    "count": 80,
                     "description": "These players are less involved with ball in hand and may play other roles for the team."
                 },
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 59,
+                    "count": 39,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],
@@ -161,13 +161,13 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 45,
+                    "count": 46,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
                     "id": 1,
                     "name": "Running Half",
-                    "count": 63,
+                    "count": 62,
                     "description": "Halves with strong running games who look to break the line, usually Five-Eighths."
                 },
                 {
@@ -211,13 +211,13 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 23,
+                    "count": 25,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
                     "id": 1,
                     "name": "Running Hooker",
-                    "count": 19,
+                    "count": 17,
                     "description": "Strong ball running hookers who often look to run from dummy half."
                 },
                 {
@@ -262,25 +262,25 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 68,
+                    "count": 56,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 24,
+                    "count": 56,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 51,
+                    "count": 30,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 35,
+                    "count": 38,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -315,19 +315,19 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 32,
+                    "count": 43,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 63,
+                    "count": 41,
                     "description": "The most effective hit up takers, these middles are characterised by their strength and big engines."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 117,
+                    "count": 130,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

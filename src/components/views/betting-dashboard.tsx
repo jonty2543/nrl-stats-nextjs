@@ -19,16 +19,56 @@ interface BettingDashboardProps {
   snapshot: BettingOddsSnapshot;
   canAccessPremium?: boolean;
   playerImages?: PlayerImageRecord[];
+  playerTeamsByName?: Record<string, string>;
   teamLogos?: Record<string, string>;
   tryscorerFormByPlayer?: Record<string, TryscorerFormSummary>;
   tryscorerKickoffsByMatch?: Record<string, string>;
+  lineupLinksByMatchKey?: Record<string, string>;
   marginModelArticle?: BettingArticleLink | null;
+  tryscorerArticle?: BettingArticleLink | null;
 }
 
 interface BettingArticleLink {
   title: string;
   slug: string;
   imageUrls: string[];
+}
+
+function BettingArticlePill({ article }: { article: BettingArticleLink }) {
+  return (
+    <Link
+      href={`/dashboard/articles/${article.slug}`}
+      aria-label={`Read ${article.title}`}
+      className="group relative flex min-h-[58px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.22)] bg-[#20284a]/80 text-white shadow-[0_8px_18px_rgba(8,10,18,0.16)] transition-colors hover:border-emerald-300/40"
+    >
+      <div className={`absolute inset-0 grid ${article.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+        {article.imageUrls.slice(0, 2).map((url, index) => (
+          <div key={`${url}-${index}`} className="min-w-0 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt=""
+              className="h-full w-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-[1.03]"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.92),rgba(14,19,48,0.78),rgba(14,19,48,0.56))]" />
+      <div className="relative flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-2">
+        <div className="min-w-0">
+          <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+            Article
+          </div>
+          <div className="mt-0.5 overflow-hidden text-[10px] font-bold uppercase leading-tight tracking-[0.08em] text-white/85 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+            {article.title}
+          </div>
+        </div>
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel-2/60 text-sm text-nrl-text/80">
+          →
+        </span>
+      </div>
+    </Link>
+  );
 }
 
 interface BettingPreferences {
@@ -120,9 +160,32 @@ interface ArbitrageCandidate {
 
 type StakingMode = "percentage" | "targetProfit" | "kelly";
 type TrackedBetStatus = "pending" | "won" | "lost" | "push";
+type TrackedBetType = "single" | "multi" | "sgm";
+
+interface BetLeg {
+  market: BettingMarket;
+  matchDate: string;
+  matchName: string;
+  selection: string;
+  lineValue: number | null;
+  odds: number;
+  bookie: string | null;
+}
+
+interface ManualBetLegDraft {
+  id: string;
+  market: BettingMarket;
+  matchDate: string;
+  matchName: string;
+  selection: string;
+  lineValue: string;
+  odds: string;
+  bookie: string;
+}
 
 interface TrackedBet {
   id: string;
+  betType?: TrackedBetType;
   market: BettingMarket;
   matchDate: string;
   matchName: string;
@@ -137,9 +200,11 @@ interface TrackedBet {
   profit: number | null;
   placedAt: string;
   settledAt: string | null;
+  legs?: BetLeg[];
 }
 
 interface BetDraft {
+  betType?: TrackedBetType;
   market: BettingMarket;
   matchDate: string;
   matchName: string;
@@ -151,6 +216,7 @@ interface BetDraft {
   modelProb: number | null;
   impliedProb: number | null;
   edgePp: number | null;
+  legs?: BetLeg[];
 }
 
 interface MobileBetSlip {
@@ -166,9 +232,11 @@ interface MobileBetSlip {
 }
 
 const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
+const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
 const DEFAULT_BETTING_MARKET: BettingMarket = "H2H";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
+const BETTING_PANEL_HEADER_CLASS = "text-[10px] font-bold uppercase tracking-[0.22em]";
 const IMPLIED_LINE_SIGMA = 16.85;
 const IMPLIED_TOTAL_SIGMA = 16.85;
 const BEST_BETS_CONFIG = {
@@ -183,6 +251,12 @@ const BEST_BETS_CONFIG = {
     efficiency: 0.14,
     disagreement: 0.1,
   },
+};
+const BEST_BETS_FEATURED_OVERRIDE = {
+  from: "2026-05-25",
+  to: "2026-05-31",
+  preferredSelectionKeys: ["north queensland cowboys", "nth queensland cowboys", "cowboys"],
+  blockedTopSelectionKeys: ["st george illawarra dragons", "st george dragons", "dragons"],
 };
 const STAKING_OPTIONS: Array<{
   mode: StakingMode;
@@ -252,29 +326,25 @@ function areLookupTokensClose(a: string, b: string): boolean {
 
 function normaliseTeamMatchKey(value: string): string {
   const key = normaliseLookupKey(value);
-  const aliases: Record<string, string> = {
-    broncos: "brisbane broncos",
-    bulldogs: "canterbury bankstown bulldogs",
-    "canterbury bulldogs": "canterbury bankstown bulldogs",
-    raiders: "canberra raiders",
-    sharks: "cronulla sutherland sharks",
-    titans: "gold coast titans",
-    "sea eagles": "manly warringah sea eagles",
-    storm: "melbourne storm",
-    knights: "newcastle knights",
-    cowboys: "north queensland cowboys",
-    "nth queensland cowboys": "north queensland cowboys",
-    "north qld cowboys": "north queensland cowboys",
-    eels: "parramatta eels",
-    panthers: "penrith panthers",
-    rabbitohs: "south sydney rabbitohs",
-    dragons: "st george illawarra dragons",
-    roosters: "sydney roosters",
-    warriors: "new zealand warriors",
-    tigers: "wests tigers",
-    dolphins: "dolphins",
-  };
-  return aliases[key] ?? key;
+  if (!key) return "";
+  if (key.includes("broncos") || key === "brisbane") return "broncos";
+  if (key.includes("raiders") || key === "canberra") return "raiders";
+  if (key.includes("bulldogs") || key.includes("canterbury")) return "bulldogs";
+  if (key.includes("sharks") || key.includes("cronulla")) return "sharks";
+  if (key.includes("dolphins")) return "dolphins";
+  if (key.includes("titans") || key.includes("gold coast")) return "titans";
+  if (key.includes("sea eagles") || key.includes("manly")) return "sea eagles";
+  if (key.includes("storm") || key.includes("melbourne")) return "storm";
+  if (key.includes("knights") || key.includes("newcastle")) return "knights";
+  if (key.includes("warriors") || key.includes("zealand")) return "warriors";
+  if (key.includes("cowboys") || key.includes("north queensland") || key.includes("north qld") || key.includes("nth queensland")) return "cowboys";
+  if (key.includes("eels") || key.includes("parramatta")) return "eels";
+  if (key.includes("panthers") || key.includes("penrith")) return "panthers";
+  if (key.includes("rabbitohs") || key.includes("south sydney") || key === "souths") return "rabbitohs";
+  if (key.includes("dragons") || key.includes("st george")) return "dragons";
+  if (key.includes("roosters") || key.includes("sydney")) return "roosters";
+  if (key.includes("tigers") || key.includes("wests")) return "tigers";
+  return key;
 }
 
 function buildMatchKickoffKey(date: string, match: string): string | null {
@@ -282,6 +352,12 @@ function buildMatchKickoffKey(date: string, match: string): string | null {
   if (!home || !away) return null;
   const teamsKey = [normaliseTeamMatchKey(home), normaliseTeamMatchKey(away)].sort().join("|");
   return `${date}|${teamsKey}`;
+}
+
+function buildMatchGroupKey(match: string): string {
+  const { home, away } = parseMatch(match);
+  if (!home || !away) return normaliseLookupKey(match);
+  return [normaliseTeamMatchKey(home), normaliseTeamMatchKey(away)].sort().join("|");
 }
 
 function kickoffSortMs(group: Pick<EventGroup, "date" | "match">, kickoffsByMatch: Record<string, string>): number {
@@ -305,36 +381,52 @@ function compareGroupsByKickoff(
   return a.match.localeCompare(b.match);
 }
 
+const NRL_TEAM_LOGO_ALIAS_GROUPS: string[][] = [
+  ["brisbane broncos", "broncos"],
+  ["canberra raiders", "raiders"],
+  ["canterbury bankstown bulldogs", "canterbury bulldogs", "bulldogs"],
+  ["cronulla sutherland sharks", "cronulla sharks", "sharks"],
+  ["dolphins", "the dolphins"],
+  ["gold coast titans", "titans"],
+  ["manly warringah sea eagles", "manly sea eagles", "sea eagles", "manly"],
+  ["melbourne storm", "storm"],
+  ["newcastle knights", "knights"],
+  ["new zealand warriors", "nz warriors", "warriors"],
+  ["north queensland cowboys", "nth queensland cowboys", "north qld cowboys", "cowboys"],
+  ["parramatta eels", "eels"],
+  ["penrith panthers", "panthers"],
+  ["south sydney rabbitohs", "rabbitohs", "souths"],
+  ["st george illawarra dragons", "st george dragons", "st george", "dragons"],
+  ["sydney roosters", "eastern suburbs roosters", "roosters"],
+  ["wests tigers", "west tigers", "tigers"],
+];
+
+function teamLogoAliasKeys(value: string | null | undefined): string[] {
+  const key = normaliseLookupKey(stripSelectionLineSuffix(value ?? ""));
+  if (!key) return [];
+
+  const group = NRL_TEAM_LOGO_ALIAS_GROUPS.find((aliases) =>
+    aliases.some((alias) => normaliseLookupKey(alias) === key)
+  );
+  if (!group) return [key];
+
+  return [...new Set(group.map((alias) => normaliseLookupKey(alias)).filter(Boolean))];
+}
+
 function resolveTeamLogoUrl(teamName: string | null | undefined, teamLogos: Record<string, string>): string | null {
-  const key = normaliseLookupKey(teamName);
-  if (!key) return null;
-  if (teamLogos[key]) return teamLogos[key];
-
-  const aliases: Record<string, string[]> = {
-    broncos: ["brisbane broncos"],
-    bulldogs: ["canterbury bulldogs", "canterbury bankstown bulldogs"],
-    raiders: ["canberra raiders"],
-    sharks: ["cronulla sharks", "cronulla sutherland sharks"],
-    titans: ["gold coast titans"],
-    "sea eagles": ["manly sea eagles", "manly warringah sea eagles"],
-    storm: ["melbourne storm"],
-    knights: ["newcastle knights"],
-    cowboys: ["north queensland cowboys"],
-    eels: ["parramatta eels"],
-    panthers: ["penrith panthers"],
-    rabbitohs: ["south sydney rabbitohs"],
-    dragons: ["st george illawarra dragons", "st george dragons"],
-    roosters: ["sydney roosters", "eastern suburbs roosters"],
-    warriors: ["new zealand warriors"],
-    tigers: ["wests tigers"],
-    dolphins: ["the dolphins", "dolphins"],
-  };
-
-  for (const alias of aliases[key] ?? []) {
-    if (teamLogos[alias]) return teamLogos[alias];
+  const keys = teamLogoAliasKeys(teamName);
+  if (keys.length === 0) return null;
+  for (const key of keys) {
+    if (teamLogos[key]) return teamLogos[key];
   }
 
-  return Object.entries(teamLogos).find(([logoKey]) => logoKey.endsWith(` ${key}`) || logoKey.includes(key))?.[1] ?? null;
+  return Object.entries(teamLogos).find(([logoKey]) =>
+    keys.some((key) => logoKey === key || logoKey.endsWith(` ${key}`) || logoKey.includes(key))
+  )?.[1] ?? null;
+}
+
+function stripSelectionLineSuffix(selection: string): string {
+  return selection.trim().replace(/\s+[+-]?\d+(?:\.\d+)?\s*$/, "").trim();
 }
 
 function TeamLogoImage({
@@ -357,6 +449,85 @@ function TeamLogoImage({
       className={`shrink-0 object-contain ${className}`}
       loading="lazy"
     />
+  );
+}
+
+function MatchLogoCluster({
+  match,
+  teamLogos,
+  className = "h-5 w-5",
+}: {
+  match: string;
+  teamLogos: Record<string, string>;
+  className?: string;
+}) {
+  const { home, away } = parseMatch(match);
+  const teams = [home, away].filter(Boolean).filter((team) => resolveTeamLogoUrl(team, teamLogos));
+  if (teams.length === 0) return null;
+
+  return (
+    <span className="inline-flex shrink-0 items-center">
+      {teams.slice(0, 2).map((team, index) => (
+        <span key={`${match}-${team}`} className={index > 0 ? "-ml-1.5" : ""}>
+          <TeamLogoImage
+            teamName={team}
+            teamLogos={teamLogos}
+            className={`${className} rounded-full bg-[#0e1530] ring-1 ring-white/10`}
+          />
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function BettingTeamLogos({
+  selection,
+  match,
+  market,
+  teamLogos,
+  className = "h-5 w-5",
+}: {
+  selection: string;
+  match: string;
+  market: BettingMarket;
+  teamLogos: Record<string, string>;
+  className?: string;
+}) {
+  const teamSelection = stripSelectionLineSuffix(selection);
+  const selectionLogoUrl = market !== "Total" ? resolveTeamLogoUrl(teamSelection, teamLogos) : null;
+  if (selectionLogoUrl) {
+    return <TeamLogoImage teamName={teamSelection} teamLogos={teamLogos} className={className} />;
+  }
+
+  return <MatchLogoCluster match={match} teamLogos={teamLogos} className={className} />;
+}
+
+function teamInitials(teamName: string | null | undefined): string {
+  return String(teamName ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase() || "?";
+}
+
+function TeamLogoBadge({
+  teamName,
+  teamLogos,
+}: {
+  teamName: string | null | undefined;
+  teamLogos: Record<string, string>;
+}) {
+  const logoUrl = resolveTeamLogoUrl(teamName, teamLogos);
+  if (logoUrl) {
+    return <TeamLogoImage teamName={teamName} teamLogos={teamLogos} className="h-7 w-7 rounded-full bg-[#0e1530] p-0.5 ring-1 ring-white/10" />;
+  }
+
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-nrl-panel-2 text-[9px] font-bold text-nrl-muted ring-1 ring-white/10">
+      {teamInitials(teamName)}
+    </span>
   );
 }
 
@@ -425,6 +596,11 @@ function formatPct(value: number | null): string {
   return `${value.toFixed(2)}%`;
 }
 
+function formatEdge(value: number | null): string {
+  if (value == null) return "-";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+
 function formatMoney(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}$${value.toFixed(2)}`;
@@ -448,11 +624,74 @@ function computeBetProfit(status: TrackedBetStatus, stake: number, odds: number)
   return Number((-stake).toFixed(2));
 }
 
-function betStatusClass(status: TrackedBetStatus): string {
-  if (status === "won") return "text-nrl-accent";
-  if (status === "lost") return "text-red-500";
-  if (status === "push") return "text-nrl-muted";
-  return "text-nrl-text";
+function createManualLegDraft(todayIso: string): ManualBetLegDraft {
+  return {
+    id: `leg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    market: "H2H",
+    matchDate: todayIso,
+    matchName: "",
+    selection: "",
+    lineValue: "",
+    odds: "1.90",
+    bookie: "",
+  };
+}
+
+function parseManualLegs(legs: ManualBetLegDraft[]): BetLeg[] {
+  return legs.flatMap((leg) => {
+    const odds = Number(leg.odds);
+    const lineValue = leg.lineValue.trim() ? Number(leg.lineValue) : null;
+    if (!leg.matchDate.trim() || !leg.matchName.trim() || !leg.selection.trim() || !Number.isFinite(odds) || odds <= 1) {
+      return [];
+    }
+    if (lineValue != null && !Number.isFinite(lineValue)) return [];
+    return [{
+      market: leg.market,
+      matchDate: leg.matchDate.trim(),
+      matchName: leg.matchName.trim(),
+      selection: leg.selection.trim(),
+      lineValue,
+      odds,
+      bookie: leg.bookie.trim() || null,
+    }];
+  });
+}
+
+function combinedMultiOdds(legs: BetLeg[]): number | null {
+  if (legs.length < 2) return null;
+  const product = legs.reduce((value, leg) => value * leg.odds, 1);
+  return Number.isFinite(product) && product > 1 ? Number(product.toFixed(2)) : null;
+}
+
+function normaliseMatchLabel(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function betTypeLabel(type: TrackedBetType | undefined): string {
+  if (type === "multi") return "Multi";
+  if (type === "sgm") return "SGM";
+  return "Single";
+}
+
+function betStatusPillClass(status: TrackedBetStatus): string {
+  if (status === "won") return "border-emerald-300/40 bg-emerald-400/12 text-emerald-300";
+  if (status === "lost") return "border-red-500/35 bg-red-500/10 text-red-400";
+  if (status === "push") return "border-white/12 bg-white/[0.04] text-nrl-muted";
+  return "border-sky-400/30 bg-sky-400/10 text-sky-200";
+}
+
+function betStatusIconClass(status: TrackedBetStatus): string {
+  if (status === "won") return "bg-emerald-300 text-[#07180f]";
+  if (status === "lost") return "bg-red-500 text-white";
+  if (status === "push") return "bg-slate-500 text-white";
+  return "bg-amber-300 text-[#1f1706]";
+}
+
+function betStatusIconLabel(status: TrackedBetStatus): string {
+  if (status === "won") return "✓";
+  if (status === "lost") return "×";
+  if (status === "push") return "=";
+  return "•";
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -476,6 +715,60 @@ function formatDateLabel(value: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatCompactDateLabel(value: string): string {
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}-${month}`;
+}
+
+function eventStartMs(
+  event: Pick<EventGroup, "date" | "match">,
+  kickoffsByMatch: Record<string, string>
+): number | null {
+  const kickoffKey = buildMatchKickoffKey(event.date, event.match);
+  const kickoff = kickoffKey ? kickoffsByMatch[kickoffKey] : null;
+  const kickoffMs = kickoff ? Date.parse(kickoff) : NaN;
+  if (Number.isFinite(kickoffMs)) return kickoffMs;
+
+  const dateEndMs = Date.parse(`${event.date}T23:59:59`);
+  if (Number.isFinite(dateEndMs)) return dateEndMs;
+
+  return null;
+}
+
+function formatEventCountdown(
+  event: Pick<EventGroup, "date" | "match">,
+  kickoffsByMatch: Record<string, string>,
+  nowMs: number
+): string {
+  const startMs = eventStartMs(event, kickoffsByMatch);
+  if (startMs == null) return formatDateLabel(event.date);
+
+  const remainingMs = startMs - nowMs;
+  if (remainingMs <= 0) return "Live";
+
+  const minuteMs = 60 * 1000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+
+  if (remainingMs < dayMs) {
+    const hours = Math.floor(remainingMs / hourMs);
+    const minutes = Math.max(0, Math.floor((remainingMs % hourMs) / minuteMs));
+    return `${hours}:${minutes.toString().padStart(2, "0")} til event`;
+  }
+
+  const days = Math.ceil(remainingMs / dayMs);
+  return `${days}d til event`;
+}
+
+function formatBestBetScore(score: number): string {
+  return `${(clamp(score, 0, 1) * 10).toFixed(1)}/10`;
+}
+
+function formatBestBetMarketLabel(market: BettingMarket): string {
+  return market === "Tryscorer" ? "Tryscorers" : market;
 }
 
 function createBookieRecord<T>(factory: () => T): Record<BettingBookie, T> {
@@ -613,7 +906,7 @@ function buildEventGroups(
 
   for (const row of rows) {
     if (row.market === "Tryscorer" && row.result.includes(";")) continue;
-    const eventKey = `${row.date}|${row.match}|${row.market}`;
+    const eventKey = `${row.date}|${buildMatchGroupKey(row.match)}|${row.market}`;
     const existingGroup = groups.get(eventKey);
     if (!existingGroup) {
       groups.set(eventKey, {
@@ -739,6 +1032,51 @@ function modelPercentToProbability(value: number | null): number | null {
   return clamp(value / 100, 0.01, 0.99);
 }
 
+function bestBetSelectionMatches(
+  candidate: Pick<BestBetCandidate, "selection" | "selectionLabel">,
+  selectionKeys: string[]
+): boolean {
+  const candidateKeys = [
+    candidate.selection,
+    candidate.selectionLabel,
+    stripSelectionLineSuffix(candidate.selection),
+    stripSelectionLineSuffix(candidate.selectionLabel),
+  ].map((value) => normaliseTeamMatchKey(value));
+
+  const targetKeys = selectionKeys.map((value) => normaliseTeamMatchKey(value));
+  return candidateKeys.some((candidateKey) => targetKeys.includes(candidateKey));
+}
+
+function applyFeaturedBestBetOverride(
+  sortedCandidates: Array<Omit<BestBetCandidate, "tags">>,
+  todayIso: string
+): Array<Omit<BestBetCandidate, "tags">> {
+  if (
+    todayIso < BEST_BETS_FEATURED_OVERRIDE.from ||
+    todayIso > BEST_BETS_FEATURED_OVERRIDE.to ||
+    sortedCandidates.length < 2 ||
+    !bestBetSelectionMatches(sortedCandidates[0], BEST_BETS_FEATURED_OVERRIDE.blockedTopSelectionKeys)
+  ) {
+    return sortedCandidates;
+  }
+
+  const preferredIndex = sortedCandidates.findIndex((candidate) =>
+    candidate.date >= BEST_BETS_FEATURED_OVERRIDE.from &&
+    candidate.date <= BEST_BETS_FEATURED_OVERRIDE.to &&
+    bestBetSelectionMatches(candidate, BEST_BETS_FEATURED_OVERRIDE.preferredSelectionKeys)
+  );
+  if (preferredIndex <= 0) return sortedCandidates;
+
+  const preferredCandidate = sortedCandidates[preferredIndex];
+  if (!preferredCandidate) return sortedCandidates;
+
+  return [
+    preferredCandidate,
+    ...sortedCandidates.slice(0, preferredIndex),
+    ...sortedCandidates.slice(preferredIndex + 1),
+  ];
+}
+
 function buildBestBets({
   groups,
   bankroll,
@@ -832,20 +1170,25 @@ function buildBestBets({
     if (Math.abs(a.score - b.score) > 1e-9) return b.score - a.score;
     return b.edgePp - a.edgePp;
   });
-  const biggestEdgeId = [...candidates].sort((a, b) => b.edgePp - a.edgePp)[0]?.id;
 
-  return sorted.slice(0, BEST_BETS_CONFIG.maxCards).map((candidate, index) => {
-    const tags: string[] = [];
-    if (index === 0) tags.push("Top Rated Bet");
-    if (candidate.id === biggestEdgeId) tags.push("Highest Edge");
-    if ((candidate.marketDisagreementPct ?? 0) >= 5) tags.push("Best Value");
-    if (candidate.modelProbability >= 0.55 && candidate.market !== "Tryscorer") tags.push("Model Favourite");
-    if (tags.length === 0) tags.push("Sharp Value");
+  return BEST_BET_MODEL_MARKETS.flatMap((market) => {
+    const marketCandidates = sorted.filter((candidate) => candidate.market === market);
+    const displaySorted = applyFeaturedBestBetOverride(marketCandidates, todayIso);
+    const biggestEdgeId = [...marketCandidates].sort((a, b) => b.edgePp - a.edgePp)[0]?.id;
 
-    return {
-      ...candidate,
-      tags: [...new Set(tags)].slice(0, 2),
-    };
+    return displaySorted.slice(0, BEST_BETS_CONFIG.maxCards).map((candidate, index) => {
+      const tags: string[] = [];
+      if (index === 0) tags.push("Top Rated Bet");
+      if (candidate.id === biggestEdgeId) tags.push("Highest Edge");
+      if ((candidate.marketDisagreementPct ?? 0) >= 5) tags.push("Best Value");
+      if (candidate.modelProbability >= 0.55 && candidate.market !== "Tryscorer") tags.push("Model Favourite");
+      if (tags.length === 0) tags.push("Sharp Value");
+
+      return {
+        ...candidate,
+        tags: [...new Set(tags)].slice(0, 2),
+      };
+    });
   });
 }
 
@@ -940,10 +1283,13 @@ export function BettingDashboard({
   snapshot,
   canAccessPremium = false,
   playerImages = [],
+  playerTeamsByName: playerTeamsByNameProp = {},
   teamLogos = {},
   tryscorerFormByPlayer = {},
   tryscorerKickoffsByMatch = {},
+  lineupLinksByMatchKey = {},
   marginModelArticle = null,
+  tryscorerArticle = null,
 }: BettingDashboardProps) {
   const { isLoaded, userId } = useAuth();
   const { user } = useUser();
@@ -959,12 +1305,19 @@ export function BettingDashboard({
   const [stakeOverrides, setStakeOverrides] = useState<Record<string, number>>({});
   const [oddsOverrides, setOddsOverrides] = useState<Record<string, number>>({});
   const [trackerOpen, setTrackerOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [bets, setBets] = useState<TrackedBet[]>([]);
   const [betsLoading, setBetsLoading] = useState(false);
   const [betsHydrated, setBetsHydrated] = useState(false);
   const [betsError, setBetsError] = useState<string | null>(null);
   const [betAddedMessage, setBetAddedMessage] = useState<string | null>(null);
   const [betRemovedMessage, setBetRemovedMessage] = useState<string | null>(null);
+  const [manualBetType, setManualBetType] = useState<TrackedBetType>("single");
+  const [manualLegs, setManualLegs] = useState<ManualBetLegDraft[]>(() => [
+    createManualLegDraft(todayIso),
+    createManualLegDraft(todayIso),
+  ]);
+  const [manualOddsEdited, setManualOddsEdited] = useState(false);
   const [manualMatchDate, setManualMatchDate] = useState(todayIso);
   const [manualMatchName, setManualMatchName] = useState("");
   const [manualSelection, setManualSelection] = useState("");
@@ -975,13 +1328,16 @@ export function BettingDashboard({
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
   const playerTeamsByName = useMemo(() => {
     const out = new Map<string, string>();
+    for (const [key, team] of Object.entries(playerTeamsByNameProp)) {
+      if (key && team) out.set(key, team);
+    }
     for (const row of playerImages) {
       const key = normaliseLookupKey(row.player);
       if (!key || !row.team || out.has(key)) continue;
       out.set(key, row.team);
     }
     return out;
-  }, [playerImages]);
+  }, [playerImages, playerTeamsByNameProp]);
   const resolveTryscorerResult = useMemo(() => {
     const entries = Object.entries(tryscorerFormByPlayer);
     return (result: string, market: BettingMarket) => {
@@ -1283,6 +1639,26 @@ export function BettingDashboard({
     }));
   };
 
+  const parsedManualLegs = useMemo(() => parseManualLegs(manualLegs), [manualLegs]);
+  const manualMultiOdds = useMemo(() => combinedMultiOdds(parsedManualLegs), [parsedManualLegs]);
+
+  useEffect(() => {
+    if (manualBetType !== "multi" || manualOddsEdited || manualMultiOdds == null) return;
+    setManualOdds(manualMultiOdds.toFixed(2));
+  }, [manualBetType, manualMultiOdds, manualOddsEdited]);
+
+  const updateManualLeg = (id: string, updates: Partial<ManualBetLegDraft>) => {
+    setManualLegs((prev) => prev.map((leg) => (leg.id === id ? { ...leg, ...updates } : leg)));
+  };
+
+  const addManualLeg = () => {
+    setManualLegs((prev) => [...prev, createManualLegDraft(todayIso)]);
+  };
+
+  const removeManualLeg = (id: string) => {
+    setManualLegs((prev) => (prev.length <= 2 ? prev : prev.filter((leg) => leg.id !== id)));
+  };
+
   const handleAddBet = async (draft: BetDraft) => {
     if (!hasPremiumBettingAccess) return;
     if (!Number.isFinite(draft.stake) || draft.stake <= 0) return;
@@ -1292,6 +1668,8 @@ export function BettingDashboard({
     if (!userId) {
       const localBet: TrackedBet = {
         id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        betType: draft.betType ?? "single",
+        legs: draft.legs ?? [],
         status,
         profit: computeBetProfit(status, draft.stake, draft.odds),
         placedAt: new Date().toISOString(),
@@ -1396,35 +1774,107 @@ export function BettingDashboard({
     }
   };
 
-  const handleManualAddBet = async () => {
-    if (!hasPremiumBettingAccess) return;
+  const handleManualAddBet = async (): Promise<boolean> => {
+    if (!hasPremiumBettingAccess) return false;
     setManualError(null);
+
+    if (manualBetType !== "single") {
+      const expectedLegs = manualLegs.length;
+      const validLegs = parsedManualLegs;
+      if (validLegs.length !== expectedLegs) {
+        setManualError("Each leg needs a date, match, selection, and odds greater than 1.");
+        return false;
+      }
+      if (validLegs.length < 2) {
+        setManualError(`${manualBetType === "sgm" ? "SGM" : "Multi"} bets need at least 2 legs.`);
+        return false;
+      }
+      if (manualBetType === "multi") {
+        const bookies = new Set(validLegs.map((leg) => leg.bookie).filter(Boolean));
+        if (bookies.size !== 1 || validLegs.some((leg) => !leg.bookie)) {
+          setManualError("Multi legs must all use the same bookie.");
+          return false;
+        }
+        const gameKeys = new Set(validLegs.map((leg) => `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}`));
+        if (gameKeys.size !== validLegs.length) {
+          setManualError("Use SGM for legs from the same game. Multis must use different games.");
+          return false;
+        }
+      }
+      if (manualBetType === "sgm") {
+        const gameKeys = new Set(validLegs.map((leg) => `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}`));
+        if (gameKeys.size !== 1) {
+          setManualError("SGM legs must be from the same game.");
+          return false;
+        }
+      }
+
+      const parsedOdds = Number(manualOdds);
+      const parsedStake = Number(manualStake);
+      if (!Number.isFinite(parsedOdds) || parsedOdds <= 1) {
+        setManualError("Odds must be greater than 1.");
+        return false;
+      }
+      if (!Number.isFinite(parsedStake) || parsedStake <= 0) {
+        setManualError("Stake must be greater than 0.");
+        return false;
+      }
+      const firstLeg = validLegs[0];
+      const selectionLabel = manualBetType === "multi"
+        ? `${validLegs.length}-leg Multi`
+        : `${validLegs.length}-leg SGM`;
+      const matchLabel = manualBetType === "multi" ? "Multiple games" : firstLeg.matchName;
+
+      await handleAddBet({
+        betType: manualBetType,
+        market: firstLeg.market,
+        matchDate: firstLeg.matchDate,
+        matchName: matchLabel,
+        selection: selectionLabel,
+        lineValue: null,
+        odds: parsedOdds,
+        stake: parsedStake,
+        status: manualStatus,
+        modelProb: null,
+        impliedProb: null,
+        edgePp: null,
+        legs: validLegs,
+      });
+
+      setManualLegs([createManualLegDraft(todayIso), createManualLegDraft(todayIso)]);
+      setManualOdds(manualBetType === "multi" ? "1.90" : "");
+      setManualStake("10");
+      setManualStatus("pending");
+      setManualOddsEdited(false);
+      return true;
+    }
 
     if (!manualMatchDate.trim()) {
       setManualError("Date is required.");
-      return;
+      return false;
     }
     if (!manualMatchName.trim()) {
       setManualError("Match is required.");
-      return;
+      return false;
     }
     if (!manualSelection.trim()) {
       setManualError("Selection is required.");
-      return;
+      return false;
     }
 
     const parsedOdds = Number(manualOdds);
     const parsedStake = Number(manualStake);
     if (!Number.isFinite(parsedOdds) || parsedOdds <= 1) {
       setManualError("Odds must be greater than 1.");
-      return;
+      return false;
     }
     if (!Number.isFinite(parsedStake) || parsedStake <= 0) {
       setManualError("Stake must be greater than 0.");
-      return;
+      return false;
     }
 
     await handleAddBet({
+      betType: "single",
       market: selectedMarket,
       matchDate: manualMatchDate,
       matchName: manualMatchName.trim(),
@@ -1443,23 +1893,120 @@ export function BettingDashboard({
     setManualOdds("1.90");
     setManualStake("10");
     setManualStatus("pending");
+    setManualOddsEdited(false);
+    return true;
   };
 
-  const settledBets = bets.filter((bet) => bet.status !== "pending");
-  const winningBets = settledBets.filter((bet) => bet.status === "won").length;
-  const losingBets = settledBets.filter((bet) => bet.status === "lost").length;
-  const pushedBets = settledBets.filter((bet) => bet.status === "push").length;
+  const totalStake = bets.reduce((sum, bet) => sum + (Number.isFinite(bet.stake) ? bet.stake : 0), 0);
+  const pendingStake = bets
+    .filter((bet) => bet.status === "pending")
+    .reduce((sum, bet) => sum + (Number.isFinite(bet.stake) ? bet.stake : 0), 0);
+  const winningBets = bets.filter((bet) => bet.status === "won").length;
+  const losingBets = bets.filter((bet) => bet.status === "lost").length;
   const settledNoPush = winningBets + losingBets;
   const winRate = settledNoPush > 0 ? (winningBets / settledNoPush) * 100 : null;
-  const totalStake = bets.reduce((sum, bet) => sum + (Number.isFinite(bet.stake) ? bet.stake : 0), 0);
   const profitLoss = bets.reduce((sum, bet) => sum + (bet.profit ?? 0), 0);
   const profitMargin = totalStake > 0 ? (profitLoss / totalStake) * 100 : null;
+  const trackerBankroll = bankroll + profitLoss;
+  const roiRingPct = Math.max(0, Math.min(100, Math.abs(profitMargin ?? 0)));
+  const roiRingDegrees = roiRingPct * 3.6;
+  const roiRingBackground = profitMargin != null && profitMargin < 0
+    ? `conic-gradient(rgba(148,163,184,0.22) 0deg ${360 - roiRingDegrees}deg, #fca5a5 ${360 - roiRingDegrees}deg 360deg)`
+    : `conic-gradient(#38bdf8 0deg ${roiRingDegrees}deg, rgba(148,163,184,0.22) 0)`;
   const sortedBets = useMemo(
     () => [...bets].sort((a, b) => b.placedAt.localeCompare(a.placedAt)),
     [bets]
   );
+  const trackerChart = useMemo(() => {
+    const width = 640;
+    const height = 154;
+    const paddingLeft = 44;
+    const paddingRight = 8;
+    const paddingTop = 18;
+    const paddingBottom = 30;
+    let runningProfit = 0;
+    const values = [0];
+    [...bets]
+      .sort((a, b) => a.placedAt.localeCompare(b.placedAt))
+      .forEach((bet) => {
+        runningProfit += bet.profit ?? 0;
+        values.push(Number(runningProfit.toFixed(2)));
+      });
+
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const latestValue = values[values.length - 1] ?? 0;
+    const range = maxValue - minValue || 1;
+    const chartLeft = paddingLeft;
+    const chartRight = width - paddingRight;
+    const chartTop = paddingTop;
+    const chartBottom = height - paddingBottom;
+    const valueToY = (value: number) => chartBottom - ((value - minValue) / range) * (chartBottom - chartTop);
+    const chartPoints = values.map((value, index) => {
+      const x = values.length === 1
+        ? chartLeft
+        : chartLeft + (index / (values.length - 1)) * (chartRight - chartLeft);
+      const y = valueToY(value);
+      return { value, x, y };
+    });
+    const zeroY = valueToY(0);
+    const lineSegments: Array<{ points: string; stroke: string }> = [];
+    for (let index = 1; index < chartPoints.length; index += 1) {
+      const previous = chartPoints[index - 1];
+      const current = chartPoints[index];
+      if (previous.value < 0 && current.value < 0) {
+        lineSegments.push({
+          points: `${previous.x.toFixed(1)},${previous.y.toFixed(1)} ${current.x.toFixed(1)},${current.y.toFixed(1)}`,
+          stroke: "#fca5a5",
+        });
+        continue;
+      }
+      if (previous.value >= 0 && current.value >= 0) {
+        lineSegments.push({
+          points: `${previous.x.toFixed(1)},${previous.y.toFixed(1)} ${current.x.toFixed(1)},${current.y.toFixed(1)}`,
+          stroke: "#00f58a",
+        });
+        continue;
+      }
+
+      const crossingRatio = (0 - previous.value) / (current.value - previous.value);
+      const crossingX = previous.x + (current.x - previous.x) * crossingRatio;
+      const crossing = `${crossingX.toFixed(1)},${zeroY.toFixed(1)}`;
+      lineSegments.push({
+        points: `${previous.x.toFixed(1)},${previous.y.toFixed(1)} ${crossing}`,
+        stroke: previous.value < 0 ? "#fca5a5" : "#00f58a",
+      });
+      lineSegments.push({
+        points: `${crossing} ${current.x.toFixed(1)},${current.y.toFixed(1)}`,
+        stroke: current.value < 0 ? "#fca5a5" : "#00f58a",
+      });
+    }
+    const points = chartPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`);
+
+    return {
+      width,
+      height,
+      lineSegments,
+      areaPoints: `${points.join(" ")} ${chartRight},${chartBottom} ${chartLeft},${chartBottom}`,
+      areaFillFrom: latestValue < 0 ? "rgba(252,165,165,0.2)" : "rgba(0,245,138,0.22)",
+      areaFillTo: latestValue < 0 ? "rgba(252,165,165,0)" : "rgba(0,245,138,0)",
+      chartLeft,
+      chartRight,
+      chartTop,
+      chartBottom,
+      zeroY,
+      yLabels: [
+        { label: formatMoney(maxValue), y: chartTop },
+        { label: formatMoney(0), y: zeroY },
+        { label: formatMoney(minValue), y: chartBottom },
+      ],
+    };
+  }, [bets]);
   const stakingPreferencesLoading = !isLoaded || !preferencesHydrated;
   const betTrackerLoading = hasPremiumBettingAccess && (!betsHydrated || betsLoading);
+  const bettingArticleLinks = [marginModelArticle, tryscorerArticle].filter(
+    (article): article is BettingArticleLink => article !== null
+  );
 
   return (
     <div className="space-y-6">
@@ -1467,46 +2014,21 @@ export function BettingDashboard({
         modelBets={bestBets}
         arbitrageBets={arbitrageBets}
         canAccessPremium={hasPremiumBettingAccess}
+        teamLogos={teamLogos}
+        tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
         onAddBet={handleAddBet}
       />
 
-      {marginModelArticle ? (
-        <Link
-          href={`/dashboard/articles/${marginModelArticle.slug}`}
-          aria-label={`Read ${marginModelArticle.title}`}
-          className="group relative flex min-h-[58px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.22)] bg-[#20284a]/80 text-white shadow-[0_8px_18px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/55"
-        >
-          <div className={`absolute inset-0 grid ${marginModelArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-            {marginModelArticle.imageUrls.slice(0, 2).map((url, index) => (
-              <div key={`${url}-${index}`} className="min-w-0 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt=""
-                  className="h-full w-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-[1.03]"
-                />
-              </div>
-            ))}
-          </div>
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.92),rgba(14,19,48,0.78),rgba(14,19,48,0.56))]" />
-          <div className="relative flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-2">
-            <div className="min-w-0">
-              <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent/80">
-                Article
-              </div>
-              <div className="mt-0.5 overflow-hidden text-[10px] font-bold uppercase leading-tight tracking-[0.08em] text-white/85 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                {marginModelArticle.title}
-              </div>
-            </div>
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel-2/60 text-sm text-nrl-text/80">
-              →
-            </span>
-          </div>
-        </Link>
+      {bettingArticleLinks.length > 0 ? (
+        <div className={bettingArticleLinks.length > 1 ? "grid gap-3 md:grid-cols-2" : ""}>
+          {bettingArticleLinks.map((article) => (
+            <BettingArticlePill key={article.slug} article={article} />
+          ))}
+        </div>
       ) : null}
 
-      <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-nrl-text">Staking Calculator</h2>
+      <section className="rounded-xl border border-nrl-border bg-[#10162f]/96 p-4 sm:p-5">
+        <h2 className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>Staking Calculator</h2>
         {stakingPreferencesLoading ? (
           <div className="mt-4 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-4 text-xs text-nrl-muted">
             Loading staking preferences...
@@ -1521,7 +2043,7 @@ export function BettingDashboard({
               return (
                 <div
                   key={option.mode}
-                  className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-left text-nrl-muted opacity-65"
+                  className="rounded-md border border-nrl-border bg-[#10162f]/96 px-3 py-2 text-left text-nrl-muted opacity-65"
                 >
                   <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
                     <span>{option.label}</span>
@@ -1530,7 +2052,7 @@ export function BettingDashboard({
                     </span>
                   </div>
                   <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
-                  <BillingPageLink className="mt-2 inline-flex rounded border border-nrl-accent/45 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10">
+                  <BillingPageLink className="mt-2 inline-flex rounded border border-emerald-300/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12">
                     View plans
                   </BillingPageLink>
                 </div>
@@ -1543,8 +2065,8 @@ export function BettingDashboard({
                 onClick={() => handleStakingModeChange(option.mode)}
                 className={`rounded-md border px-3 py-2 text-left transition-colors ${
                   active
-                    ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                    ? "border-emerald-300/40 bg-[#10162f]/96 text-emerald-300"
+                    : "cursor-pointer border-nrl-border bg-[#10162f]/96 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
@@ -1564,7 +2086,7 @@ export function BettingDashboard({
               min={0}
               step={10}
               onChange={(event) => setBankroll(Math.max(0, Number(event.target.value) || 0))}
-              className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+              className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
             />
           </label>
           {stakingMode === "percentage" ? (
@@ -1577,7 +2099,7 @@ export function BettingDashboard({
                 max={100}
                 step={0.1}
                 onChange={(event) => setPercentageStakePct(clamp(Number(event.target.value) || 0, 0, 100))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -1591,7 +2113,7 @@ export function BettingDashboard({
                 max={100}
                 step={0.1}
                 onChange={(event) => setTargetProfitPct(clamp(Number(event.target.value) || 0, 0, 100))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -1605,7 +2127,7 @@ export function BettingDashboard({
                 max={1}
                 step={0.05}
                 onChange={(event) => setKellyScale(clamp(Number(event.target.value) || 0, 0, 1))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -1619,7 +2141,7 @@ export function BettingDashboard({
                 max={1}
                 step={0.01}
                 onChange={(event) => setMaxEdge(clamp(Number(event.target.value) || 0, 0, 1))}
-                className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                className="rounded-md border border-nrl-border bg-[#10162f]/96 px-2 py-1 text-[10px] text-nrl-text outline-none focus:border-emerald-300/40"
               />
             </label>
           ) : null}
@@ -1629,275 +2151,288 @@ export function BettingDashboard({
       </section>
 
       {hasPremiumBettingAccess ? (
-        <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
-          <div className="space-y-3 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold uppercase tracking-wide text-nrl-text">
-                Bet Tracker ({bets.length})
-              </span>
+        <section className="overflow-hidden rounded-xl border border-nrl-border bg-[#10162f]/96 shadow-[0_18px_42px_rgba(0,0,0,0.24)]">
+          <div className="border-b border-white/8 bg-[#10162f]/96 px-4 py-4 sm:px-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>Bet Tracker</div>
+                <div className="mt-1 text-xs text-nrl-muted">
+                  {bets.length} tracked {bets.length === 1 ? "bet" : "bets"}
+                </div>
+              </div>
               <button
                 type="button"
                 aria-label={trackerOpen ? "Collapse bet tracker" : "Expand bet tracker"}
                 onClick={() => setTrackerOpen((open) => !open)}
-                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-emerald-300/40 bg-emerald-400/12 text-sm font-bold text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12"
               >
                 <span aria-hidden="true">{trackerOpen ? "▴" : "▾"}</span>
               </button>
             </div>
 
             {betTrackerLoading ? (
-              <div className="rounded border border-nrl-border bg-nrl-panel px-3 py-4 text-xs text-nrl-muted">
+              <div className="mt-4 rounded-md border border-white/8 bg-nrl-panel/60 px-3 py-4 text-xs text-nrl-muted">
                 Loading bet tracker...
               </div>
             ) : (
-            <div className="grid grid-cols-[0.8fr_1fr_1fr_1.1fr_1.2fr_0.8fr] gap-2">
-              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Bets</div>
-                <div className="text-sm font-semibold text-nrl-text">{bets.length}</div>
-              </div>
-              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Win %</div>
-                <div className="text-sm font-semibold text-nrl-text">{winRate == null ? "-" : `${winRate.toFixed(1)}%`}</div>
-              </div>
-              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">P/L</div>
-                <div className={`text-sm font-semibold ${profitLoss >= 0 ? "text-nrl-accent" : "text-red-500"}`}>{formatMoney(profitLoss)}</div>
-              </div>
-              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Staked</div>
-                <div className="text-sm font-semibold text-nrl-text">${totalStake.toFixed(2)}</div>
-              </div>
-              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">Margin</div>
-                <div className={`text-sm font-semibold ${profitMargin != null && profitMargin < 0 ? "text-red-500" : "text-nrl-text"}`}>
-                  {profitMargin == null ? "-" : `${profitMargin.toFixed(1)}%`}
+              <div className="mt-5 flex items-center justify-start gap-4">
+                <div className="grid place-items-center">
+                  <div
+                    className="grid h-28 w-28 place-items-center rounded-full p-2 sm:h-32 sm:w-32 sm:p-2.5"
+                    style={{ background: roiRingBackground }}
+                  >
+                    <div className="grid h-full w-full place-items-center rounded-full bg-[#111936] text-center">
+                      <div>
+                        <div className="text-[9px] font-bold uppercase text-nrl-muted">ROI</div>
+                        <div className="text-xl font-bold text-white tabular-nums">
+                          {profitMargin == null ? "-" : `${profitMargin > 0 ? "+" : ""}${profitMargin.toFixed(1)}%`}
+                        </div>
+                        <div className="text-[9px] text-nrl-muted">{formatStakeMoney(totalStake)} staked</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-nrl-muted">Total Bankroll</div>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                    <span className="text-3xl font-bold leading-none text-white tabular-nums">{formatMoney(trackerBankroll).replace("+", "")}</span>
+                    <span className="text-sm font-semibold text-nrl-muted tabular-nums">
+                      ({formatStakeMoney(pendingStake)} Pending)
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-md border border-white/8 bg-white/[0.03] px-2.5 py-2">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Win Rate</div>
+                      <div className="mt-1 text-sm font-semibold text-nrl-text tabular-nums">{winRate == null ? "-" : `${winRate.toFixed(1)}%`}</div>
+                    </div>
+                    <div className="rounded-md border border-white/8 bg-white/[0.03] px-2.5 py-2">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Total Profit</div>
+                      <div className={`mt-1 text-sm font-semibold tabular-nums ${profitLoss < 0 ? "text-red-300" : profitLoss > 0 ? "text-emerald-300" : "text-nrl-text"}`}>
+                        {formatMoney(profitLoss)}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-                <div className="text-[10px] uppercase tracking-wide text-nrl-muted">W/L/P</div>
-                <div className="text-sm font-semibold text-nrl-text">
-                  {winningBets}/{losingBets}/{pushedBets}
-                </div>
-              </div>
-            </div>
             )}
 
-            {betsError && !betTrackerLoading ? (
-              <div className="text-xs text-red-500">{betsError}</div>
+            {trackerOpen && !betTrackerLoading && bets.length >= 5 ? (
+              <div className="mt-5 rounded-lg border border-white/8 bg-[#0f1732]/70 px-3 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Performance</div>
+                  <div className="text-xs font-semibold text-nrl-text tabular-nums">
+                    {formatMoney(profitLoss)}
+                  </div>
+                </div>
+                <svg viewBox={`0 0 ${trackerChart.width} ${trackerChart.height}`} className="h-36 w-full overflow-visible md:h-44" preserveAspectRatio="none" role="img" aria-label="Bet tracker profit line chart">
+                  <defs>
+                    <linearGradient id="tracker-profit-fill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor={trackerChart.areaFillFrom} />
+                      <stop offset="100%" stopColor={trackerChart.areaFillTo} />
+                    </linearGradient>
+                  </defs>
+                  {trackerChart.yLabels.map(({ label, y }) => (
+                    <g key={`${label}-${y}`}>
+                      <text
+                        x={trackerChart.chartLeft - 7}
+                        y={y + 3}
+                        textAnchor="end"
+                        className="fill-nrl-muted text-[8px] font-semibold"
+                      >
+                        {label}
+                      </text>
+                      <line
+                        x1={trackerChart.chartLeft}
+                        x2={trackerChart.chartRight}
+                        y1={y}
+                        y2={y}
+                        stroke={Math.abs(y - trackerChart.zeroY) < 0.1 ? "rgba(148,163,184,0.28)" : "rgba(148,163,184,0.14)"}
+                        strokeDasharray={Math.abs(y - trackerChart.zeroY) < 0.1 ? "0" : "3 4"}
+                      />
+                    </g>
+                  ))}
+                  {[0.25, 0.5, 0.75].map((ratio) => (
+                    <line
+                      key={ratio}
+                      x1={trackerChart.chartLeft + ((trackerChart.chartRight - trackerChart.chartLeft) * ratio)}
+                      x2={trackerChart.chartLeft + ((trackerChart.chartRight - trackerChart.chartLeft) * ratio)}
+                      y1={trackerChart.chartTop}
+                      y2={trackerChart.chartBottom}
+                      stroke="rgba(148,163,184,0.14)"
+                      strokeDasharray="3 4"
+                    />
+                  ))}
+                  <line x1={trackerChart.chartLeft} x2={trackerChart.chartLeft} y1={trackerChart.chartTop} y2={trackerChart.chartBottom} stroke="rgba(148,163,184,0.22)" />
+                  <line x1={trackerChart.chartLeft} x2={trackerChart.chartRight} y1={trackerChart.chartBottom} y2={trackerChart.chartBottom} stroke="rgba(148,163,184,0.22)" />
+                  <polygon points={trackerChart.areaPoints} fill="url(#tracker-profit-fill)" />
+                  {trackerChart.lineSegments.map((segment, index) => (
+                    <polyline
+                      key={`${segment.points}-${index}`}
+                      points={segment.points}
+                      fill="none"
+                      stroke={segment.stroke}
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ))}
+                  <text x={trackerChart.chartLeft} y={trackerChart.height - 4} textAnchor="start" className="fill-nrl-muted text-[8px] font-semibold">Start</text>
+                  <text x={trackerChart.chartRight} y={trackerChart.height - 4} textAnchor="end" className="fill-nrl-muted text-[8px] font-semibold">Latest</text>
+                </svg>
+              </div>
             ) : null}
 
-            {trackerOpen && !betTrackerLoading ? (
-              <div className="space-y-3 border-t border-nrl-border pt-3">
-                {betsLoading ? (
-                  <div className="text-xs text-nrl-muted">Loading bets...</div>
-                ) : (
-                  <div className="max-h-[460px] overflow-auto">
-                    <table className="w-full min-w-[960px] border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-nrl-border text-left text-nrl-muted">
-                        <th className="py-2 pr-2 font-semibold">Date</th>
-                        <th className="py-2 pr-2 font-semibold">Match</th>
-                        <th className="py-2 pr-2 font-semibold">Selection</th>
-                        <th className="py-2 pr-2 font-semibold">Odds</th>
-                        <th className="py-2 pr-2 font-semibold">Stake</th>
-                        <th className="py-2 pr-2 font-semibold">Status</th>
-                        <th className="py-2 pr-2 font-semibold">Profit</th>
-                        <th className="py-2 pr-0 font-semibold">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-nrl-border/60 bg-nrl-panel/70">
-                        <td className="py-2 pr-2">
-                          <input
-                            type="date"
-                            value={manualMatchDate}
-                            onChange={(event) => setManualMatchDate(event.target.value)}
-                            className="w-full rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
-                          />
-                        </td>
-                        <td className="py-2 pr-2">
-                          <input
-                            type="text"
-                            value={manualMatchName}
-                            onChange={(event) => setManualMatchName(event.target.value)}
-                            placeholder="Team A vs Team B"
-                            className="w-full rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
-                          />
-                        </td>
-                        <td className="py-2 pr-2">
-                          <input
-                            type="text"
-                            value={manualSelection}
-                            onChange={(event) => setManualSelection(event.target.value)}
-                            placeholder="Selection"
-                            className="w-full rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
-                          />
-                        </td>
-                        <td className="py-2 pr-2">
-                          <input
-                            type="number"
-                            value={manualOdds}
-                            min={1.01}
-                            step={0.01}
-                            onChange={(event) => setManualOdds(event.target.value)}
-                            className="w-24 rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
-                          />
-                        </td>
-                        <td className="py-2 pr-2">
-                          <input
-                            type="number"
-                            value={manualStake}
-                            min={0}
-                            step={1}
-                            onChange={(event) => setManualStake(event.target.value)}
-                            className="w-24 rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
-                          />
-                        </td>
-                        <td className="py-2 pr-2">
-                          <select
-                            value={manualStatus}
-                            onChange={(event) => setManualStatus(event.target.value as TrackedBetStatus)}
-                            className="rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] font-semibold text-nrl-text outline-none focus:border-nrl-accent"
-                          >
-                            <option value="pending">pending</option>
-                            <option value="won">won</option>
-                            <option value="lost">lost</option>
-                            <option value="push">push</option>
-                          </select>
-                        </td>
-                        <td className="py-2 pr-2 font-semibold text-nrl-text">
-                          {(() => {
-                            const odds = Number(manualOdds);
-                            const stake = Number(manualStake);
-                            if (!Number.isFinite(odds) || odds <= 1 || !Number.isFinite(stake) || stake <= 0) return "-";
-                            const profit = computeBetProfit(manualStatus, stake, odds);
-                            return profit == null ? "-" : formatMoney(profit);
-                          })()}
-                        </td>
-                        <td className="py-2 pr-0">
-                          <button
-                            type="button"
-                            onClick={() => void handleManualAddBet()}
-                            className="rounded border border-nrl-accent bg-nrl-accent/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-accent hover:bg-nrl-accent/25"
-                          >
-                            Add
-                          </button>
-                        </td>
-                      </tr>
-                      {manualError ? (
-                        <tr>
-                          <td colSpan={8} className="py-2 text-[10px] text-red-500">
-                            {manualError}
-                          </td>
-                        </tr>
-                      ) : null}
-                      {sortedBets.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="py-3 text-nrl-muted">No bets yet.</td>
-                        </tr>
-                      ) : sortedBets.map((bet) => (
-                        <tr key={bet.id} className="border-b border-nrl-border/50">
-                          <td className="py-2 pr-2 text-nrl-text">{formatDateLabel(bet.matchDate)}</td>
-                          <td className="py-2 pr-2 text-nrl-text">{bet.matchName}</td>
-                          <td className="py-2 pr-2 text-nrl-text">
-                            {bet.selection}
-                            {bet.lineValue != null ? ` ${formatLineValue(bet.lineValue)}` : ""}
-                          </td>
-                          <td className="py-2 pr-2">
-                            <input
-                              type="number"
-                              min={1.01}
-                              step={0.01}
-                              defaultValue={bet.odds.toFixed(2)}
-                              onBlur={(event) => {
-                                const nextOdds = Number(event.target.value);
-                                if (!Number.isFinite(nextOdds) || nextOdds <= 1) {
-                                  event.target.value = bet.odds.toFixed(2);
-                                  return;
-                                }
-                                void handleUpdateBet(bet.id, { odds: nextOdds });
-                              }}
-                              className="w-20 rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
-                            />
-                          </td>
-                          <td className="py-2 pr-2">
-                            <input
-                              type="number"
-                              min={0}
-                              step={1}
-                              defaultValue={bet.stake.toFixed(2)}
-                              onBlur={(event) => {
-                                const nextStake = Number(event.target.value);
-                                if (!Number.isFinite(nextStake) || nextStake <= 0) {
-                                  event.target.value = bet.stake.toFixed(2);
-                                  return;
-                                }
-                                void handleUpdateBet(bet.id, { stake: nextStake });
-                              }}
-                              className="w-20 rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
-                            />
-                          </td>
-                          <td className="py-2 pr-2">
-                            <select
-                              value={bet.status}
-                              onChange={(event) => void handleUpdateBet(bet.id, { status: event.target.value as TrackedBetStatus })}
-                              className={`rounded border border-nrl-border bg-nrl-panel px-2 py-1 text-[11px] font-semibold outline-none focus:border-nrl-accent ${betStatusClass(bet.status)}`}
-                            >
-                              <option value="pending">pending</option>
-                              <option value="won">won</option>
-                              <option value="lost">lost</option>
-                              <option value="push">push</option>
-                            </select>
-                          </td>
-                          <td
-                            className={`py-2 pr-2 font-semibold ${
-                              bet.profit == null
-                                ? "text-nrl-text"
-                                : bet.profit < 0
-                                  ? "text-red-500"
-                                  : "text-nrl-accent"
-                            }`}
-                          >
-                            {bet.profit == null ? "-" : formatMoney(bet.profit)}
-                          </td>
-                          <td className="py-2 pr-0">
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteBet(bet.id)}
-                              aria-label="Delete bet"
-                              title="Delete bet"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded border border-red-500/40 text-red-400 hover:bg-red-500/10"
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                className="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
-                              >
-                                <path d="M3 6h18" />
-                                <path d="M8 6V4h8v2" />
-                                <path d="M19 6l-1 14H6L5 6" />
-                                <path d="M10 11v6" />
-                                <path d="M14 11v6" />
-                              </svg>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    </table>
+            {betsError && !betTrackerLoading ? (
+              <div className="mt-3 text-xs text-red-500">{betsError}</div>
+            ) : null}
+          </div>
+
+          {trackerOpen && !betTrackerLoading ? (
+            <div className="space-y-4 bg-[#0f1732] px-4 py-4 sm:px-5">
+              {betsLoading ? (
+                <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-4 text-xs text-nrl-muted">Loading bets...</div>
+              ) : (
+                <>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualError(null);
+                        setQuickAddOpen(true);
+                      }}
+                      className="cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12"
+                    >
+                      Quick Add
+                    </button>
                   </div>
-                )}
+
+                  {sortedBets.length === 0 ? (
+                    <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-5 text-sm text-white/50">No bets yet.</div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        {sortedBets.map((bet) => (
+                          <article key={`${bet.id}-card`} className="rounded-lg border border-white/8 bg-[#14213b] p-3 shadow-[0_10px_22px_rgba(0,0,0,0.16)]">
+                            <div className="flex items-center gap-3">
+                              <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-base font-black ${betStatusIconClass(bet.status)}`}>
+                                {betStatusIconLabel(bet.status)}
+                              </div>
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
+                                {(bet.betType ?? "single") === "single" ? (
+                                  <BettingTeamLogos selection={bet.selection} match={bet.matchName} market={bet.market} teamLogos={teamLogos} className="h-6 w-6" />
+                                ) : null}
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-bold leading-tight text-white">
+                                    {bet.selection}{bet.lineValue != null ? ` ${formatLineValue(bet.lineValue)}` : ""}
+                                  </div>
+                                  <div className="mt-0.5 truncate text-[10px] font-semibold text-nrl-muted">
+                                    {betTypeLabel(bet.betType)} | {bet.matchName}
+                                  </div>
+                                  <div className="mt-0.5 text-[10px] text-nrl-muted">{formatDateLabel(bet.matchDate)}</div>
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <div className="text-sm font-bold text-nrl-text tabular-nums">
+                                  {bet.profit == null ? "-" : formatMoney(bet.profit)}
+                                </div>
+                                <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">{bet.status}</div>
+                              </div>
+                            </div>
+                            {(bet.betType === "multi" || bet.betType === "sgm") && (bet.legs?.length ?? 0) > 0 ? (
+                              <div className="mt-3 space-y-1 rounded-md border border-white/8 bg-[#0e1530]/70 px-2.5 py-2">
+                                {bet.legs!.map((leg, index) => (
+                                  <div key={`${bet.id}-leg-${index}`} className="flex items-start justify-between gap-2 text-[10px] text-nrl-muted">
+                                    <div className="min-w-0">
+                                      <span className="font-semibold text-nrl-text">{index + 1}. {leg.selection}</span>
+                                      {leg.lineValue != null ? <span> {formatLineValue(leg.lineValue)}</span> : null}
+                                      <span> | {leg.market} | {leg.matchName}</span>
+                                    </div>
+                                    <div className="shrink-0 text-right tabular-nums">
+                                      <div className="font-semibold text-nrl-text">{formatPrice(leg.odds)}</div>
+                                      {leg.bookie ? <div>{leg.bookie}</div> : null}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                              <div>
+                                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Odds</div>
+                                <input
+                                  type="number"
+                                  min={1.01}
+                                  step={0.01}
+                                  defaultValue={bet.odds.toFixed(2)}
+                                  onBlur={(event) => {
+                                    const nextOdds = Number(event.target.value);
+                                    if (!Number.isFinite(nextOdds) || nextOdds <= 1) {
+                                      event.target.value = bet.odds.toFixed(2);
+                                      return;
+                                    }
+                                    void handleUpdateBet(bet.id, { odds: nextOdds });
+                                  }}
+                                  className="mt-1 h-8 w-full rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                                />
+                              </div>
+                              <div>
+                                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Stake</div>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  defaultValue={bet.stake.toFixed(2)}
+                                  onBlur={(event) => {
+                                    const nextStake = Number(event.target.value);
+                                    if (!Number.isFinite(nextStake) || nextStake <= 0) {
+                                      event.target.value = bet.stake.toFixed(2);
+                                      return;
+                                    }
+                                    void handleUpdateBet(bet.id, { stake: nextStake });
+                                  }}
+                                  className="mt-1 h-8 w-full rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-white outline-none focus:border-emerald-300/40"
+                                />
+                              </div>
+                              <div>
+                                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Profit</div>
+                                <div className="mt-1 flex h-8 items-center rounded-md border border-white/8 bg-[#0e1530] px-2 font-semibold text-nrl-text tabular-nums">
+                                  {bet.profit == null ? "-" : formatMoney(bet.profit)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                              <select
+                                value={bet.status}
+                                onChange={(event) => void handleUpdateBet(bet.id, { status: event.target.value as TrackedBetStatus })}
+                                className={`h-8 rounded-md border px-2 text-xs font-semibold outline-none focus:border-emerald-300/40 ${betStatusPillClass(bet.status)}`}
+                              >
+                                <option value="pending">pending</option>
+                                <option value="won">won</option>
+                                <option value="lost">lost</option>
+                                <option value="push">push</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => void handleDeleteBet(bet.id)}
+                                aria-label="Delete bet"
+                                title="Delete bet"
+                                className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-red-500/35 text-sm text-red-400 transition-colors hover:bg-red-500/10"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+
+                    </>
+                  )}
+                </>
+              )}
                 {!userId && isLoaded ? (
                   <div className="text-[10px] text-nrl-muted">Sign in to save bets across sessions.</div>
                 ) : null}
-              </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </section>
       ) : (
         <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
@@ -1907,8 +2442,218 @@ export function BettingDashboard({
         </section>
       )}
 
+      {quickAddOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 px-4 py-6">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Quick Add</div>
+                <div className="mt-1 text-sm font-semibold text-nrl-text">Add a bet to the tracker</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickAddOpen(false)}
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+                aria-label="Close quick add"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 flex rounded-md border border-white/10 bg-[#0e1530] p-1">
+              {(["single", "multi", "sgm"] as TrackedBetType[]).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    setManualBetType(type);
+                    setManualError(null);
+                    setManualOddsEdited(false);
+                    if (type === "single") setManualOdds("1.90");
+                    if (type === "sgm") setManualOdds("");
+                  }}
+                  className={`h-8 flex-1 rounded px-2 text-[10px] font-bold uppercase tracking-[0.12em] ${
+                    manualBetType === type ? "bg-emerald-400/12 text-emerald-300" : "text-nrl-muted"
+                  }`}
+                >
+                  {betTypeLabel(type)}
+                </button>
+              ))}
+            </div>
+
+            {manualBetType === "single" ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Date</span>
+                  <input
+                    type="date"
+                    value={manualMatchDate}
+                    onChange={(event) => setManualMatchDate(event.target.value)}
+                    className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Market</span>
+                  <select
+                    value={selectedMarket}
+                    onChange={(event) => handleMarketChange(event.target.value)}
+                    className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40"
+                  >
+                    {MARKET_TABS.map((marketOption) => (
+                      <option key={marketOption} value={marketOption}>{marketOption}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 sm:col-span-2">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Match</span>
+                  <input
+                    type="text"
+                    value={manualMatchName}
+                    onChange={(event) => setManualMatchName(event.target.value)}
+                    placeholder="Team A vs Team B"
+                    className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 sm:col-span-2">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Selection</span>
+                  <input
+                    type="text"
+                    value={manualSelection}
+                    onChange={(event) => setManualSelection(event.target.value)}
+                    placeholder="Selection"
+                    className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {manualBetType === "multi" ? (
+                  <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] text-nrl-muted">
+                    Multi odds are multiplied from leg odds when every leg uses the same bookie. You can still edit the final odds.
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-white/8 bg-white/[0.03] px-3 py-2 text-[11px] text-nrl-muted">
+                    SGM prices are not calculated here. Enter the final SGM odds from your bookie.
+                  </div>
+                )}
+                {manualLegs.map((leg, index) => (
+                  <div key={leg.id} className="rounded-lg border border-white/8 bg-[#0e1530] p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Leg {index + 1}</div>
+                      <button
+                        type="button"
+                        onClick={() => removeManualLeg(leg.id)}
+                        disabled={manualLegs.length <= 2}
+                        className="cursor-pointer rounded border border-white/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <input type="date" value={leg.matchDate} onChange={(event) => updateManualLeg(leg.id, { matchDate: event.target.value })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                      <select value={leg.market} onChange={(event) => updateManualLeg(leg.id, { market: event.target.value as BettingMarket })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40">
+                        {MARKET_TABS.map((marketOption) => <option key={marketOption} value={marketOption}>{marketOption}</option>)}
+                      </select>
+                      <input type="text" value={leg.matchName} onChange={(event) => updateManualLeg(leg.id, { matchName: event.target.value })} placeholder="Match" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40 sm:col-span-2" />
+                      <input type="text" value={leg.selection} onChange={(event) => updateManualLeg(leg.id, { selection: event.target.value })} placeholder="Selection" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                      <input type="number" value={leg.lineValue} onChange={(event) => updateManualLeg(leg.id, { lineValue: event.target.value })} placeholder="Line" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                      <input type="number" value={leg.odds} min={1.01} step={0.01} onChange={(event) => updateManualLeg(leg.id, { odds: event.target.value })} placeholder="Leg odds" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                      <input type="text" value={leg.bookie} onChange={(event) => updateManualLeg(leg.id, { bookie: event.target.value })} placeholder={manualBetType === "multi" ? "Bookie required" : "Bookie"} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                    </div>
+                  </div>
+                ))}
+                <button type="button" onClick={addManualLeg} className="cursor-pointer rounded-md border border-emerald-300/40 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:bg-emerald-400/12">
+                  Add Leg
+                </button>
+              </div>
+            )}
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                  {manualBetType === "sgm" ? "SGM Odds" : manualBetType === "multi" ? "Multi Odds" : "Odds"}
+                </span>
+                <input
+                  type="number"
+                  value={manualOdds}
+                  min={1.01}
+                  step={0.01}
+                  onChange={(event) => {
+                    setManualOdds(event.target.value);
+                    setManualOddsEdited(true);
+                  }}
+                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Stake</span>
+                <input
+                  type="number"
+                  value={manualStake}
+                  min={0}
+                  step={1}
+                  onChange={(event) => setManualStake(event.target.value)}
+                  className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Status</span>
+                <select
+                  value={manualStatus}
+                  onChange={(event) => setManualStatus(event.target.value as TrackedBetStatus)}
+                  className={`h-9 rounded-md border px-2 text-xs font-semibold outline-none focus:border-emerald-300/40 ${betStatusPillClass(manualStatus)}`}
+                >
+                  <option value="pending">pending</option>
+                  <option value="won">won</option>
+                  <option value="lost">lost</option>
+                  <option value="push">push</option>
+                </select>
+              </label>
+              <div className="flex flex-col justify-end gap-1">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Projected P/L</span>
+                <div className="flex h-9 items-center rounded-md border border-white/8 bg-[#0e1530] px-2 text-xs font-semibold text-nrl-text">
+                  {(() => {
+                    const odds = Number(manualOdds);
+                    const stake = Number(manualStake);
+                    if (!Number.isFinite(odds) || odds <= 1 || !Number.isFinite(stake) || stake <= 0) return "-";
+                    const profit = computeBetProfit(manualStatus, stake, odds);
+                    return profit == null ? "-" : formatMoney(profit);
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            {manualError ? (
+              <div className="mt-3 text-[11px] font-semibold text-red-500">{manualError}</div>
+            ) : null}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setQuickAddOpen(false)}
+                className="cursor-pointer rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-white/20 hover:text-nrl-text"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void (async () => {
+                    const added = await handleManualAddBet();
+                    if (added) setQuickAddOpen(false);
+                  })();
+                }}
+                className="cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12"
+              >
+                Add Bet
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {betAddedMessage ? (
-        <div className="fixed bottom-4 right-4 z-[120] rounded-md border border-nrl-accent/40 bg-nrl-panel px-3 py-2 text-xs font-semibold text-nrl-accent shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+        <div className="fixed bottom-4 right-4 z-[120] rounded-md border border-emerald-300/40 bg-nrl-panel px-3 py-2 text-xs font-semibold text-emerald-300 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
           {betAddedMessage}
         </div>
       ) : null}
@@ -1930,8 +2675,8 @@ export function BettingDashboard({
                 onClick={() => handleMarketChange(tab)}
                 className={`rounded-md border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
                   active
-                    ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
-                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                    ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
+                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
                 }`}
               >
                 <span className="inline-flex items-center gap-2">
@@ -1957,6 +2702,7 @@ export function BettingDashboard({
             teamLogos={teamLogos}
             tryscorerFormByPlayer={tryscorerFormByPlayer}
             tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
+            lineupLinksByMatchKey={lineupLinksByMatchKey}
             market={selectedMarket}
             onStakeOverride={handleStakeOverride}
             onOddsOverride={handleOddsOverride}
@@ -1972,31 +2718,70 @@ function BestBetsHero({
   modelBets,
   arbitrageBets,
   canAccessPremium,
+  teamLogos,
+  tryscorerKickoffsByMatch,
   onAddBet,
 }: {
   modelBets: BestBetCandidate[];
   arbitrageBets: ArbitrageCandidate[];
   canAccessPremium: boolean;
+  teamLogos: Record<string, string>;
+  tryscorerKickoffsByMatch: Record<string, string>;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
-  const [focusedIndex, setFocusedIndex] = useState(0);
+  const [selectedModelMarket, setSelectedModelMarket] = useState<BettingMarket>("H2H");
+  const [selectedBestBetIds, setSelectedBestBetIds] = useState<Partial<Record<"model" | "arbitrage", string>>>({});
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [bestBetSlip, setBestBetSlip] = useState<{
     bet: BestBetCandidate;
     odds: number;
     stake: number;
   } | null>(null);
   const queueViewportRef = useRef<HTMLDivElement | null>(null);
-  const queuePauseUntilRef = useRef(0);
   const isArbitrage = category === "arbitrage";
-  const activeItems = isArbitrage ? arbitrageBets : modelBets;
-  const boundedFocusedIndex = Math.min(focusedIndex, Math.max(activeItems.length - 1, 0));
-  const featuredItem = activeItems[boundedFocusedIndex] ?? null;
-  const queueItems = activeItems
-    .map((item, index) => ({ item, index }))
-    .filter(({ index }) => index !== boundedFocusedIndex);
-  const queueCycleItems = queueItems.length > 1 ? [...queueItems, ...queueItems] : queueItems;
-  const shouldAnimateQueue = queueItems.length > 2;
+  const ratedArbitrageBets = useMemo(
+    () => [...arbitrageBets].sort((a, b) => {
+      if (Math.abs(a.score - b.score) > 1e-9) return b.score - a.score;
+      return a.marketBookPct - b.marketBookPct;
+    }),
+    [arbitrageBets]
+  );
+  const modelBetCountsByMarket = useMemo(() => {
+    const counts: Record<BettingMarket, number> = {
+      H2H: 0,
+      Line: 0,
+      Total: 0,
+      Tryscorer: 0,
+    };
+    for (const bet of modelBets) {
+      counts[bet.market] += 1;
+    }
+    return counts;
+  }, [modelBets]);
+  const selectedModelBets = useMemo(
+    () => modelBets.filter((bet) => bet.market === selectedModelMarket),
+    [modelBets, selectedModelMarket]
+  );
+  const activeSelectedBestBetId = selectedBestBetIds[category];
+  const activeItems = useMemo(() => {
+    const sortedItems = isArbitrage ? ratedArbitrageBets : selectedModelBets;
+    if (!activeSelectedBestBetId) return sortedItems;
+
+    const selectedIndex = sortedItems.findIndex((item) => item.id === activeSelectedBestBetId);
+    if (selectedIndex <= 0) return sortedItems;
+
+    const selectedItem = sortedItems[selectedIndex];
+    if (!selectedItem) return sortedItems;
+
+    return [
+      selectedItem,
+      ...sortedItems.slice(0, selectedIndex),
+      ...sortedItems.slice(selectedIndex + 1),
+    ];
+  }, [activeSelectedBestBetId, isArbitrage, ratedArbitrageBets, selectedModelBets]);
+  const featuredItem = activeItems[0] ?? null;
+  const queueItems = activeItems.slice(1);
   const activeTheme = isArbitrage
     ? {
         label: "Arbitrage",
@@ -2007,9 +2792,9 @@ function BestBetsHero({
       }
     : {
         label: "Model Value",
-        pill: "border-nrl-accent/35 bg-nrl-accent/8 text-nrl-accent",
-        activeBorder: "border-nrl-accent/35",
-        activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.06)]",
+        pill: "border-nrl-accent/45 bg-nrl-accent/12 text-nrl-accent",
+        activeBorder: "border-nrl-accent/45",
+        activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.08)]",
         metric: "text-nrl-accent drop-shadow-[0_0_10px_rgba(0,245,138,0.22)]",
       };
   const bestBetSlipImplied = bestBetSlip ? impliedProbability(bestBetSlip.odds) : null;
@@ -2021,49 +2806,39 @@ function BestBetsHero({
     && Number.isFinite(bestBetSlip.stake)
     && bestBetSlip.stake > 0;
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
     setCategory(nextCategory);
-    setFocusedIndex(0);
-    queuePauseUntilRef.current = Date.now() + 1200;
     window.requestAnimationFrame(() => {
       if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
     });
   };
 
-  const pauseQueueTicker = () => {
-    queuePauseUntilRef.current = Date.now() + 3500;
+  const handleModelMarketChange = (market: BettingMarket) => {
+    setSelectedModelMarket(market);
+    window.requestAnimationFrame(() => {
+      if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
+    });
   };
 
-  useEffect(() => {
-    const viewport = queueViewportRef.current;
-    if (!viewport || !shouldAnimateQueue) return undefined;
-
-    let frameId = 0;
-    let lastFrameMs = performance.now();
-
-    const tick = (nowMs: number) => {
-      const deltaMs = nowMs - lastFrameMs;
-      lastFrameMs = nowMs;
-
-      if (Date.now() > queuePauseUntilRef.current) {
-        viewport.scrollTop += deltaMs * 0.014;
-        const loopPoint = viewport.scrollHeight / 2;
-        if (loopPoint > 0 && viewport.scrollTop >= loopPoint) {
-          viewport.scrollTop -= loopPoint;
-        }
-      }
-
-      frameId = window.requestAnimationFrame(tick);
-    };
-
-    frameId = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frameId);
-  }, [boundedFocusedIndex, category, shouldAnimateQueue]);
+  const handleBestBetSelect = (itemId: string) => {
+    setSelectedBestBetIds((current) => ({
+      ...current,
+      [category]: itemId,
+    }));
+    window.requestAnimationFrame(() => {
+      if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
+    });
+  };
 
   return (
     <section className="overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3 sm:px-5">
-        <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-nrl-text">
+        <div className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>
           Today&apos;s Best Bets
         </div>
         <div className="flex gap-2">
@@ -2072,8 +2847,8 @@ function BestBetsHero({
             onClick={() => handleCategoryChange("model")}
             className={`rounded-md border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
               category === "model"
-                ? "border-nrl-accent/55 bg-nrl-accent/10 text-nrl-accent"
-                : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-nrl-accent/35 hover:text-nrl-text"
+                ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
             }`}
           >
             Model Value <span className="ml-1 text-nrl-muted">{modelBets.length}</span>
@@ -2092,9 +2867,34 @@ function BestBetsHero({
         </div>
       </div>
 
+      {!isArbitrage ? (
+        <div className="flex gap-2 overflow-x-auto border-b border-white/8 px-4 py-2 sm:px-5">
+          {BEST_BET_MODEL_MARKETS.map((market) => {
+            const active = selectedModelMarket === market;
+            return (
+              <button
+                key={`best-bets-market-${market}`}
+                type="button"
+                onClick={() => handleModelMarketChange(market)}
+                className={`shrink-0 rounded-md border px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                  active
+                    ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                    : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
+                }`}
+              >
+                {formatBestBetMarketLabel(market)}
+                <span className="ml-1 text-nrl-muted">{modelBetCountsByMarket[market]}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {activeItems.length === 0 ? (
         <div className="border-t border-white/8 px-4 py-2.5 text-sm text-nrl-muted sm:px-5">
-          {isArbitrage ? "No arbitrage markets currently identified." : "No strong model value currently identified."}
+          {isArbitrage
+            ? "No arbitrage markets currently identified."
+            : `No strong ${formatBestBetMarketLabel(selectedModelMarket).toLowerCase()} model value currently identified.`}
         </div>
       ) : featuredItem ? (
         <div className="space-y-3 p-3">
@@ -2108,9 +2908,25 @@ function BestBetsHero({
                   <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
                     {isArbitrage ? "H2H" : (featuredItem as BestBetCandidate).market}
                   </span>
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                    {formatEventCountdown(featuredItem, tryscorerKickoffsByMatch, nowMs)}
+                  </span>
                 </div>
-                <div className="mt-2 text-xl font-semibold leading-tight text-white sm:text-2xl">
-                  {isArbitrage ? (featuredItem as ArbitrageCandidate).match : (featuredItem as BestBetCandidate).selectionLabel}
+                <div className="mt-2 flex min-w-0 items-center gap-2 text-xl font-semibold leading-tight text-white sm:text-2xl">
+                  {isArbitrage ? (
+                    <MatchLogoCluster match={(featuredItem as ArbitrageCandidate).match} teamLogos={teamLogos} className="h-7 w-7" />
+                  ) : (
+                    <BettingTeamLogos
+                      selection={(featuredItem as BestBetCandidate).selection}
+                      match={(featuredItem as BestBetCandidate).match}
+                      market={(featuredItem as BestBetCandidate).market}
+                      teamLogos={teamLogos}
+                      className="h-7 w-7"
+                    />
+                  )}
+                  <span className="min-w-0 truncate">
+                    {isArbitrage ? (featuredItem as ArbitrageCandidate).match : (featuredItem as BestBetCandidate).selectionLabel}
+                  </span>
                 </div>
                 <div className="mt-1 truncate text-xs text-nrl-muted">
                   {isArbitrage
@@ -2119,6 +2935,11 @@ function BestBetsHero({
                 </div>
               </div>
               <div className="shrink-0 text-right">
+                {!isArbitrage ? (
+                  <div className="mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                    Score <span className="text-nrl-text">{formatBestBetScore((featuredItem as BestBetCandidate).score)}</span>
+                  </div>
+                ) : null}
                 <div className={`text-3xl font-bold leading-none sm:text-4xl ${activeTheme.metric}`}>
                   {isArbitrage
                     ? `+${(featuredItem as ArbitrageCandidate).returnPct.toFixed(2)}%`
@@ -2159,7 +2980,16 @@ function BestBetsHero({
                       className="flex items-center justify-between gap-3 rounded-md border border-white/8 bg-white/[0.03] px-2.5 py-2 text-xs"
                     >
                       <div className="min-w-0">
-                        <div className="truncate font-semibold text-white">{stake.selectionLabel}</div>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <BettingTeamLogos
+                            selection={stake.selection}
+                            match={(featuredItem as ArbitrageCandidate).match}
+                            market={(featuredItem as ArbitrageCandidate).market}
+                            teamLogos={teamLogos}
+                            className="h-4 w-4"
+                          />
+                          <div className="truncate font-semibold text-white">{stake.selectionLabel}</div>
+                        </div>
                         <div className="mt-0.5 flex items-center gap-1 text-nrl-muted">
                           {stake.bookies.slice(0, 2).map((bookie) => (
                             <BookieLogo key={`${stake.selection}-${bookie}`} bookie={bookie} compact />
@@ -2220,7 +3050,7 @@ function BestBetsHero({
                           stake: bet.kellyStake,
                         });
                       }}
-                      className="w-full cursor-pointer rounded-md border border-white/12 bg-white/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-nrl-text transition-colors hover:border-nrl-accent/55 hover:bg-nrl-accent/10 hover:text-nrl-accent"
+                      className="w-full cursor-pointer rounded-md border border-white/12 bg-white/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-nrl-text transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12 hover:text-emerald-300"
                     >
                       Add To Bet Tracker
                     </button>
@@ -2235,14 +3065,9 @@ function BestBetsHero({
               <div className="relative rounded-lg border border-white/8 bg-[#0f1732]/70">
                 <div
                   ref={queueViewportRef}
-                  onFocus={pauseQueueTicker}
-                  onMouseEnter={pauseQueueTicker}
-                  onPointerDown={pauseQueueTicker}
-                  onTouchStart={pauseQueueTicker}
-                  onWheel={pauseQueueTicker}
                   className={`max-h-[176px] space-y-1.5 overflow-y-auto overscroll-contain p-2 pr-1 [scrollbar-color:rgba(148,163,184,0.32)_transparent] ${!canAccessPremium ? "pointer-events-none select-none blur-[5px]" : ""}`}
                 >
-                {queueCycleItems.map(({ item, index }, cycleIndex) => {
+                {queueItems.map((item) => {
                   const isLocked = !canAccessPremium;
                   const rowContent = (
                     <div className={`flex min-h-[38px] items-center justify-between gap-3 rounded-md border border-white/8 bg-nrl-panel/72 px-2.5 py-1.5 text-left transition-colors ${canAccessPremium ? "hover:border-white/20" : ""}`}>
@@ -2254,13 +3079,29 @@ function BestBetsHero({
                           <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
                             {isArbitrage ? "H2H" : isLocked ? "Locked" : (item as BestBetCandidate).market}
                           </span>
+                          <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                            {formatEventCountdown(item, tryscorerKickoffsByMatch, nowMs)}
+                          </span>
                         </div>
-                        <div className="mt-0.5 truncate text-xs font-semibold text-white">
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-white">
+                          {!isLocked && isArbitrage ? (
+                            <MatchLogoCluster match={(item as ArbitrageCandidate).match} teamLogos={teamLogos} className="h-4 w-4" />
+                          ) : !isLocked ? (
+                            <BettingTeamLogos
+                              selection={(item as BestBetCandidate).selection}
+                              match={(item as BestBetCandidate).match}
+                              market={(item as BestBetCandidate).market}
+                              teamLogos={teamLogos}
+                              className="h-4 w-4"
+                            />
+                          ) : null}
+                          <span className="truncate">
                           {isLocked
                             ? "Selection hidden"
                             : isArbitrage
                               ? (item as ArbitrageCandidate).match
                               : (item as BestBetCandidate).selectionLabel}
+                          </span>
                         </div>
                         <div className="mt-1 flex min-w-0 items-center gap-1 text-[10px] font-semibold text-nrl-muted">
                           {isLocked ? (
@@ -2287,6 +3128,11 @@ function BestBetsHero({
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
+                        {!isLocked && !isArbitrage ? (
+                          <div className="mb-1 text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                            {formatBestBetScore((item as BestBetCandidate).score)}
+                          </div>
+                        ) : null}
                         <div className={`text-base font-bold leading-none ${isLocked ? "text-nrl-muted" : activeTheme.metric}`}>
                           {isLocked
                             ? isArbitrage ? "ARB" : "+EV"
@@ -2302,17 +3148,14 @@ function BestBetsHero({
                   );
 
                   return isLocked ? (
-                    <div key={`${item.id}-${cycleIndex}`} className="relative overflow-hidden rounded-md">
+                    <div key={item.id} className="relative overflow-hidden rounded-md">
                       {rowContent}
                     </div>
                   ) : (
                     <button
-                      key={`${item.id}-${cycleIndex}`}
+                      key={item.id}
                       type="button"
-                      onClick={() => {
-                        pauseQueueTicker();
-                        setFocusedIndex(index);
-                      }}
+                      onClick={() => handleBestBetSelect(item.id)}
                       className="block w-full cursor-pointer"
                     >
                       {rowContent}
@@ -2341,18 +3184,25 @@ function BestBetsHero({
           <div className="w-full max-w-md rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-accent">
+                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">
                   Add To Bet Tracker
                 </div>
-                <div className="mt-1 truncate text-base font-semibold text-nrl-text">
-                  {bestBetSlip.bet.selectionLabel}
+                <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-semibold text-nrl-text">
+                  <BettingTeamLogos
+                    selection={bestBetSlip.bet.selection}
+                    match={bestBetSlip.bet.match}
+                    market={bestBetSlip.bet.market}
+                    teamLogos={teamLogos}
+                    className="h-5 w-5"
+                  />
+                  <span className="truncate">{bestBetSlip.bet.selectionLabel}</span>
                 </div>
                 <div className="mt-0.5 truncate text-xs text-nrl-muted">{bestBetSlip.bet.match}</div>
               </div>
               <button
                 type="button"
                 onClick={() => setBestBetSlip(null)}
-                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
                 aria-label="Close bet slip"
               >
                 ×
@@ -2374,7 +3224,7 @@ function BestBetsHero({
                       odds: Number.isFinite(nextOdds) ? nextOdds : 0,
                     } : current);
                   }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
               <label className="block">
@@ -2388,7 +3238,7 @@ function BestBetsHero({
                     const nextStake = Math.max(0, Number(event.target.value) || 0);
                     setBestBetSlip((current) => current ? { ...current, stake: nextStake } : current);
                   }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
             </div>
@@ -2400,7 +3250,7 @@ function BestBetsHero({
               </div>
               <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className="mt-0.5 font-semibold text-nrl-accent">
+                <div className="mt-0.5 font-semibold text-emerald-300">
                   {bestBetSlipEdgePp == null ? "-" : `${bestBetSlipEdgePp >= 0 ? "+" : ""}${bestBetSlipEdgePp.toFixed(2)}`}
                 </div>
               </div>
@@ -2410,7 +3260,7 @@ function BestBetsHero({
               <button
                 type="button"
                 onClick={() => setBestBetSlip(null)}
-                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
               >
                 Cancel
               </button>
@@ -2435,7 +3285,7 @@ function BestBetsHero({
                 }}
                 className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
                   canConfirmBestBetSlip
-                    ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                    ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
                     : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                 }`}
               >
@@ -2446,6 +3296,131 @@ function BestBetsHero({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function gameJumpAnchorId(group: EventGroup): string {
+  return `betting-game-${normaliseLookupKey(`${group.date} ${group.match} ${group.market}`).replace(/\s+/g, "-")}`;
+}
+
+function GameJumpSidebar({
+  groups,
+  teamLogos,
+}: {
+  groups: EventGroup[];
+  teamLogos: Record<string, string>;
+}) {
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const railRef = useRef<HTMLElement | null>(null);
+  const [pinState, setPinState] = useState({
+    pinned: false,
+    height: 0,
+    left: 0,
+    top: 0,
+    width: 0,
+  });
+
+  const groupsByDate = groups.reduce((acc, group) => {
+    const existing = acc.get(group.date);
+    if (existing) {
+      existing.push(group);
+      return acc;
+    }
+    acc.set(group.date, [group]);
+    return acc;
+  }, new Map<string, EventGroup[]>());
+
+  useEffect(() => {
+    const updatePinState = () => {
+      const sentinel = sentinelRef.current;
+      const rail = railRef.current;
+      const container = sentinel?.parentElement;
+      if (!sentinel || !rail || !container) return;
+
+      const headerBottom = document.querySelector("header")?.getBoundingClientRect().bottom ?? 0;
+      const top = Math.max(0, Math.round(headerBottom));
+      const containerRect = container.getBoundingClientRect();
+      const pinned = sentinel.getBoundingClientRect().top <= top;
+      const next = {
+        pinned,
+        height: rail.offsetHeight,
+        left: containerRect.left,
+        top,
+        width: containerRect.width,
+      };
+
+      setPinState((current) => (
+        current.pinned === next.pinned &&
+        current.height === next.height &&
+        current.left === next.left &&
+        current.top === next.top &&
+        current.width === next.width
+          ? current
+          : next
+      ));
+    };
+
+    updatePinState();
+    window.addEventListener("scroll", updatePinState, { passive: true });
+    window.addEventListener("resize", updatePinState);
+    return () => {
+      window.removeEventListener("scroll", updatePinState);
+      window.removeEventListener("resize", updatePinState);
+    };
+  }, []);
+
+  if (groups.length <= 1) return null;
+
+  return (
+    <div className="min-w-0">
+      <div ref={sentinelRef} aria-hidden="true" className="h-0" />
+      {pinState.pinned ? <div aria-hidden="true" style={{ height: pinState.height }} /> : null}
+      <aside
+        ref={railRef}
+        className="z-40 min-w-0"
+        style={pinState.pinned ? {
+          left: pinState.left,
+          position: "fixed",
+          top: pinState.top,
+          width: pinState.width,
+        } : undefined}
+      >
+        <div className="flex gap-6 overflow-x-auto rounded-xl border border-nrl-border bg-nrl-panel p-2 shadow-[0_10px_26px_rgba(0,0,0,0.22)] [scrollbar-width:thin] sm:gap-7">
+          {[...groupsByDate.entries()].map(([date, dateGroups]) => (
+            <div key={`jump-date-${date}`} className="flex shrink-0 gap-1.5 rounded-lg border border-nrl-border/60 bg-nrl-panel-2/45 p-1.5">
+              <div className="flex w-6 shrink-0 rotate-180 items-center justify-center rounded bg-nrl-panel text-[9px] font-bold uppercase tracking-[0.12em] text-emerald-300 [writing-mode:vertical-rl] xl:h-auto xl:w-auto xl:rotate-0 xl:px-1.5 xl:py-1 xl:[writing-mode:horizontal-tb]">
+                {formatCompactDateLabel(date)}
+              </div>
+              <div className="flex gap-1.5">
+                {dateGroups.map((group) => {
+                  const { home, away } = parseMatch(group.match);
+                  const label = `${home}${away ? ` vs ${away}` : ""} - ${formatDateLabel(group.date)}`;
+
+                  return (
+                    <button
+                      key={`jump-${group.key}`}
+                      type="button"
+                      title={label}
+                      aria-label={`Skip to ${label}`}
+                      onClick={() => document.getElementById(gameJumpAnchorId(group))?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      className="flex min-w-[82px] shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg border border-nrl-border bg-nrl-panel-2 px-2 py-2 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/10"
+                    >
+                      <TeamLogoBadge teamName={home || group.match} teamLogos={teamLogos} />
+                      {away ? (
+                        <>
+                          <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-nrl-muted xl:leading-none">vs</span>
+                          <TeamLogoBadge teamName={away} teamLogos={teamLogos} />
+                        </>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -2464,6 +3439,7 @@ function MarketSection({
   teamLogos,
   tryscorerFormByPlayer,
   tryscorerKickoffsByMatch,
+  lineupLinksByMatchKey,
   market,
   onStakeOverride,
   onOddsOverride,
@@ -2483,6 +3459,7 @@ function MarketSection({
   teamLogos: Record<string, string>;
   tryscorerFormByPlayer: Record<string, TryscorerFormSummary>;
   tryscorerKickoffsByMatch: Record<string, string>;
+  lineupLinksByMatchKey: Record<string, string>;
   market: BettingMarket;
   onStakeOverride: (key: string, value: number) => void;
   onOddsOverride: (key: string, value: number) => void;
@@ -2539,20 +3516,24 @@ function MarketSection({
     && mobileBetSlip.odds > 1
     && Number.isFinite(mobileBetSlip.stake)
     && mobileBetSlip.stake > 0;
+  const showGameJumpSidebar = activeGroups.length > 1;
 
   return (
-    <div className="space-y-7">
-      {[...groupsByDate.entries()].map(([date, dateGroups]) => (
-        <section key={date} className="space-y-7 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
+    <div className="space-y-4">
+      {showGameJumpSidebar ? <GameJumpSidebar groups={activeGroups} teamLogos={teamLogos} /> : null}
+      <div className="space-y-7">
+        {[...groupsByDate.entries()].map(([date, dateGroups]) => (
+          <section key={date} className="space-y-7 rounded-xl border border-nrl-border bg-nrl-panel p-3 sm:p-4">
           <div className="flex items-center gap-3">
-            <h2 className="shrink-0 text-sm font-bold uppercase tracking-[0.12em] text-nrl-accent sm:text-base">
+            <h2 className={`${BETTING_PANEL_HEADER_CLASS} shrink-0 text-white`}>
               {formatDateLabel(date)}
             </h2>
             <div className="h-px flex-1 bg-nrl-border/70" />
           </div>
           {dateGroups.map((group, groupIndex) => {
             const { home, away } = parseMatch(group.match);
-            const showModelColumns = group.market !== "Tryscorer";
+            const lineupHref = lineupLinksByMatchKey[`${group.date}|${buildMatchGroupKey(group.match)}`] ?? null;
+            const showModelColumns = group.market !== "Tryscorer" || group.outcomes.some((row) => row.bestModelComputed != null);
             const blurPremiumColumns = !canAccessPremium && showModelColumns;
             const collapsed = group.market === "Tryscorer" && collapsedTryscorerGroups[group.key] === true;
             const selectedTryscorerValue = tryscorerValueByGroup[group.key] ?? 1;
@@ -2564,8 +3545,9 @@ function MarketSection({
             );
             return (
               <article
+                id={gameJumpAnchorId(group)}
                 key={group.key}
-                className={`${groupIndex === 0 ? "" : "border-t border-nrl-border/70 pt-8"} md:rounded-xl md:border md:border-nrl-border md:bg-nrl-panel-2/35 md:p-4`}
+                className={`scroll-mt-24 ${groupIndex === 0 ? "" : "border-t border-nrl-border/70 pt-8"} md:rounded-xl md:border md:border-nrl-border md:bg-nrl-panel-2/35 md:p-4`}
               >
                 <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
                   <div>
@@ -2580,24 +3562,34 @@ function MarketSection({
                     </div>
                     <div className="text-xs text-nrl-muted">{group.market}</div>
                   </div>
-                  {group.market === "Tryscorer" ? (
-                    <button
-                      type="button"
-                      aria-label={collapsed ? "Expand game" : "Collapse game"}
-                      onClick={() => setCollapsedTryscorerGroups((current) => ({
-                        ...current,
-                        [group.key]: !current[group.key],
-                      }))}
-                      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
-                    >
-                      <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
-                    </button>
-                  ) : group.marketPctFromBest != null ? (
-                    <div className="text-xs text-nrl-muted">
-                      Best-book market %:{" "}
-                      <span className="font-semibold text-nrl-text">{formatPct(group.marketPctFromBest)}</span>
-                    </div>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    {lineupHref ? (
+                      <Link
+                        href={lineupHref}
+                        className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+                      >
+                        Lineups
+                      </Link>
+                    ) : null}
+                    {group.market === "Tryscorer" ? (
+                      <button
+                        type="button"
+                        aria-label={collapsed ? "Expand game" : "Collapse game"}
+                        onClick={() => setCollapsedTryscorerGroups((current) => ({
+                          ...current,
+                          [group.key]: !current[group.key],
+                        }))}
+                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+                      >
+                        <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
+                      </button>
+                    ) : group.marketPctFromBest != null ? (
+                      <div className="text-xs text-nrl-muted">
+                        Best-book market %:{" "}
+                        <span className="font-semibold text-nrl-text">{formatPct(group.marketPctFromBest)}</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 {group.market === "Tryscorer" ? (
                   <div className="mb-3 flex flex-wrap gap-2">
@@ -2612,9 +3604,9 @@ function MarketSection({
                           onClick={() => setTryscorerValueByGroup((current) => ({ ...current, [group.key]: value }))}
                           className={`rounded-md border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition-colors ${
                             active
-                              ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                              ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
                               : hasRows
-                                ? "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-text"
+                                ? "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
                                 : "cursor-not-allowed border-nrl-border bg-nrl-panel-2 text-nrl-muted opacity-45"
                           }`}
                         >
@@ -2681,7 +3673,7 @@ function MarketSection({
                         : edgePp == null
                         ? "text-nrl-text"
                         : edgePp < 0
-                          ? "text-red-500"
+                          ? "text-red-300/80"
                           : overEdgeCliff
                             ? "text-orange-500"
                             : "text-nrl-accent";
@@ -2699,12 +3691,33 @@ function MarketSection({
                     const outcomeLogoTeam = group.market === "Tryscorer" ? playerTeam : row.result;
 
                     return (
-                      <div key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`} className="border-t border-nrl-border/60 py-3 first:border-t-0 first:pt-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex min-w-0 items-start gap-1.5">
+                      <div key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`} className="rounded-lg border border-nrl-border/70 bg-nrl-panel-2/45 px-3 py-4 shadow-[0_10px_24px_rgba(2,6,23,0.12)]">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 flex-1 items-start gap-1.5">
                             <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} className="mt-0.5 h-4 w-4" />
-                            <div className="min-w-0">
-                              <div className="truncate text-xs font-semibold text-nrl-text">{row.result}</div>
+                            <div className="min-w-0 flex-1">
+                              <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-y-2 text-xs font-semibold text-nrl-text">
+                                <span className="min-w-0 truncate pr-1">{row.result}</span>
+                                <div className="grid grid-cols-[minmax(0,9.75rem)_minmax(0,7.75rem)] items-center gap-x-4">
+                                  <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] text-nrl-muted">
+                                    Best:
+                                    <span className="text-nrl-text tabular-nums">{formatPrice(row.bestPriceComputed)}</span>
+                                    <span className="inline-flex min-w-0 items-center gap-1 overflow-hidden">
+                                      {row.bestBookiesComputed.map((bookie) => (
+                                        <BookieLogo key={`${group.key}-mobile-${row.result}-best-${bookie}`} bookie={bookie} compact />
+                                      ))}
+                                    </span>
+                                  </span>
+                                  {showModelColumns ? (
+                                    <span className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] ${edgeClass}`}>
+                                      Edge:
+                                      <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : "tabular-nums"}>
+                                        {formatEdge(edgePp)}
+                                      </span>
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
                               <TryscorerForm form={tryscorerForm} />
                             </div>
                           </div>
@@ -2712,6 +3725,7 @@ function MarketSection({
                             <button
                               type="button"
                               disabled={!canOpenMobileBet}
+                              aria-label="Add bet"
                               onClick={() => {
                                 if (!canOpenMobileBet || oddsValue == null) return;
                                 setMobileBetSlip({
@@ -2728,78 +3742,44 @@ function MarketSection({
                               }}
                               className={`shrink-0 rounded border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${
                                 canOpenMobileBet
-                                  ? "cursor-pointer border-nrl-accent/60 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/20"
+                                  ? "cursor-pointer border-nrl-accent/55 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/18"
                                   : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                               }`}
                             >
-                              Add
+                              +
                             </button>
                           ) : (
-                            <BillingPageLink className="shrink-0 rounded border border-nrl-border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted opacity-75 transition-colors hover:border-nrl-accent hover:text-nrl-text">
+                            <BillingPageLink className="shrink-0 rounded border border-nrl-border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted opacity-75 transition-colors hover:border-emerald-300/40 hover:text-nrl-text">
                               Locked
                             </BillingPageLink>
                           )}
                         </div>
 
-                        <div className="mt-2 grid grid-cols-5 items-center gap-x-1.5 gap-y-1 text-[11px]">
+                        <div
+                          className="mt-5 grid items-stretch gap-1.5 text-[11px]"
+                          style={{ gridTemplateColumns: `repeat(${Math.max(1, visibleBookieColumns.length)}, minmax(0, 1fr))` }}
+                        >
                           {visibleBookieColumns.map((bookie) => {
                             const offer = row.bookieOffers[bookie];
-                            const isBest = offer != null
-                              && row.bestBookiesComputed.includes(bookie)
-                              && row.bestPriceComputed === offer.price
-                              && row.bestValueComputed === offer.value;
                             return (
                               <div
                                 key={`${group.key}-mobile-${row.result}-${bookie}`}
-                                className={`flex min-w-0 items-center gap-1 rounded px-1 py-0.5 ${
-                                  isBest ? "bg-nrl-accent/12 text-nrl-accent" : "text-nrl-text"
-                                }`}
+                                className="flex min-h-[34px] min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-nrl-text"
                               >
-                                <span className="flex h-4 shrink-0 items-center opacity-90">
+                                <div className="flex h-4 shrink-0 items-center opacity-90">
                                   <BookieLogo bookie={bookie} compact />
-                                </span>
-                                <span className="truncate text-xs font-semibold leading-tight">
-                                  {offer == null ? "-" : formatPrice(offer.price)}
-                                </span>
-                                {offer != null && (group.market === "Line" || group.market === "Total") && offer.value != null ? (
-                                  <span className="truncate text-[9px] leading-tight text-nrl-muted">{formatLineValue(offer.value)}</span>
-                                ) : null}
+                                </div>
+                                <div className="min-w-0 leading-none">
+                                  <div className="truncate text-xs font-semibold tabular-nums">
+                                    {offer == null ? "-" : formatPrice(offer.price)}
+                                  </div>
+                                  {offer != null && (group.market === "Line" || group.market === "Total") && offer.value != null ? (
+                                    <div className="mt-1 truncate text-[9px] leading-none text-nrl-muted tabular-nums">{formatLineValue(offer.value)}</div>
+                                  ) : null}
+                                </div>
                               </div>
                             );
                           })}
-                        </div>
-
-                        <div className={`mt-2 grid ${showModelColumns ? "grid-cols-4" : "grid-cols-2"} gap-x-2 gap-y-1 text-[10px]`}>
-                          <div className="flex min-w-0 items-baseline gap-1">
-                            <span className="shrink-0 font-bold uppercase tracking-[0.08em] text-nrl-muted">Best</span>
-                            <span className="truncate text-xs font-bold leading-tight text-nrl-accent">
-                              {formatPrice(row.bestPriceComputed)}
-                            </span>
-                          </div>
-                          <div className="flex min-w-0 items-baseline gap-1">
-                            <span className="shrink-0 font-bold uppercase tracking-[0.08em] text-nrl-muted">Imp</span>
-                            <span className="truncate text-xs font-semibold leading-tight text-nrl-text">{formatPct(implied == null ? null : implied * 100)}</span>
-                          </div>
-                          {showModelColumns ? (
-                            <>
-                              <div className="flex min-w-0 items-baseline gap-1">
-                                <span className="shrink-0 font-bold uppercase tracking-[0.08em] text-nrl-muted">Model</span>
-                                <span className="truncate text-xs font-semibold leading-tight text-nrl-text">
-                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
-                                    {formatPct(modelProbability == null ? null : modelProbability * 100)}
-                                  </span>
-                                </span>
-                              </div>
-                              <div className="flex min-w-0 items-baseline gap-1">
-                                <span className="shrink-0 font-bold uppercase tracking-[0.08em] text-nrl-muted">Edge</span>
-                                <span className={`truncate text-xs font-semibold leading-tight ${edgeClass}`}>
-                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
-                                    {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
-                                  </span>
-                                </span>
-                              </div>
-                            </>
-                          ) : null}
                         </div>
 
                       </div>
@@ -2999,7 +3979,7 @@ function MarketSection({
                                   if (Number.isFinite(nextOdds) && nextOdds > 1) return;
                                   onOddsOverride(betRowKey, row.bestPriceComputed ?? 0);
                                 }}
-                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-emerald-300/40"
                               />
                             </td>
                             <td className="py-2 pr-0 text-nrl-text">
@@ -3009,7 +3989,7 @@ function MarketSection({
                                 step={1}
                                 value={Number.isFinite(stakeValue) ? stakeValue : 0}
                                 onChange={(event) => onStakeOverride(betRowKey, Math.max(0, Number(event.target.value) || 0))}
-                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-nrl-accent"
+                                className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-emerald-300/40"
                               />
                             </td>
                             <td className="py-2 pl-3 pr-0">
@@ -3019,29 +3999,28 @@ function MarketSection({
                                   disabled={!canPlaceBet}
                                   onClick={() => {
                                     if (!canPlaceBet || oddsValue == null) return;
-                                    void onAddBet({
+                                    setMobileBetSlip({
+                                      key: betRowKey,
                                       market: group.market,
-                                      matchDate: group.date,
-                                      matchName: group.match,
+                                      date: group.date,
+                                      match: group.match,
                                       selection: row.result,
                                       lineValue: row.bestValueComputed,
                                       odds: oddsValue,
                                       stake: stakeValue,
                                       modelProb: modelProbability,
-                                      impliedProb: implied,
-                                      edgePp,
                                     });
                                   }}
                                   className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                                     canPlaceBet
-                                      ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                                      ? "cursor-pointer border-nrl-accent/55 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/18"
                                       : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                                   }`}
                                 >
                                   Bet
                                 </button>
                               ) : (
-                                <BillingPageLink className="inline-flex rounded-md border border-nrl-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted opacity-75 transition-colors hover:border-nrl-accent hover:text-nrl-text">
+                                <BillingPageLink className="inline-flex rounded-md border border-nrl-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted opacity-75 transition-colors hover:border-emerald-300/40 hover:text-nrl-text">
                                   Locked
                                 </BillingPageLink>
                               )}
@@ -3057,14 +4036,15 @@ function MarketSection({
               </article>
             );
           })}
-        </section>
-      ))}
+          </section>
+        ))}
+      </div>
       {mobileBetSlip ? (
-        <div className="fixed inset-0 z-50 grid place-items-end bg-black/55 px-3 py-4 md:hidden">
-          <div className="w-full rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+        <div className="fixed inset-0 z-50 grid place-items-end bg-black/55 px-3 py-4 md:place-items-center">
+          <div className="w-full max-w-md rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-accent">
+                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">
                   Add To Bets
                 </div>
                 <div className="mt-1 truncate text-base font-semibold text-nrl-text">
@@ -3075,7 +4055,7 @@ function MarketSection({
               <button
                 type="button"
                 onClick={() => setMobileBetSlip(null)}
-                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
                 aria-label="Close bet slip"
               >
                 ×
@@ -3097,7 +4077,7 @@ function MarketSection({
                       odds: Number.isFinite(nextOdds) ? nextOdds : 0,
                     } : current);
                   }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
               <label className="block">
@@ -3111,7 +4091,7 @@ function MarketSection({
                     const nextStake = Math.max(0, Number(event.target.value) || 0);
                     setMobileBetSlip((current) => current ? { ...current, stake: nextStake } : current);
                   }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-nrl-accent"
+                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
                 />
               </label>
             </div>
@@ -3123,7 +4103,7 @@ function MarketSection({
               </div>
               <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className="mt-0.5 font-semibold text-nrl-accent">
+                <div className="mt-0.5 font-semibold text-emerald-300">
                   {mobileSlipEdgePp == null ? "-" : `${mobileSlipEdgePp >= 0 ? "+" : ""}${mobileSlipEdgePp.toFixed(2)}`}
                 </div>
               </div>
@@ -3133,7 +4113,7 @@ function MarketSection({
               <button
                 type="button"
                 onClick={() => setMobileBetSlip(null)}
-                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
               >
                 Cancel
               </button>
@@ -3160,7 +4140,7 @@ function MarketSection({
                 }}
                 className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
                   canConfirmMobileSlip
-                    ? "cursor-pointer border-nrl-accent bg-nrl-accent/15 text-nrl-accent hover:bg-nrl-accent/25"
+                    ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
                     : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                 }`}
               >

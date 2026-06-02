@@ -68,7 +68,7 @@ export function ToolNav({ className }: ToolNavProps) {
       <nav
         className={`-mx-1 flex w-full justify-start overflow-x-auto pb-1 [scrollbar-width:none] lg:justify-center lg:overflow-visible [&::-webkit-scrollbar]:hidden sm:mx-0 ${className ?? ""}`}
       >
-        <div className="flex w-max min-w-max items-center gap-x-1 rounded-full border border-white/10 bg-[#0e1330]/80 p-1 backdrop-blur sm:w-auto sm:gap-x-2 lg:w-full lg:min-w-0 lg:justify-between lg:gap-x-0">
+        <div className="flex w-max min-w-max items-center gap-x-1 rounded-full border border-white/10 bg-[#1b2444]/86 p-1 backdrop-blur sm:w-auto sm:gap-x-2 lg:w-full lg:min-w-0 lg:justify-between lg:gap-x-0">
           {tools.map((tool) => {
             const active = tool.href === "/"
               ? pathname === "/"

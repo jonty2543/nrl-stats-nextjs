@@ -55,6 +55,11 @@ type PlayerStatsSelection = {
   liveStats: LineupLivePlayerStats | null
   baselinePpm: number | null
   baselineLabel: string | null
+  averages: Record<AverageStatKey, number> | null
+  tryHistory: PlayerTryHistory[string]
+  opponent: string | null
+  opponentTryHistory: PlayerTryHistory[string]
+  tryscorerOdds: LineupTryscorerOdds | null
 }
 
 const FREE_INSIGHT_CATEGORY_ROTATION: MatchupInsight["category"][][] = [
@@ -1336,10 +1341,142 @@ function PlayerStatGroup({ group }: { group: PlayerStatDisplayGroup }) {
   )
 }
 
+function formatTriesPerGame(tries: number, games: number): string {
+  if (!Number.isFinite(tries) || !Number.isFinite(games) || games <= 0) return "-"
+  return `${(tries / games).toFixed(2)}/g`
+}
+
+function TryRateTile({ label, value, subtext }: { label: string; value: string; subtext: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">{label}</div>
+      <div className="mt-1 truncate text-xl font-black text-emerald-300">{value}</div>
+      <div className="text-[10px] font-semibold text-nrl-muted">{subtext}</div>
+    </div>
+  )
+}
+
+function TryHistoryDots({ history }: { history: PlayerTryHistory[string] }) {
+  if (history.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-1">
+      {[...history].slice(0, 10).reverse().map((entry, index) => (
+        <span
+          key={`${entry.year}-${entry.round}-${index}`}
+          className={`grid h-6 w-6 place-items-center rounded-full border text-[10px] font-black ${
+            entry.tries > 0
+              ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-200"
+              : "border-red-300/45 bg-red-400/12 text-red-200"
+          }`}
+          title={`${entry.year} R${entry.round}${entry.opponent ? ` v ${entry.opponent}` : ""}: ${entry.tries} tries`}
+        >
+          {entry.tries}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function shortLineupTeamName(value: string | null): string {
+  const key = normaliseKey(value)
+  const labels: Record<string, string> = {
+    "brisbane broncos": "Broncos",
+    broncos: "Broncos",
+    "canberra raiders": "Raiders",
+    raiders: "Raiders",
+    "canterbury bankstown bulldogs": "Bulldogs",
+    bulldogs: "Bulldogs",
+    "cronulla sutherland sharks": "Sharks",
+    sharks: "Sharks",
+    dolphins: "Dolphins",
+    "gold coast titans": "Titans",
+    titans: "Titans",
+    "manly warringah sea eagles": "Sea Eagles",
+    "manly sea eagles": "Sea Eagles",
+    "sea eagles": "Sea Eagles",
+    manly: "Sea Eagles",
+    "melbourne storm": "Storm",
+    storm: "Storm",
+    "newcastle knights": "Knights",
+    knights: "Knights",
+    "new zealand warriors": "Warriors",
+    warriors: "Warriors",
+    "north queensland cowboys": "Cowboys",
+    cowboys: "Cowboys",
+    "parramatta eels": "Eels",
+    eels: "Eels",
+    "penrith panthers": "Panthers",
+    panthers: "Panthers",
+    "south sydney rabbitohs": "Rabbitohs",
+    rabbitohs: "Rabbitohs",
+    "st george illawarra dragons": "Dragons",
+    dragons: "Dragons",
+    "sydney roosters": "Roosters",
+    roosters: "Roosters",
+    "wests tigers": "Tigers",
+    tigers: "Tigers",
+  }
+  return labels[key] ?? value ?? "Opponent"
+}
+
+function PlayerTryFormPanel({ selection }: { selection: PlayerStatsSelection }) {
+  const { player, averages, tryHistory, opponent, opponentTryHistory, tryscorerOdds, baselineLabel } = selection
+  const recentFive = tryHistory.slice(0, 5)
+  const recentTen = tryHistory.slice(0, 10)
+  const scoredFive = recentFive.filter((entry) => entry.tries > 0).length
+  const scoredTen = recentTen.filter((entry) => entry.tries > 0).length
+  const triesFive = recentFive.reduce((total, entry) => total + entry.tries, 0)
+  const triesTen = recentTen.reduce((total, entry) => total + entry.tries, 0)
+  const seasonTries = tryHistory.reduce((total, entry) => total + entry.tries, 0)
+
+  return (
+    <section className="border-b border-blue-300/10 pb-4">
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-nrl-muted">Try form</div>
+      <div className="grid grid-cols-3 gap-4">
+        <TryRateTile label="L5" value={`${scoredFive}/${recentFive.length}`} subtext={`${triesFive} tries`} />
+        <TryRateTile label="L10" value={`${scoredTen}/${recentTen.length}`} subtext={`${triesTen} tries`} />
+        <TryRateTile label="Season" value={formatTriesPerGame(seasonTries, tryHistory.length)} subtext={`${seasonTries} in ${tryHistory.length}`} />
+      </div>
+      {tryHistory.length > 0 ? (
+        <div className="mt-3">
+          <div className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-nrl-muted">Recent tries</div>
+          <TryHistoryDots history={tryHistory} />
+        </div>
+      ) : null}
+      {opponent ? (
+        <div className="mt-3">
+          <div className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-nrl-muted">Vs {shortLineupTeamName(opponent)}</div>
+          {opponentTryHistory.length > 0 ? (
+            <TryHistoryDots history={opponentTryHistory} />
+          ) : (
+            <div className="text-xs font-semibold text-nrl-muted">No recent try history against this opponent.</div>
+          )}
+        </div>
+      ) : null}
+      <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.08em]">
+        <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Starts: {player.position || "TBC"}</span>
+        <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Edge: {player.side}</span>
+        {baselineLabel ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">{baselineLabel}</span> : null}
+        {tryscorerOdds?.bestPrice != null ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Anytime best: {tryscorerOdds.bestPrice.toFixed(2)}</span> : null}
+        {averages?.Tries != null ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Avg tries: {averages.Tries.toFixed(2)}</span> : null}
+        {triesTen > 0 ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">L10 tries: {triesTen}</span> : null}
+      </div>
+    </section>
+  )
+}
+
 function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelection | null; onClose: () => void }) {
   if (!selection) return null
   const { player, liveState, liveStats } = selection
   const fantasyPpm = fantasyPointsPerMinute(liveStats)
+  const image = player.headImage ?? player.bodyImage
+  const initials = player.player.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2)
+  const averageItems: PlayerStatDisplayItem[] = DISPLAY_MODES
+    .filter((mode): mode is { key: AverageStatKey; label: string; shortLabel: string } => mode.key !== "odds" && mode.key !== "fantasy")
+    .map((mode) => ({
+      label: mode.shortLabel,
+      value: selection.averages?.[mode.key] == null ? "-" : formatAverage(selection.averages[mode.key], mode.key),
+    }))
   const groups: PlayerStatDisplayGroup[] = [
     {
       title: "Summary",
@@ -1391,18 +1528,28 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3 border-b border-nrl-border px-4 py-3">
-          <div className="min-w-0">
-            <div className="truncate text-base font-bold text-nrl-text">{player.player}</div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-nrl-muted">
-              <span>{player.team}</span>
-              <span>{player.number ?? "-"} · {player.position || "Position TBC"}</span>
-              {liveState ? (
-                <span className={liveState.isOnField ? "font-semibold text-emerald-300" : "font-semibold text-red-200"}>
-                  {liveState.isOnField ? "On field" : "Off field"}
-                </span>
-              ) : null}
+      <div className="max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-lg border border-blue-300/20 bg-[#071024] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-blue-300/15 bg-[#0b1630] px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={image} alt="" className="h-14 w-14 shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover" />
+            ) : (
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel text-sm font-black text-nrl-muted">
+                {initials}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="truncate text-base font-bold text-nrl-text">{player.player}</div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-nrl-muted">
+                <span>{player.team}</span>
+                <span>{player.number ?? "-"} · {player.position || "Position TBC"}</span>
+                {liveState ? (
+                  <span className={liveState.isOnField ? "font-semibold text-emerald-300" : "font-semibold text-red-200"}>
+                    {liveState.isOnField ? "On field" : "Off field"}
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
           <button
@@ -1415,15 +1562,21 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
           </button>
         </div>
 
-        {liveStats ? (
-          <div className="max-h-[calc(88vh-5.5rem)] space-y-3 overflow-y-auto p-3">
+        <div className="max-h-[calc(88vh-5.5rem)] space-y-3 overflow-y-auto p-3">
+          <PlayerTryFormPanel selection={selection} />
+          {averageItems.some((item) => item.value !== "-") ? (
+            <PlayerStatGroup group={{ title: "Per-game averages", items: averageItems }} />
+          ) : null}
+          {liveStats ? (
+            <>
             {groups.map((group) => (
               <PlayerStatGroup key={group.title} group={group} />
             ))}
-          </div>
-        ) : (
-          <div className="px-4 py-5 text-sm text-nrl-muted">No live stat summary available yet.</div>
-        )}
+            </>
+          ) : (
+            <div className="rounded-md border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">No live stat summary available yet.</div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -2217,13 +2370,30 @@ function LineupCard({
       ? "hidden -right-8 h-44 w-44 opacity-[0.22] sm:right-4 sm:block sm:h-56 sm:w-56"
     : "hidden -right-8 h-44 w-44 opacity-[0.065] grayscale sm:right-4 sm:block sm:h-56 sm:w-56"
   const selectedPlayerStats: PlayerStatsSelection | null = selectedPlayer
-    ? {
+    ? (() => {
+        const history = playerTryHistory[normaliseKey(selectedPlayer.player)] ?? []
+        const opponentTeam =
+          selectedPlayer.teamType === "Home"
+            ? detailMatch.awayTeam?.teamName ?? detailMatch.awayTeam?.team ?? null
+            : selectedPlayer.teamType === "Away"
+              ? detailMatch.homeTeam?.teamName ?? detailMatch.homeTeam?.team ?? null
+              : null
+        const opponentKey = normaliseKey(opponentTeam)
+        return {
         player: selectedPlayer,
         liveState: getLivePlayerState(displayLiveMatch, selectedPlayer),
         liveStats: getLivePlayerStats(displayLiveMatch, selectedPlayer),
         baselinePpm: positionBaselineForPlayer(selectedPlayer, positionPpmBaselines).value,
         baselineLabel: positionBaselineForPlayer(selectedPlayer, positionPpmBaselines).label,
+        averages: playerAverages[normaliseKey(selectedPlayer.player)] ?? null,
+        tryHistory: history,
+        opponent: opponentTeam,
+        opponentTryHistory: opponentKey
+          ? history.filter((entry) => normaliseKey(entry.opponent).includes(opponentKey)).slice(0, 5)
+          : [],
+        tryscorerOdds: tryscorerOdds[normaliseKey(selectedPlayer.player)] ?? null,
       }
+      })()
     : null
   const insights = isLive
     ? []
@@ -2290,7 +2460,7 @@ function LineupCard({
           />
         ) : null}
         <div className="relative z-[1] pb-2 text-center">
-          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-nrl-muted sm:text-xs sm:tracking-[0.28em]">
+          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white sm:text-xs sm:tracking-[0.28em]">
             {detailMatch.round} · {formatCardDate(detailMatch)}
           </div>
           {detailMatch.venue || weatherForecast ? (
@@ -2628,7 +2798,7 @@ export function LineupsDashboard({
         <div className="space-y-11">
           {matchDateGroups.map((group) => (
             <section key={group.dateKey} className="space-y-8 sm:space-y-6">
-              <div className="px-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300/90">
+              <div className="px-1 text-xs font-bold uppercase tracking-[0.18em] text-white">
                 {formatMatchDateHeader(group.dateKey)}
               </div>
               {group.matches.map((match) => (

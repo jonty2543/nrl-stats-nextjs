@@ -150,6 +150,7 @@ export default async function BettingPage() {
       playerTeamsByName={bettingSummary.playerTeamsByName}
       teamLogos={bettingSummary.teamLogos}
       tryscorerFormByPlayer={bettingSummary.tryscorerFormByPlayer}
+      tryscorerLastFiveVsOpponentByMatch={bettingSummary.tryscorerLastFiveVsOpponentByMatch}
       tryscorerKickoffsByMatch={bettingSummary.tryscorerKickoffsByMatch}
       lineupLinksByMatchKey={buildLineupLinksByMatchKey(bettingSummary.games)}
       marginModelArticle={

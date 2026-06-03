@@ -67,6 +67,7 @@ export interface BettingTryscorerFormSummary {
   gamesPlayed?: number;
   tries2026?: number;
   lastFive: number[];
+  opponentLastFive?: number[];
   average: number;
   headImage?: string | null;
   bodyImage?: string | null;
@@ -80,6 +81,7 @@ export interface BettingPageSummary {
   teamLogos: Record<string, string>;
   playerTeamsByName: Record<string, string>;
   tryscorerFormByPlayer: Record<string, BettingTryscorerFormSummary>;
+  tryscorerLastFiveVsOpponentByMatch: Record<string, unknown>;
   tryscorerKickoffsByMatch: Record<string, string>;
   lineupPlayersByMatch: Record<string, unknown>;
   updatedAt: string | null;
@@ -2010,6 +2012,9 @@ function mapBettingTryscorerForm(value: unknown): BettingTryscorerFormSummary | 
   const lastFive = Array.isArray(row.lastFive)
     ? row.lastFive.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
     : [];
+  const opponentLastFive = Array.isArray(row.opponentLastFive)
+    ? row.opponentLastFive.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+    : undefined;
 
   return {
     player,
@@ -2018,6 +2023,7 @@ function mapBettingTryscorerForm(value: unknown): BettingTryscorerFormSummary | 
     gamesPlayed: typeof row.gamesPlayed === "number" && Number.isFinite(row.gamesPlayed) ? row.gamesPlayed : undefined,
     tries2026: typeof row.tries2026 === "number" && Number.isFinite(row.tries2026) ? row.tries2026 : undefined,
     lastFive,
+    opponentLastFive,
     average: typeof row.average === "number" && Number.isFinite(row.average) ? row.average : 0,
     headImage: typeof row.headImage === "string" ? row.headImage : null,
     bodyImage: typeof row.bodyImage === "string" ? row.bodyImage : null,
@@ -2033,6 +2039,7 @@ function emptyBettingPageSummary(): BettingPageSummary {
     teamLogos: {},
     playerTeamsByName: {},
     tryscorerFormByPlayer: {},
+    tryscorerLastFiveVsOpponentByMatch: {},
     tryscorerKickoffsByMatch: {},
     lineupPlayersByMatch: {},
     updatedAt: null,
@@ -2043,7 +2050,7 @@ export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPage
   const supabase = createServerSupabaseClient("summary");
   const { data, error } = await supabase
     .from("betting_page_summary")
-    .select("id,year,games,team_logos,player_teams_by_name,tryscorer_form_by_player,tryscorer_kickoffs_by_match,lineup_players_by_match,updated_at")
+    .select("id,year,games,team_logos,player_teams_by_name,tryscorer_form_by_player,tryscorer_last_five_vs_opponent_by_match,tryscorer_kickoffs_by_match,lineup_players_by_match,updated_at")
     .eq("id", "current")
     .maybeSingle();
 
@@ -2068,6 +2075,7 @@ export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPage
     teamLogos: asStringRecord(row.team_logos),
     playerTeamsByName: asStringRecord(row.player_teams_by_name),
     tryscorerFormByPlayer,
+    tryscorerLastFiveVsOpponentByMatch: asRecord(row.tryscorer_last_five_vs_opponent_by_match),
     tryscorerKickoffsByMatch: asStringRecord(row.tryscorer_kickoffs_by_match),
     lineupPlayersByMatch: asRecord(row.lineup_players_by_match),
     updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,

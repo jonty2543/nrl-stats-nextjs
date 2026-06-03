@@ -22,6 +22,7 @@ interface BettingDashboardProps {
   playerTeamsByName?: Record<string, string>;
   teamLogos?: Record<string, string>;
   tryscorerFormByPlayer?: Record<string, TryscorerFormSummary>;
+  tryscorerLastFiveVsOpponentByMatch?: Record<string, unknown>;
   tryscorerKickoffsByMatch?: Record<string, string>;
   lineupLinksByMatchKey?: Record<string, string>;
   marginModelArticle?: BettingArticleLink | null;
@@ -101,8 +102,25 @@ interface OutcomeRow {
 interface TryscorerFormSummary {
   player: string;
   team: string | null;
+  position?: string | null;
+  gamesPlayed?: number;
+  tries2026?: number;
   lastFive: number[];
+  opponentLastFive?: number[];
   average: number;
+  headImage?: string | null;
+  bodyImage?: string | null;
+  teamLogoUrl?: string | null;
+}
+
+interface TryscorerProfileSelection {
+  form: TryscorerFormSummary;
+  opponentLastFive: number[];
+  bestPrice: number | null;
+  bestBookies: BettingBookie[];
+  modelProbability: number | null;
+  match: string;
+  opponent: string | null;
 }
 
 interface EventGroup {
@@ -550,26 +568,252 @@ function TeamNameWithLogo({
   );
 }
 
-function TryscorerForm({ form }: { form: TryscorerFormSummary | null }) {
-  if (!form || form.lastFive.length === 0) return null;
-  const oldestToNewest = [...form.lastFive].reverse();
-  const latestIndex = oldestToNewest.length - 1;
+function modelPriceLabel(probability: number | null): string | null {
+  if (probability == null || !Number.isFinite(probability) || probability <= 0) return null;
+  return (1 / probability).toFixed(2);
+}
+
+function shortTeamName(value: string | null): string {
+  const key = normaliseTeamMatchKey(value ?? "");
+  const labels: Record<string, string> = {
+    broncos: "Broncos",
+    raiders: "Raiders",
+    bulldogs: "Bulldogs",
+    sharks: "Sharks",
+    dolphins: "Dolphins",
+    titans: "Titans",
+    "sea eagles": "Sea Eagles",
+    storm: "Storm",
+    knights: "Knights",
+    warriors: "Warriors",
+    cowboys: "Cowboys",
+    eels: "Eels",
+    panthers: "Panthers",
+    rabbitohs: "Rabbitohs",
+    dragons: "Dragons",
+    roosters: "Roosters",
+    tigers: "Tigers",
+  };
+  return labels[key] ?? value ?? "Opponent";
+}
+
+function opponentForTryscorer(match: string, team: string | null): string | null {
+  if (!team) return null;
+  const { home, away } = parseMatch(match);
+  const teamKey = normaliseLookupKey(team);
+  if (teamKey && normaliseLookupKey(home).includes(teamKey)) return away || null;
+  if (teamKey && normaliseLookupKey(away).includes(teamKey)) return home || null;
+  if (home && away) return null;
+  return null;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function tryNumberArray(value: unknown): number[] | null {
+  if (Array.isArray(value)) {
+    const values = value.filter((item): item is number => typeof item === "number" && Number.isFinite(item));
+    return values.length > 0 ? values : null;
+  }
+  if (!value || typeof value !== "object") return null;
+  const record = objectRecord(value);
+  for (const key of ["lastFive", "last_five", "tries", "values", "history"]) {
+    const nested = tryNumberArray(record[key]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function lookupTryscorerVsOpponentLastFive({
+  source,
+  date,
+  match,
+  player,
+  opponent,
+}: {
+  source: Record<string, unknown>;
+  date: string;
+  match: string;
+  player: string;
+  opponent: string | null;
+}): number[] {
+  const matchKeys = [
+    `${date}|${buildMatchGroupKey(match)}`,
+    `${date}|${normaliseLookupKey(match)}`,
+    buildMatchGroupKey(match),
+    normaliseLookupKey(match),
+    match,
+  ].filter(Boolean);
+  const playerKeys = [normaliseLookupKey(player), player].filter(Boolean);
+  const opponentKeys = [shortTeamName(opponent), normaliseLookupKey(opponent), opponent ?? ""].filter(Boolean);
+
+  const readNode = (node: unknown): number[] | null => {
+    const direct = tryNumberArray(node);
+    if (direct) return direct;
+    const record = objectRecord(node);
+    for (const playerKey of playerKeys) {
+      const playerNode = record[playerKey];
+      const playerDirect = tryNumberArray(playerNode);
+      if (playerDirect) return playerDirect;
+      const playerRecord = objectRecord(playerNode);
+      for (const opponentKey of opponentKeys) {
+        const opponentDirect = tryNumberArray(playerRecord[opponentKey]);
+        if (opponentDirect) return opponentDirect;
+      }
+    }
+    return null;
+  };
+
+  for (const matchKey of matchKeys) {
+    const byMatch = readNode(source[matchKey]);
+    if (byMatch) return byMatch.slice(0, 5);
+    for (const playerKey of playerKeys) {
+      const composite = readNode(source[`${matchKey}|${playerKey}`]);
+      if (composite) return composite.slice(0, 5);
+    }
+  }
+
+  for (const playerKey of playerKeys) {
+    const playerRecord = objectRecord(source[playerKey]);
+    for (const matchKey of matchKeys) {
+      const byPlayerMatch = readNode(playerRecord[matchKey]);
+      if (byPlayerMatch) return byPlayerMatch.slice(0, 5);
+    }
+  }
+
+  return [];
+}
+
+function PlayerProfileImage({
+  image,
+  name,
+  fallbackTeam,
+  teamLogos,
+  className = "h-8 w-8",
+}: {
+  image?: string | null;
+  name: string;
+  fallbackTeam: string | null;
+  teamLogos: Record<string, string>;
+  className?: string;
+}) {
+  if (image) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={image} alt="" className={`${className} shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover`} loading="lazy" />
+    );
+  }
+  return <TeamLogoImage teamName={fallbackTeam ?? name} teamLogos={teamLogos} className={className} />;
+}
+
+function TryFormDots({ values }: { values: number[] }) {
+  if (values.length === 0) return null;
   return (
-    <div className="mt-1 flex flex-nowrap items-center gap-1 whitespace-nowrap text-[10px] font-semibold">
-      <span className="mr-1 font-medium text-nrl-muted">Last 5:</span>
-      {oldestToNewest.map((tries, index) => (
+    <div className="flex items-center gap-1">
+      {[...values].reverse().map((tries, index) => (
         <span
           key={`${index}-${tries}`}
-          className={`inline-flex h-5 min-w-7 items-center justify-center rounded-md px-2 ${
+          className={`grid h-5 w-5 place-items-center rounded-full border text-[9px] font-black ${
             tries > 0
-              ? "bg-emerald-500/15 text-emerald-300"
-              : "bg-red-500/12 text-red-300"
-          } ${index === latestIndex ? (tries > 0 ? "border border-emerald-300" : "border border-red-300") : "border border-transparent"}`}
+              ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-200"
+              : "border-red-300/45 bg-red-400/12 text-red-200"
+          }`}
+          title={tries > 0 ? `${tries} ${tries === 1 ? "try" : "tries"}` : "No try"}
         >
           {tries}
         </span>
       ))}
-      <span className="ml-1 text-nrl-muted">Avg {form.average.toFixed(1)}</span>
+    </div>
+  );
+}
+
+function TryscorerProfileDialog({ selection, onClose }: { selection: TryscorerProfileSelection | null; onClose: () => void }) {
+  if (!selection) return null;
+  const { form, opponentLastFive, bestPrice, bestBookies, modelProbability, match, opponent } = selection;
+  const image = form.headImage ?? form.bodyImage ?? null;
+  const l5Scored = form.lastFive.filter((tries) => tries > 0).length;
+  const l5Tries = form.lastFive.reduce((total, tries) => total + tries, 0);
+  const modelPrice = modelPriceLabel(modelProbability);
+  const modelPriceValue = modelPrice == null ? null : Number(modelPrice);
+  const modelPriceClass =
+    modelPriceValue == null || bestPrice == null
+      ? "text-nrl-muted"
+      : modelPriceValue > bestPrice
+        ? "text-red-300/80"
+        : "text-emerald-300/85";
+  const opponentLabel = shortTeamName(opponent);
+
+  return (
+    <div className="fixed inset-0 z-[140] grid place-items-center bg-black/75 p-4" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="w-full max-w-lg overflow-hidden rounded-lg border border-blue-300/20 bg-[#071024] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-blue-300/15 bg-[#0b1630] px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={image} alt="" className="h-14 w-14 rounded-full border border-white/10 bg-nrl-panel object-cover" />
+            ) : (
+              <div className="grid h-14 w-14 place-items-center rounded-full border border-white/10 bg-nrl-panel text-sm font-black text-nrl-muted">
+                {form.player.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="truncate text-base font-bold text-nrl-text">{form.player}</div>
+              <div className="mt-0.5 text-xs text-nrl-muted">{[form.team, form.position].filter(Boolean).join(" · ") || match}</div>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/10 bg-white/5 text-lg font-bold leading-none text-nrl-muted transition-colors hover:text-nrl-text" aria-label="Close try form">
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-4 p-4">
+          <div className="grid grid-cols-4 gap-4 border-b border-blue-300/10 pb-4">
+            <div>
+              <div className="text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">Last 5</div>
+              <div className="mt-1 text-xl font-black text-emerald-300">{l5Tries}</div>
+              <div className="text-[10px] font-semibold text-nrl-muted">{l5Scored}/{form.lastFive.length} games</div>
+            </div>
+            <div>
+              <div className="text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">Season</div>
+              <div className="mt-1 text-xl font-black text-nrl-text">{form.tries2026 ?? "-"}</div>
+              <div className="text-[10px] font-semibold text-nrl-muted">{form.gamesPlayed ?? "-"} games</div>
+            </div>
+            <div>
+              <div className="text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">Best</div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xl font-black text-nrl-text">
+                <span>{formatPrice(bestPrice)}</span>
+                {bestBookies[0] ? <BookieLogo bookie={bestBookies[0]} compact /> : null}
+              </div>
+              <div className="text-[10px] font-semibold text-nrl-muted">anytime</div>
+            </div>
+            <div>
+              <div className="text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">Model</div>
+              <div className={`mt-1 text-xl font-black ${modelPriceClass}`}>{modelPrice ?? "-"}</div>
+              <div className="text-[10px] font-semibold text-nrl-muted">anytime</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-nrl-muted">Recent tries</div>
+              <TryFormDots values={form.lastFive} />
+            </div>
+            {opponent && opponentLastFive.length > 0 ? (
+              <div>
+                <div className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-nrl-muted">Vs {opponentLabel}</div>
+                <TryFormDots values={opponentLastFive} />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.08em]">
+            {form.position ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Starts: {form.position}</span> : null}
+            {form.gamesPlayed != null ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Games: {form.gamesPlayed}</span> : null}
+            <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Avg tries: {form.average.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1286,6 +1530,7 @@ export function BettingDashboard({
   playerTeamsByName: playerTeamsByNameProp = {},
   teamLogos = {},
   tryscorerFormByPlayer = {},
+  tryscorerLastFiveVsOpponentByMatch = {},
   tryscorerKickoffsByMatch = {},
   lineupLinksByMatchKey = {},
   marginModelArticle = null,
@@ -2727,6 +2972,7 @@ export function BettingDashboard({
             playerTeamsByName={playerTeamsByName}
             teamLogos={teamLogos}
             tryscorerFormByPlayer={tryscorerFormByPlayer}
+            tryscorerLastFiveVsOpponentByMatch={tryscorerLastFiveVsOpponentByMatch}
             tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
             lineupLinksByMatchKey={lineupLinksByMatchKey}
             market={selectedMarket}
@@ -3464,6 +3710,7 @@ function MarketSection({
   playerTeamsByName,
   teamLogos,
   tryscorerFormByPlayer,
+  tryscorerLastFiveVsOpponentByMatch,
   tryscorerKickoffsByMatch,
   lineupLinksByMatchKey,
   market,
@@ -3484,6 +3731,7 @@ function MarketSection({
   playerTeamsByName: Map<string, string>;
   teamLogos: Record<string, string>;
   tryscorerFormByPlayer: Record<string, TryscorerFormSummary>;
+  tryscorerLastFiveVsOpponentByMatch: Record<string, unknown>;
   tryscorerKickoffsByMatch: Record<string, string>;
   lineupLinksByMatchKey: Record<string, string>;
   market: BettingMarket;
@@ -3494,6 +3742,7 @@ function MarketSection({
   const [tryscorerValueByGroup, setTryscorerValueByGroup] = useState<Record<string, number>>({});
   const [collapsedTryscorerGroups, setCollapsedTryscorerGroups] = useState<Record<string, boolean>>({});
   const [mobileBetSlip, setMobileBetSlip] = useState<MobileBetSlip | null>(null);
+  const [selectedTryscorerProfile, setSelectedTryscorerProfile] = useState<TryscorerProfileSelection | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -3546,6 +3795,7 @@ function MarketSection({
 
   return (
     <div className="space-y-4">
+      <TryscorerProfileDialog selection={selectedTryscorerProfile} onClose={() => setSelectedTryscorerProfile(null)} />
       {showGameJumpSidebar ? <GameJumpSidebar groups={activeGroups} teamLogos={teamLogos} /> : null}
       <div className="space-y-7">
         {[...groupsByDate.entries()].map(([date, dateGroups]) => (
@@ -3715,12 +3965,54 @@ function MarketSection({
                       ? tryscorerForm?.team ?? playerTeamsByName.get(normaliseLookupKey(row.result)) ?? null
                       : null;
                     const outcomeLogoTeam = group.market === "Tryscorer" ? playerTeam : row.result;
+                    const tryscorerOpponent = group.market === "Tryscorer" ? opponentForTryscorer(group.match, playerTeam) : null;
+                    const opponentLastFive = group.market === "Tryscorer"
+                      ? lookupTryscorerVsOpponentLastFive({
+                          source: tryscorerLastFiveVsOpponentByMatch,
+                          date: group.date,
+                          match: group.match,
+                          player: row.result,
+                          opponent: tryscorerOpponent,
+                        })
+                      : [];
+                    const openTryscorerProfile = tryscorerForm
+                      ? () => setSelectedTryscorerProfile({
+                          form: tryscorerForm,
+                          opponentLastFive,
+                          bestPrice: row.bestPriceComputed,
+                          bestBookies: row.bestBookiesComputed,
+                          modelProbability: canAccessPremium ? modelProbability : null,
+                          match: group.match,
+                          opponent: tryscorerOpponent,
+                        })
+                      : undefined;
 
                     return (
-                      <div key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`} className="rounded-lg border border-nrl-border/70 bg-nrl-panel-2/45 px-3 py-4 shadow-[0_10px_24px_rgba(2,6,23,0.12)]">
+                      <div
+                        key={`${group.key}-mobile-${row.result}-${row.bestValueComputed ?? ""}`}
+                        role={openTryscorerProfile ? "button" : undefined}
+                        tabIndex={openTryscorerProfile ? 0 : undefined}
+                        onClick={openTryscorerProfile}
+                        onKeyDown={(event) => {
+                          if (!openTryscorerProfile || (event.key !== "Enter" && event.key !== " ")) return;
+                          event.preventDefault();
+                          openTryscorerProfile();
+                        }}
+                        className={`rounded-lg border border-nrl-border/70 bg-nrl-panel-2/45 px-3 py-4 shadow-[0_10px_24px_rgba(2,6,23,0.12)] ${openTryscorerProfile ? "cursor-pointer transition-colors hover:border-emerald-300/35" : ""}`}
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex min-w-0 flex-1 items-start gap-1.5">
-                            <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} className="mt-0.5 h-4 w-4" />
+                            {group.market === "Tryscorer" ? (
+                              <PlayerProfileImage
+                                image={tryscorerForm?.headImage ?? tryscorerForm?.bodyImage ?? null}
+                                name={row.result}
+                                fallbackTeam={outcomeLogoTeam}
+                                teamLogos={teamLogos}
+                                className="mt-0.5 h-8 w-8"
+                              />
+                            ) : (
+                              <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} className="mt-0.5 h-4 w-4" />
+                            )}
                             <div className="min-w-0 flex-1">
                               <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-y-2 text-xs font-semibold text-nrl-text">
                                 <span className="min-w-0 truncate pr-1">{row.result}</span>
@@ -3743,8 +4035,21 @@ function MarketSection({
                                     </span>
                                   ) : null}
                                 </div>
+                                {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
+                                  <div className="grid grid-cols-2 gap-2 pt-1">
+                                    <div>
+                                      <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Last 5</div>
+                                      <TryFormDots values={tryscorerForm.lastFive} />
+                                    </div>
+                                    {tryscorerOpponent && opponentLastFive.length > 0 ? (
+                                      <div>
+                                        <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Vs {shortTeamName(tryscorerOpponent)}</div>
+                                        <TryFormDots values={opponentLastFive} />
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : null}
                               </div>
-                              <TryscorerForm form={tryscorerForm} />
                             </div>
                           </div>
                           {canAccessPremium ? (
@@ -3752,7 +4057,8 @@ function MarketSection({
                               type="button"
                               disabled={!canOpenMobileBet}
                               aria-label="Add bet"
-                              onClick={() => {
+                              onClick={(event) => {
+                                event.stopPropagation();
                                 if (!canOpenMobileBet || oddsValue == null) return;
                                 setMobileBetSlip({
                                   key: betRowKey,
@@ -3919,15 +4225,62 @@ function MarketSection({
                           ? tryscorerForm?.team ?? playerTeamsByName.get(normaliseLookupKey(row.result)) ?? null
                           : null;
                         const outcomeLogoTeam = group.market === "Tryscorer" ? playerTeam : row.result;
+                        const tryscorerOpponent = group.market === "Tryscorer" ? opponentForTryscorer(group.match, playerTeam) : null;
+                        const opponentLastFive = group.market === "Tryscorer"
+                          ? lookupTryscorerVsOpponentLastFive({
+                              source: tryscorerLastFiveVsOpponentByMatch,
+                              date: group.date,
+                              match: group.match,
+                              player: row.result,
+                              opponent: tryscorerOpponent,
+                            })
+                          : [];
+                        const openTryscorerProfile = tryscorerForm
+                          ? () => setSelectedTryscorerProfile({
+                              form: tryscorerForm,
+                              opponentLastFive,
+                              bestPrice: row.bestPriceComputed,
+                              bestBookies: row.bestBookiesComputed,
+                              modelProbability: canAccessPremium ? modelProbability : null,
+                              match: group.match,
+                              opponent: tryscorerOpponent,
+                            })
+                          : undefined;
 
                         return (
-                          <tr key={`${group.key}-${row.result}-${row.bestValueComputed ?? ""}`} className="border-b border-nrl-border/50">
+                          <tr
+                            key={`${group.key}-${row.result}-${row.bestValueComputed ?? ""}`}
+                            onClick={openTryscorerProfile}
+                            className={`border-b border-nrl-border/50 ${openTryscorerProfile ? "cursor-pointer transition-colors hover:bg-emerald-400/5" : ""}`}
+                          >
                             <td className="py-2 pr-3 font-medium text-nrl-text">
                               <span className="inline-flex min-w-0 items-center gap-2">
-                                <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} />
+                                {group.market === "Tryscorer" ? (
+                                  <PlayerProfileImage
+                                    image={tryscorerForm?.headImage ?? tryscorerForm?.bodyImage ?? null}
+                                    name={outcomeLabel}
+                                    fallbackTeam={outcomeLogoTeam}
+                                    teamLogos={teamLogos}
+                                  />
+                                ) : (
+                                  <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} />
+                                )}
                                 <span className="min-w-0">
                                   <span className="block whitespace-nowrap">{outcomeLabel}</span>
-                                  <TryscorerForm form={tryscorerForm} />
+                                  {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
+                                    <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
+                                      <div>
+                                        <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Last 5</div>
+                                        <TryFormDots values={tryscorerForm.lastFive} />
+                                      </div>
+                                      {tryscorerOpponent && opponentLastFive.length > 0 ? (
+                                        <div>
+                                          <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Vs {shortTeamName(tryscorerOpponent)}</div>
+                                          <TryFormDots values={opponentLastFive} />
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
                                 </span>
                               </span>
                             </td>
@@ -3999,6 +4352,7 @@ function MarketSection({
                                 min={1.01}
                                 step={0.01}
                                 value={oddsValue == null || !Number.isFinite(oddsValue) ? "" : oddsValue}
+                                onClick={(event) => event.stopPropagation()}
                                 onChange={(event) => onOddsOverride(betRowKey, Number(event.target.value))}
                                 onBlur={(event) => {
                                   const nextOdds = Number(event.target.value);
@@ -4014,6 +4368,7 @@ function MarketSection({
                                 min={0}
                                 step={1}
                                 value={Number.isFinite(stakeValue) ? stakeValue : 0}
+                                onClick={(event) => event.stopPropagation()}
                                 onChange={(event) => onStakeOverride(betRowKey, Math.max(0, Number(event.target.value) || 0))}
                                 className="w-20 rounded border border-nrl-border bg-nrl-panel-2 px-2 py-1 text-[11px] text-nrl-text outline-none focus:border-emerald-300/40"
                               />
@@ -4023,7 +4378,8 @@ function MarketSection({
                                 <button
                                   type="button"
                                   disabled={!canPlaceBet}
-                                  onClick={() => {
+                                  onClick={(event) => {
+                                    event.stopPropagation();
                                     if (!canPlaceBet || oddsValue == null) return;
                                     setMobileBetSlip({
                                       key: betRowKey,

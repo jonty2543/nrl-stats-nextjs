@@ -154,11 +154,11 @@ export function PlayerComments({ playerId, playerSlug, playerName }: PlayerComme
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel-2">
+    <div className="overflow-hidden rounded-xl border border-nrl-border bg-[#111832]">
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="flex w-full items-center justify-between gap-3 bg-nrl-panel-2 px-4 py-3 text-left transition-colors hover:bg-nrl-panel-2/80"
+        className="flex w-full items-center justify-between gap-3 bg-[#111832] px-4 py-3 text-left transition-colors hover:bg-[#17213d]"
         aria-expanded={isOpen}
       >
         <div className="min-w-0">
@@ -181,7 +181,7 @@ export function PlayerComments({ playerId, playerSlug, playerName }: PlayerComme
                 onChange={(event) => setDraft(event.target.value)}
                 maxLength={MAX_COMMENT_LENGTH}
                 rows={3}
-                className="w-full resize-y rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent"
+                className="w-full resize-y rounded-md border border-nrl-border bg-[#0f162d] px-3 py-2 text-sm text-nrl-text outline-none transition-colors placeholder:text-nrl-muted focus:border-nrl-accent"
                 placeholder="Add a comment..."
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -199,7 +199,7 @@ export function PlayerComments({ playerId, playerSlug, playerName }: PlayerComme
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-nrl-border bg-[#0f162d] p-3">
               <div className="text-sm text-nrl-muted">Sign in to post a comment.</div>
               <SignInButton mode="modal">
                 <button
@@ -225,7 +225,7 @@ export function PlayerComments({ playerId, playerSlug, playerName }: PlayerComme
               <div className="text-sm text-nrl-muted">No comments yet.</div>
             ) : (
               comments.map((comment) => (
-                <div key={comment.id} className="rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                <div key={comment.id} className="rounded-lg border border-nrl-border bg-[#0f162d] p-3">
                   <div className="flex items-start gap-3">
                     <div
                       className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-nrl-border bg-nrl-panel bg-cover bg-center text-xs font-bold text-nrl-muted"

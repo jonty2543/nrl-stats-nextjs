@@ -68,7 +68,7 @@ const PlayerComments = dynamic(
   () => import("@/components/fantasy/player-comments").then((mod) => mod.PlayerComments),
   {
     loading: () => (
-      <div className="rounded-xl border border-nrl-border bg-nrl-panel-2 p-4 text-xs text-nrl-muted">
+      <div className="rounded-xl border border-nrl-border bg-[#111832] p-4 text-xs text-nrl-muted">
         Loading comments…
       </div>
     ),
@@ -1598,7 +1598,7 @@ function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
   if (rows.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-nrl-border bg-nrl-panel-2 p-4">
+    <div className="rounded-xl border border-nrl-border bg-[#111832] p-4">
       <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-300">
         <span aria-hidden="true">⚠</span>
         <span>Relevant Outs</span>
@@ -1607,7 +1607,7 @@ function RelevantOutsList({ rows }: { rows: CasualtyWardRecord[] }) {
         {rows.map((row, index) => (
           <div
             key={`${row.player}-${row.position ?? "position"}-${index}`}
-            className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-sm text-nrl-text"
+            className="rounded-lg border border-nrl-border bg-[#0f162d] px-3 py-2 text-sm text-nrl-text"
           >
             {row.player}: {row.injury ?? "TBC"}, return {row.returnDate ?? "TBC"}
           </div>
@@ -2599,7 +2599,7 @@ function MetricCard({
 
   return (
     <div
-      className={`h-full rounded-lg border border-nrl-border bg-[#1b2444] ${compact
+      className={`h-full rounded-lg border border-nrl-border bg-[#111832] ${compact
         ? mobileTight
           ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
           : "px-2 py-2 sm:px-2.5 sm:py-2.5 xl:px-2.5 xl:py-2.5"
@@ -5510,7 +5510,7 @@ export function FantasyDashboard({
         <section ref={playerDetailsRef} id="fantasy-player-details" className="scroll-mt-24">
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_252px] xl:items-stretch">
             <div className="flex min-w-0 flex-col gap-4">
-              <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel-2 p-3">
+              <div className="relative overflow-hidden rounded-xl border border-nrl-border bg-[#111832] p-3">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_28%,rgba(71,255,182,0.16),transparent_30%),radial-gradient(circle_at_82%_76%,rgba(129,92,255,0.18),transparent_34%),linear-gradient(135deg,rgba(13,21,44,0.18),rgba(13,21,44,0))]" />
                 <div className="pointer-events-none absolute left-[10%] top-[18%] h-28 w-28 rounded-full bg-emerald-300/8 blur-3xl" />
                 <div className="pointer-events-none absolute bottom-[8%] right-[14%] h-32 w-32 rounded-full bg-violet-400/10 blur-3xl" />
@@ -5524,7 +5524,7 @@ export function FantasyDashboard({
                         <span className="rounded-md bg-nrl-accent/15 px-1 py-0.5 text-[8px] font-semibold text-nrl-accent sm:px-2 sm:text-xs">
                           {formatPrice(selectedDisplayFantasyPlayer?.cost ?? null)}
                         </span>
-                        <span className="rounded-md border border-nrl-border bg-nrl-panel-2 px-1 py-0.5 text-[8px] text-nrl-muted sm:px-2 sm:text-xs">
+                        <span className="rounded-md border border-nrl-border bg-[#0f162d] px-1 py-0.5 text-[8px] text-nrl-muted sm:px-2 sm:text-xs">
                           {selectedDisplayFantasyPlayer?.positionLabel ?? selectedFantasyPlayer.positionLabel}
                         </span>
                       </div>
@@ -5625,7 +5625,7 @@ export function FantasyDashboard({
 
               <RelevantOutsList rows={selectedRelevantOuts} />
 
-              <div className="rounded-xl border border-nrl-border bg-nrl-panel-2 p-4">
+              <div className="rounded-xl border border-nrl-border bg-[#111832] p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Filters</div>
                   <div className="text-[10px] text-nrl-muted">Applies to player game log and filtered analysis</div>
@@ -5732,7 +5732,7 @@ export function FantasyDashboard({
               </div>
 
               <div
-                className={`order-6 relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-nrl-panel-2"
+                className={`order-6 relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-[#111832]"
                   }`}
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -5855,7 +5855,7 @@ export function FantasyDashboard({
                 </div>
 
                 {analysisLocked && lockedPreviewPlot ? (
-                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-[#0f162d] p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -6021,14 +6021,14 @@ export function FantasyDashboard({
                   selectedProjectionDistribution ? (
                     <ProjectionRangePlot data={selectedProjectionDistribution} />
                   ) : (
-                    <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3 text-xs text-nrl-muted">
+                    <div className="mt-3 rounded-lg border border-nrl-border bg-[#0f162d] p-3 text-xs text-nrl-muted">
                       Projection range is unavailable for this player.
                     </div>
                   )
                 ) : null}
 
                 {showRollingAveragePlot && trendFilteredRows.length > 0 ? (
-                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-[#0f162d] p-3">
                     <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
                         Rolling Average Plot
@@ -6081,7 +6081,7 @@ export function FantasyDashboard({
                 ) : null}
 
                 {showOpponentHeatmap ? (
-                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-[#0f162d] p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
                         Average Fantasy vs Opponent
@@ -6160,7 +6160,7 @@ export function FantasyDashboard({
                 ) : null}
 
                 {showFantasyBoxPlot ? (
-                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-[#0f162d] p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
                         Fantasy Score Box Plot
@@ -6293,7 +6293,7 @@ export function FantasyDashboard({
                 ) : null}
 
                 {showStatVsFantasyPlot ? (
-                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-[#0f162d] p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
                         Stat vs Fantasy
@@ -6318,7 +6318,7 @@ export function FantasyDashboard({
                 ) : null}
 
                 {showWithWithoutPlot && hasLoginAccess && teammate !== "None" ? (
-                  <div className="mt-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-3">
+                  <div className="mt-3 rounded-lg border border-nrl-border bg-[#0f162d] p-3">
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
                         With vs Without {teammate}
@@ -6347,8 +6347,8 @@ export function FantasyDashboard({
 
               </div>
 
-              <div className="order-5 overflow-hidden rounded-xl border border-nrl-border bg-nrl-panel-2">
-                <div className="border-b border-nrl-border bg-nrl-panel-2 px-4 py-3">
+              <div className="order-5 overflow-hidden rounded-xl border border-nrl-border bg-[#111832]">
+                <div className="border-b border-nrl-border bg-[#0f162d] px-4 py-3">
                   <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
                     Player Game Log
                   </div>
@@ -6420,7 +6420,7 @@ export function FantasyDashboard({
                         </tr>
                       ) : (
                         <>
-                          <tr className="border-b border-nrl-accent/25 bg-nrl-panel-2/60">
+                          <tr className="border-b border-nrl-accent/25 bg-[#0f162d]/70">
                             {GAME_LOG_COLUMNS.map((column, index) => {
                               const avg = gameLogAverages[column.key] ?? null
                               const display =
@@ -6568,7 +6568,7 @@ export function FantasyDashboard({
                   ) : null}
                 </div>
                 {shouldCollapseGameLog && isGameLogExpanded ? (
-                  <div className="flex justify-center border-t border-nrl-border bg-nrl-panel-2/45 py-2">
+                  <div className="flex justify-center border-t border-nrl-border bg-[#0f162d]/70 py-2">
                     <button
                       type="button"
                       onClick={() => setIsGameLogExpanded(false)}

@@ -647,7 +647,8 @@ function addPlayerTryMarketTrendInsights(
   insights: CandidateInsight[],
   match: LineupMatch,
   tryscorerOdds: Record<string, LineupTryscorerOdds>,
-  playerAverages?: PlayerAverages
+  playerAverages?: PlayerAverages,
+  playerTryHistory?: PlayerTryHistory
 ) {
   if (!playerAverages) return
 
@@ -656,6 +657,7 @@ function addPlayerTryMarketTrendInsights(
     .map((entry) => ({
       ...entry,
       tries: averageValue(playerAverages, entry.player, "Tries"),
+      tryGames: playerTryHistory?.[normaliseKey(entry.player.player)]?.length ?? 0,
       odds: tryscorerOdds[normaliseKey(entry.player.player)] ?? null,
     }))
     .map((entry) => {
@@ -669,11 +671,12 @@ function addPlayerTryMarketTrendInsights(
       team: LineupTeam | null
       slot: InsightSlot | null
       tries: number
+      tryGames: number
       odds: LineupTryscorerOdds
       impliedProbability: number
       valueEdge: number
     } => {
-      return entry.tries != null && entry.odds?.bestPrice != null && entry.impliedProbability != null && entry.valueEdge != null && entry.valueEdge >= 0.1
+      return entry.tryGames >= 5 && entry.tries != null && entry.odds?.bestPrice != null && entry.impliedProbability != null && entry.valueEdge != null && entry.valueEdge >= 0.1
     })
     .sort((a, b) => {
       return b.valueEdge - a.valueEdge
@@ -818,7 +821,7 @@ export function generateMatchupInsights({
   addPlayerTryRunInsights(insights, match, playerTryHistory)
   addMatchTotalPointsTrendInsight(insights, match)
   addTeamPointsTrendInsights(insights, match)
-  addPlayerTryMarketTrendInsights(insights, match, tryscorerOdds, playerAverages)
+  addPlayerTryMarketTrendInsights(insights, match, tryscorerOdds, playerAverages, playerTryHistory)
   addTryscorerInsight(insights, match, tryscorerOdds)
   addFallbackContextInsights(insights, match)
 

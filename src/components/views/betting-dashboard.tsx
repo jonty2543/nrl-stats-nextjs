@@ -154,6 +154,14 @@ interface BestBetCandidate {
   tags: string[];
 }
 
+interface BettingMarketJumpTarget {
+  id: number;
+  market: BettingMarket;
+  date: string;
+  match: string;
+  lineValue: number | null;
+}
+
 interface ArbitrageStake {
   selection: string;
   selectionLabel: string;
@@ -1571,6 +1579,7 @@ export function BettingDashboard({
   const [manualStatus, setManualStatus] = useState<TrackedBetStatus>("pending");
   const [manualError, setManualError] = useState<string | null>(null);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
+  const [marketJumpTarget, setMarketJumpTarget] = useState<BettingMarketJumpTarget | null>(null);
   const playerTeamsByName = useMemo(() => {
     const out = new Map<string, string>();
     for (const [key, team] of Object.entries(playerTeamsByNameProp)) {
@@ -1647,6 +1656,17 @@ export function BettingDashboard({
       }
       setSelectedMarket(value);
     }
+  };
+
+  const handleBestBetMarketOpen = (bet: BestBetCandidate) => {
+    setSelectedMarket(bet.market);
+    setMarketJumpTarget({
+      id: Date.now(),
+      market: bet.market,
+      date: bet.date,
+      match: bet.match,
+      lineValue: bet.lineValue,
+    });
   };
 
   useEffect(() => {
@@ -2287,6 +2307,7 @@ export function BettingDashboard({
         canAccessPremium={hasPremiumBettingAccess}
         teamLogos={teamLogos}
         tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
+        onOpenMarket={handleBestBetMarketOpen}
         onAddBet={handleAddBet}
       />
 
@@ -2927,27 +2948,7 @@ export function BettingDashboard({
       ) : null}
 
       <div className="space-y-7">
-        <div className="flex flex-wrap gap-2">
-          {MARKET_TABS.map((tab) => {
-            const active = tab === selectedMarket;
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => handleMarketChange(tab)}
-                className={`rounded-md border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
-                  active
-                    ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
-                    : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
-                }`}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <span>{tab}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <MarketTabsRail selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
         <section className="min-w-0">
           <MarketSection
             groups={selectedMarketGroups}
@@ -2967,6 +2968,7 @@ export function BettingDashboard({
             tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
             lineupLinksByMatchKey={lineupLinksByMatchKey}
             market={selectedMarket}
+            jumpTarget={marketJumpTarget}
             onStakeOverride={handleStakeOverride}
             onOddsOverride={handleOddsOverride}
             onAddBet={handleAddBet}
@@ -2983,6 +2985,7 @@ function BestBetsHero({
   canAccessPremium,
   teamLogos,
   tryscorerKickoffsByMatch,
+  onOpenMarket,
   onAddBet,
 }: {
   modelBets: BestBetCandidate[];
@@ -2990,6 +2993,7 @@ function BestBetsHero({
   canAccessPremium: boolean;
   teamLogos: Record<string, string>;
   tryscorerKickoffsByMatch: Record<string, string>;
+  onOpenMarket: (bet: BestBetCandidate) => void;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
@@ -3161,7 +3165,10 @@ function BestBetsHero({
         </div>
       ) : featuredItem ? (
         <div className="space-y-3 p-3">
-          <article className={`rounded-lg border bg-[#14213b] px-3 py-3 sm:px-4 ${activeTheme.activeBorder} ${activeTheme.activeShadow}`}>
+          <article
+            onClick={!isArbitrage ? () => onOpenMarket(featuredItem as BestBetCandidate) : undefined}
+            className={`rounded-lg border bg-[#14213b] px-3 py-3 sm:px-4 ${activeTheme.activeBorder} ${activeTheme.activeShadow} ${!isArbitrage ? "cursor-pointer transition-colors hover:bg-[#172743]" : ""}`}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -3305,7 +3312,8 @@ function BestBetsHero({
                   <div className="mt-3">
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation();
                         const bet = featuredItem as BestBetCandidate;
                         setBestBetSlip({
                           bet,
@@ -3562,6 +3570,101 @@ function gameJumpAnchorId(group: EventGroup): string {
   return `betting-game-${normaliseLookupKey(`${group.date} ${group.match} ${group.market}`).replace(/\s+/g, "-")}`;
 }
 
+function MarketTabsRail({
+  selectedMarket,
+  onMarketChange,
+}: {
+  selectedMarket: BettingMarket;
+  onMarketChange: (market: BettingMarket) => void;
+}) {
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const [pinState, setPinState] = useState({
+    pinned: false,
+    height: 0,
+    left: 0,
+    top: 0,
+    width: 0,
+  });
+
+  useEffect(() => {
+    const updatePinState = () => {
+      const sentinel = sentinelRef.current;
+      const rail = railRef.current;
+      const container = sentinel?.parentElement;
+      if (!sentinel || !rail || !container) return;
+
+      const headerBottom = document.querySelector("header")?.getBoundingClientRect().bottom ?? 0;
+      const top = Math.max(0, Math.round(headerBottom));
+      const containerRect = container.getBoundingClientRect();
+      const pinned = sentinel.getBoundingClientRect().top <= top;
+      const next = {
+        pinned,
+        height: rail.offsetHeight,
+        left: containerRect.left,
+        top,
+        width: containerRect.width,
+      };
+
+      setPinState((current) => (
+        current.pinned === next.pinned &&
+        current.height === next.height &&
+        current.left === next.left &&
+        current.top === next.top &&
+        current.width === next.width
+          ? current
+          : next
+      ));
+    };
+
+    updatePinState();
+    window.addEventListener("scroll", updatePinState, { passive: true });
+    window.addEventListener("resize", updatePinState);
+    return () => {
+      window.removeEventListener("scroll", updatePinState);
+      window.removeEventListener("resize", updatePinState);
+    };
+  }, []);
+
+  return (
+    <div className="min-w-0">
+      <div ref={sentinelRef} aria-hidden="true" className="h-0" />
+      {pinState.pinned ? <div aria-hidden="true" style={{ height: pinState.height }} /> : null}
+      <div
+        ref={railRef}
+        data-betting-market-tabs
+        className="z-50 flex flex-wrap gap-2 rounded-xl border border-nrl-border bg-nrl-panel/95 p-1.5 shadow-[0_10px_26px_rgba(0,0,0,0.22)] backdrop-blur"
+        style={pinState.pinned ? {
+          left: pinState.left,
+          position: "fixed",
+          top: pinState.top,
+          width: pinState.width,
+        } : undefined}
+      >
+        {MARKET_TABS.map((tab) => {
+          const active = tab === selectedMarket;
+          return (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => onMarketChange(tab)}
+              className={`rounded-md border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${
+                active
+                  ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
+                  : "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
+              }`}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span>{tab}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GameJumpSidebar({
   groups,
   teamLogos,
@@ -3597,7 +3700,8 @@ function GameJumpSidebar({
       if (!sentinel || !rail || !container) return;
 
       const headerBottom = document.querySelector("header")?.getBoundingClientRect().bottom ?? 0;
-      const top = Math.max(0, Math.round(headerBottom));
+      const marketTabsBottom = document.querySelector("[data-betting-market-tabs]")?.getBoundingClientRect().bottom ?? 0;
+      const top = Math.max(0, Math.round(Math.max(headerBottom, marketTabsBottom)));
       const containerRect = container.getBoundingClientRect();
       const pinned = sentinel.getBoundingClientRect().top <= top;
       const next = {
@@ -3701,6 +3805,7 @@ function MarketSection({
   tryscorerKickoffsByMatch,
   lineupLinksByMatchKey,
   market,
+  jumpTarget,
   onStakeOverride,
   onOddsOverride,
   onAddBet,
@@ -3722,6 +3827,7 @@ function MarketSection({
   tryscorerKickoffsByMatch: Record<string, string>;
   lineupLinksByMatchKey: Record<string, string>;
   market: BettingMarket;
+  jumpTarget: BettingMarketJumpTarget | null;
   onStakeOverride: (key: string, value: number) => void;
   onOddsOverride: (key: string, value: number) => void;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
@@ -3731,6 +3837,7 @@ function MarketSection({
   const [mobileBetSlip, setMobileBetSlip] = useState<MobileBetSlip | null>(null);
   const [selectedTryscorerProfile, setSelectedTryscorerProfile] = useState<TryscorerProfileSelection | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const processedMarketJumpIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNowMs(Date.now()), 30_000);
@@ -3750,6 +3857,38 @@ function MarketSection({
       return !Number.isFinite(kickoffMs) || nowMs < kickoffMs + 5 * 60 * 1000;
     })
     .sort((a, b) => compareGroupsByKickoff(a, b, tryscorerKickoffsByMatch));
+
+  useEffect(() => {
+    if (!jumpTarget || jumpTarget.market !== market) return;
+    if (processedMarketJumpIdRef.current === jumpTarget.id) return;
+
+    const targetGroup = activeGroups.find((group) =>
+      group.market === jumpTarget.market &&
+      group.date === jumpTarget.date &&
+      buildMatchGroupKey(group.match) === buildMatchGroupKey(jumpTarget.match)
+    );
+    if (!targetGroup) return;
+    processedMarketJumpIdRef.current = jumpTarget.id;
+
+    window.requestAnimationFrame(() => {
+      if (market === "Tryscorer" && jumpTarget.lineValue != null) {
+        setTryscorerValueByGroup((current) =>
+          current[targetGroup.key] === jumpTarget.lineValue
+            ? current
+            : { ...current, [targetGroup.key]: jumpTarget.lineValue ?? 1 }
+        );
+        setCollapsedTryscorerGroups((current) =>
+          current[targetGroup.key] === false
+            ? current
+            : { ...current, [targetGroup.key]: false }
+        );
+      }
+
+      window.requestAnimationFrame(() => {
+        document.getElementById(gameJumpAnchorId(targetGroup))?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }, [activeGroups, jumpTarget, market]);
 
   if (activeGroups.length === 0) {
     return (

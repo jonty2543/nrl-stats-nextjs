@@ -146,14 +146,6 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
             <div className="inline-flex rounded-full border border-nrl-border bg-nrl-panel/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-nrl-muted">
               Billing
             </div>
-            <h1 className="mt-4 text-3xl font-bold tracking-tight text-nrl-text sm:text-5xl">
-              Simple, transparent pricing
-            </h1>
-            <p className="mx-auto mt-4 max-w-3xl text-sm leading-6 text-nrl-muted sm:text-base">
-              Choose the tier that matches how deep you want to go. Free covers the core product.
-              Pro unlocks paid stats access plus higher AI usage and full stats history.
-              Premium adds deeper AI reasoning plus premium-only betting model info, line odds, and total odds.
-            </p>
           </div>
 
           <div className="mt-8 pb-2">
@@ -202,11 +194,11 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 tone="featured"
                 features={[
                   "Everything in Free",
-                  formatAiQuota("pro"),
                   "Fantasy projections and breakevens",
                   "All plots unlocked in Fantasy and Stats",
                   "Full stats years",
                   "New features as they release",
+                  formatAiQuota("pro"),
                 ]}
                 cta={
                   currentPlan === "pro" ? (
@@ -237,11 +229,11 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 description="The future top tier above Pro for premium-only capabilities."
                 features={[
                   "Everything in Pro",
-                  formatAiQuota("premium"),
-                  "Betting model predictions, line and total odds",
+                  "Betting model predictions for H2H, line, total and tryscorers",
                   "Bet tracker with history",
-                  "Discord alerting",
+                  "Full matchup insights",
                   "New features as they release",
+                  formatAiQuota("premium"),
                 ]}
                 cta={
                   <div className="flex h-11 items-center justify-center rounded-xl border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted">

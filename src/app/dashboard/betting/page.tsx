@@ -110,6 +110,82 @@ function filterUnreleasedBettingRounds(
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function collectLineupPlayerNames(value: unknown, names: Set<string>) {
+  if (typeof value === "string") {
+    const key = normalisePlayerKey(value);
+    if (key) names.add(key);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectLineupPlayerNames(item, names);
+    return;
+  }
+
+  const row = asRecord(value);
+  const player =
+    typeof row.player === "string" ? row.player :
+      typeof row.playerName === "string" ? row.playerName :
+        typeof row.name === "string" ? row.name :
+          "";
+  if (player) {
+    const key = normalisePlayerKey(player);
+    if (key) names.add(key);
+  }
+
+  for (const key of ["players", "homeTeam", "awayTeam", "home", "away", "lineup"]) {
+    if (key in row) collectLineupPlayerNames(row[key], names);
+  }
+}
+
+function buildLineupPlayersByMatch(summary: Record<string, unknown>, games: BettingSummaryGame[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  const gamesByMatchKey = new Map(games.map((game) => [game.matchKey, game]));
+
+  for (const [rawKey, value] of Object.entries(summary)) {
+    const players = new Set<string>();
+    collectLineupPlayerNames(value, players);
+    if (players.size === 0) continue;
+
+    out.set(rawKey, players);
+    const normalizedRawKey = normalisePlayerKey(rawKey);
+    if (normalizedRawKey) out.set(normalizedRawKey, players);
+
+    const game = gamesByMatchKey.get(rawKey);
+    if (game) out.set(`${game.matchDate}|${game.matchKey}`, players);
+  }
+
+  return out;
+}
+
+function filterTryscorersToLineups(
+  snapshot: BettingOddsSnapshot,
+  lineupPlayersByMatch: Record<string, unknown>,
+  games: BettingSummaryGame[]
+): BettingOddsSnapshot {
+  const namedPlayersByMatch = buildLineupPlayersByMatch(lineupPlayersByMatch, games);
+  if (namedPlayersByMatch.size === 0) return snapshot;
+
+  const tryscorer = snapshot.tryscorer.filter((row) => {
+    const match = parseBettingMatch(row.match);
+    const matchKey = match ? buildBettingMatchKey(match.home, match.away) : normalisePlayerKey(row.match);
+    const namedPlayers =
+      namedPlayersByMatch.get(`${row.date}|${matchKey}`) ??
+      namedPlayersByMatch.get(matchKey) ??
+      namedPlayersByMatch.get(`${row.date}|${normalisePlayerKey(row.match)}`) ??
+      namedPlayersByMatch.get(normalisePlayerKey(row.match));
+
+    if (!namedPlayers) return true;
+    return namedPlayers.has(normalisePlayerKey(row.result));
+  });
+
+  return { ...snapshot, tryscorer };
+}
+
 function lineupsMatchAnchorId(game: BettingSummaryGame): string {
   return `lineups-match-${normalisePlayerKey(`${game.matchDate} ${game.matchKey}`).replace(/\s+/g, "-")}`;
 }
@@ -141,7 +217,12 @@ export default async function BettingPage() {
       (title.includes("tryscorer") || title.includes("try scorer") || title.includes("try scoring") || title.includes("tryscore"))
     );
   }) ?? null;
-  const visibleSnapshot = filterUnreleasedBettingRounds(snapshot, bettingSummary.games);
+  const lineupsFilteredSnapshot = filterTryscorersToLineups(
+    snapshot,
+    bettingSummary.lineupPlayersByMatch,
+    bettingSummary.games
+  );
+  const visibleSnapshot = filterUnreleasedBettingRounds(lineupsFilteredSnapshot, bettingSummary.games);
 
   return (
     <BettingDashboard

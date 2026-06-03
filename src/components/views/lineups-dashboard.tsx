@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { createPortal } from "react-dom"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type {
@@ -1466,7 +1467,7 @@ function PlayerTryFormPanel({ selection }: { selection: PlayerStatsSelection }) 
 }
 
 function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelection | null; onClose: () => void }) {
-  if (!selection) return null
+  if (!selection || typeof document === "undefined") return null
   const { player, liveState, liveStats } = selection
   const fantasyPpm = fantasyPointsPerMinute(liveStats)
   const image = player.headImage ?? player.bodyImage
@@ -1526,7 +1527,7 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
     },
   ]
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-lg border border-blue-300/20 bg-[#071024] shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-blue-300/15 bg-[#0b1630] px-4 py-3">
@@ -1578,7 +1579,8 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

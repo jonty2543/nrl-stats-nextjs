@@ -2579,6 +2579,7 @@ function MetricCard({
   mobileTight = false,
   center = false,
   prominentValue = false,
+  softSurface = false,
 }: {
   label: string
   value: string
@@ -2588,6 +2589,7 @@ function MetricCard({
   mobileTight?: boolean
   center?: boolean
   prominentValue?: boolean
+  softSurface?: boolean
 }) {
   const valueSizeClass = prominentValue
     ? "text-[1.35rem] leading-none tracking-tight sm:text-[1.7rem]"
@@ -2599,7 +2601,7 @@ function MetricCard({
 
   return (
     <div
-      className={`h-full rounded-lg border border-nrl-border bg-[#111832] ${compact
+      className={`h-full rounded-lg border ${softSurface ? "border-blue-300/20 bg-white/[0.055]" : "border-nrl-border bg-[#111832]"} ${compact
         ? mobileTight
           ? "min-h-[4.4rem] px-2 py-2.5 sm:min-h-[5.25rem] sm:px-1.5 sm:py-4 xl:min-h-[4.5rem] xl:px-1.5 xl:py-2.5"
           : "px-2 py-2 sm:px-2.5 sm:py-2.5 xl:px-2.5 xl:py-2.5"
@@ -5555,11 +5557,12 @@ export function FantasyDashboard({
 
                     <div className={`grid items-start gap-3 pt-4 sm:gap-4 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5 ${fantasyCardPlayerName ? "grid-cols-[minmax(0,1fr)_10.75rem] min-[420px]:grid-cols-[minmax(0,1fr)_11.5rem] sm:grid-cols-[minmax(0,1fr)_14.25rem]" : "grid-cols-1"}`}>
                       <div className="grid w-full auto-rows-fr grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
-                        <MetricCard compact mobileTight label="Price" value={formatPrice(selectedDisplayFantasyPlayer?.cost ?? null)} />
-                        <MetricCard compact mobileTight label="PPM" value={formatNumber(localPpm, 2)} />
+                        <MetricCard compact mobileTight softSurface label="Price" value={formatPrice(selectedDisplayFantasyPlayer?.cost ?? null)} />
+                        <MetricCard compact mobileTight softSurface label="PPM" value={formatNumber(localPpm, 2)} />
                         <MetricCard
                           compact
                           mobileTight
+                          softSurface
                           label="Own %"
                           value={formatPercent(selectedDisplayFantasyPlayer?.ownedBy ?? null)}
                           sublabel={
@@ -5571,6 +5574,7 @@ export function FantasyDashboard({
                         <MetricCard
                           compact
                           mobileTight
+                          softSurface
                           label="Priced At"
                           value={formatNumber(selectedDisplayFantasyPlayer?.pricedAt ?? null, 0)}
                         />

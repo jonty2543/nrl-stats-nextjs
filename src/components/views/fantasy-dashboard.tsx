@@ -4662,7 +4662,7 @@ export function FantasyDashboard({
 
   return (
     <div className={showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? "space-y-3" : "space-y-6"}>
-      <div className="space-y-8 xl:space-y-12">
+      <div className="space-y-5 xl:space-y-8">
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
           <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch">
             <Link
@@ -5064,7 +5064,7 @@ export function FantasyDashboard({
 
       {showOwnedCards && !showFantasyAnalyticsOnly ? (
         <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-accent/10 px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-panel-2 px-3 py-2">
             <div>
               <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
                 {hasLoadedFullAllPlayersRows ? "All Players" : "Top Weekly Buys"}
@@ -5288,7 +5288,7 @@ export function FantasyDashboard({
                     key={row.player.id}
                     type="button"
                     onClick={() => navigateToPlayer(row.player.name)}
-	                    className="block w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-left transition-colors hover:border-white/25 hover:bg-nrl-panel md:flex md:items-center md:gap-4"
+	                    className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-2.5 text-left transition-colors hover:border-white/25 hover:bg-[#17213d] md:flex md:items-center md:gap-4"
 	                  >
 	                    <div className="flex items-start justify-between gap-3 md:w-[250px] md:shrink-0 md:items-center">
                       <div className="flex min-w-0 items-start gap-2.5">

@@ -314,8 +314,8 @@ const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
 const PRO_PRICE_LABEL = "$5/month"
 const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
-  "inline-flex h-5 w-12 items-center justify-center rounded bg-[#263154] text-slate-100"
-const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[7px] opacity-60 select-none"
+  "inline-flex h-5 w-12 items-center justify-center rounded border border-nrl-border/60 bg-[#1c2544]/65 text-slate-100"
+const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[2px] opacity-75 select-none"
 
 interface MajorByeRoundTag {
   round: number
@@ -2610,7 +2610,7 @@ function MetricCard({
         {label}
       </div>
       <div
-        className={`${prominentValue ? "flex min-h-[2.75rem] items-center justify-center sm:min-h-[3rem]" : ""} ${valueSizeClass} min-w-0 font-bold text-nrl-text ${center ? "text-center" : ""} ${blurValue ? "select-none blur-[8px] opacity-60" : ""
+        className={`${prominentValue ? "flex min-h-[2.75rem] items-center justify-center sm:min-h-[3rem]" : ""} ${valueSizeClass} min-w-0 font-bold text-nrl-text ${center ? "text-center" : ""} ${blurValue ? "select-none blur-[2px] opacity-75" : ""
           }`}
         aria-hidden={blurValue || undefined}
       >
@@ -2643,7 +2643,7 @@ function ProjectionBandMetricCard({
       <div className="min-h-[1.8em] text-center text-[7px] font-semibold uppercase leading-[1.15] tracking-wide text-nrl-muted">
         {label}
       </div>
-      <div className={`grid min-h-[2.75rem] grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-center gap-1 sm:min-h-[3rem] ${blurValue ? "select-none blur-[8px] opacity-60" : ""}`}>
+      <div className={`grid min-h-[2.75rem] grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-center gap-1 sm:min-h-[3rem] ${blurValue ? "select-none blur-[2px] opacity-75" : ""}`}>
         <div className="min-w-0 text-left" aria-hidden={blurValue || undefined}>
           <div className="text-[8px] font-semibold uppercase tracking-wide text-red-300/80">LOW 5%</div>
           <div className="mt-0.5 text-sm font-bold leading-none text-red-300 sm:text-base">{lower}</div>
@@ -5776,7 +5776,7 @@ export function FantasyDashboard({
                     />
                   </div>
                   <div className="relative mx-auto w-full max-w-[43rem]">
-                    <div className={`grid grid-cols-2 gap-2 ${analysisLocked ? "pointer-events-none opacity-45 blur-[1px]" : ""}`}>
+                    <div className={`grid grid-cols-2 gap-2 ${analysisLocked ? "pointer-events-none opacity-65" : ""}`}>
                       <FantasyPlotToggleButton
                         active={showRollingAveragePlot}
                         locked={analysisLocked}
@@ -5838,15 +5838,13 @@ export function FantasyDashboard({
                       ) : null}
                     </div>
                     {analysisLocked ? (
-                      <div className="absolute inset-0 z-10 flex items-center justify-center px-3">
-                        <BillingPageLink className="block rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]">
-                          <div className="rounded-[calc(1rem-1px)] bg-slate-950/85 px-4 py-2.5 text-center backdrop-blur-[2px]">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-100 sm:text-sm">
-                              Sign Up To {PRO_UNLOCK_COPY}
-                            </div>
-                            <div className="mt-1 text-[10px] text-slate-400 sm:text-xs">
-                              Unlock projections, breakevens and full plots.
-                            </div>
+                      <div className="absolute right-2 top-2 z-10 flex justify-end px-1">
+                        <BillingPageLink className="block rounded-md border border-emerald-300/35 bg-slate-950/80 px-2.5 py-1.5 text-right shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-emerald-300/60">
+                          <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-100 sm:text-[10px]">
+                            {PRO_UNLOCK_COPY}
+                          </div>
+                          <div className="mt-0.5 text-[9px] text-slate-400 sm:text-[10px]">
+                            Projections and plots
                           </div>
                         </BillingPageLink>
                       </div>
@@ -5883,7 +5881,7 @@ export function FantasyDashboard({
                                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
                                   Rolling Average Preview
                                 </div>
-                                <div className="opacity-70 blur-[2px]">
+                                <div className="opacity-80 blur-[1px]">
                                   <FantasyGameLogTrendBrush
                                     key={`locked-preview-${gameLogChartKey}`}
                                     rows={lockedPreviewTrendRows}
@@ -5900,7 +5898,7 @@ export function FantasyDashboard({
                                 <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
                                   Projection Range Preview
                                 </div>
-                                <div className="mt-2 h-[150px] opacity-70 blur-[2px] sm:h-[164px]">
+                                <div className="mt-2 h-[150px] opacity-80 blur-[1px] sm:h-[164px]">
                                   <ProjectionRangePreviewBars data={STATIC_LOCKED_PREVIEW_PROJECTION_RANGE} />
                                 </div>
                               </div>
@@ -5919,7 +5917,7 @@ export function FantasyDashboard({
                                   return (
                                     <div key={`preview-box-${row.label}`} className="grid grid-cols-[74px_minmax(0,1fr)] items-center gap-3">
                                       <div className="text-[10px] font-semibold text-nrl-muted">{row.label}</div>
-                                      <svg viewBox="0 0 100 28" preserveAspectRatio="none" className="h-9 w-full overflow-visible opacity-70 blur-[2px]">
+                                      <svg viewBox="0 0 100 28" preserveAspectRatio="none" className="h-9 w-full overflow-visible opacity-80 blur-[1px]">
                                         <line x1={scale(row.min)} x2={scale(row.max)} y1="14" y2="14" stroke="rgba(154,164,191,0.9)" strokeWidth="1.3" />
                                         <rect
                                           x={scale(row.q1)}
@@ -5944,7 +5942,7 @@ export function FantasyDashboard({
                                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
                                   Stat vs Fantasy Preview
                                 </div>
-                                <div className="opacity-70 blur-[2px]">
+                                <div className="opacity-80 blur-[1px]">
                                   <ScatterCorrelation
                                     rows={STATIC_LOCKED_PREVIEW_TREND_ROWS}
                                     statX={selectedStatVsFantasyOption.key}
@@ -5967,7 +5965,7 @@ export function FantasyDashboard({
                                       style={{ backgroundColor: getHeatColorForAverage(row.average) }}
                                     >
                                       <div className="text-[10px] font-bold text-nrl-text">{row.opponent}</div>
-                                      <div className="opacity-70 blur-[2px]">
+                                      <div className="opacity-80 blur-[1px]">
                                         <div className="text-xs font-semibold text-nrl-text">{row.average.toFixed(1)}</div>
                                         <div className="text-[8px] text-nrl-muted">n={row.games}</div>
                                       </div>
@@ -5988,7 +5986,7 @@ export function FantasyDashboard({
                                       <div key={`preview-base-${row.label}`} className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-3">
                                         <div className="text-[10px] font-semibold text-nrl-muted">{row.label}</div>
                                         <div>
-                                          <div className="opacity-70 blur-[2px]">
+                                          <div className="opacity-80 blur-[1px]">
                                             <div className="flex h-3 w-full overflow-hidden rounded-sm border border-nrl-border bg-nrl-panel">
                                               <div className="bg-nrl-accent" style={{ width: `${widths.basePct}%` }} />
                                               <div

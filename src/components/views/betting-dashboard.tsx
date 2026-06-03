@@ -2323,9 +2323,6 @@ export function BettingDashboard({
                     </span>
                   </div>
                   <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
-                  <BillingPageLink className="mt-2 inline-flex rounded border border-emerald-300/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12">
-                    View plans
-                  </BillingPageLink>
                 </div>
               );
             }
@@ -2705,13 +2702,7 @@ export function BettingDashboard({
             </div>
           ) : null}
         </section>
-      ) : (
-        <section className="rounded-xl border border-nrl-border bg-nrl-panel p-4 sm:p-5">
-          <div className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-3 text-sm text-nrl-muted">
-            <div>Bet tracker is Premium-only.</div>
-          </div>
-        </section>
-      )}
+      ) : null}
 
       {quickAddOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 px-4 py-6">
@@ -3337,7 +3328,7 @@ function BestBetsHero({
               <div className="relative rounded-lg border border-white/8 bg-[#0f1732]/70">
                 <div
                   ref={queueViewportRef}
-                  className={`max-h-[176px] space-y-1.5 overflow-y-auto overscroll-contain p-2 pr-1 [scrollbar-color:rgba(148,163,184,0.32)_transparent] ${!canAccessPremium ? "pointer-events-none select-none blur-[5px]" : ""}`}
+                  className={`max-h-[176px] space-y-1.5 overflow-y-auto overscroll-contain p-2 pr-1 [scrollbar-color:rgba(148,163,184,0.32)_transparent] ${!canAccessPremium ? "pointer-events-none select-none opacity-75" : ""}`}
                 >
                 {queueItems.map((item) => {
                   const isLocked = !canAccessPremium;
@@ -3436,13 +3427,9 @@ function BestBetsHero({
                 })}
                 </div>
                 {!canAccessPremium ? (
-                  <div className="absolute inset-0 z-10 grid place-items-center bg-[#080d1f]/30 px-3 backdrop-blur-[1px]">
-                    <BillingPageLink className="rounded-xl bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]">
-                      <div className="rounded-[calc(0.75rem-1px)] bg-slate-950/85 px-4 py-2 text-center">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-100">
-                          Sign Up To Premium
-                        </div>
-                      </div>
+                  <div className="absolute right-2 top-2 z-10">
+                    <BillingPageLink className="rounded-md border border-emerald-300/35 bg-slate-950/80 px-2.5 py-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-100 shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-emerald-300/60">
+                      Premium picks
                     </BillingPageLink>
                   </div>
                 ) : null}
@@ -4029,7 +4016,7 @@ function MarketSection({
                                   {showModelColumns ? (
                                     <span className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] ${edgeClass}`}>
                                       Edge:
-                                      <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : "tabular-nums"}>
+                                      <span className={blurPremiumColumns ? "inline-block select-none opacity-75 blur-[2px]" : "tabular-nums"}>
                                         {formatEdge(edgePp)}
                                       </span>
                                     </span>
@@ -4335,12 +4322,12 @@ function MarketSection({
                             {showModelColumns ? (
                               <>
                                 <td className="py-2 pr-3 text-nrl-text">
-                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
+                                  <span className={blurPremiumColumns ? "inline-block select-none opacity-75 blur-[2px]" : ""}>
                                     {formatPct(modelProbability == null ? null : modelProbability * 100)}
                                   </span>
                                 </td>
                                 <td className={`py-2 pr-3 ${edgeClass}`}>
-                                  <span className={blurPremiumColumns ? "inline-block blur-[4px] select-none" : ""}>
+                                  <span className={blurPremiumColumns ? "inline-block select-none opacity-75 blur-[2px]" : ""}>
                                     {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
                                   </span>
                                 </td>

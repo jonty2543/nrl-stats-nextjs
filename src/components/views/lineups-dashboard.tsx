@@ -2207,7 +2207,7 @@ function MatchupInsightsPanel({
             ))}
             {lockedInsightCount > 0 ? (
               <div className="relative min-h-24 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2/65 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
-                <div className="grid gap-2 p-2 blur-[3px] select-none">
+                <div className="grid gap-2 p-2 opacity-75 blur-[1px] select-none">
                   {(lockedPreviewInsights.length > 0 ? lockedPreviewInsights : visibleInsights).map((insight, insightIndex) => (
                     <div
                       key={`locked-${insight.category}-${insight.title}-${insightIndex}`}
@@ -2225,15 +2225,13 @@ function MatchupInsightsPanel({
                     </div>
                   ))}
                 </div>
-                <div className="absolute inset-0 flex items-center justify-center bg-[#080d1f]/35 px-3 backdrop-blur-[2px]">
-                  <BillingPageLink className="block rounded-[1rem] bg-[linear-gradient(135deg,rgba(141,99,255,0.95),rgba(0,245,138,0.95))] p-[1px] shadow-[0_12px_30px_rgba(0,0,0,0.28)] transition-transform hover:scale-[1.01]">
-                    <div className="rounded-[calc(1rem-1px)] bg-slate-950/80 px-4 py-3 text-center">
-                      <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-100">
-                        Sign Up To Pro
-                      </div>
-                      <div className="mt-1 text-xs text-slate-400">
-                        Unlock {lockedInsightCount} more matchup {lockedInsightCount === 1 ? "insight" : "insights"}.
-                      </div>
+                <div className="absolute right-2 top-2 flex justify-end">
+                  <BillingPageLink className="block rounded-md border border-emerald-300/35 bg-slate-950/80 px-2.5 py-1.5 text-right shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-emerald-300/60">
+                    <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+                      Pro insights
+                    </div>
+                    <div className="mt-0.5 text-[9px] text-slate-400">
+                      +{lockedInsightCount} more
                     </div>
                   </BillingPageLink>
                 </div>

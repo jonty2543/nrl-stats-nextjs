@@ -30,6 +30,7 @@ const STARTER_ROWS = [
   { slot: "WFB", count: 3 },
 ] as const
 const MY_TEAM_MAJOR_BYE_ROUNDS = [13, 16, 19] as const
+const MY_TEAM_THIRTEEN_PLAYER_ROUNDS = [13, 15, 16, 18, 19] as const
 const MY_TEAM_PROJECTION_ROUNDS = Array.from({ length: 19 }, (_, index) => index + 1)
 const MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS = [12, 13, 15, 16, 18, 19] as const
 const MY_TEAM_AI_ENABLED = true
@@ -140,6 +141,7 @@ interface TradeCandidate {
 }
 
 type MyTeamMajorByeRound = (typeof MY_TEAM_MAJOR_BYE_ROUNDS)[number]
+type MyTeamThirteenPlayerRound = (typeof MY_TEAM_THIRTEEN_PLAYER_ROUNDS)[number]
 type MyTeamProjectionRound = number
 
 interface RoundAvailabilityBadge {
@@ -664,7 +666,7 @@ function buildMyTeamAiPrompt({
       : "Trade-ins must be real live-data candidates and not already owned. Prefer players who play as many major bye rounds as possible, then rank by traded-in/ownership delta, recent form, role security, price, and sensible squad fit. Do not mention projection, BE, projection vs priced at, Origin or casualty ward.",
     "For Top 5 trade-ins, lean heavily on traded-in ownership delta: clearly rising ownership should lift a player up the list when bye coverage and role are sound. Do not bury a strongly traded-in player behind a lower-momentum option unless the lower-momentum player is clearly better on bye availability, role security, or value.",
     "When prices/bank are unknown, avoid pretending you can afford exact moves. Give ranked targets and say affordability needs checking.",
-    "Major bye/scoring rule: rounds 13, 16, and 19 only use the starting 13 scoring players. In those rounds, prioritise getting 13 strong active scorers rather than a normal 17.",
+    "13-player scoring rule: rounds 13, 15, 16, 18, and 19 only use the starting 13 scoring players. In those rounds, prioritise getting 13 strong active scorers rather than a normal 17.",
     "Looping rule: a bench/emergency score can be accepted by leaving a non-playing red-dot/DNP player in the scoring side. For a non-playing starter in the 13, cover must be position-compatible from INT/EMG. During major bye rounds, actively check starter-to-INT loops because the 13 scorers can come from starters and interchange, not just EMG-to-INT.",
     "Starter/INT loop practical advice: if two active INT/EMG players can cover a non-playing starter's position, put the earlier-playing option in the first relevant INT/bench slot as the trial score. If that score is good, leave the non-playing starter setup so it counts; if not, swap the later-playing cover option into the scoring path before lockout.",
     "Loop red-dot quality: bye players are the best loop anchors because they do not lock. Injured, suspended, or otherwise red-marked players lock when their NRL team plays, so mention that lockout risk if recommending them as the anchor.",
@@ -1290,6 +1292,10 @@ function getRoundAvailability(
   return { available: false, reason: "Unknown draw", isBye: false, isOriginRisk: false }
 }
 
+function isThirteenPlayerRound(round: MyTeamProjectionRound | null): round is MyTeamThirteenPlayerRound {
+  return round != null && MY_TEAM_THIRTEEN_PLAYER_ROUNDS.includes(round as MyTeamThirteenPlayerRound)
+}
+
 function getMajorRoundAvailability(
   player: MyTeamPlayer,
   round: MyTeamMajorByeRound,
@@ -1369,7 +1375,7 @@ function buildMajorRoundDisplayLineup(
   const indexedPlayers = players.map((player, index) => ({ player, index }))
   const usedIndexes = new Set<number>()
   const scoringIndexes = new Set<number>()
-  const isMajorRound = MY_TEAM_MAJOR_BYE_ROUNDS.includes(round as MyTeamMajorByeRound)
+  const isMajorRound = isThirteenPlayerRound(round)
   const activeScore = ({ player, index }: IndexedMyTeamPlayer) => {
     const active = isAvailableForProjectionRound(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames) ? 1 : 0
     const originalStarter = player.squadRole === "starter" ? 0.4 : 0
@@ -2184,14 +2190,14 @@ function TeamBoard({
     Boolean(player?.tradeReversal?.round && player.tradeReversal.round === team?.round)
   const availableHeaderRounds = MY_TEAM_PROJECTION_ROUNDS.filter((round) => round >= (currentRoundForHeader ?? 1))
   const showRoundProjections = showProjections && selectedProjectionRound == null
-  const activeHeaderIsMajorRound = activeHeaderRound != null && MY_TEAM_MAJOR_BYE_ROUNDS.includes(activeHeaderRound as MyTeamMajorByeRound)
+  const activeHeaderIsMajorRound = isThirteenPlayerRound(activeHeaderRound)
   const playingTarget = activeHeaderIsMajorRound ? 13 : 17
   const availabilitySummaryRounds =
     team && players.length > 0
       ? MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS.filter((round) => round >= (currentRoundForHeader ?? 1))
       : []
   const availabilitySummary = availabilitySummaryRounds.map((round) => {
-    const target = MY_TEAM_MAJOR_BYE_ROUNDS.includes(round as MyTeamMajorByeRound) ? 13 : 17
+    const target = isThirteenPlayerRound(round) ? 13 : 17
     const availableCount = players.filter((player) => {
       if (actualScoreForPlayerRound(player, round, fantasyPlayersById) != null) return true
       const availability = getRoundAvailability(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)

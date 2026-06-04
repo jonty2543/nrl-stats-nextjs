@@ -3450,9 +3450,9 @@ export function FantasyDashboard({
   )
 
   useEffect(() => {
-    if (!showPlayerDetails || !(preloadedPlayerAllYears || preloadSelectedPlayerAllYears) || !hasLoginAccess) return
+    if (!showPlayerDetails || !hasLoginAccess) return
     void loadTeammateLookupRows(selectedYears)
-  }, [hasLoginAccess, loadTeammateLookupRows, preloadSelectedPlayerAllYears, preloadedPlayerAllYears, selectedYears, showPlayerDetails])
+  }, [hasLoginAccess, loadTeammateLookupRows, selectedYears, showPlayerDetails])
 
   useEffect(() => {
     if (

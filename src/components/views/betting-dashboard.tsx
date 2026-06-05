@@ -717,21 +717,29 @@ function PlayerProfileImage({
 
 function TryFormDots({ values }: { values: number[] }) {
   if (values.length === 0) return null;
+  const displayValues = [...values].reverse();
   return (
     <div className="flex items-center gap-1">
-      {[...values].reverse().map((tries, index) => (
-        <span
-          key={`${index}-${tries}`}
-          className={`grid h-5 w-5 place-items-center rounded-full border text-[9px] font-black ${
-            tries > 0
-              ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-200"
-              : "border-red-300/45 bg-red-400/12 text-red-200"
-          }`}
-          title={tries > 0 ? `${tries} ${tries === 1 ? "try" : "tries"}` : "No try"}
-        >
-          {tries}
-        </span>
-      ))}
+      {displayValues.map((tries, index) => {
+        const isMostRecent = index === displayValues.length - 1;
+        return (
+          <span
+            key={`${index}-${tries}`}
+            className={`grid h-5 w-5 place-items-center rounded-full border text-[9px] font-black ${
+              tries > 0
+                ? isMostRecent
+                  ? "border-emerald-300/85 bg-emerald-400/28 text-emerald-200 shadow-[0_0_12px_rgba(52,211,153,0.18)]"
+                  : "border-emerald-300/40 bg-emerald-400/15 text-emerald-200"
+                : isMostRecent
+                  ? "border-red-300/85 bg-red-400/24 text-red-200 shadow-[0_0_12px_rgba(248,113,113,0.18)]"
+                  : "border-red-300/45 bg-red-400/12 text-red-200"
+            }`}
+            title={`${isMostRecent ? "Most recent: " : ""}${tries > 0 ? `${tries} ${tries === 1 ? "try" : "tries"}` : "No try"}`}
+          >
+            {tries}
+          </span>
+        );
+      })}
     </div>
   );
 }

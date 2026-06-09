@@ -64,6 +64,36 @@ function stripFantasyProjections(match: LineupMatch): LineupMatch {
   }
 }
 
+function mergeHydratedMatch(base: LineupMatch | null, hydrated: LineupMatch | null): LineupMatch | null {
+  if (!base) return hydrated
+  if (!hydrated) return base
+
+  return {
+    ...base,
+    ...hydrated,
+    homeTeam:
+      playerCount({ ...hydrated, awayTeam: null }) > 0
+        ? hydrated.homeTeam
+        : base.homeTeam ?? hydrated.homeTeam,
+    awayTeam:
+      playerCount({ ...hydrated, homeTeam: null }) > 0
+        ? hydrated.awayTeam
+        : base.awayTeam ?? hydrated.awayTeam,
+    recentHeadToHead:
+      hydrated.recentHeadToHead && hydrated.recentHeadToHead.length > 0
+        ? hydrated.recentHeadToHead
+        : base.recentHeadToHead,
+    homeRecentResults:
+      hydrated.homeRecentResults && hydrated.homeRecentResults.length > 0
+        ? hydrated.homeRecentResults
+        : base.homeRecentResults,
+    awayRecentResults:
+      hydrated.awayRecentResults && hydrated.awayRecentResults.length > 0
+        ? hydrated.awayRecentResults
+        : base.awayRecentResults,
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
@@ -121,7 +151,7 @@ export async function POST(request: NextRequest) {
     const responseDetail = detail
       ? {
           ...detail,
-          match: hydratedMatch ?? detail.match,
+          match: mergeHydratedMatch(detail.match, hydratedMatch) ?? detail.match,
           matchStats: hydratedMatchStats,
         }
       : fallbackDetail

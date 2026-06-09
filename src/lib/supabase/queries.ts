@@ -31,6 +31,7 @@ import {
 
 const PAGE_SIZE = 1000;
 const DAILY_REVALIDATE_SECONDS = 86400;
+const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
 
@@ -332,8 +333,75 @@ function isRelevantOutsPositionMatch(left: string | null | undefined, right: str
 interface FetchOptions {
   /** Filter by match_date year(s) — e.g. ["2025"] → gte 2025-01-01, lt 2026-01-01 */
   years?: string[];
+  dateFrom?: string;
+  dateTo?: string;
   /** Optional projection columns for Supabase select(...) */
   columns?: string;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    const causeMessage = cause instanceof Error ? `: ${cause.message}` : "";
+    return `${error.message}${causeMessage}`;
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message?: unknown }).message ?? "");
+  }
+  return String(error);
+}
+
+function isTransientSupabaseFetchError(error: unknown): boolean {
+  const message = errorMessage(error).toLowerCase();
+  return (
+    message.includes("fetch failed") ||
+    message.includes("networkerror") ||
+    message.includes("econnreset") ||
+    message.includes("etimedout") ||
+    message.includes("socket hang up") ||
+    message.includes("terminated") ||
+    message.includes("und_err")
+  );
+}
+
+function isStatementTimeoutError(error: unknown): boolean {
+  return errorMessage(error).toLowerCase().includes("statement timeout");
+}
+
+interface SupabasePageResult {
+  data: unknown;
+  error: { message: string } | null;
+}
+
+async function fetchSupabasePage<T extends SupabasePageResult>(
+  label: string,
+  request: () => PromiseLike<T>
+): Promise<T> {
+  for (let attempt = 0; attempt <= SUPABASE_FETCH_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const result = await request();
+      if (!result.error || !isTransientSupabaseFetchError(result.error)) {
+        return result;
+      }
+      if (attempt >= SUPABASE_FETCH_RETRY_DELAYS_MS.length) {
+        return result;
+      }
+      console.warn(`${label} failed; retrying.`, result.error);
+    } catch (error) {
+      if (!isTransientSupabaseFetchError(error) || attempt >= SUPABASE_FETCH_RETRY_DELAYS_MS.length) {
+        throw error;
+      }
+      console.warn(`${label} failed; retrying.`, error);
+    }
+
+    await sleep(SUPABASE_FETCH_RETRY_DELAYS_MS[attempt]);
+  }
+
+  throw new Error(`${label}: exhausted retries`);
 }
 
 async function fetchAllRowsFromSchema<T extends Record<string, unknown>>(
@@ -346,7 +414,9 @@ async function fetchAllRowsFromSchema<T extends Record<string, unknown>>(
 
   while (true) {
     const end = start + PAGE_SIZE - 1;
-    const { data, error } = await supabase.from(table).select("*").range(start, end);
+    const { data, error } = await fetchSupabasePage(`Supabase fetch ${schema}.${table}`, () =>
+      supabase.from(table).select("*").range(start, end)
+    );
 
     if (error) throw new Error(`Supabase fetch ${schema}.${table}: ${error.message}`);
     const rows = (data ?? []) as unknown as T[];
@@ -371,8 +441,10 @@ async function fetchAllRows<T extends Record<string, unknown>>(
     const end = start + PAGE_SIZE - 1;
     let query = supabase.from(table).select(options?.columns ?? "*");
 
-    // Apply year filter if provided
-    if (options?.years && options.years.length > 0) {
+    if (options?.dateFrom || options?.dateTo) {
+      if (options.dateFrom) query = query.gte("match_date", options.dateFrom);
+      if (options.dateTo) query = query.lt("match_date", options.dateTo);
+    } else if (options?.years && options.years.length > 0) {
       const sorted = [...options.years].sort();
       const minYear = parseInt(sorted[0], 10);
       const maxYear = parseInt(sorted[sorted.length - 1], 10);
@@ -381,7 +453,9 @@ async function fetchAllRows<T extends Record<string, unknown>>(
         .lt("match_date", `${maxYear + 1}-01-01`);
     }
 
-    const { data, error } = await query.range(start, end);
+    const { data, error } = await fetchSupabasePage(`Supabase fetch ${table}`, () =>
+      query.range(start, end)
+    );
 
     if (error) throw new Error(`Supabase fetch ${table}: ${error.message}`);
     const rows = (data ?? []) as unknown as T[];
@@ -1375,6 +1449,51 @@ function buildTeammateLookupRows(rawPlayers: Record<string, unknown>[]): Teammat
   return rows;
 }
 
+function normalizeYearFilters(years?: string[]): string[] {
+  return [...new Set((years ?? []).map((year) => year.trim()).filter(Boolean))].sort();
+}
+
+function monthRangesForYear(year: string): Array<{ dateFrom: string; dateTo: string }> {
+  const parsedYear = Number.parseInt(year, 10);
+  if (!Number.isFinite(parsedYear)) return [];
+
+  return Array.from({ length: 12 }, (_, monthIndex) => {
+    const month = String(monthIndex + 1).padStart(2, "0");
+    const nextYear = monthIndex === 11 ? parsedYear + 1 : parsedYear;
+    const nextMonth = monthIndex === 11 ? "01" : String(monthIndex + 2).padStart(2, "0");
+    return {
+      dateFrom: `${parsedYear}-${month}-01`,
+      dateTo: `${nextYear}-${nextMonth}-01`,
+    };
+  });
+}
+
+async function fetchPlayerStatsRowsFromSupabase(
+  years?: string[]
+): Promise<Record<string, unknown>[]> {
+  const normalizedYears = normalizeYearFilters(years);
+  if (normalizedYears.length === 0) {
+    return fetchAllRows<Record<string, unknown>>("player_stats");
+  }
+
+  const rows: Record<string, unknown>[] = [];
+  for (const year of normalizedYears) {
+    try {
+      rows.push(...(await fetchAllRows<Record<string, unknown>>("player_stats", { years: [year] })));
+      continue;
+    } catch (error) {
+      if (!isStatementTimeoutError(error)) throw error;
+      console.warn(`Supabase fetch player_stats for ${year} timed out; retrying by month.`, error);
+    }
+
+    for (const range of monthRangesForYear(year)) {
+      rows.push(...(await fetchAllRows<Record<string, unknown>>("player_stats", range)));
+    }
+  }
+
+  return rows;
+}
+
 // ---------------------------------------------------------------------------
 // fetchPlayerStats — main entry point
 // ---------------------------------------------------------------------------
@@ -1384,7 +1503,7 @@ export async function fetchPlayerStatsFromSupabase(years?: string[]): Promise<Pl
     ...opts,
     columns: "match_date,team,opponent_team,is_home",
   });
-  const rawPlayers = await fetchAllRows<Record<string, unknown>>("player_stats", opts);
+  const rawPlayers = await fetchPlayerStatsRowsFromSupabase(years);
   return buildPlayerStatsRows(rawPlayers, rawMatches);
 }
 

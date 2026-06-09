@@ -315,7 +315,8 @@ const PRO_PRICE_LABEL = "$5/month"
 const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
   "inline-flex h-5 w-12 items-center justify-center rounded border border-nrl-border/60 bg-[#1c2544]/65 text-slate-100"
-const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[2px] opacity-75 select-none"
+const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[7px] opacity-55 select-none"
+const FANTASY_LOCKED_METRIC_TEXT_CLASS = "select-none blur-[9px] opacity-50"
 
 interface MajorByeRoundTag {
   round: number
@@ -2612,7 +2613,7 @@ function MetricCard({
         {label}
       </div>
       <div
-        className={`${prominentValue ? "flex min-h-[2.75rem] items-center justify-center sm:min-h-[3rem]" : ""} ${valueSizeClass} min-w-0 font-bold text-nrl-text ${center ? "text-center" : ""} ${blurValue ? "select-none blur-[2px] opacity-75" : ""
+        className={`${prominentValue ? "flex min-h-[2.75rem] items-center justify-center sm:min-h-[3rem]" : ""} ${valueSizeClass} min-w-0 font-bold text-nrl-text ${center ? "text-center" : ""} ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""
           }`}
         aria-hidden={blurValue || undefined}
       >
@@ -2645,7 +2646,7 @@ function ProjectionBandMetricCard({
       <div className="min-h-[1.8em] text-center text-[7px] font-semibold uppercase leading-[1.15] tracking-wide text-nrl-muted">
         {label}
       </div>
-      <div className={`grid min-h-[2.75rem] grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-center gap-1 sm:min-h-[3rem] ${blurValue ? "select-none blur-[2px] opacity-75" : ""}`}>
+      <div className={`grid min-h-[2.75rem] grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-center gap-1 sm:min-h-[3rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}>
         <div className="min-w-0 text-left" aria-hidden={blurValue || undefined}>
           <div className="text-[8px] font-semibold uppercase tracking-wide text-red-300/80">LOW 5%</div>
           <div className="mt-0.5 text-sm font-bold leading-none text-red-300 sm:text-base">{lower}</div>
@@ -5842,8 +5843,8 @@ export function FantasyDashboard({
                       ) : null}
                     </div>
                     {analysisLocked ? (
-                      <div className="absolute right-2 top-2 z-10 flex justify-end px-1">
-                        <BillingPageLink className="block rounded-md border border-emerald-300/35 bg-slate-950/80 px-2.5 py-1.5 text-right shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-emerald-300/60">
+                      <div className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 px-1">
+                        <BillingPageLink className="block rounded-md border border-emerald-300/35 bg-slate-950/80 px-2.5 py-1.5 text-center shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-emerald-300/60">
                           <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-100 sm:text-[10px]">
                             {PRO_UNLOCK_COPY}
                           </div>

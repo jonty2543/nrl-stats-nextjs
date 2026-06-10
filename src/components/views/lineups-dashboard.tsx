@@ -2209,7 +2209,7 @@ function MatchupInsightsPanel({
             ))}
             {lockedInsightCount > 0 ? (
               <div className="relative min-h-24 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2/65 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
-                <div className="grid gap-2 p-2 opacity-75 blur-[1px] select-none">
+                <div className="grid gap-2 p-2 opacity-45 blur-[8px] select-none">
                   {(lockedPreviewInsights.length > 0 ? lockedPreviewInsights : visibleInsights).map((insight, insightIndex) => (
                     <div
                       key={`locked-${insight.category}-${insight.title}-${insightIndex}`}

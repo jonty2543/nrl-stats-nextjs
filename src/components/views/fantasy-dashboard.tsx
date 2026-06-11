@@ -5478,7 +5478,7 @@ export function FantasyDashboard({
           </div>
           {hasLoadedFullAllPlayersRows && allPlayersFiltersOpen ? (
             <div className="border-b border-nrl-border bg-nrl-panel px-3 py-2">
-              <div className="grid grid-cols-3 gap-2 lg:grid-cols-4 xl:grid-cols-5">
+              <div className="grid grid-cols-3 gap-x-2 gap-y-3 lg:grid-cols-4 xl:grid-cols-5">
                 <div>
                   <MultiSelect
                     label="Position"

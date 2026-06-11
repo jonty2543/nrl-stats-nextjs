@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import dynamic from "next/dynamic"
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type MouseEvent, type PointerEvent } from "react"
+import { Fragment, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type MouseEvent, type PointerEvent } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
@@ -661,27 +661,51 @@ function RangeFilter({
   const [open, setOpen] = useState(false)
   const [fieldBottom, setFieldBottom] = useState<number | null>(null)
   const [activeHandle, setActiveHandle] = useState<keyof NumberRange | null>(null)
+  const [draftRange, setDraftRange] = useState(() => normalizeNumberRange(value, bounds))
   const containerRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
-  const range = normalizeNumberRange(value, bounds)
+  const commitFrameRef = useRef<number | null>(null)
+  const committedRange = normalizeNumberRange(value, bounds)
+  const pendingRangeRef = useRef<NumberRange>(committedRange)
+  const range = open || activeHandle ? normalizeNumberRange(draftRange, bounds) : committedRange
   const span = bounds.max - bounds.min || 1
   const startPercent = ((range.min - bounds.min) / span) * 100
   const endPercent = ((range.max - bounds.min) / span) * 100
-  const updateRange = useCallback((key: keyof NumberRange, nextValue: number) => {
-    onChange(normalizeNumberRange({ ...range, [key]: nextValue }, bounds))
-  }, [bounds, onChange, range])
   const measureField = useCallback(() => {
     const rect = containerRef.current?.getBoundingClientRect()
     if (rect) setFieldBottom(rect.bottom)
   }, [])
+  const flushPendingRange = useCallback(() => {
+    if (commitFrameRef.current !== null) {
+      window.cancelAnimationFrame(commitFrameRef.current)
+      commitFrameRef.current = null
+    }
+    const nextRange = pendingRangeRef.current
+    startTransition(() => onChange(nextRange))
+  }, [onChange])
+  const scheduleRangeCommit = useCallback((nextRange: NumberRange) => {
+    pendingRangeRef.current = nextRange
+    if (commitFrameRef.current !== null) return
+    commitFrameRef.current = window.requestAnimationFrame(() => {
+      commitFrameRef.current = null
+      startTransition(() => onChange(pendingRangeRef.current))
+    })
+  }, [onChange])
+  const updateRange = useCallback((key: keyof NumberRange, nextValue: number) => {
+    setDraftRange((current) => {
+      const nextRange = normalizeNumberRange({ ...current, [key]: nextValue }, bounds)
+      scheduleRangeCommit(nextRange)
+      return nextRange
+    })
+  }, [bounds, scheduleRangeCommit])
   const valueFromClientX = useCallback((clientX: number) => {
     const rect = trackRef.current?.getBoundingClientRect()
-    if (!rect || rect.width <= 0) return range.min
+    if (!rect || rect.width <= 0) return pendingRangeRef.current.min
     const ratio = clampNumber((clientX - rect.left) / rect.width, 0, 1)
     const rawValue = bounds.min + ratio * span
     const steppedValue = bounds.min + Math.round((rawValue - bounds.min) / step) * step
     return clampNumber(steppedValue, bounds.min, bounds.max)
-  }, [bounds.max, bounds.min, range.min, span, step])
+  }, [bounds.max, bounds.min, span, step])
   const startDrag = useCallback((handle: keyof NumberRange, clientX: number) => {
     setActiveHandle(handle)
     updateRange(handle, valueFromClientX(clientX))
@@ -699,13 +723,14 @@ function RangeFilter({
     const onPointerDown = (event: globalThis.PointerEvent) => {
       if (!containerRef.current) return
       if (!containerRef.current.contains(event.target as Node)) {
+        flushPendingRange()
         setOpen(false)
       }
     }
 
     document.addEventListener("pointerdown", onPointerDown)
     return () => document.removeEventListener("pointerdown", onPointerDown)
-  }, [open])
+  }, [flushPendingRange, open])
 
   useEffect(() => {
     if (!open) return
@@ -726,6 +751,7 @@ function RangeFilter({
       updateRange(activeHandle, valueFromClientX(event.clientX))
     }
     const onPointerUp = () => {
+      flushPendingRange()
       setActiveHandle(null)
     }
 
@@ -735,7 +761,13 @@ function RangeFilter({
       window.removeEventListener("pointermove", onPointerMove)
       window.removeEventListener("pointerup", onPointerUp)
     }
-  }, [activeHandle, updateRange, valueFromClientX])
+  }, [activeHandle, flushPendingRange, updateRange, valueFromClientX])
+
+  useEffect(() => () => {
+    if (commitFrameRef.current !== null) {
+      window.cancelAnimationFrame(commitFrameRef.current)
+    }
+  }, [])
 
   return (
     <div ref={containerRef} className={`relative flex min-w-0 flex-col gap-0.5 ${open ? "z-[340]" : "z-0"}`}>
@@ -746,6 +778,8 @@ function RangeFilter({
         type="button"
         onClick={() => {
           measureField()
+          setDraftRange(normalizeNumberRange(value, bounds))
+          pendingRangeRef.current = normalizeNumberRange(value, bounds)
           setOpen((current) => !current)
         }}
         className={`h-[34px] w-full rounded-md border bg-nrl-panel-2 px-3 text-left transition-colors ${
@@ -3153,6 +3187,12 @@ export function FantasyDashboard({
   const [allPlayersProjectionRange, setAllPlayersProjectionRange] = useState<NumberRange>(ALL_PLAYERS_SCORE_RANGE)
   const [allPlayersBreakevenRange, setAllPlayersBreakevenRange] = useState<NumberRange>(ALL_PLAYERS_BREAKEVEN_RANGE)
   const [allPlayersFiltersOpen, setAllPlayersFiltersOpen] = useState(false)
+  const deferredAllPlayersPriceRange = useDeferredValue(allPlayersPriceRange)
+  const deferredAllPlayersOwnershipRange = useDeferredValue(allPlayersOwnershipRange)
+  const deferredAllPlayersAverageRange = useDeferredValue(allPlayersAverageRange)
+  const deferredAllPlayersLast3Range = useDeferredValue(allPlayersLast3Range)
+  const deferredAllPlayersProjectionRange = useDeferredValue(allPlayersProjectionRange)
+  const deferredAllPlayersBreakevenRange = useDeferredValue(allPlayersBreakevenRange)
   const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(false)
   const [cardTagsPreferenceHydrated, setCardTagsPreferenceHydrated] = useState(false)
   const showFantasyAnalytics = initialShowFantasyAnalytics
@@ -4315,12 +4355,12 @@ export function FantasyDashboard({
           matchesAllPlayersPositionFilters(point.positionLabels, allPlayersPositionFilters) &&
           matchesFantasyTagFilters(point.tagFilters, allPlayersTagFilters) &&
           matchesAllPlayersTeamFilters(point.team, allPlayersTeamFilters) &&
-          matchesAllPlayersNumberRange(point.price, allPlayersPriceRange) &&
-          matchesAllPlayersNumberRange(point.ownPercent, allPlayersOwnershipRange) &&
-          matchesAllPlayersNumberRange(point.avg2026, allPlayersAverageRange) &&
-          matchesAllPlayersNumberRange(point.last3, allPlayersLast3Range) &&
-          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.projection, allPlayersProjectionRange)) &&
-          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.breakeven, allPlayersBreakevenRange)) &&
+          matchesAllPlayersNumberRange(point.price, deferredAllPlayersPriceRange) &&
+          matchesAllPlayersNumberRange(point.ownPercent, deferredAllPlayersOwnershipRange) &&
+          matchesAllPlayersNumberRange(point.avg2026, deferredAllPlayersAverageRange) &&
+          matchesAllPlayersNumberRange(point.last3, deferredAllPlayersLast3Range) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.projection, deferredAllPlayersProjectionRange)) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.breakeven, deferredAllPlayersBreakevenRange)) &&
           point.pricedAt !== null &&
           metricValue !== null &&
           metricValue > 0 &&
@@ -4330,13 +4370,13 @@ export function FantasyDashboard({
       })
     },
     [
-      allPlayersAverageRange,
-      allPlayersBreakevenRange,
-      allPlayersLast3Range,
-      allPlayersOwnershipRange,
+      deferredAllPlayersAverageRange,
+      deferredAllPlayersBreakevenRange,
+      deferredAllPlayersLast3Range,
+      deferredAllPlayersOwnershipRange,
       allPlayersPositionFilters,
-      allPlayersPriceRange,
-      allPlayersProjectionRange,
+      deferredAllPlayersPriceRange,
+      deferredAllPlayersProjectionRange,
       allPlayersTagFilters,
       allPlayersTeamFilters,
       fantasyAnalyticsMetric,
@@ -4402,21 +4442,21 @@ export function FantasyDashboard({
           matchesAllPlayersPositionFilters(point.positionLabels, allPlayersPositionFilters) &&
           matchesFantasyTagFilters(point.tagFilters, allPlayersTagFilters) &&
           matchesAllPlayersTeamFilters(point.team, allPlayersTeamFilters) &&
-          matchesAllPlayersNumberRange(point.price, allPlayersPriceRange) &&
-          matchesAllPlayersNumberRange(point.ownPercent, allPlayersOwnershipRange) &&
-          matchesAllPlayersNumberRange(point.avg2026, allPlayersAverageRange) &&
-          matchesAllPlayersNumberRange(point.last3, allPlayersLast3Range) &&
-          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.projection, allPlayersProjectionRange)) &&
-          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.breakeven, allPlayersBreakevenRange))
+          matchesAllPlayersNumberRange(point.price, deferredAllPlayersPriceRange) &&
+          matchesAllPlayersNumberRange(point.ownPercent, deferredAllPlayersOwnershipRange) &&
+          matchesAllPlayersNumberRange(point.avg2026, deferredAllPlayersAverageRange) &&
+          matchesAllPlayersNumberRange(point.last3, deferredAllPlayersLast3Range) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.projection, deferredAllPlayersProjectionRange)) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.breakeven, deferredAllPlayersBreakevenRange))
       ),
     [
-      allPlayersAverageRange,
-      allPlayersBreakevenRange,
-      allPlayersLast3Range,
-      allPlayersOwnershipRange,
+      deferredAllPlayersAverageRange,
+      deferredAllPlayersBreakevenRange,
+      deferredAllPlayersLast3Range,
+      deferredAllPlayersOwnershipRange,
       allPlayersPositionFilters,
-      allPlayersPriceRange,
-      allPlayersProjectionRange,
+      deferredAllPlayersPriceRange,
+      deferredAllPlayersProjectionRange,
       allPlayersTagFilters,
       allPlayersTeamFilters,
       globalStatVsFantasyPoints,
@@ -4482,12 +4522,12 @@ export function FantasyDashboard({
       filteredRows = filteredRows.filter(
         (row) =>
           matchesAllPlayersTeamFilters(row.team, allPlayersTeamFilters) &&
-          matchesAllPlayersNumberRange(row.player.cost, allPlayersPriceRange) &&
-          matchesAllPlayersNumberRange(row.player.ownedBy, allPlayersOwnershipRange) &&
-          matchesAllPlayersNumberRange(row.avg2026, allPlayersAverageRange) &&
-          matchesAllPlayersNumberRange(row.last3, allPlayersLast3Range) &&
-          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(row.projection, allPlayersProjectionRange)) &&
-          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(row.breakeven, allPlayersBreakevenRange))
+          matchesAllPlayersNumberRange(row.player.cost, deferredAllPlayersPriceRange) &&
+          matchesAllPlayersNumberRange(row.player.ownedBy, deferredAllPlayersOwnershipRange) &&
+          matchesAllPlayersNumberRange(row.avg2026, deferredAllPlayersAverageRange) &&
+          matchesAllPlayersNumberRange(row.last3, deferredAllPlayersLast3Range) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(row.projection, deferredAllPlayersProjectionRange)) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(row.breakeven, deferredAllPlayersBreakevenRange))
       )
     }
     const activeAllPlayersSort = hasLoadedFullAllPlayersRows
@@ -4535,13 +4575,13 @@ export function FantasyDashboard({
       return String(aValue).localeCompare(String(bValue)) * direction
     })
   }, [
-    allPlayersOwnershipRange,
-    allPlayersAverageRange,
-    allPlayersBreakevenRange,
-    allPlayersLast3Range,
+    deferredAllPlayersOwnershipRange,
+    deferredAllPlayersAverageRange,
+    deferredAllPlayersBreakevenRange,
+    deferredAllPlayersLast3Range,
     allPlayersPositionFilters,
-    allPlayersPriceRange,
-    allPlayersProjectionRange,
+    deferredAllPlayersPriceRange,
+    deferredAllPlayersProjectionRange,
     allPlayersSort,
     allPlayersTableRows,
     allPlayersTagFilters,

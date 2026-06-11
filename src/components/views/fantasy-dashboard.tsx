@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import dynamic from "next/dynamic"
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type MouseEvent, type PointerEvent } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type MouseEvent, type PointerEvent } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
@@ -658,6 +658,9 @@ function RangeFilter({
   formatValue: (value: number) => string
   onChange: (value: NumberRange) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const [fieldBottom, setFieldBottom] = useState<number | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const range = normalizeNumberRange(value, bounds)
   const span = bounds.max - bounds.min || 1
   const startPercent = ((range.min - bounds.min) / span) * 100
@@ -665,43 +668,104 @@ function RangeFilter({
   const updateRange = (key: keyof NumberRange, nextValue: number) => {
     onChange(normalizeNumberRange({ ...range, [key]: nextValue }, bounds))
   }
+  const measureField = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (rect) setFieldBottom(rect.bottom)
+  }, [])
+  const rangeInputClass =
+    "pointer-events-none absolute left-6 right-6 top-1/2 h-0 -translate-y-1/2 appearance-none bg-transparent accent-nrl-accent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-nrl-accent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-nrl-accent"
+
+  useEffect(() => {
+    if (!open) return
+
+    const onPointerDown = (event: globalThis.PointerEvent) => {
+      if (!containerRef.current) return
+      if (!containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener("pointerdown", onPointerDown)
+    return () => document.removeEventListener("pointerdown", onPointerDown)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const animationFrame = window.requestAnimationFrame(measureField)
+    window.addEventListener("resize", measureField)
+    window.addEventListener("scroll", measureField, true)
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      window.removeEventListener("resize", measureField)
+      window.removeEventListener("scroll", measureField, true)
+    }
+  }, [measureField, open])
 
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div ref={containerRef} className={`relative flex min-w-0 flex-col gap-0.5 ${open ? "z-[340]" : "z-0"}`}>
       <div className="flex items-center justify-between gap-2">
         <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">{label}</label>
-        <span className="truncate text-[9px] font-semibold text-nrl-text">
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          measureField()
+          setOpen((current) => !current)
+        }}
+        className={`h-[34px] w-full rounded-md border bg-nrl-panel-2 px-3 text-left transition-colors ${
+          open ? "border-nrl-accent/60" : "border-nrl-border hover:border-nrl-accent/40"
+        }`}
+        aria-expanded={open}
+      >
+        <span className="block truncate text-[10px] font-semibold text-nrl-text">
           {formatValue(range.min)}-{formatValue(range.max)}
         </span>
-      </div>
-      <div className="relative h-[34px] rounded-md border border-nrl-border bg-nrl-panel-2 px-3">
-        <div className="absolute left-3 right-3 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-panel">
-          <div
-            className="absolute h-full rounded-full bg-nrl-accent/60"
-            style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }}
-          />
+      </button>
+      {open ? (
+        <div
+          className="fixed inset-x-3 top-[var(--range-popup-top)] z-[330] rounded-lg border border-nrl-border bg-nrl-panel p-4 shadow-[0_18px_44px_rgba(0,0,0,0.38)]"
+          style={{ "--range-popup-top": `${(fieldBottom ?? 0) + 6}px` } as CSSProperties}
+        >
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-nrl-accent">{label}</div>
+            <div className="text-[10px] font-semibold text-nrl-text">
+              {formatValue(range.min)}-{formatValue(range.max)}
+            </div>
+          </div>
+          <div className="relative h-12 rounded-md border border-nrl-border bg-nrl-panel-2 px-6">
+            <div className="absolute left-6 right-6 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-panel">
+              <div
+                className="absolute h-full rounded-full bg-nrl-accent/60"
+                style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }}
+              />
+            </div>
+            <input
+              type="range"
+              min={bounds.min}
+              max={bounds.max}
+              step={step}
+              value={range.min}
+              onChange={(event) => updateRange("min", Number(event.target.value))}
+              className={`${rangeInputClass} z-10`}
+              aria-label={`${label} minimum`}
+            />
+            <input
+              type="range"
+              min={bounds.min}
+              max={bounds.max}
+              step={step}
+              value={range.max}
+              onChange={(event) => updateRange("max", Number(event.target.value))}
+              className={`${rangeInputClass} z-20`}
+              aria-label={`${label} maximum`}
+            />
+          </div>
+          <div className="mt-2 flex justify-between text-[9px] font-semibold text-nrl-muted">
+            <span>{formatValue(bounds.min)}</span>
+            <span>{formatValue(bounds.max)}</span>
+          </div>
         </div>
-        <input
-          type="range"
-          min={bounds.min}
-          max={bounds.max}
-          step={step}
-          value={range.min}
-          onChange={(event) => updateRange("min", Number(event.target.value))}
-          className="pointer-events-none absolute left-3 right-3 top-1/2 z-10 h-0 -translate-y-1/2 appearance-none bg-transparent accent-nrl-accent [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto"
-          aria-label={`${label} minimum`}
-        />
-        <input
-          type="range"
-          min={bounds.min}
-          max={bounds.max}
-          step={step}
-          value={range.max}
-          onChange={(event) => updateRange("max", Number(event.target.value))}
-          className="pointer-events-none absolute left-3 right-3 top-1/2 z-20 h-0 -translate-y-1/2 appearance-none bg-transparent accent-nrl-accent [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto"
-          aria-label={`${label} maximum`}
-        />
-      </div>
+      ) : null}
     </div>
   )
 }

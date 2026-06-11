@@ -4170,7 +4170,7 @@ function MarketSection({
                                   ) : null}
                                 </div>
                                 {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
-                                  <div className="grid grid-cols-2 gap-2 pt-1">
+                                  <div className="grid grid-cols-[minmax(7.75rem,1fr)_minmax(7.75rem,1fr)] gap-2 pt-1">
                                     <div>
                                       <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Last 5</div>
                                       <TryFormDots values={tryscorerForm.lastFive} />
@@ -4402,7 +4402,7 @@ function MarketSection({
                                 <span className="min-w-0">
                                   <span className="block whitespace-nowrap">{outcomeLabel}</span>
                                   {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
-                                    <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
+                                    <div className="mt-1 grid w-[27rem] grid-cols-[13rem_minmax(0,1fr)] gap-x-3 gap-y-1">
                                       <div>
                                         <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Last 5</div>
                                         <TryFormDots values={tryscorerForm.lastFive} />

@@ -138,6 +138,7 @@ type AllPlayersSortDirection = "asc" | "desc"
 type FantasyAnalyticsMetric = "projection" | "last3" | "avg2026"
 type LockedPreviewPlot = "rolling" | "projectionRange" | "box" | "stat" | "heatmap" | "baseUpside"
 type FantasyTemplateMode = "ownership" | "change"
+type NumberRange = { min: number; max: number }
 type AllPlayersSortKey =
   | "name"
   | "position"
@@ -215,6 +216,7 @@ interface AllPlayersTableRow {
   playsNextMajorBye: boolean | null
   originChance: boolean
   gamesPlayed: number
+  team: string | null
 }
 
 interface FantasyAnalyticsPoint {
@@ -225,6 +227,7 @@ interface FantasyAnalyticsPoint {
   imageUrl: string | null
   team: string | null
   price: number | null
+  ownPercent: number | null
   pricedAt: number | null
   avg2026: number | null
   last3: number | null
@@ -253,6 +256,11 @@ interface GlobalStatVsFantasyPoint {
   imageUrl: string | null
   team: string | null
   price: number | null
+  ownPercent: number | null
+  avg2026: number | null
+  last3: number | null
+  projection: number | null
+  breakeven: number | null
   statValue: number
   fantasyAvg: number
 }
@@ -307,6 +315,10 @@ const FANTASY_TEMPLATE_MODES: Array<{ key: FantasyTemplateMode; label: string }>
   { key: "change", label: "Weekly Deltas" },
   { key: "ownership", label: "Total Ownership" },
 ]
+const ALL_PLAYERS_PRICE_RANGE: NumberRange = { min: 0, max: 1200000 }
+const ALL_PLAYERS_OWNERSHIP_RANGE: NumberRange = { min: 0, max: 100 }
+const ALL_PLAYERS_SCORE_RANGE: NumberRange = { min: 0, max: 100 }
+const ALL_PLAYERS_BREAKEVEN_RANGE: NumberRange = { min: -20, max: 140 }
 const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin"
 const FANTASY_DASHBOARD_STATE_STORAGE_KEY = "fantasy-dashboard-ui-state-v1"
 const FANTASY_DASHBOARD_STATE_TTL_MS = 30 * 60 * 1000
@@ -326,7 +338,15 @@ interface MajorByeRoundTag {
 interface FantasyDashboardPersistedState {
   allPlayersView?: "cards" | "table"
   allPlayersPositionFilter?: string
+  allPlayersPositionFilters?: string[]
   allPlayersTagFilters?: string[]
+  allPlayersTeamFilters?: string[]
+  allPlayersPriceRange?: NumberRange
+  allPlayersOwnershipRange?: NumberRange
+  allPlayersAverageRange?: NumberRange
+  allPlayersLast3Range?: NumberRange
+  allPlayersProjectionRange?: NumberRange
+  allPlayersBreakevenRange?: NumberRange
   allPlayersSort?: {
     column?: AllPlayersSortKey
     direction?: AllPlayersSortDirection
@@ -546,6 +566,38 @@ function parseFantasyDashboardPersistedState(raw: string | null): FantasyDashboa
   }
 }
 
+function isNumberRange(value: unknown): value is NumberRange {
+  if (!value || typeof value !== "object") return false
+  const range = value as Partial<NumberRange>
+  return typeof range.min === "number" && typeof range.max === "number" && Number.isFinite(range.min) && Number.isFinite(range.max)
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function normalizeNumberRange(value: NumberRange, bounds: NumberRange): NumberRange {
+  const min = clampNumber(Math.min(value.min, value.max), bounds.min, bounds.max)
+  const max = clampNumber(Math.max(value.min, value.max), bounds.min, bounds.max)
+  return { min, max }
+}
+
+function isFullNumberRange(value: NumberRange, bounds: NumberRange): boolean {
+  return value.min <= bounds.min && value.max >= bounds.max
+}
+
+function matchesAllPlayersNumberRange(value: number | null, range: NumberRange): boolean {
+  return value !== null && value >= range.min && value <= range.max
+}
+
+function matchesAllPlayersPositionFilters(positionLabels: string[], filters: string[]): boolean {
+  return filters.length === 0 || filters.some((position) => positionLabels.includes(position))
+}
+
+function matchesAllPlayersTeamFilters(team: string | null, filters: string[]): boolean {
+  return filters.length === 0 || (team !== null && filters.includes(team))
+}
+
 function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
   switch (key) {
     case "name":
@@ -589,6 +641,69 @@ function getCenteredValueClass(key: AllPlayersSortKey): string {
     default:
       return ""
   }
+}
+
+function RangeFilter({
+  label,
+  value,
+  bounds,
+  step,
+  formatValue,
+  onChange,
+}: {
+  label: string
+  value: NumberRange
+  bounds: NumberRange
+  step: number
+  formatValue: (value: number) => string
+  onChange: (value: NumberRange) => void
+}) {
+  const range = normalizeNumberRange(value, bounds)
+  const span = bounds.max - bounds.min || 1
+  const startPercent = ((range.min - bounds.min) / span) * 100
+  const endPercent = ((range.max - bounds.min) / span) * 100
+  const updateRange = (key: keyof NumberRange, nextValue: number) => {
+    onChange(normalizeNumberRange({ ...range, [key]: nextValue }, bounds))
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">{label}</label>
+        <span className="truncate text-[9px] font-semibold text-nrl-text">
+          {formatValue(range.min)}-{formatValue(range.max)}
+        </span>
+      </div>
+      <div className="relative h-[34px] rounded-md border border-nrl-border bg-nrl-panel-2 px-3">
+        <div className="absolute left-3 right-3 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-panel">
+          <div
+            className="absolute h-full rounded-full bg-nrl-accent/60"
+            style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }}
+          />
+        </div>
+        <input
+          type="range"
+          min={bounds.min}
+          max={bounds.max}
+          step={step}
+          value={range.min}
+          onChange={(event) => updateRange("min", Number(event.target.value))}
+          className="pointer-events-none absolute left-3 right-3 top-1/2 z-10 h-0 -translate-y-1/2 appearance-none bg-transparent accent-nrl-accent [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto"
+          aria-label={`${label} minimum`}
+        />
+        <input
+          type="range"
+          min={bounds.min}
+          max={bounds.max}
+          step={step}
+          value={range.max}
+          onChange={(event) => updateRange("max", Number(event.target.value))}
+          className="pointer-events-none absolute left-3 right-3 top-1/2 z-20 h-0 -translate-y-1/2 appearance-none bg-transparent accent-nrl-accent [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto"
+          aria-label={`${label} maximum`}
+        />
+      </div>
+    </div>
+  )
 }
 
 function isCompactGameLogColumn(column: GameLogColumn): boolean {
@@ -2926,8 +3041,16 @@ export function FantasyDashboard({
   })
   const [allPlayerCardSummaryRows, setAllPlayerCardSummaryRows] = useState<FantasyPlayerCardSummary[]>(precomputedAllPlayersRows)
   const [allPlayersView, setAllPlayersView] = useState<"cards" | "table">("cards")
-  const [allPlayersPositionFilter, setAllPlayersPositionFilter] = useState("All Positions")
+  const [allPlayersPositionFilters, setAllPlayersPositionFilters] = useState<string[]>([])
   const [allPlayersTagFilters, setAllPlayersTagFilters] = useState<string[]>([])
+  const [allPlayersTeamFilters, setAllPlayersTeamFilters] = useState<string[]>([])
+  const [allPlayersPriceRange, setAllPlayersPriceRange] = useState<NumberRange>(ALL_PLAYERS_PRICE_RANGE)
+  const [allPlayersOwnershipRange, setAllPlayersOwnershipRange] = useState<NumberRange>(ALL_PLAYERS_OWNERSHIP_RANGE)
+  const [allPlayersAverageRange, setAllPlayersAverageRange] = useState<NumberRange>(ALL_PLAYERS_SCORE_RANGE)
+  const [allPlayersLast3Range, setAllPlayersLast3Range] = useState<NumberRange>(ALL_PLAYERS_SCORE_RANGE)
+  const [allPlayersProjectionRange, setAllPlayersProjectionRange] = useState<NumberRange>(ALL_PLAYERS_SCORE_RANGE)
+  const [allPlayersBreakevenRange, setAllPlayersBreakevenRange] = useState<NumberRange>(ALL_PLAYERS_BREAKEVEN_RANGE)
+  const [allPlayersFiltersOpen, setAllPlayersFiltersOpen] = useState(false)
   const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(false)
   const [cardTagsPreferenceHydrated, setCardTagsPreferenceHydrated] = useState(false)
   const showFantasyAnalytics = initialShowFantasyAnalytics
@@ -3005,12 +3128,23 @@ export function FantasyDashboard({
     }
     if (saved) {
       if (isAllPlayersView(saved.allPlayersView)) setAllPlayersView(saved.allPlayersView)
-      if (typeof saved.allPlayersPositionFilter === "string") {
-        setAllPlayersPositionFilter(saved.allPlayersPositionFilter)
+      if (Array.isArray(saved.allPlayersPositionFilters)) {
+        setAllPlayersPositionFilters(saved.allPlayersPositionFilters.filter((position): position is string => typeof position === "string"))
+      } else if (typeof saved.allPlayersPositionFilter === "string" && saved.allPlayersPositionFilter !== "All Positions") {
+        setAllPlayersPositionFilters([saved.allPlayersPositionFilter])
       }
       if (Array.isArray(saved.allPlayersTagFilters)) {
         setAllPlayersTagFilters(saved.allPlayersTagFilters.filter((tag): tag is string => typeof tag === "string"))
       }
+      if (Array.isArray(saved.allPlayersTeamFilters)) {
+        setAllPlayersTeamFilters(saved.allPlayersTeamFilters.filter((team): team is string => typeof team === "string"))
+      }
+      if (isNumberRange(saved.allPlayersPriceRange)) setAllPlayersPriceRange(normalizeNumberRange(saved.allPlayersPriceRange, ALL_PLAYERS_PRICE_RANGE))
+      if (isNumberRange(saved.allPlayersOwnershipRange)) setAllPlayersOwnershipRange(normalizeNumberRange(saved.allPlayersOwnershipRange, ALL_PLAYERS_OWNERSHIP_RANGE))
+      if (isNumberRange(saved.allPlayersAverageRange)) setAllPlayersAverageRange(normalizeNumberRange(saved.allPlayersAverageRange, ALL_PLAYERS_SCORE_RANGE))
+      if (isNumberRange(saved.allPlayersLast3Range)) setAllPlayersLast3Range(normalizeNumberRange(saved.allPlayersLast3Range, ALL_PLAYERS_SCORE_RANGE))
+      if (isNumberRange(saved.allPlayersProjectionRange)) setAllPlayersProjectionRange(normalizeNumberRange(saved.allPlayersProjectionRange, ALL_PLAYERS_SCORE_RANGE))
+      if (isNumberRange(saved.allPlayersBreakevenRange)) setAllPlayersBreakevenRange(normalizeNumberRange(saved.allPlayersBreakevenRange, ALL_PLAYERS_BREAKEVEN_RANGE))
       if (
         saved.allPlayersSort &&
         isAllPlayersSortKey(saved.allPlayersSort.column) &&
@@ -3044,8 +3178,15 @@ export function FantasyDashboard({
     if (!showOwnedCards || !dashboardStateHydrated) return
     const state: FantasyDashboardPersistedState = {
       allPlayersView,
-      allPlayersPositionFilter,
+      allPlayersPositionFilters,
       allPlayersTagFilters,
+      allPlayersTeamFilters,
+      allPlayersPriceRange,
+      allPlayersOwnershipRange,
+      allPlayersAverageRange,
+      allPlayersLast3Range,
+      allPlayersProjectionRange,
+      allPlayersBreakevenRange,
       allPlayersSort,
       fantasyAnalyticsMetric,
       fantasyAnalyticsPositionFilter,
@@ -3062,9 +3203,16 @@ export function FantasyDashboard({
       // Ignore dashboard state storage failures.
     }
   }, [
-    allPlayersPositionFilter,
+    allPlayersAverageRange,
+    allPlayersBreakevenRange,
+    allPlayersLast3Range,
+    allPlayersPositionFilters,
+    allPlayersOwnershipRange,
+    allPlayersPriceRange,
+    allPlayersProjectionRange,
     allPlayersSort,
     allPlayersTagFilters,
+    allPlayersTeamFilters,
     allPlayersView,
     dashboardStateHydrated,
     fantasyAnalyticsMetric,
@@ -4024,6 +4172,7 @@ export function FantasyDashboard({
         playsNextMajorBye,
         originChance: precomputedRow?.originChance ?? originChance,
         gamesPlayed: Math.trunc(precomputedStatsRow?.gamesPlayed ?? (playerRows.length || player.gamesPlayed || 0)),
+        team: projectionTeam ?? imageRow?.team ?? teamHint,
       }
     })
   }, [allPlayerCardSummaryRows, allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, isAllPlayersPreview, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
@@ -4044,8 +4193,9 @@ export function FantasyDashboard({
         positionLabels: row.player.positionLabels,
         tagFilters: getFantasyFilterTags(row),
         imageUrl: getPlayerThumbnailUrl(row.imageRow),
-        team: row.imageRow?.team ?? null,
+        team: row.team,
         price: row.player.cost,
+        ownPercent: row.player.ownedBy,
         pricedAt: row.player.pricedAt,
         avg2026: row.avg2026,
         last3: row.last3,
@@ -4060,9 +4210,15 @@ export function FantasyDashboard({
       return fantasyAnalyticsPoints.filter((point) => {
         const metricValue = getFantasyAnalyticsMetricValue(point, fantasyAnalyticsMetric)
         return (
-          (fantasyAnalyticsPositionFilter === "All Positions" ||
-            point.positionLabels.includes(fantasyAnalyticsPositionFilter)) &&
+          matchesAllPlayersPositionFilters(point.positionLabels, allPlayersPositionFilters) &&
           matchesFantasyTagFilters(point.tagFilters, allPlayersTagFilters) &&
+          matchesAllPlayersTeamFilters(point.team, allPlayersTeamFilters) &&
+          matchesAllPlayersNumberRange(point.price, allPlayersPriceRange) &&
+          matchesAllPlayersNumberRange(point.ownPercent, allPlayersOwnershipRange) &&
+          matchesAllPlayersNumberRange(point.avg2026, allPlayersAverageRange) &&
+          matchesAllPlayersNumberRange(point.last3, allPlayersLast3Range) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.projection, allPlayersProjectionRange)) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.breakeven, allPlayersBreakevenRange)) &&
           point.pricedAt !== null &&
           metricValue !== null &&
           metricValue > 0 &&
@@ -4071,7 +4227,20 @@ export function FantasyDashboard({
         )
       })
     },
-    [allPlayersTagFilters, fantasyAnalyticsMetric, fantasyAnalyticsPoints, fantasyAnalyticsPositionFilter]
+    [
+      allPlayersAverageRange,
+      allPlayersBreakevenRange,
+      allPlayersLast3Range,
+      allPlayersOwnershipRange,
+      allPlayersPositionFilters,
+      allPlayersPriceRange,
+      allPlayersProjectionRange,
+      allPlayersTagFilters,
+      allPlayersTeamFilters,
+      fantasyAnalyticsMetric,
+      fantasyAnalyticsPoints,
+      hasFantasyPlotAccess,
+    ]
   )
   const fantasyAnalyticsMetricOption =
     FANTASY_ANALYTICS_METRICS.find((metric) => metric.key === fantasyAnalyticsMetric) ?? FANTASY_ANALYTICS_METRICS[0]
@@ -4112,8 +4281,13 @@ export function FantasyDashboard({
         positionLabels: row.player.positionLabels,
         tagFilters: getFantasyFilterTags(row),
         imageUrl: getPlayerThumbnailUrl(row.imageRow),
-        team: row.imageRow?.team ?? null,
+        team: row.team,
         price: row.player.cost,
+        ownPercent: row.player.ownedBy,
+        avg2026: row.avg2026,
+        last3: row.last3,
+        projection: row.projection,
+        breakeven: row.breakeven,
         statValue,
         fantasyAvg: row.avg2026,
       }]
@@ -4123,11 +4297,29 @@ export function FantasyDashboard({
     () =>
       globalStatVsFantasyPoints.filter(
         (point) =>
-          (globalStatVsFantasyPositionFilter === "All Positions" ||
-            point.positionLabels.includes(globalStatVsFantasyPositionFilter)) &&
-          matchesFantasyTagFilters(point.tagFilters, allPlayersTagFilters)
+          matchesAllPlayersPositionFilters(point.positionLabels, allPlayersPositionFilters) &&
+          matchesFantasyTagFilters(point.tagFilters, allPlayersTagFilters) &&
+          matchesAllPlayersTeamFilters(point.team, allPlayersTeamFilters) &&
+          matchesAllPlayersNumberRange(point.price, allPlayersPriceRange) &&
+          matchesAllPlayersNumberRange(point.ownPercent, allPlayersOwnershipRange) &&
+          matchesAllPlayersNumberRange(point.avg2026, allPlayersAverageRange) &&
+          matchesAllPlayersNumberRange(point.last3, allPlayersLast3Range) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.projection, allPlayersProjectionRange)) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.breakeven, allPlayersBreakevenRange))
       ),
-    [allPlayersTagFilters, globalStatVsFantasyPoints, globalStatVsFantasyPositionFilter]
+    [
+      allPlayersAverageRange,
+      allPlayersBreakevenRange,
+      allPlayersLast3Range,
+      allPlayersOwnershipRange,
+      allPlayersPositionFilters,
+      allPlayersPriceRange,
+      allPlayersProjectionRange,
+      allPlayersTagFilters,
+      allPlayersTeamFilters,
+      globalStatVsFantasyPoints,
+      hasFantasyPlotAccess,
+    ]
   )
   const globalStatVsFantasyCorrelation = useMemo(() => {
     if (filteredGlobalStatVsFantasyPoints.length < 2) return null
@@ -4174,12 +4366,26 @@ export function FantasyDashboard({
 
   const sortedAllPlayersTableRows = useMemo(() => {
     let filteredRows =
-      !hasLoadedFullAllPlayersRows || allPlayersPositionFilter === "All Positions"
+      !hasLoadedFullAllPlayersRows || allPlayersPositionFilters.length === 0
         ? allPlayersTableRows
-        : allPlayersTableRows.filter((row) => row.player.positionLabels.includes(allPlayersPositionFilter))
+        : allPlayersTableRows.filter((row) =>
+          matchesAllPlayersPositionFilters(row.player.positionLabels, allPlayersPositionFilters)
+        )
     if (hasLoadedFullAllPlayersRows && allPlayersTagFilters.length > 0) {
       filteredRows = filteredRows.filter(
         (row) => matchesFantasyTagFilters(getFantasyFilterTags(row), allPlayersTagFilters)
+      )
+    }
+    if (hasLoadedFullAllPlayersRows) {
+      filteredRows = filteredRows.filter(
+        (row) =>
+          matchesAllPlayersTeamFilters(row.team, allPlayersTeamFilters) &&
+          matchesAllPlayersNumberRange(row.player.cost, allPlayersPriceRange) &&
+          matchesAllPlayersNumberRange(row.player.ownedBy, allPlayersOwnershipRange) &&
+          matchesAllPlayersNumberRange(row.avg2026, allPlayersAverageRange) &&
+          matchesAllPlayersNumberRange(row.last3, allPlayersLast3Range) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(row.projection, allPlayersProjectionRange)) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(row.breakeven, allPlayersBreakevenRange))
       )
     }
     const activeAllPlayersSort = hasLoadedFullAllPlayersRows
@@ -4226,7 +4432,21 @@ export function FantasyDashboard({
 
       return String(aValue).localeCompare(String(bValue)) * direction
     })
-  }, [allPlayersPositionFilter, allPlayersSort, allPlayersTableRows, allPlayersTagFilters, hasLoadedFullAllPlayersRows])
+  }, [
+    allPlayersOwnershipRange,
+    allPlayersAverageRange,
+    allPlayersBreakevenRange,
+    allPlayersLast3Range,
+    allPlayersPositionFilters,
+    allPlayersPriceRange,
+    allPlayersProjectionRange,
+    allPlayersSort,
+    allPlayersTableRows,
+    allPlayersTagFilters,
+    allPlayersTeamFilters,
+    hasFantasyPlotAccess,
+    hasLoadedFullAllPlayersRows,
+  ])
 
   const allPlayersTagFilterOptions = useMemo(() => {
     const byeOptions = new Set<string>()
@@ -4244,6 +4464,13 @@ export function FantasyDashboard({
     ]
   }, [allPlayersTableRows])
 
+  const allPlayersTeamFilterOptions = useMemo(
+    () =>
+      Array.from(new Set(allPlayersTableRows.map((row) => row.team).filter((team): team is string => Boolean(team))))
+        .sort((a, b) => a.localeCompare(b)),
+    [allPlayersTableRows]
+  )
+
   useEffect(() => {
     if (!dashboardStateHydrated || allPlayersTagFilters.length === 0) return
     const availableTags = new Set(allPlayersTagFilterOptions)
@@ -4253,6 +4480,15 @@ export function FantasyDashboard({
     }
   }, [allPlayersTagFilterOptions, allPlayersTagFilters, dashboardStateHydrated])
 
+  useEffect(() => {
+    if (!dashboardStateHydrated || allPlayersTeamFilters.length === 0) return
+    const availableTeams = new Set(allPlayersTeamFilterOptions)
+    const validTeams = allPlayersTeamFilters.filter((team) => availableTeams.has(team))
+    if (validTeams.length !== allPlayersTeamFilters.length) {
+      setAllPlayersTeamFilters(validTeams)
+    }
+  }, [allPlayersTeamFilterOptions, allPlayersTeamFilters, dashboardStateHydrated])
+
   const availableAllPlayersMobileSortOptions = useMemo(
     () => ALL_PLAYERS_MOBILE_SORT_OPTIONS.filter((option) => hasFantasyPlotAccess || !option.proOnly),
     [hasFantasyPlotAccess]
@@ -4261,6 +4497,18 @@ export function FantasyDashboard({
     availableAllPlayersMobileSortOptions.find((option) => option.key === allPlayersSort.column)?.label ??
     availableAllPlayersMobileSortOptions[0]?.label ??
     "Weekly"
+  const allPlayersPlotPositionFilter =
+    allPlayersPositionFilters.length === 1 ? allPlayersPositionFilters[0] : "All Positions"
+  const activeAllPlayersFilterCount =
+    (allPlayersPositionFilters.length > 0 ? 1 : 0) +
+    (allPlayersTagFilters.length > 0 ? 1 : 0) +
+    (allPlayersTeamFilters.length > 0 ? 1 : 0) +
+    (isFullNumberRange(allPlayersPriceRange, ALL_PLAYERS_PRICE_RANGE) ? 0 : 1) +
+    (isFullNumberRange(allPlayersOwnershipRange, ALL_PLAYERS_OWNERSHIP_RANGE) ? 0 : 1) +
+    (isFullNumberRange(allPlayersAverageRange, ALL_PLAYERS_SCORE_RANGE) ? 0 : 1) +
+    (isFullNumberRange(allPlayersLast3Range, ALL_PLAYERS_SCORE_RANGE) ? 0 : 1) +
+    (hasFantasyPlotAccess && !isFullNumberRange(allPlayersProjectionRange, ALL_PLAYERS_SCORE_RANGE) ? 1 : 0) +
+    (hasFantasyPlotAccess && !isFullNumberRange(allPlayersBreakevenRange, ALL_PLAYERS_BREAKEVEN_RANGE) ? 1 : 0)
 
   const toggleAllPlayersSort = useCallback((column: AllPlayersSortKey, disabled = false) => {
     if (disabled) return
@@ -4671,17 +4919,17 @@ export function FantasyDashboard({
             <Link
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}
-              className="relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-violet-300/25 bg-[linear-gradient(135deg,rgba(82,43,168,0.72),rgba(33,39,83,0.92))] px-5 py-4 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-violet-200/55 hover:bg-[#34296f] xl:min-h-[108px] xl:py-3"
+              className="relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-violet-200/40 bg-[linear-gradient(135deg,rgba(111,73,228,0.88),rgba(57,85,198,0.86))] px-5 py-4 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.14)] transition-colors hover:border-violet-100/65 hover:bg-[#5143c9] xl:min-h-[108px] xl:py-3"
             >
               <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-                <span className="absolute -left-2 top-2 h-14 w-36 rounded-full opacity-25 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
-                <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-20 [background-image:radial-gradient(circle,#00f58a_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
+                <span className="absolute -left-2 top-2 h-14 w-36 rounded-full opacity-30 [background-image:radial-gradient(circle,#8bd8ff_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
+                <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-25 [background-image:radial-gradient(circle,#8bd8ff_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
               </span>
               <span className="absolute right-3 top-3 rounded-full border border-emerald-200 bg-nrl-accent px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.22)]">
                 New
               </span>
               <span className="relative z-10 inline-flex items-center gap-2 pr-12 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/15 bg-white/10">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/25 bg-white/[0.16]">
                   <PersonIcon className="h-5 w-5" />
                 </span>
                 <span className="text-base font-black leading-none">My Team</span>
@@ -4836,19 +5084,8 @@ export function FantasyDashboard({
                       Pro unlocks projection
                     </BillingPageLink>
                   ) : null}
-                  <div className="w-full overflow-x-auto">
-                  <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(128px,1.1fr)] items-center gap-2">
-                    <div className="min-w-0">
-                      <Select
-                        label=""
-                        value={fantasyAnalyticsPositionFilter}
-                        options={FANTASY_ANALYTICS_POSITION_OPTIONS}
-                        onChange={(value) => {
-                          setFantasyAnalyticsPositionFilter(value)
-                        }}
-                      />
-                    </div>
-                    <div className="min-w-0">
+                  <div className="w-full overflow-x-auto sm:w-auto sm:min-w-[220px]">
+                    <div className="min-w-[180px]">
                       <div className="flex min-w-0 justify-center rounded-md border border-nrl-border bg-nrl-panel p-0.5">
                         {FANTASY_ANALYTICS_METRICS.map((metric) => {
                           const metricLocked = !hasFantasyPlotAccess && metric.key === "projection"
@@ -4877,11 +5114,10 @@ export function FantasyDashboard({
                       </div>
                     </div>
                   </div>
-                  </div>
                 </div>
                 {pricedAtProjectionPoints.length > 0 ? (
                   <FantasyAnalyticsScatterPlot
-                    key={`${fantasyAnalyticsPositionFilter}-${fantasyAnalyticsMetric}`}
+                    key={`${allPlayersPositionFilters.join(",") || "all"}-${fantasyAnalyticsMetric}`}
                     points={pricedAtProjectionPoints}
                     metric={fantasyAnalyticsMetric}
                     metricOption={fantasyAnalyticsMetricOption}
@@ -4904,17 +5140,7 @@ export function FantasyDashboard({
                         : ""}
                     </div>
                   </div>
-                  <div className="grid w-full grid-cols-2 items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[360px]">
-                  <div className="min-w-0">
-                    <Select
-                      label=""
-                      value={globalStatVsFantasyPositionFilter}
-                      options={FANTASY_ANALYTICS_POSITION_OPTIONS}
-                      onChange={(value) => {
-                        setGlobalStatVsFantasyPositionFilter(value)
-                      }}
-                    />
-                  </div>
+                  <div className="grid w-full items-center gap-2 overflow-x-auto sm:w-auto sm:min-w-[180px]">
                   <div className="min-w-0">
                     <Select
                       label=""
@@ -4929,10 +5155,10 @@ export function FantasyDashboard({
                 </div>
                 {filteredGlobalStatVsFantasyPoints.length > 0 ? (
                   <GlobalStatVsFantasyScatterPlot
-                    key={globalStatVsFantasyPositionFilter + "-" + selectedGlobalStatVsFantasyLabel}
+                    key={(allPlayersPositionFilters.join(",") || "all") + "-" + selectedGlobalStatVsFantasyLabel}
                     points={filteredGlobalStatVsFantasyPoints}
                     selectedOption={selectedGlobalStatVsFantasyOption}
-                    positionFilter={globalStatVsFantasyPositionFilter}
+                    positionFilter={allPlayersPlotPositionFilter}
                     trendline={globalStatVsFantasyTrendline}
                   />
                 ) : (
@@ -5068,41 +5294,35 @@ export function FantasyDashboard({
       {showOwnedCards && !showFantasyAnalyticsOnly ? (
         <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-panel-2 px-3 py-2">
-            <div>
+            {!hasLoadedFullAllPlayersRows ? (
+              <div>
               <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
-                {hasLoadedFullAllPlayersRows ? "All Players" : "Top Weekly Buys"}
+                Top Weekly Buys
               </div>
             </div>
+            ) : null}
             {hasLoadedFullAllPlayersRows ? (
-              <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-0.5 min-[360px]:gap-1 sm:w-auto sm:justify-end sm:gap-1.5">
-                <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-[2px]">
-                  {(["cards", "table"] as const).map((view) => (
-                    <button
-                      key={view}
-                      type="button"
-                      onClick={() => {
-                        setAllPlayersView(view)
-                      }}
-                      className={`rounded-full px-1.5 py-1 text-[8px] font-bold uppercase tracking-wide transition-colors sm:px-2 sm:text-[9px] ${
-                        effectiveAllPlayersView === view
-                          ? "bg-nrl-accent text-[#07131f]"
-                          : "text-nrl-muted hover:text-nrl-text"
-                      }`}
-                    >
-                      {view === "cards" ? "Cards" : "Table"}
-                    </button>
-                  ))}
-                </div>
-                <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[126px]">
-                  <Select
-                    label=""
-                    value={allPlayersPositionFilter}
-                    options={["All Positions", ...POSITION_TABLES.map((position) => position.label)]}
-                    onChange={setAllPlayersPositionFilter}
-                  />
-                </div>
-                <label className="inline-flex shrink-0 cursor-pointer rounded-full bg-[linear-gradient(90deg,#071632,#1d4ed8,#7dd3fc,#bfdbfe,#1d4ed8,#071632)] p-[1px] shadow-[0_0_0_1px_rgba(125,211,252,0.28),0_0_14px_rgba(37,99,235,0.22)]">
-                  <span className="inline-flex min-h-[28px] items-center justify-center gap-1 rounded-full bg-nrl-panel-2 px-1.5 text-[8px] font-bold uppercase tracking-wide text-nrl-muted min-[360px]:px-2 sm:gap-1.5 sm:text-[9px]">
+              <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-1.5">
+                <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+                  <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-[2px]">
+                    {(["cards", "table"] as const).map((view) => (
+                      <button
+                        key={view}
+                        type="button"
+                        onClick={() => {
+                          setAllPlayersView(view)
+                        }}
+                        className={`rounded-full px-1.5 py-1 text-[8px] font-bold uppercase tracking-wide transition-colors sm:px-2 sm:text-[9px] ${
+                          effectiveAllPlayersView === view
+                            ? "bg-nrl-accent text-[#07131f]"
+                            : "text-nrl-muted hover:text-nrl-text"
+                        }`}
+                      >
+                        {view === "cards" ? "Cards" : "Table"}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
                     <span>Tags</span>
                     <input
                       type="checkbox"
@@ -5110,20 +5330,28 @@ export function FantasyDashboard({
                       onChange={(event) => setShowAllPlayersCardTags(event.target.checked)}
                       className="sr-only"
                     />
-                    <span className={`relative h-3.5 w-5 rounded-full border transition-colors sm:w-6 ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
-                      <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-2.5 bg-nrl-accent sm:translate-x-3" : "translate-x-0.5 bg-nrl-muted"}`} />
+                    <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                      <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
                     </span>
-                  </span>
-                </label>
-                <div className="w-[80px] shrink-0 min-[360px]:w-[94px] sm:w-[116px]">
-                  <MultiSelect
-                    label=""
-                    value={allPlayersTagFilters}
-                    options={allPlayersTagFilterOptions}
-                    onChange={setAllPlayersTagFilters}
-                    placeholder="All Tags"
-                  />
+                  </label>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setAllPlayersFiltersOpen((open) => !open)}
+                  className={`relative inline-grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border transition-colors ${
+                    allPlayersFiltersOpen || activeAllPlayersFilterCount > 0
+                      ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                      : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+                  }`}
+                  aria-expanded={allPlayersFiltersOpen}
+                  aria-label="Filters"
+                >
+                  <span className="flex flex-col gap-0.5" aria-hidden="true">
+                    <span className="block h-0.5 w-4 rounded-full bg-current" />
+                    <span className="block h-0.5 w-4 rounded-full bg-current" />
+                    <span className="block h-0.5 w-4 rounded-full bg-current" />
+                  </span>
+                </button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -5146,6 +5374,129 @@ export function FantasyDashboard({
               </div>
             )}
           </div>
+          {hasLoadedFullAllPlayersRows && allPlayersFiltersOpen ? (
+            <div className="border-b border-nrl-border bg-nrl-panel px-3 py-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                <div>
+                  <MultiSelect
+                    label="Position"
+                    value={allPlayersPositionFilters}
+                    options={POSITION_TABLES.map((position) => position.label)}
+                    onChange={setAllPlayersPositionFilters}
+                    placeholder="All Positions"
+                  />
+                </div>
+                <div>
+                  <MultiSelect
+                    label="Team"
+                    value={allPlayersTeamFilters}
+                    options={allPlayersTeamFilterOptions}
+                    onChange={setAllPlayersTeamFilters}
+                    placeholder="All Teams"
+                  />
+                </div>
+                <div>
+                  <MultiSelect
+                    label="Tags"
+                    value={allPlayersTagFilters}
+                    options={allPlayersTagFilterOptions}
+                    onChange={setAllPlayersTagFilters}
+                    placeholder="All Tags"
+                  />
+                </div>
+                <div>
+                  <RangeFilter
+                    label="Price"
+                    value={allPlayersPriceRange}
+                    bounds={ALL_PLAYERS_PRICE_RANGE}
+                    step={50000}
+                    formatValue={(value) => `$${Math.round(value / 1000)}k`}
+                    onChange={setAllPlayersPriceRange}
+                  />
+                </div>
+                <div>
+                  <RangeFilter
+                    label="Ownership"
+                    value={allPlayersOwnershipRange}
+                    bounds={ALL_PLAYERS_OWNERSHIP_RANGE}
+                    step={1}
+                    formatValue={(value) => `${value}%`}
+                    onChange={setAllPlayersOwnershipRange}
+                  />
+                </div>
+                <div>
+                  <RangeFilter
+                    label="Avg"
+                    value={allPlayersAverageRange}
+                    bounds={ALL_PLAYERS_SCORE_RANGE}
+                    step={1}
+                    formatValue={(value) => `${value}`}
+                    onChange={setAllPlayersAverageRange}
+                  />
+                </div>
+                <div>
+                  <RangeFilter
+                    label="Last 3"
+                    value={allPlayersLast3Range}
+                    bounds={ALL_PLAYERS_SCORE_RANGE}
+                    step={1}
+                    formatValue={(value) => `${value}`}
+                    onChange={setAllPlayersLast3Range}
+                  />
+                </div>
+                {hasFantasyPlotAccess ? (
+                  <>
+                    <div>
+                      <RangeFilter
+                        label="Proj"
+                        value={allPlayersProjectionRange}
+                        bounds={ALL_PLAYERS_SCORE_RANGE}
+                        step={1}
+                        formatValue={(value) => `${value}`}
+                        onChange={setAllPlayersProjectionRange}
+                      />
+                    </div>
+                    <div>
+                      <RangeFilter
+                        label="BE"
+                        value={allPlayersBreakevenRange}
+                        bounds={ALL_PLAYERS_BREAKEVEN_RANGE}
+                        step={5}
+                        formatValue={(value) => `${value}`}
+                        onChange={setAllPlayersBreakevenRange}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                  {sortedAllPlayersTableRows.length} shown
+                </div>
+                <div className="flex items-center gap-2">
+                  {activeAllPlayersFilterCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAllPlayersPositionFilters([])
+                        setAllPlayersTagFilters([])
+                        setAllPlayersTeamFilters([])
+                        setAllPlayersPriceRange(ALL_PLAYERS_PRICE_RANGE)
+                        setAllPlayersOwnershipRange(ALL_PLAYERS_OWNERSHIP_RANGE)
+                        setAllPlayersAverageRange(ALL_PLAYERS_SCORE_RANGE)
+                        setAllPlayersLast3Range(ALL_PLAYERS_SCORE_RANGE)
+                        setAllPlayersProjectionRange(ALL_PLAYERS_SCORE_RANGE)
+                        setAllPlayersBreakevenRange(ALL_PLAYERS_BREAKEVEN_RANGE)
+                      }}
+                      className="min-h-[30px] rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 text-[10px] font-bold uppercase tracking-wide text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-accent"
+                    >
+                      Clear {activeAllPlayersFilterCount}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
           <div className={`${hasLoadedFullAllPlayersRows && effectiveAllPlayersView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2`}>
             <div className="mb-2 max-w-2xl">
               <SearchableSelect
@@ -5191,7 +5542,11 @@ export function FantasyDashboard({
           <div className={`${effectiveAllPlayersView === "cards" ? "grid" : "hidden"} ${showAllPlayersOnly ? "" : "max-h-[760px]"} grid-cols-1 gap-2 overflow-y-auto p-2.5`}>
             {sortedAllPlayersTableRows.length === 0 ? (
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
-                {isAllPlayersPreview ? "No weekly ownership movers available." : `No ${ALL_PLAYERS_STATS_YEAR} player stats available.`}
+                {activeAllPlayersFilterCount > 0
+                  ? "No players match the current filters."
+                  : isAllPlayersPreview
+                    ? "No weekly ownership movers available."
+                    : `No ${ALL_PLAYERS_STATS_YEAR} player stats available.`}
               </div>
             ) : (
               sortedAllPlayersTableRows.map((row) => {
@@ -5407,7 +5762,9 @@ export function FantasyDashboard({
                       colSpan={ALL_PLAYERS_BASE_COLUMNS.length + 1}
                       className="px-3 py-6 text-center text-xs text-nrl-muted"
                     >
-                      No {ALL_PLAYERS_STATS_YEAR} player stats available.
+                      {activeAllPlayersFilterCount > 0
+                        ? "No players match the current filters."
+                        : `No ${ALL_PLAYERS_STATS_YEAR} player stats available.`}
                     </td>
                   </tr>
                 ) : (

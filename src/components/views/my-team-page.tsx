@@ -2924,12 +2924,15 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
         <Link
           href="/dashboard/fantasy"
           onClick={() => setIsBackPending(true)}
-          className="inline-flex items-center rounded-md border border-nrl-border bg-nrl-panel px-3 py-1.5 text-xs font-semibold text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:text-nrl-accent"
+          aria-label="Back to Fantasy Dashboard"
+          title="Back to Fantasy Dashboard"
+          className="inline-grid h-9 w-10 place-items-center rounded-md border border-nrl-border bg-nrl-panel text-lg font-bold leading-none text-nrl-muted transition-colors hover:border-nrl-accent/40 hover:text-nrl-accent"
         >
-          Back to Fantasy Dashboard
           {isBackPending ? (
-            <span className="ml-2 h-3 w-3 animate-spin rounded-full border-2 border-nrl-accent/25 border-t-nrl-accent" />
-          ) : null}
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-nrl-accent/25 border-t-nrl-accent" />
+          ) : (
+            <span aria-hidden="true">←</span>
+          )}
         </Link>
         {team ? (
           <button

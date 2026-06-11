@@ -84,10 +84,10 @@ export function MultiSelect({
             setOpen(true);
           }}
           aria-expanded={open}
-          className="w-full rounded-md border border-nrl-border bg-nrl-panel-2 p-1 min-h-[22px] text-left"
+          className="min-h-[34px] w-full rounded-md border border-nrl-border bg-nrl-panel-2 py-1 pl-3 pr-2 text-left"
         >
-          <div className="flex items-center justify-between gap-1">
-            <div className="flex flex-wrap gap-0.5">
+          <div className="flex min-h-[24px] items-center justify-between gap-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-0.5">
               {selectedOptions.length === 0 ? (
                 <span className="text-[10px] text-slate-100">{placeholder}</span>
               ) : (

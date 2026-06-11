@@ -5387,12 +5387,6 @@ export function FantasyDashboard({
         </section>
       ) : null}
 
-      {showOwnedCards && showAllPlayersOnly ? (
-        <div>
-          <FantasyBackLink href="/dashboard/fantasy" label="Back to Fantasy Dashboard" />
-        </div>
-      ) : null}
-
       {showOwnedCards && !showFantasyAnalyticsOnly ? (
         <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-panel-2 px-3 py-2">
@@ -5406,6 +5400,9 @@ export function FantasyDashboard({
             {hasLoadedFullAllPlayersRows ? (
               <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-1.5">
                 <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+                  {showAllPlayersOnly ? (
+                    <FantasyBackLink href="/dashboard/fantasy" label="Back to Fantasy Dashboard" />
+                  ) : null}
                   <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-[2px]">
                     {(["cards", "table"] as const).map((view) => (
                       <button

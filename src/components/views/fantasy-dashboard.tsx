@@ -660,20 +660,38 @@ function RangeFilter({
 }) {
   const [open, setOpen] = useState(false)
   const [fieldBottom, setFieldBottom] = useState<number | null>(null)
+  const [activeHandle, setActiveHandle] = useState<keyof NumberRange | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
   const range = normalizeNumberRange(value, bounds)
   const span = bounds.max - bounds.min || 1
   const startPercent = ((range.min - bounds.min) / span) * 100
   const endPercent = ((range.max - bounds.min) / span) * 100
-  const updateRange = (key: keyof NumberRange, nextValue: number) => {
+  const updateRange = useCallback((key: keyof NumberRange, nextValue: number) => {
     onChange(normalizeNumberRange({ ...range, [key]: nextValue }, bounds))
-  }
+  }, [bounds, onChange, range])
   const measureField = useCallback(() => {
     const rect = containerRef.current?.getBoundingClientRect()
     if (rect) setFieldBottom(rect.bottom)
   }, [])
-  const rangeInputClass =
-    "pointer-events-none absolute left-6 right-6 top-1/2 h-0 -translate-y-1/2 appearance-none bg-transparent accent-nrl-accent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-nrl-accent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-nrl-accent"
+  const valueFromClientX = useCallback((clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect()
+    if (!rect || rect.width <= 0) return range.min
+    const ratio = clampNumber((clientX - rect.left) / rect.width, 0, 1)
+    const rawValue = bounds.min + ratio * span
+    const steppedValue = bounds.min + Math.round((rawValue - bounds.min) / step) * step
+    return clampNumber(steppedValue, bounds.min, bounds.max)
+  }, [bounds.max, bounds.min, range.min, span, step])
+  const startDrag = useCallback((handle: keyof NumberRange, clientX: number) => {
+    setActiveHandle(handle)
+    updateRange(handle, valueFromClientX(clientX))
+  }, [updateRange, valueFromClientX])
+  const startTrackDrag = useCallback((clientX: number) => {
+    const nextValue = valueFromClientX(clientX)
+    const minDistance = Math.abs(nextValue - range.min)
+    const maxDistance = Math.abs(nextValue - range.max)
+    startDrag(minDistance <= maxDistance ? "min" : "max", clientX)
+  }, [range.max, range.min, startDrag, valueFromClientX])
 
   useEffect(() => {
     if (!open) return
@@ -700,6 +718,24 @@ function RangeFilter({
       window.removeEventListener("scroll", measureField, true)
     }
   }, [measureField, open])
+
+  useEffect(() => {
+    if (!activeHandle) return
+
+    const onPointerMove = (event: globalThis.PointerEvent) => {
+      updateRange(activeHandle, valueFromClientX(event.clientX))
+    }
+    const onPointerUp = () => {
+      setActiveHandle(null)
+    }
+
+    window.addEventListener("pointermove", onPointerMove)
+    window.addEventListener("pointerup", onPointerUp)
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("pointerup", onPointerUp)
+    }
+  }, [activeHandle, updateRange, valueFromClientX])
 
   return (
     <div ref={containerRef} className={`relative flex min-w-0 flex-col gap-0.5 ${open ? "z-[340]" : "z-0"}`}>
@@ -732,33 +768,35 @@ function RangeFilter({
               {formatValue(range.min)}-{formatValue(range.max)}
             </div>
           </div>
-          <div className="relative h-12 rounded-md border border-nrl-border bg-nrl-panel-2 px-6">
-            <div className="absolute left-6 right-6 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-panel">
+          <div className="rounded-md border border-nrl-border bg-nrl-panel-2 px-6 py-4">
+            <div
+              ref={trackRef}
+              className="relative h-5 cursor-pointer touch-none"
+              onPointerDown={(event) => startTrackDrag(event.clientX)}
+            >
+              <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-nrl-panel">
+                <div
+                  className="absolute h-full rounded-full bg-nrl-accent/60"
+                  style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }}
+                />
+              </div>
               <div
-                className="absolute h-full rounded-full bg-nrl-accent/60"
-                style={{ left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%` }}
+                className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-nrl-accent/60 bg-nrl-accent shadow-[0_0_0_2px_rgba(11,17,34,0.9)]"
+                style={{ left: `${startPercent}%` }}
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                  startDrag("min", event.clientX)
+                }}
+              />
+              <div
+                className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-nrl-accent/60 bg-nrl-accent shadow-[0_0_0_2px_rgba(11,17,34,0.9)]"
+                style={{ left: `${endPercent}%` }}
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                  startDrag("max", event.clientX)
+                }}
               />
             </div>
-            <input
-              type="range"
-              min={bounds.min}
-              max={bounds.max}
-              step={step}
-              value={range.min}
-              onChange={(event) => updateRange("min", Number(event.target.value))}
-              className={`${rangeInputClass} z-10`}
-              aria-label={`${label} minimum`}
-            />
-            <input
-              type="range"
-              min={bounds.min}
-              max={bounds.max}
-              step={step}
-              value={range.max}
-              onChange={(event) => updateRange("max", Number(event.target.value))}
-              className={`${rangeInputClass} z-20`}
-              aria-label={`${label} maximum`}
-            />
           </div>
           <div className="mt-2 flex justify-between text-[9px] font-semibold text-nrl-muted">
             <span>{formatValue(bounds.min)}</span>
@@ -5440,7 +5478,7 @@ export function FantasyDashboard({
           </div>
           {hasLoadedFullAllPlayersRows && allPlayersFiltersOpen ? (
             <div className="border-b border-nrl-border bg-nrl-panel px-3 py-2">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 <div>
                   <MultiSelect
                     label="Position"
@@ -5473,7 +5511,7 @@ export function FantasyDashboard({
                     label="Price"
                     value={allPlayersPriceRange}
                     bounds={ALL_PLAYERS_PRICE_RANGE}
-                    step={50000}
+                    step={10000}
                     formatValue={(value) => `$${Math.round(value / 1000)}k`}
                     onChange={setAllPlayersPriceRange}
                   />
@@ -5525,7 +5563,7 @@ export function FantasyDashboard({
                         label="BE"
                         value={allPlayersBreakevenRange}
                         bounds={ALL_PLAYERS_BREAKEVEN_RANGE}
-                        step={5}
+                        step={1}
                         formatValue={(value) => `${value}`}
                         onChange={setAllPlayersBreakevenRange}
                       />

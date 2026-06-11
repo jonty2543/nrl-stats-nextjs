@@ -5478,8 +5478,8 @@ export function FantasyDashboard({
           </div>
           {hasLoadedFullAllPlayersRows && allPlayersFiltersOpen ? (
             <div className="border-b border-nrl-border bg-nrl-panel px-3 py-2">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                <div>
+              <div className="grid grid-cols-6 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <div className="col-span-3 sm:col-span-1">
                   <MultiSelect
                     label="Position"
                     value={allPlayersPositionFilters}
@@ -5488,7 +5488,7 @@ export function FantasyDashboard({
                     placeholder="All Positions"
                   />
                 </div>
-                <div>
+                <div className="col-span-3 sm:col-span-1">
                   <MultiSelect
                     label="Team"
                     value={allPlayersTeamFilters}
@@ -5497,7 +5497,7 @@ export function FantasyDashboard({
                     placeholder="All Teams"
                   />
                 </div>
-                <div>
+                <div className="col-span-3 sm:col-span-1">
                   <MultiSelect
                     label="Tags"
                     value={allPlayersTagFilters}
@@ -5506,7 +5506,7 @@ export function FantasyDashboard({
                     placeholder="All Tags"
                   />
                 </div>
-                <div>
+                <div className="col-span-3 sm:col-span-1">
                   <RangeFilter
                     label="Price"
                     value={allPlayersPriceRange}
@@ -5516,7 +5516,7 @@ export function FantasyDashboard({
                     onChange={setAllPlayersPriceRange}
                   />
                 </div>
-                <div>
+                <div className="col-span-3 sm:col-span-1">
                   <RangeFilter
                     label="Ownership"
                     value={allPlayersOwnershipRange}
@@ -5526,7 +5526,7 @@ export function FantasyDashboard({
                     onChange={setAllPlayersOwnershipRange}
                   />
                 </div>
-                <div>
+                <div className="col-span-3 sm:col-span-1">
                   <RangeFilter
                     label="Avg"
                     value={allPlayersAverageRange}
@@ -5536,7 +5536,7 @@ export function FantasyDashboard({
                     onChange={setAllPlayersAverageRange}
                   />
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <RangeFilter
                     label="Last 3"
                     value={allPlayersLast3Range}
@@ -5548,7 +5548,7 @@ export function FantasyDashboard({
                 </div>
                 {hasFantasyPlotAccess ? (
                   <>
-                    <div>
+                    <div className="col-span-2 sm:col-span-1">
                       <RangeFilter
                         label="Proj"
                         value={allPlayersProjectionRange}
@@ -5558,7 +5558,7 @@ export function FantasyDashboard({
                         onChange={setAllPlayersProjectionRange}
                       />
                     </div>
-                    <div>
+                    <div className="col-span-2 sm:col-span-1">
                       <RangeFilter
                         label="BE"
                         value={allPlayersBreakevenRange}

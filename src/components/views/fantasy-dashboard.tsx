@@ -1783,6 +1783,23 @@ function TradeStars({ value, className = "", blurred = false }: { value: number 
   )
 }
 
+function TradeRatingInfoPopover({ className = "" }: { className?: string }) {
+  return (
+    <div className={`absolute right-0 top-full z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-nrl-border bg-[#101832] p-3 text-left shadow-2xl shadow-black/40 ${className}`}>
+      <div className="grid gap-1.5 text-[10px] font-semibold leading-snug text-nrl-muted sm:grid-cols-2">
+        <div><span className="text-nrl-accent">Overall</span>: Combines every component with even weighting.</div>
+        <div><span className="text-nrl-accent">Popularity</span>: Scores weekly ownership movement against fixed thresholds.</div>
+        <div><span className="text-nrl-accent">Value</span>: Scores projection versus priced-at against fixed thresholds.</div>
+        <div><span className="text-nrl-accent">Keeper</span>: Rewards keeper-level projected scoring.</div>
+        <div><span className="text-nrl-accent">Role</span>: Penalises relevant casualty ward return risk.</div>
+        <div><span className="text-nrl-accent">Form</span>: Compares L3 average to priced-at score.</div>
+        <div><span className="text-nrl-accent">BE</span>: Compares priced-at score to breakeven.</div>
+        <div><span className="text-nrl-accent">Avail</span>: Counts next 6 rounds played, including byes and Origin risk.</div>
+      </div>
+    </div>
+  )
+}
+
 function getTradeScoreColorClass(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "text-nrl-muted"
   if (value >= 8) return "text-emerald-300"
@@ -5683,7 +5700,7 @@ export function FantasyDashboard({
                   </label>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <div className="flex items-center gap-0.5">
+                  <div className="relative flex items-center gap-0.5">
                     <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
                       <span>Ratings</span>
                       <input
@@ -5714,6 +5731,7 @@ export function FantasyDashboard({
                     >
                       i
                     </button>
+                    {showAllPlayersTradeRatingInfo ? <TradeRatingInfoPopover /> : null}
                   </div>
                   <button
                     type="button"
@@ -5752,7 +5770,7 @@ export function FantasyDashboard({
                     <span aria-hidden="true">→</span>
                   )}
                 </Link>
-                <div className="flex shrink-0 items-center gap-0.5">
+                <div className="relative flex shrink-0 items-center gap-0.5">
                   <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
                     <span>Ratings</span>
                     <input
@@ -5783,24 +5801,11 @@ export function FantasyDashboard({
                   >
                     i
                   </button>
+                  {showAllPlayersTradeRatingInfo ? <TradeRatingInfoPopover /> : null}
                 </div>
               </div>
             )}
           </div>
-          {showAllPlayersTradeRatingInfo ? (
-            <div className="border-b border-nrl-border bg-[#101832] px-3 py-2">
-              <div className="grid gap-1.5 text-[10px] font-semibold leading-snug text-nrl-muted sm:grid-cols-2 lg:grid-cols-4">
-                <div><span className="text-nrl-accent">Overall</span>: Combines every component with even weighting.</div>
-                <div><span className="text-nrl-accent">Popularity</span>: Measures weekly trade popularity versus the player pool.</div>
-                <div><span className="text-nrl-accent">Value</span>: Compares projection to priced-at score.</div>
-                <div><span className="text-nrl-accent">Keeper</span>: Rewards keeper-level projected scoring.</div>
-                <div><span className="text-nrl-accent">Role</span>: Penalises relevant casualty ward return risk.</div>
-                <div><span className="text-nrl-accent">Form</span>: Compares L3 average to priced-at score.</div>
-                <div><span className="text-nrl-accent">BE</span>: Compares priced-at score to breakeven.</div>
-                <div><span className="text-nrl-accent">Avail</span>: Counts next 6 rounds played, including byes and Origin risk.</div>
-              </div>
-            </div>
-          ) : null}
           {hasLoadedFullAllPlayersRows && allPlayersFiltersOpen ? (
             <div className="border-b border-nrl-border bg-nrl-panel px-3 py-2">
               <div className="grid grid-cols-3 gap-x-2 gap-y-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -6640,7 +6645,7 @@ export function FantasyDashboard({
                   </div>
                   {selectedTradeRatingStats.length > 0 ? (
                     <div className="mx-auto mb-5 w-full max-w-[43rem] rounded-xl border border-white/10 bg-white/[0.035] px-3 py-3">
-                      <div className="mb-2 flex items-center justify-end gap-2">
+                      <div className="relative mb-2 flex items-center justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => setShowAllPlayersTradeRatingInfo((open) => !open)}
@@ -6654,6 +6659,7 @@ export function FantasyDashboard({
                         >
                           i
                         </button>
+                        {showAllPlayersTradeRatingInfo ? <TradeRatingInfoPopover /> : null}
                       </div>
                       <div className="grid grid-cols-4 gap-2">
                           {selectedTradeRatingStats.map((stat) => {
@@ -6671,18 +6677,6 @@ export function FantasyDashboard({
                             )
                           })}
                       </div>
-                      {showAllPlayersTradeRatingInfo ? (
-                        <div className="mt-3 grid gap-1.5 border-t border-white/8 pt-3 text-[10px] font-semibold leading-snug text-nrl-muted sm:grid-cols-2">
-                          <div><span className="text-nrl-accent">Overall</span>: Combines every component with even weighting.</div>
-                          <div><span className="text-nrl-accent">Popularity</span>: Measures weekly trade popularity versus the player pool.</div>
-                          <div><span className="text-nrl-accent">Value</span>: Compares projection to priced-at score.</div>
-                          <div><span className="text-nrl-accent">Keeper</span>: Rewards keeper-level projected scoring.</div>
-                          <div><span className="text-nrl-accent">Role</span>: Penalises relevant casualty ward return risk.</div>
-                          <div><span className="text-nrl-accent">Form</span>: Compares L3 average to priced-at score.</div>
-                          <div><span className="text-nrl-accent">BE</span>: Compares priced-at score to breakeven.</div>
-                          <div><span className="text-nrl-accent">Avail</span>: Counts next 6 rounds played, including byes and Origin risk.</div>
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
                   <div className="relative mx-auto w-full max-w-[43rem]">

@@ -22,7 +22,7 @@ export function AppHeader({
 }: AppHeaderProps) {
   return (
     <header className={`${sticky ? "sticky top-0 z-50" : ""} relative isolate ${className}`.trim()}>
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 z-0 w-screen -translate-x-1/2 bg-[#111733]/86 backdrop-blur" />
+      <div className="pointer-events-none absolute inset-y-0 left-1/2 z-0 w-screen -translate-x-1/2 bg-[var(--app-bg-base)] bg-fixed [background-image:var(--app-bg-gradient)]" />
       <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="relative flex items-center justify-between gap-4 border-b border-white/8 pb-4 pt-6">
           <Link href="/" className="relative z-10 inline-flex min-w-0 items-center gap-3">

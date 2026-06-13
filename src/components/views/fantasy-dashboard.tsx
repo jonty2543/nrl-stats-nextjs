@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import { Fragment, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type MouseEvent, type PointerEvent } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
+import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
 import type { FantasyGameLogTrendBrushProps } from "@/components/charts/fantasy-game-log-trend-brush"
 import type { Draw2026Data } from "@/lib/draw/types"
@@ -2306,12 +2307,7 @@ function FantasyAnalyticsScatterPlot({
           className="group flex items-center gap-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-xs text-nrl-text transition-colors hover:border-nrl-accent/60 hover:bg-nrl-panel"
         >
           <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-xs font-semibold text-nrl-muted">
-            {selectedPoint.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={selectedPoint.imageUrl} alt="" className="h-full w-full object-cover object-top" loading="lazy" />
-            ) : (
-              <span>{getPlayerInitials(selectedPoint.name)}</span>
-            )}
+            <ImageWithFallback sources={[selectedPoint.imageUrl ?? "", "/body-shot.png"]} alt={`${selectedPoint.name} player image`} className="h-full w-full object-cover object-top" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-start justify-between gap-3">
@@ -2601,12 +2597,7 @@ function GlobalStatVsFantasyScatterPlot({
           className="group flex items-center gap-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-xs text-nrl-text transition-colors hover:border-nrl-accent/60 hover:bg-nrl-panel"
         >
           <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-xs font-semibold text-nrl-muted">
-            {selectedPoint.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={selectedPoint.imageUrl} alt="" className="h-full w-full object-cover object-top" loading="lazy" />
-            ) : (
-              <span>{getPlayerInitials(selectedPoint.name)}</span>
-            )}
+            <ImageWithFallback sources={[selectedPoint.imageUrl ?? "", "/body-shot.png"]} alt={`${selectedPoint.name} player image`} className="h-full w-full object-cover object-top" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-start justify-between gap-3">
@@ -5243,7 +5234,7 @@ export function FantasyDashboard({
     <div className={showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? "space-y-3" : "space-y-6"}>
       <div className="space-y-5 xl:space-y-8">
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly && fantasyMarketWatch.buys.length > 0 ? (
-          <section className="overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(135deg,#101a33_0%,#0b1020_58%,#111827_100%)] shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+          <section className="overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(135deg,#172543_0%,#111a32_58%,#18213a_100%)] shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
             <div className="px-3 py-3 sm:px-4">
               <div className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-300">
                 Top 5 buys
@@ -5262,17 +5253,7 @@ export function FantasyDashboard({
                         {index + 1}
                       </span>
                       <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-white/10 bg-black/20 text-[11px] text-nrl-muted shadow-[0_8px_18px_rgba(0,0,0,0.25)] sm:h-11 sm:w-11">
-                        {thumbnailUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={thumbnailUrl}
-                            alt={`${row.player.name} profile`}
-                            className="h-full w-full object-cover object-top"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span>{getPlayerInitials(row.player.name)}</span>
-                        )}
+                        <ImageWithFallback sources={[thumbnailUrl ?? "", "/body-shot.png"]} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                       </div>
                       <div className="min-w-0">
                         <div className="truncate text-[13px] font-black text-white">
@@ -6163,17 +6144,7 @@ export function FantasyDashboard({
 	                    <div className="flex items-start justify-between gap-3 md:w-[250px] md:shrink-0 md:items-center">
                       <div className="flex min-w-0 items-start gap-2.5">
                         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-[11px] text-nrl-muted">
-                          {thumbnailUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={thumbnailUrl}
-                              alt=""
-                              className="h-full w-full object-cover object-top"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <span>{getPlayerInitials(row.player.name)}</span>
-                          )}
+                          <ImageWithFallback sources={[thumbnailUrl ?? "", "/body-shot.png"]} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                         </div>
                         <div className="min-w-0">
                           <div className="min-w-0">
@@ -6320,17 +6291,7 @@ export function FantasyDashboard({
                       >
                         <td className="sticky left-0 z-[1] w-13 min-w-13 max-w-13 border-r border-nrl-border bg-nrl-panel px-1 py-1 sm:w-15 sm:min-w-15 sm:max-w-15">
                           <div className="mx-auto grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
-                            {thumbnailUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={thumbnailUrl}
-                                alt=""
-                                className="h-full w-full object-cover object-top"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <span>{getPlayerInitials(row.player.name)}</span>
-                            )}
+                            <ImageWithFallback sources={[thumbnailUrl ?? "", "/body-shot.png"]} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                           </div>
                         </td>
                         <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-32 sm:min-w-32 sm:max-w-32 sm:px-2 lg:sticky lg:left-[3.75rem] lg:z-[1]">

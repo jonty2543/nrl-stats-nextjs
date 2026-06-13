@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
+import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
 import type {
@@ -757,13 +758,13 @@ function normaliseImageUrl(value: string | null): string | null {
   return trimmed
 }
 
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
+function playerImageSources(...sources: Array<string | null | undefined>): string[] {
+  const out = sources.flatMap((source) => {
+    const normalised = normaliseImageUrl(source ?? null)
+    return normalised ? [normalised] : []
+  })
+  out.push("/body-shot.png")
+  return out
 }
 
 function displayName(player: LineupPlayer): string {
@@ -1484,8 +1485,7 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
   if (!selection || typeof document === "undefined") return null
   const { player, liveState, liveStats, showPregameMetrics } = selection
   const fantasyPpm = fantasyPointsPerMinute(liveStats)
-  const image = player.headImage ?? player.bodyImage
-  const initials = player.player.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2)
+  const imageSources = playerImageSources(player.headImage, player.bodyImage)
   const averageItems: PlayerStatDisplayItem[] = DISPLAY_MODES
     .filter((mode): mode is { key: AverageStatKey; label: string; shortLabel: string } => mode.key !== "odds" && mode.key !== "fantasy")
     .map((mode) => ({
@@ -1546,14 +1546,7 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
       <div className="max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-lg border border-blue-300/20 bg-[#071024] shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-blue-300/15 bg-[#0b1630] px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            {image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={image} alt="" className="h-14 w-14 shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover" />
-            ) : (
-              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel text-sm font-black text-nrl-muted">
-                {initials}
-              </div>
-            )}
+            <ImageWithFallback sources={imageSources} alt={`${player.player} player image`} className="h-14 w-14 shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover" />
             <div className="min-w-0">
               <div className="truncate text-base font-bold text-nrl-text">{player.player}</div>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-nrl-muted">
@@ -1836,7 +1829,7 @@ function PitchPlayer({
   positionPpmBaselines: Record<string, number>
   onPlayerSelect: (player: LineupPlayer) => void
 }) {
-  const imageUrl = normaliseImageUrl(player.headImage ?? player.bodyImage)
+  const imageSources = playerImageSources(player.headImage, player.bodyImage)
   const position = slotPosition(slot, player, side, orientation)
   const compact = orientation === "portrait"
   const liveState = getLivePlayerState(liveMatch, player)
@@ -1854,12 +1847,7 @@ function PitchPlayer({
     >
       <div className={`${compact ? "h-9 w-9 sm:h-10 sm:w-10" : "h-12 w-12"} relative mx-auto`}>
         <div className="grid h-full w-full place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-nrl-panel shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
-          {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt="" className="h-full w-full object-cover object-top" loading="lazy" />
-          ) : (
-            <span className="text-[10px] font-bold text-nrl-muted">{initials(player.player)}</span>
-          )}
+          <ImageWithFallback sources={imageSources} alt={`${player.player} player image`} className="h-full w-full object-cover object-top" />
         </div>
         <div className={`${compact ? "-right-3 px-1.5 text-[9px]" : "-right-3.5 px-2 text-[10px]"} absolute -top-1 rounded-full bg-blue-950 py-0.5 font-bold text-white`}>
           {slot}

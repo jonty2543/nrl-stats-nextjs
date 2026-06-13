@@ -919,14 +919,7 @@ function TryscorerProfileDialog({ selection, onClose }: { selection: TryscorerPr
       <div className="w-full max-w-lg overflow-hidden rounded-lg border border-blue-300/20 bg-[#071024] shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-blue-300/15 bg-[#0b1630] px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            {image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={image} alt="" className="h-14 w-14 rounded-full border border-white/10 bg-nrl-panel object-cover" />
-            ) : (
-              <div className="grid h-14 w-14 place-items-center rounded-full border border-white/10 bg-nrl-panel text-sm font-black text-nrl-muted">
-                {form.player.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}
-              </div>
-            )}
+            <PlayerProfileImage image={image} name={form.player} className="h-14 w-14" />
             <div className="min-w-0">
               <div className="truncate text-base font-bold text-nrl-text">{form.player}</div>
               <div className="mt-0.5 text-xs text-nrl-muted">{[form.team, form.position].filter(Boolean).join(" · ") || match}</div>

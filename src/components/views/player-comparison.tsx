@@ -152,12 +152,6 @@ function formatTableNumber(value: number | null, digits = 1): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(digits);
 }
 
-function getPlayerInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  return `${parts[0]?.[0] ?? ""}${parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : ""}`.toUpperCase();
-}
-
 function withPositionLabel(name: string, position: string): string {
   if (!name || name === "None" || position === "All") return name;
   return `${name} (${position})`;
@@ -635,9 +629,15 @@ export function PlayerImageCard({
                 }}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-xs text-nrl-muted">
-                Image unavailable
-              </div>
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={PLAYER_IMAGE_FALLBACK_URL}
+                alt={`${playerName} player image`}
+                className={frameless ? "relative z-10 max-h-[99%] w-auto object-contain" : "relative z-10 max-h-[94%] w-auto object-contain"}
+                loading="eager"
+                fetchPriority={priority ? "high" : "auto"}
+                decoding="async"
+              />
             )}
           </div>
 
@@ -756,9 +756,15 @@ export function SimplePlayerPhotoTile({
             }}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-nrl-muted">
-            Image unavailable
-          </div>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={PLAYER_IMAGE_FALLBACK_URL}
+            alt={`${playerName} player image`}
+            className="relative z-10 max-h-[96%] w-auto object-contain"
+            loading="eager"
+            fetchPriority={priority ? "high" : "auto"}
+            decoding="async"
+          />
         )}
       </div>
       {showName ? (
@@ -804,7 +810,14 @@ function PlayerStatsTableThumbnail({
           }}
         />
       ) : (
-        <span>{getPlayerInitials(name)}</span>
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={PLAYER_IMAGE_FALLBACK_URL}
+          alt={`${name} player image`}
+          className="h-full w-full object-cover object-top"
+          loading="lazy"
+          decoding="async"
+        />
       )}
     </div>
   );

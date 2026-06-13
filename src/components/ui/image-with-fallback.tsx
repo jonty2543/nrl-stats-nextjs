@@ -8,6 +8,14 @@ interface ImageWithFallbackProps {
   className?: string
 }
 
+function normaliseImageSource(value: string): string {
+  if (value.startsWith("http://")) return `https://${value.slice("http://".length)}`
+  if (value.includes("/remote.axd?http://")) {
+    return value.replace("/remote.axd?http://", "/remote.axd?https://")
+  }
+  return value
+}
+
 export function ImageWithFallback({ sources, alt, className }: ImageWithFallbackProps) {
   const uniqueSources = useMemo(() => {
     const seen = new Set<string>()
@@ -15,8 +23,10 @@ export function ImageWithFallback({ sources, alt, className }: ImageWithFallback
     for (const source of sources) {
       const trimmed = source?.trim()
       if (!trimmed || seen.has(trimmed)) continue
-      seen.add(trimmed)
-      out.push(trimmed)
+      const normalised = normaliseImageSource(trimmed)
+      if (seen.has(normalised)) continue
+      seen.add(normalised)
+      out.push(normalised)
     }
     return out
   }, [sources])

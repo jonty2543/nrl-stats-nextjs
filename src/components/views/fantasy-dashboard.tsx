@@ -5286,7 +5286,7 @@ export function FantasyDashboard({
                       </div>
                       <div className="text-right">
                         <div className="text-base font-black leading-none tracking-[0.08em]">
-                          <TradeStars value={row.tradeRating?.overall ?? null} blurred={!hasFantasyPlotAccess} />
+                          <TradeStars value={row.tradeRating?.overall ?? null} />
                         </div>
                         <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-white/35">
                           Overall Rating
@@ -5304,22 +5304,20 @@ export function FantasyDashboard({
             <Link
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}
-              className="relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-violet-200/40 bg-[linear-gradient(135deg,rgba(111,73,228,0.88),rgba(57,85,198,0.86))] px-5 py-4 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.14)] transition-colors hover:border-violet-100/65 hover:bg-[#5143c9] xl:min-h-[108px] xl:py-3"
+              className="relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] px-5 py-4 text-left text-nrl-text shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] xl:min-h-[108px] xl:py-3"
             >
+              <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(123,92,255,0.11),rgba(0,245,138,0.045)_58%,rgba(17,24,50,0)_100%)]" />
               <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-                <span className="absolute -left-2 top-2 h-14 w-36 rounded-full opacity-30 [background-image:radial-gradient(circle,#8bd8ff_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
-                <span className="absolute -bottom-1 right-8 h-14 w-40 rounded-full opacity-25 [background-image:radial-gradient(circle,#8bd8ff_1.4px,transparent_1.7px)] [background-size:9px_9px]" />
+                <span className="absolute -left-3 top-2 h-14 w-36 rounded-full opacity-16 [background-image:radial-gradient(circle,#00f58a_1.25px,transparent_1.6px)] [background-size:9px_9px]" />
+                <span className="absolute -bottom-2 right-8 h-14 w-40 rounded-full opacity-12 [background-image:radial-gradient(circle,#00f58a_1.25px,transparent_1.6px)] [background-size:9px_9px]" />
               </span>
-              <span className="absolute right-3 top-3 rounded-full border border-emerald-200 bg-nrl-accent px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#07131f] shadow-[0_8px_18px_rgba(0,245,138,0.22)]">
-                New
-              </span>
-              <span className="relative z-10 inline-flex items-center gap-2 pr-12 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/25 bg-white/[0.16]">
-                  <PersonIcon className="h-5 w-5" />
+              <span className="relative z-10 inline-flex items-center gap-2">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10 text-nrl-accent">
+                  <PersonIcon className="h-4 w-4" />
                 </span>
                 <span className="text-base font-black leading-none">My Team</span>
               </span>
-              <span className="relative z-10 max-w-[280px] text-[11px] font-bold leading-snug text-white/95 drop-shadow-[0_1px_2px_rgba(7,19,31,0.55)]">
+              <span className="relative z-10 max-w-[280px] text-[11px] font-semibold leading-snug text-nrl-muted">
                 Upload screenshots, save your team and get personalised advice
               </span>
               {isMyTeamPending ? (
@@ -5712,6 +5710,11 @@ export function FantasyDashboard({
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <div className="flex items-center gap-0.5">
+                    {!hasFantasyPlotAccess ? (
+                      <BillingPageLink className="inline-flex min-h-[30px] shrink-0 items-center rounded-full border border-nrl-accent/50 bg-nrl-accent/10 px-2.5 text-[8px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-nrl-accent hover:text-nrl-accent sm:text-[9px]">
+                        Pro $5/month
+                      </BillingPageLink>
+                    ) : null}
                     <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
                       <span>Ratings</span>
                       <input
@@ -5776,6 +5779,11 @@ export function FantasyDashboard({
                   )}
                 </Link>
                 <div className="flex shrink-0 items-center gap-0.5">
+                  {!hasFantasyPlotAccess ? (
+                    <BillingPageLink className="inline-flex min-h-[30px] shrink-0 items-center rounded-full border border-nrl-accent/50 bg-nrl-accent/10 px-2.5 text-[8px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-nrl-accent hover:text-nrl-accent sm:text-[9px]">
+                      Pro $5/month
+                    </BillingPageLink>
+                  ) : null}
                   <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
                     <span>Ratings</span>
                     <input

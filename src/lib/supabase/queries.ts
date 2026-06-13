@@ -3045,26 +3045,21 @@ export async function fetchTopWeeklyFantasyPlayerCardSummaries(): Promise<Fantas
 
 export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord[]> {
   const raw = await fetchAllRows<Record<string, unknown>>("player_images");
-  const currentSeasonStartMs = Date.parse("2026-01-01");
-  return raw.map((row) => {
-    const lastSeen = typeof row.last_seen_match_date === "string" ? row.last_seen_match_date : null;
-    const lastSeenMs = lastSeen ? Date.parse(lastSeen) : NaN;
-    const hasCurrentImage = Number.isFinite(lastSeenMs) && lastSeenMs >= currentSeasonStartMs;
-    return {
-      player: typeof row.player === "string" ? row.player : "",
-      team: typeof row.team === "string" ? row.team : null,
-      number: row.number == null ? null : String(row.number),
-      position: typeof row.position === "string" ? row.position : null,
-      head_image: hasCurrentImage && typeof row.head_image === "string" ? row.head_image : null,
-      body_image: hasCurrentImage && typeof row.body_image === "string" ? row.body_image : null,
-      last_seen_match_date: lastSeen,
-    };
-  });
+  return raw.map((row) => ({
+    player: typeof row.player === "string" ? row.player : "",
+    team: typeof row.team === "string" ? row.team : null,
+    number: row.number == null ? null : String(row.number),
+    position: typeof row.position === "string" ? row.position : null,
+    head_image: typeof row.head_image === "string" ? row.head_image : null,
+    body_image: typeof row.body_image === "string" ? row.body_image : null,
+    last_seen_match_date:
+      typeof row.last_seen_match_date === "string" ? row.last_seen_match_date : null,
+  }));
 }
 
 const fetchPlayerImagesCached = unstable_cache(
   async (): Promise<PlayerImageRecord[]> => fetchPlayerImagesFromSupabase(),
-  ["player-images-v1"],
+  ["player-images-v2"],
   { revalidate: 3600 }
 );
 

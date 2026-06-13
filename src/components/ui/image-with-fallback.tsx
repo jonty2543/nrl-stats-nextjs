@@ -9,11 +9,24 @@ interface ImageWithFallbackProps {
 }
 
 function normaliseImageSource(value: string): string {
-  if (value.startsWith("http://")) return `https://${value.slice("http://".length)}`
-  if (value.includes("/remote.axd?http://")) {
-    return value.replace("/remote.axd?http://", "/remote.axd?https://")
+  const upgradeHttp = (source: string) => source.startsWith("http://") ? `https://${source.slice("http://".length)}` : source
+  const decode = (source: string) => {
+    try {
+      return decodeURIComponent(source)
+    } catch {
+      return source
+    }
   }
-  return value
+
+  const marker = "/remote.axd?"
+  const markerIndex = value.indexOf(marker)
+  if (markerIndex >= 0) {
+    const nested = value.slice(markerIndex + marker.length).split("&preset=")[0]
+    const decoded = decode(nested)
+    if (decoded) return upgradeHttp(decoded)
+  }
+
+  return upgradeHttp(decode(value))
 }
 
 export function ImageWithFallback({ sources, alt, className }: ImageWithFallbackProps) {

@@ -250,10 +250,18 @@ const PLAYER_IMAGE_FALLBACK_URL = "/body-shot.png";
 function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
+  const upgradeHttp = (value: string) => value.startsWith("http://") ? `https://${value.slice("http://".length)}` : value;
+  const decode = (value: string) => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  };
 
   const push = (value: string | null | undefined) => {
     if (!value || typeof value !== "string") return;
-    const trimmed = value.trim();
+    const trimmed = upgradeHttp(decode(value.trim()));
     if (!trimmed || seen.has(trimmed)) return;
     seen.add(trimmed);
     out.push(trimmed);
@@ -270,21 +278,12 @@ function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[
       variants.push(trimmed);
     };
 
-    if (value.startsWith("http://")) {
-      pushVariant(`https://${value.slice("http://".length)}`);
-    }
-    if (value.includes("/remote.axd?http://")) {
-      pushVariant(value.replace("/remote.axd?http://", "/remote.axd?https://"));
-    }
     const marker = "/remote.axd?";
     const idx = value.indexOf(marker);
     if (idx >= 0) {
-      const nested = value.slice(idx + marker.length);
+      const nested = value.slice(idx + marker.length).split("&preset=")[0];
       if (nested) {
-        const httpsNested = nested.startsWith("http://")
-          ? `https://${nested.slice("http://".length)}`
-          : nested;
-        pushVariant(httpsNested);
+        pushVariant(upgradeHttp(decode(nested)));
       }
     }
     pushVariant(value);

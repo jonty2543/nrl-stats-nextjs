@@ -710,11 +710,21 @@ function lookupTryscorerVsOpponentLastFive({
 function normalizePlayerImageUrl(value: string | null | undefined): string | null {
   const trimmed = typeof value === "string" ? value.trim() : "";
   if (!trimmed) return null;
-  if (trimmed.startsWith("http://")) return `https://${trimmed.slice("http://".length)}`;
-  if (trimmed.includes("/remote.axd?http://")) {
-    return trimmed.replace("/remote.axd?http://", "/remote.axd?https://");
+  const upgradeHttp = (source: string) => source.startsWith("http://") ? `https://${source.slice("http://".length)}` : source;
+  const decode = (source: string) => {
+    try {
+      return decodeURIComponent(source);
+    } catch {
+      return source;
+    }
+  };
+  const marker = "/remote.axd?";
+  const markerIndex = trimmed.indexOf(marker);
+  if (markerIndex >= 0) {
+    const nested = trimmed.slice(markerIndex + marker.length).split("&preset=")[0];
+    if (nested) return upgradeHttp(decode(nested));
   }
-  return trimmed;
+  return upgradeHttp(decode(trimmed));
 }
 
 function PlayerProfileImage({

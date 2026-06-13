@@ -908,11 +908,11 @@ function LiveScoreHeader({
   const hasScore = score.homeScore != null || score.awayScore != null
 
   return (
-    <div className={`flex flex-col justify-center px-1.5 text-center sm:px-2 ${lift ? "sm:-translate-y-3" : ""} ${splitScore ? "min-w-[4.7rem] sm:min-w-[6.75rem]" : "min-w-[6.4rem] sm:min-w-[10rem] sm:px-4"}`}>
+    <div className={`flex flex-col justify-center px-1.5 text-center sm:px-2 ${lift ? "sm:-translate-y-3" : ""} ${splitScore ? "min-w-[5.35rem] sm:min-w-[6.75rem]" : "min-w-[6.4rem] sm:min-w-[10rem] sm:px-4"}`}>
       {hasScore ? (
         <>
           {showLiveBadge ? (
-            <div className={`${splitScore ? "mb-1.5 px-1.5 py-0.5 text-[8px] sm:mb-2 sm:px-2 sm:py-1 sm:text-xs" : "mb-2 px-1.5 py-px text-[8px]"} inline-flex self-center items-center gap-1 rounded-md border border-red-300/30 bg-red-500/15 font-black uppercase tracking-[0.14em] text-red-100`}>
+            <div className={`${splitScore ? "mb-1.5 whitespace-nowrap px-2 py-0.5 text-[8.5px] sm:mb-2 sm:px-2 sm:py-1 sm:text-xs" : "mb-2 px-1.5 py-px text-[8px]"} inline-flex self-center items-center gap-1 rounded-md border border-red-300/30 bg-red-500/15 font-black uppercase tracking-[0.14em] text-red-100`}>
               <span className="h-1 w-1 rounded-full bg-red-300 shadow-[0_0_8px_rgba(252,165,165,0.85)]" aria-hidden="true" />
               {splitScore ? matchStateLabel : "Live"}
             </div>
@@ -2664,7 +2664,7 @@ function LineupCard({
         <div
           className={`relative z-[1] mx-auto grid w-full items-center ${
             showSplitScore
-              ? "max-w-5xl grid-cols-[minmax(4rem,1fr)_10.4rem_minmax(4rem,1fr)] gap-x-1 sm:grid-cols-[minmax(6rem,1fr)_4.5rem_minmax(6.75rem,auto)_4.5rem_minmax(6rem,1fr)] sm:gap-5 lg:gap-10"
+              ? "max-w-5xl grid-cols-[minmax(4rem,1fr)_12.4rem_minmax(4rem,1fr)] gap-x-1 sm:grid-cols-[minmax(6rem,1fr)_4.5rem_minmax(6.75rem,auto)_4.5rem_minmax(6rem,1fr)] sm:gap-5 lg:gap-10"
               : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
           }`}
         >
@@ -2673,7 +2673,7 @@ function LineupCard({
           </div>
           {showSplitScore ? (
             <div className="relative col-start-2 h-[5rem] sm:contents">
-              <div className={`absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 grid-cols-[2.35rem_4.7rem_2.35rem] items-center justify-center gap-x-2 sm:static sm:contents sm:translate-x-0 ${showLiveCardHeader ? "-translate-y-[62%] sm:-translate-y-0" : "-translate-y-1/2 sm:translate-y-0"}`}>
+              <div className={`absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 grid-cols-[2.55rem_5.35rem_2.55rem] items-center justify-center gap-x-3 sm:static sm:contents sm:translate-x-0 ${showLiveCardHeader ? "-translate-y-[62%] sm:-translate-y-0" : "-translate-y-1/2 sm:translate-y-0"}`}>
                 <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} lift={showLiveCardHeader} />
                 <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore lift={showLiveCardHeader} />
                 <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} lift={showLiveCardHeader} />

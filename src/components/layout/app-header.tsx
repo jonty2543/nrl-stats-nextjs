@@ -11,6 +11,7 @@ interface AppHeaderProps {
   sticky?: boolean;
   showBillingNav?: boolean;
   showStatsTabs?: boolean;
+  blendBackground?: boolean;
   className?: string;
 }
 
@@ -18,13 +19,16 @@ export function AppHeader({
   sticky = false,
   showBillingNav = false,
   showStatsTabs = false,
+  blendBackground = false,
   className = "",
 }: AppHeaderProps) {
   return (
     <header className={`${sticky ? "sticky top-0 z-50" : ""} relative isolate ${className}`.trim()}>
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 z-0 w-screen -translate-x-1/2 bg-[var(--app-bg-base)] bg-fixed [background-image:var(--app-bg-gradient)]" />
+      {!blendBackground ? (
+        <div className="pointer-events-none absolute inset-y-0 left-1/2 z-0 w-screen -translate-x-1/2 bg-[var(--app-bg-base)] bg-fixed [background-image:var(--app-bg-gradient)]" />
+      ) : null}
       <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="relative flex items-center justify-between gap-4 border-b border-white/8 pb-4 pt-6">
+        <div className={`relative flex items-center justify-between gap-4 border-b pb-4 pt-6 ${blendBackground ? "border-transparent" : "border-white/8"}`}>
           <Link href="/" className="relative z-10 inline-flex min-w-0 items-center gap-3">
             <Image src="/logo-mark.svg" alt="Short Side logo" width={30} height={30} priority />
             <div className="min-w-0">

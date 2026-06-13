@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
-import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
 import type {
@@ -66,11 +65,6 @@ type PlayerStatsSelection = {
   tryscorerOdds: LineupTryscorerOdds | null
 }
 
-const FREE_INSIGHT_CATEGORY_ROTATION: MatchupInsight["category"][][] = [
-  ["Betting", "Stats", "Fantasy", "Team News", "Matchup"],
-  ["Stats", "Fantasy", "Betting", "Team News", "Matchup"],
-  ["Fantasy", "Betting", "Stats", "Team News", "Matchup"],
-]
 type PlayerStatDisplayItem = {
   label: string
   value: string
@@ -927,9 +921,6 @@ function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: Line
         <>
           <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
             {formatKickoffTime(match.kickoffUtc)}
-          </div>
-          <div className="mt-4 inline-flex self-center rounded-full border border-emerald-300/35 bg-nrl-panel px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300 sm:mt-5 sm:text-[10px]">
-            {match.round}
           </div>
         </>
       )}
@@ -2378,54 +2369,8 @@ function MatchupInsightCard({ insight, muted = false }: { insight: MatchupInsigh
   )
 }
 
-function LockedProInsightsPreview({
-  lockedInsights,
-  visibleInsights,
-  lockedInsightCount,
-  homeTeam,
-  awayTeam,
-  homeTryChart,
-  awayTryChart,
-  teamLogos,
-}: {
-  lockedInsights: MatchupInsight[]
-  visibleInsights: MatchupInsight[]
-  lockedInsightCount: number
-  homeTeam: LineupTeam | null
-  awayTeam: LineupTeam | null
-  homeTryChart: StatsinsiderTryChart | null
-  awayTryChart: StatsinsiderTryChart | null
-  teamLogos: Record<string, string>
-}) {
-  const previewInsights = lockedInsights.length > 0 ? lockedInsights : visibleInsights
-  const previewCount = Math.max(lockedInsightCount, homeTryChart || awayTryChart ? 1 : 0)
-
-  return (
-    <div className="relative min-h-[17rem] overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2/65 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
-      <div className="grid grid-cols-2 gap-1.5 p-2 opacity-45 blur-[7px] select-none sm:gap-2">
-        {previewInsights.slice(0, 2).map((insight, insightIndex) => (
-          <MatchupInsightCard key={`locked-preview-${insight.category}-${insight.title}-${insightIndex}`} insight={insight} muted />
-        ))}
-        <MatchupTryCharts homeTeam={homeTeam} awayTeam={awayTeam} homeChart={homeTryChart} awayChart={awayTryChart} teamLogos={teamLogos} />
-      </div>
-      <div className="absolute inset-0 grid place-items-center p-2">
-        <BillingPageLink className="block rounded-md border border-emerald-300/35 bg-slate-950/85 px-3 py-2 text-center shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-emerald-300/60">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
-            Pro insights
-          </div>
-          <div className="mt-0.5 text-[10px] text-slate-400">
-            +{previewCount} more
-          </div>
-        </BillingPageLink>
-      </div>
-    </div>
-  )
-}
-
 function MatchupInsightsPanel({
   insights,
-  canAccessFullInsights,
-  freeInsightCategoryPriority,
   homeTeam,
   awayTeam,
   homeTryChart,
@@ -2433,23 +2378,12 @@ function MatchupInsightsPanel({
   teamLogos,
 }: {
   insights: MatchupInsight[]
-  canAccessFullInsights: boolean
-  freeInsightCategoryPriority: MatchupInsight["category"][]
   homeTeam: LineupTeam | null
   awayTeam: LineupTeam | null
   homeTryChart: StatsinsiderTryChart | null
   awayTryChart: StatsinsiderTryChart | null
   teamLogos: Record<string, string>
 }) {
-  const preferredFreeInsight = freeInsightCategoryPriority
-    .map((category) => insights.find((insight) => insight.category === category))
-    .find((insight): insight is MatchupInsight => Boolean(insight))
-  const orderedInsights = !canAccessFullInsights && preferredFreeInsight
-    ? [preferredFreeInsight, ...insights.filter((insight) => insight !== preferredFreeInsight)]
-    : insights
-  const visibleInsights = canAccessFullInsights ? orderedInsights : orderedInsights.slice(0, 1)
-  const lockedPreviewInsights = canAccessFullInsights ? [] : orderedInsights.slice(1)
-  const lockedInsightCount = canAccessFullInsights ? 0 : Math.max(0, insights.length - visibleInsights.length)
   const hasTryCharts = Boolean(homeTryChart && awayTryChart)
 
   return (
@@ -2461,7 +2395,7 @@ function MatchupInsightsPanel({
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2.5 py-2 marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-nrl-accent">Matchup Insights</span>
         <span className="flex shrink-0 items-center gap-2">
-          <span className="text-[10px] font-semibold tabular-nums text-nrl-muted">{visibleInsights.length}</span>
+          <span className="text-[10px] font-semibold tabular-nums text-nrl-muted">{insights.length}</span>
           <svg
             viewBox="0 0 16 16"
             className="h-4 w-4 text-nrl-muted transition-transform group-open/insights:rotate-180"
@@ -2473,11 +2407,11 @@ function MatchupInsightsPanel({
         </span>
       </summary>
 
-      <div className={`${canAccessFullInsights ? "max-h-[34rem] overflow-y-auto" : ""} border-t border-nrl-border p-2`}>
+      <div className="max-h-[34rem] overflow-y-auto border-t border-nrl-border p-2">
         <div className="grid gap-2.5">
-          {visibleInsights.length > 0 ? (
+          {insights.length > 0 ? (
             <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
-              {visibleInsights.map((insight, insightIndex) => (
+              {insights.map((insight, insightIndex) => (
                 <MatchupInsightCard key={`${insight.category}-${insight.title}-${insightIndex}`} insight={insight} />
               ))}
             </div>
@@ -2486,19 +2420,7 @@ function MatchupInsightsPanel({
               No strong matchup signals identified yet.
             </div>
           )}
-          {!canAccessFullInsights && (lockedInsightCount > 0 || hasTryCharts) ? (
-            <LockedProInsightsPreview
-              lockedInsights={lockedPreviewInsights}
-              visibleInsights={visibleInsights}
-              lockedInsightCount={lockedInsightCount}
-              homeTeam={homeTeam}
-              awayTeam={awayTeam}
-              homeTryChart={homeTryChart}
-              awayTryChart={awayTryChart}
-              teamLogos={teamLogos}
-            />
-          ) : null}
-          {canAccessFullInsights && hasTryCharts ? (
+          {hasTryCharts ? (
             <MatchupTryCharts homeTeam={homeTeam} awayTeam={awayTeam} homeChart={homeTryChart} awayChart={awayTryChart} teamLogos={teamLogos} />
           ) : null}
         </div>
@@ -2545,7 +2467,6 @@ function DisplayModeControl({
 
 function LineupCard({
   match,
-  matchIndex,
   liveMatch,
   weatherForecast,
   teamLogos,
@@ -2559,7 +2480,6 @@ function LineupCard({
   onOpen,
 }: {
   match: LineupMatch
-  matchIndex: number
   liveMatch: LineupLiveMatch | null
   weatherForecast: LineupWeatherForecast | null
   teamLogos: Record<string, string>
@@ -2668,7 +2588,6 @@ function LineupCard({
         playerAverages,
         playerTryHistory,
       })
-  const freeInsightCategoryPriority = FREE_INSIGHT_CATEGORY_ROTATION[matchIndex % FREE_INSIGHT_CATEGORY_ROTATION.length]
 
   useEffect(() => {
     if (window.location.hash !== `#${anchorId}`) return
@@ -2815,8 +2734,6 @@ function LineupCard({
         ) : activeDetailView === "insights" ? (
           <MatchupInsightsPanel
             insights={insights}
-            canAccessFullInsights={canAccessFantasyProjections}
-            freeInsightCategoryPriority={freeInsightCategoryPriority}
             homeTeam={detailMatch.homeTeam}
             awayTeam={detailMatch.awayTeam}
             homeTryChart={homeTryChart}
@@ -3054,8 +2971,6 @@ export function LineupsDashboard({
     },
     []
   )
-  const matchIndexById = new Map(matches.map((match, index) => [match.matchId, index]))
-
   return (
     <div className="space-y-3">
       {summaryDiagnostic ? (
@@ -3075,7 +2990,6 @@ export function LineupsDashboard({
                 <LineupCard
                   key={match.matchId}
                   match={match}
-                  matchIndex={matchIndexById.get(match.matchId) ?? 0}
                   liveMatch={liveMatches[match.matchId] ?? null}
                   weatherForecast={weatherForecasts[match.matchId] ?? null}
                   teamLogos={teamLogos}

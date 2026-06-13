@@ -253,6 +253,16 @@ function opposingTeam(match: LineupMatch, team: LineupTeam | null): LineupTeam |
   return null
 }
 
+function isCurrentHomeTeam(match: LineupMatch, team: LineupTeam | null): boolean {
+  if (!team) return false
+  const teamKey = normaliseKey(team.team || team.teamName)
+  return Boolean(teamKey && teamKey === normaliseKey(match.homeTeam?.team || match.homeTeam?.teamName))
+}
+
+function isStartingPlayer(player: LineupPlayer): boolean {
+  return player.isOnField && player.number != null && player.number >= 1 && player.number <= 13
+}
+
 function averageValue(playerAverages: PlayerAverages | undefined, player: LineupPlayer, key: LineupAverageStatKey): number | null {
   const value = playerAverages?.[normaliseKey(player.player)]?.[key]
   return typeof value === "number" && Number.isFinite(value) ? value : null
@@ -460,15 +470,17 @@ function addTeamRecordTrendInsights(insights: CandidateInsight[], match: LineupM
       82
     )
 
-    const h2hHomeGames = headToHead.filter((result) => normaliseKey(result.homeTeam) === normaliseKey(team?.team || team?.teamName)).slice(0, 10)
-    addTeamRecordInsight(
-      recordInsights,
-      team,
-      h2hHomeGames,
-      `${teamLabel(team)} have had success over ${teamLabel(opponent)} at home.`,
-      (wins) => `${teamLabel(team)} have won ${wins} of their last 10 home games between the two sides.`,
-      76
-    )
+    if (isCurrentHomeTeam(match, team)) {
+      const h2hHomeGames = headToHead.filter((result) => normaliseKey(result.homeTeam) === normaliseKey(team?.team || team?.teamName)).slice(0, 10)
+      addTeamRecordInsight(
+        recordInsights,
+        team,
+        h2hHomeGames,
+        `${teamLabel(team)} have had success over ${teamLabel(opponent)} at home.`,
+        (wins) => `${teamLabel(team)} have won ${wins} of their last 10 home games between the two sides.`,
+        76
+      )
+    }
   }
 
   const teams = [
@@ -486,17 +498,19 @@ function addTeamRecordTrendInsights(insights: CandidateInsight[], match: LineupM
       70
     )
 
-    const homeGames = results
-      .filter((result) => normaliseKey(result.homeTeam) === normaliseKey(team?.team || team?.teamName))
-      .slice(0, 10)
-    addTeamRecordInsight(
-      recordInsights,
-      team,
-      homeGames,
-      `${teamLabel(team)} have been hard to beat at home.`,
-      (wins) => `${teamLabel(team)} have won ${wins} of their last 10 home games against all teams.`,
-      66
-    )
+    if (isCurrentHomeTeam(match, team)) {
+      const homeGames = results
+        .filter((result) => normaliseKey(result.homeTeam) === normaliseKey(team?.team || team?.teamName))
+        .slice(0, 10)
+      addTeamRecordInsight(
+        recordInsights,
+        team,
+        homeGames,
+        `${teamLabel(team)} have been hard to beat at home.`,
+        (wins) => `${teamLabel(team)} have won ${wins} of their last 10 home games against all teams.`,
+        66
+      )
+    }
   }
 
   insights.push(...recordInsights.sort((a, b) => b.score - a.score).slice(0, 2))
@@ -657,7 +671,7 @@ function addPlayerTryMarketTrendInsights(
     .map((entry) => ({
       ...entry,
       tries: averageValue(playerAverages, entry.player, "Tries"),
-      tryGames: playerTryHistory?.[normaliseKey(entry.player.player)]?.length ?? 0,
+      gamesPlayed: playerTryHistory?.[normaliseKey(entry.player.player)]?.length ?? 0,
       odds: tryscorerOdds[normaliseKey(entry.player.player)] ?? null,
     }))
     .map((entry) => {
@@ -671,12 +685,20 @@ function addPlayerTryMarketTrendInsights(
       team: LineupTeam | null
       slot: InsightSlot | null
       tries: number
-      tryGames: number
+      gamesPlayed: number
       odds: LineupTryscorerOdds
       impliedProbability: number
       valueEdge: number
     } => {
-      return entry.tryGames >= 5 && entry.tries != null && entry.odds?.bestPrice != null && entry.impliedProbability != null && entry.valueEdge != null && entry.valueEdge >= 0.1
+      return (
+        isStartingPlayer(entry.player) &&
+        entry.gamesPlayed >= 5 &&
+        entry.tries != null &&
+        entry.odds?.bestPrice != null &&
+        entry.impliedProbability != null &&
+        entry.valueEdge != null &&
+        entry.valueEdge >= 0.1
+      )
     })
     .sort((a, b) => {
       return b.valueEdge - a.valueEdge

@@ -1066,9 +1066,9 @@ function MatchStatCompare({
   return (
     <div className="rounded-md border border-white/8 bg-nrl-panel-2/55 px-3 py-2">
       <div className="mb-1 flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
-        <span>{formatCompactStat(home, suffix)}</span>
+        <span className="text-xs tabular-nums tracking-normal text-nrl-text/80 sm:text-sm">{formatCompactStat(home, suffix)}</span>
         <span>{label}</span>
-        <span>{formatCompactStat(away, suffix)}</span>
+        <span className="text-xs tabular-nums tracking-normal text-nrl-text/80 sm:text-sm">{formatCompactStat(away, suffix)}</span>
       </div>
       {bar ? (
         <div className="flex h-2 overflow-hidden rounded-full bg-white/10">

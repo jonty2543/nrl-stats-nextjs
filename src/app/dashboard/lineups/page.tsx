@@ -7,7 +7,7 @@ import {
   fetchLiveLineupData,
   fetchLineupsForRound,
 } from "@/lib/lineups/nrl-lineups"
-import { fetchLatestLineupsPageShellSummary, fetchLineupsPageShellSummary, fetchTeamLogos } from "@/lib/supabase/queries"
+import { fetchLatestLineupsPageShellSummary, fetchLineupsPageShellSummary, fetchStatsinsiderTryCharts, fetchTeamLogos } from "@/lib/supabase/queries"
 import type { LineupMatch, LineupRoundOption } from "@/lib/lineups/nrl-lineups"
 
 export const dynamic = "force-dynamic"
@@ -136,6 +136,26 @@ function lineupsSummaryMissReason(summary: Awaited<ReturnType<typeof fetchLineup
   return null
 }
 
+function lineupsSummarySparseReason(summary: Awaited<ReturnType<typeof fetchLineupsPageShellSummary>>): string | null {
+  if (!summary || summary.matches.length === 0) return null
+
+  const playerCount = summary.matches.reduce(
+    (total, match) => total + (match.homeTeam?.players.length ?? 0) + (match.awayTeam?.players.length ?? 0),
+    0
+  )
+  if (playerCount === 0) {
+    return `summary.lineups_page_summary has ${summary.matches.length} matches for ${summary.year} ${summary.round}, but zero players. Localhost is showing fixture shell data until the summary/full lineup source is populated.`
+  }
+  return null
+}
+
+function roundNumberFromLabel(value: string): number | null {
+  const match = value.match(/\d+/)
+  if (!match) return null
+  const round = Number(match[0])
+  return Number.isFinite(round) ? Math.trunc(round) : null
+}
+
 function matchShell(match: LineupMatch): LineupMatch {
   return {
     ...match,
@@ -187,7 +207,10 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       matches: lineupRound.matches,
     }
   })()
-  const matches = (summary?.matches ?? fallbackData?.matches ?? []).map(matchShell)
+  const shouldUseShellMatches = process.env.NODE_ENV === "production"
+  const matches = (summary?.matches ?? fallbackData?.matches ?? []).map((match) =>
+    shouldUseShellMatches ? matchShell(match) : match
+  )
   const summaryTeamLogos = summary?.teamLogos ?? {}
   const teamLogos = Object.keys(summaryTeamLogos).length > 0
     ? summaryTeamLogos
@@ -196,8 +219,17 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const initialLiveMatches = visibleMatches.length > 0
     ? await withFallback(fetchLiveLineupData(visibleMatches.map((match) => match.matchId)), {}, "Live lineups data")
     : {}
-  const summaryDiagnostic = summaryMissReason && await shouldShowLineupsSummaryDiagnostic()
+  const tryChartsByTeam = await withFallback(
+    fetchStatsinsiderTryCharts(year, roundNumberFromLabel(selectedRound)),
+    {},
+    "Stats Insider try charts"
+  )
+  const summarySparseReason = lineupsSummarySparseReason(summary)
+  const summaryDiagnosticReason = summaryMissReason
     ? `lineups_page_summary miss: ${summaryMissReason} Heavy fallback data path is active for ${year} ${selectedRound}.`
+    : summarySparseReason
+  const summaryDiagnostic = summaryDiagnosticReason && await shouldShowLineupsSummaryDiagnostic()
+    ? summaryDiagnosticReason
     : null
 
   return (
@@ -210,6 +242,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       selectedRound={selectedRound}
       teamLogos={teamLogos}
       sportsbetOdds={summary?.sportsbetOdds ?? {}}
+      tryChartsByTeam={tryChartsByTeam}
       canAccessFantasyProjections={hasProAccess}
       summaryDiagnostic={summaryDiagnostic}
     />

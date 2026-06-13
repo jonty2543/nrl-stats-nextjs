@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
+import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
 import type {
   LineupCasualtyOut,
   LineupLiveMatch,
@@ -31,6 +32,7 @@ interface LineupsDashboardProps {
   selectedRound: string
   teamLogos: Record<string, string>
   sportsbetOdds?: Record<string, LineupSportsbetOdds>
+  tryChartsByTeam: Record<string, StatsinsiderTryChart>
   canAccessFantasyProjections: boolean
   summaryDiagnostic?: string | null
 }
@@ -49,11 +51,12 @@ interface LineupMatchDetailData {
 type Slot = "FB" | "LW" | "LC" | "RW" | "RC" | "FE" | "HLF" | "LK" | "L2R" | "R2R" | "HK" | "PR"
 type Orientation = "landscape" | "portrait"
 type DisplayMode = "fantasy" | "odds" | AverageStatKey
-type LineupDetailView = "lineup" | "stats"
+type LineupDetailView = "lineup" | "stats" | "insights"
 type PlayerStatsSelection = {
   player: LineupPlayer
   liveState: LineupLivePlayerState | null
   liveStats: LineupLivePlayerStats | null
+  showPregameMetrics: boolean
   baselinePpm: number | null
   baselineLabel: string | null
   averages: Record<AverageStatKey, number> | null
@@ -176,14 +179,6 @@ function statPerGameLabel(mode: AverageStatKey): string {
   return `${displayModeShortLabel(mode)}/g`
 }
 
-const INSIGHT_CATEGORY_CLASSES: Record<MatchupInsight["category"], string> = {
-  Matchup: "border-nrl-accent/20 bg-nrl-accent/10 text-nrl-accent",
-  Fantasy: "border-sky-300/25 bg-sky-400/10 text-sky-100",
-  Betting: "border-amber-300/25 bg-amber-400/10 text-amber-100",
-  Stats: "border-violet-300/25 bg-violet-400/10 text-violet-100",
-  "Team News": "border-red-300/25 bg-red-400/10 text-red-100",
-}
-
 const DEPTH_X: Record<Slot, number> = {
   FB: 7,
   LW: 14,
@@ -289,6 +284,26 @@ const TEAM_ALIAS_GROUPS = [
   ["wests tigers", "tigers", "western suburbs magpies"],
 ]
 
+const STATSINSIDER_TEAM_CODES: Record<string, string> = {
+  broncos: "BRI",
+  bulldogs: "CBY",
+  cowboys: "NQL",
+  dolphins: "DOL",
+  dragons: "STI",
+  eels: "PAR",
+  knights: "NEW",
+  panthers: "PEN",
+  rabbitohs: "SOU",
+  raiders: "CBR",
+  roosters: "SYD",
+  "sea eagles": "MAN",
+  sharks: "CRO",
+  storm: "MEL",
+  titans: "GLD",
+  warriors: "WAR",
+  "wests tigers": "WST",
+}
+
 function teamAliases(value: string | null | undefined): string[] {
   const key = normaliseKey(value)
   if (!key) return []
@@ -297,6 +312,14 @@ function teamAliases(value: string | null | undefined): string[] {
     if (group.includes(key)) group.forEach((alias) => aliases.add(alias))
   }
   return [...aliases]
+}
+
+function statsinsiderTeamCode(team: LineupTeam | null): string | null {
+  for (const alias of [team?.team, team?.teamName].flatMap(teamAliases)) {
+    const code = STATSINSIDER_TEAM_CODES[alias]
+    if (code) return code
+  }
+  return null
 }
 
 function bettingTeamKey(value: string | null | undefined): string {
@@ -895,7 +918,7 @@ function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: Line
           {splitScore && clock && showLiveBadge ? (
             <div className="text-xl font-semibold leading-none tabular-nums text-nrl-text sm:text-2xl">{clock}</div>
           ) : (
-            <div className={`${splitScore && showLiveBadge ? "mt-0" : "mt-4 sm:mt-5"} inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]`}>
+            <div className={`${splitScore ? "mt-0" : "mt-4 sm:mt-5"} inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]`}>
               {matchStateLabel}{clock && showLiveBadge && !splitScore ? ` · ${clock}` : ""}
             </div>
           )}
@@ -1468,7 +1491,7 @@ function PlayerTryFormPanel({ selection }: { selection: PlayerStatsSelection }) 
 
 function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelection | null; onClose: () => void }) {
   if (!selection || typeof document === "undefined") return null
-  const { player, liveState, liveStats } = selection
+  const { player, liveState, liveStats, showPregameMetrics } = selection
   const fantasyPpm = fantasyPointsPerMinute(liveStats)
   const image = player.headImage ?? player.bodyImage
   const initials = player.player.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2)
@@ -1480,7 +1503,7 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
     }))
   const groups: PlayerStatDisplayGroup[] = [
     {
-      title: "Summary",
+      title: showPregameMetrics ? "Summary" : "Match facts",
       items: [
         { label: "Mins", value: formatStatValue(liveStats?.minutesPlayed) },
         { label: "Fantasy", value: formatStatValue(liveStats?.fantasyPointsTotal) },
@@ -1564,9 +1587,13 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
         </div>
 
         <div className="max-h-[calc(88vh-5.5rem)] space-y-3 overflow-y-auto p-3">
-          <PlayerTryFormPanel selection={selection} />
-          {averageItems.some((item) => item.value !== "-") ? (
-            <PlayerStatGroup group={{ title: "Per-game averages", items: averageItems }} />
+          {showPregameMetrics ? (
+            <>
+              <PlayerTryFormPanel selection={selection} />
+              {averageItems.some((item) => item.value !== "-") ? (
+                <PlayerStatGroup group={{ title: "Per-game averages", items: averageItems }} />
+              ) : null}
+            </>
           ) : null}
           {liveStats ? (
             <>
@@ -1575,7 +1602,7 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
             ))}
             </>
           ) : (
-            <div className="rounded-md border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">No live stat summary available yet.</div>
+            <div className="rounded-md border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">No match facts available for this player yet.</div>
           )}
         </div>
       </div>
@@ -2148,14 +2175,271 @@ function NotableOuts({
   )
 }
 
+function formatTryChartPct(value: number): string {
+  return `${Math.round(Math.max(0, value) * 100)}%`
+}
+
+function TryChartLogo({ logo, label }: { logo: string | null; label: string }) {
+  if (logo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={logo} alt="" aria-hidden="true" className="h-4 w-4 object-contain" loading="lazy" />
+    )
+  }
+  return <span className="grid h-4 w-4 place-items-center rounded bg-white/10 text-[7px] font-black text-nrl-muted">{label.slice(0, 1)}</span>
+}
+
+function TryChartField({
+  chart,
+  opponentChart,
+  teamName,
+  opponentName,
+  teamLogo,
+  opponentLogo,
+}: {
+  chart: StatsinsiderTryChart
+  opponentChart: StatsinsiderTryChart
+  teamName: string
+  opponentName: string
+  teamLogo: string | null
+  opponentLogo: string | null
+}) {
+  const lanes = [
+    { label: "Left", scored: chart.leftScored, scoredPct: chart.leftScoredPct, conceded: opponentChart.rightConceded, concededPct: opponentChart.rightConcededPct },
+    { label: "Middle", scored: chart.middleScored, scoredPct: chart.middleScoredPct, conceded: opponentChart.middleConceded, concededPct: opponentChart.middleConcededPct },
+    { label: "Right", scored: chart.rightScored, scoredPct: chart.rightScoredPct, conceded: opponentChart.leftConceded, concededPct: opponentChart.leftConcededPct },
+  ]
+
+  return (
+    <div className="relative overflow-hidden rounded-md border border-emerald-300/20 bg-[linear-gradient(90deg,rgba(16,185,129,0.18),rgba(15,118,110,0.24)),repeating-linear-gradient(0deg,rgba(255,255,255,0.08)_0_1px,transparent_1px_20%)] p-2">
+      <div className="grid grid-cols-3 gap-1.5">
+        {lanes.map((lane) => (
+          <div key={lane.label} className="relative min-h-28 rounded border border-white/10 bg-slate-950/20 px-1.5 py-2 text-center">
+            <div className="mb-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-200">{lane.label}</div>
+            <div className="space-y-2">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded bg-emerald-300/15 px-1 py-1">
+                <div>
+                  <div className="h-1.5 rounded-full bg-emerald-300/20">
+                    <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(8, lane.scoredPct * 100)}%` }} />
+                  </div>
+                  <div className="mt-0.5 text-[8px] text-emerald-100/70">{formatTryChartPct(lane.scoredPct)}</div>
+                </div>
+                <div className="inline-flex min-w-[2.25rem] items-center justify-start gap-1 text-[9px] font-bold text-emerald-200">
+                  <TryChartLogo logo={teamLogo} label={teamName} />
+                  <span>{lane.scored}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded bg-[#fb7185]/14 px-1 py-1">
+                <div>
+                  <div className="h-1.5 rounded-full bg-[#fb7185]/22">
+                    <div className="h-full rounded-full bg-[#fb7185]" style={{ width: `${Math.max(8, lane.concededPct * 100)}%` }} />
+                  </div>
+                  <div className="mt-0.5 text-[8px] text-[#fecdd3]/80">{formatTryChartPct(lane.concededPct)}</div>
+                </div>
+                <div className="inline-flex min-w-[2.25rem] items-center justify-start gap-1 text-[9px] font-bold text-[#ffe4e6]">
+                  <TryChartLogo logo={opponentLogo} label={opponentName} />
+                  <span>{lane.conceded}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TryTypeRow({
+  label,
+  scored,
+  scoredPct,
+  conceded,
+  concededPct,
+  teamName,
+  opponentName,
+  teamLogo,
+  opponentLogo,
+}: {
+  label: string
+  scored: number
+  scoredPct: number
+  conceded: number
+  concededPct: number
+  teamName: string
+  opponentName: string
+  teamLogo: string | null
+  opponentLogo: string | null
+}) {
+  return (
+    <div className="rounded border border-white/8 bg-nrl-panel/55 px-2 py-1.5">
+      <div className="mb-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">{label}</div>
+      <div className="space-y-1.5">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+          <div>
+            <div className="relative h-3 rounded-full bg-emerald-300/20">
+              <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, scoredPct * 100)}%` }} />
+              <div className="absolute inset-0 grid place-items-center text-[8px] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">{formatTryChartPct(scoredPct)}</div>
+            </div>
+          </div>
+          <div className="inline-flex min-w-[3.1rem] items-center justify-start gap-1 text-[9px] font-semibold text-emerald-200">
+            <TryChartLogo logo={teamLogo} label={teamName} />
+            <span>{scored}</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+          <div>
+            <div className="relative h-3 rounded-full bg-[#fb7185]/22">
+              <div className="h-full rounded-full bg-[#fb7185]" style={{ width: `${Math.max(5, concededPct * 100)}%` }} />
+              <div className="absolute inset-0 grid place-items-center text-[8px] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">{formatTryChartPct(concededPct)}</div>
+            </div>
+          </div>
+          <div className="inline-flex min-w-[3.1rem] items-center justify-start gap-1 text-[9px] font-semibold text-[#ffe4e6]">
+            <TryChartLogo logo={opponentLogo} label={opponentName} />
+            <span>{conceded}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TeamTryChartCard({
+  team,
+  opponentTeam,
+  chart,
+  opponentChart,
+  teamLogos,
+}: {
+  team: LineupTeam | null
+  opponentTeam: LineupTeam | null
+  chart: StatsinsiderTryChart
+  opponentChart: StatsinsiderTryChart
+  teamLogos: Record<string, string>
+}) {
+  const teamName = shortLineupTeamName(team?.teamName ?? team?.team ?? chart.team)
+  const opponentName = shortLineupTeamName(opponentTeam?.teamName ?? opponentTeam?.team ?? opponentChart.team)
+  const runScored = chart.runScored + chart.interceptScored
+  const runScoredPct = chart.runScoredPct + chart.interceptScoredPct
+  const runConceded = opponentChart.runConceded + opponentChart.interceptConceded
+  const runConcededPct = opponentChart.runConcededPct + opponentChart.interceptConcededPct
+  const teamLogo = resolveLogo(team, teamLogos)
+  const opponentLogo = resolveLogo(opponentTeam, teamLogos)
+
+  return (
+    <div className="rounded-md border border-white/10 bg-nrl-panel-2/65 p-2 shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0 truncate text-[10px] font-black text-nrl-text">{teamName}</div>
+        <div className="shrink-0 text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">R{chart.round}</div>
+      </div>
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] font-bold uppercase tracking-[0.12em]">
+        <span className="text-emerald-200">Green scored</span>
+        <span className="text-[#ffe4e6]">Red conceded</span>
+      </div>
+      <TryChartField chart={chart} opponentChart={opponentChart} teamName={teamName} opponentName={opponentName} teamLogo={teamLogo} opponentLogo={opponentLogo} />
+      <div className="mt-2 space-y-1.5">
+        <TryTypeRow label="Run" scored={runScored} scoredPct={runScoredPct} conceded={runConceded} concededPct={runConcededPct} teamName={teamName} opponentName={opponentName} teamLogo={teamLogo} opponentLogo={opponentLogo} />
+        <TryTypeRow label="Kick" scored={chart.kickScored} scoredPct={chart.kickScoredPct} conceded={opponentChart.kickConceded} concededPct={opponentChart.kickConcededPct} teamName={teamName} opponentName={opponentName} teamLogo={teamLogo} opponentLogo={opponentLogo} />
+      </div>
+    </div>
+  )
+}
+
+function MatchupTryCharts({
+  homeTeam,
+  awayTeam,
+  homeChart,
+  awayChart,
+  teamLogos,
+}: {
+  homeTeam: LineupTeam | null
+  awayTeam: LineupTeam | null
+  homeChart: StatsinsiderTryChart | null
+  awayChart: StatsinsiderTryChart | null
+  teamLogos: Record<string, string>
+}) {
+  if (!homeChart && !awayChart) return null
+
+  return (
+    <div className="grid gap-2.5 sm:grid-cols-2">
+      {homeChart && awayChart ? <TeamTryChartCard team={homeTeam} opponentTeam={awayTeam} chart={homeChart} opponentChart={awayChart} teamLogos={teamLogos} /> : null}
+      {awayChart && homeChart ? <TeamTryChartCard team={awayTeam} opponentTeam={homeTeam} chart={awayChart} opponentChart={homeChart} teamLogos={teamLogos} /> : null}
+    </div>
+  )
+}
+
+function MatchupInsightCard({ insight, muted = false }: { insight: MatchupInsight; muted?: boolean }) {
+  return (
+    <div className={`min-w-0 rounded-md border border-white/10 bg-nrl-panel-2/65 px-1.5 py-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.18)] sm:px-2 sm:py-2 ${muted ? "opacity-75" : ""}`}>
+      <div className="min-w-0">
+        <div className="text-[9px] font-semibold leading-snug text-nrl-text sm:text-[10px]">{insight.title}</div>
+        <div className="mt-0.5 text-[8px] leading-snug text-nrl-muted sm:text-[9px]">{insight.description}</div>
+      </div>
+    </div>
+  )
+}
+
+function LockedProInsightsPreview({
+  lockedInsights,
+  visibleInsights,
+  lockedInsightCount,
+  homeTeam,
+  awayTeam,
+  homeTryChart,
+  awayTryChart,
+  teamLogos,
+}: {
+  lockedInsights: MatchupInsight[]
+  visibleInsights: MatchupInsight[]
+  lockedInsightCount: number
+  homeTeam: LineupTeam | null
+  awayTeam: LineupTeam | null
+  homeTryChart: StatsinsiderTryChart | null
+  awayTryChart: StatsinsiderTryChart | null
+  teamLogos: Record<string, string>
+}) {
+  const previewInsights = lockedInsights.length > 0 ? lockedInsights : visibleInsights
+  const previewCount = Math.max(lockedInsightCount, homeTryChart || awayTryChart ? 1 : 0)
+
+  return (
+    <div className="relative min-h-[17rem] overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2/65 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
+      <div className="grid grid-cols-2 gap-1.5 p-2 opacity-45 blur-[7px] select-none sm:gap-2">
+        {previewInsights.slice(0, 2).map((insight, insightIndex) => (
+          <MatchupInsightCard key={`locked-preview-${insight.category}-${insight.title}-${insightIndex}`} insight={insight} muted />
+        ))}
+        <MatchupTryCharts homeTeam={homeTeam} awayTeam={awayTeam} homeChart={homeTryChart} awayChart={awayTryChart} teamLogos={teamLogos} />
+      </div>
+      <div className="absolute inset-0 grid place-items-center p-2">
+        <BillingPageLink className="block rounded-md border border-emerald-300/35 bg-slate-950/85 px-3 py-2 text-center shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-emerald-300/60">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-100">
+            Pro insights
+          </div>
+          <div className="mt-0.5 text-[10px] text-slate-400">
+            +{previewCount} more
+          </div>
+        </BillingPageLink>
+      </div>
+    </div>
+  )
+}
+
 function MatchupInsightsPanel({
   insights,
   canAccessFullInsights,
   freeInsightCategoryPriority,
+  homeTeam,
+  awayTeam,
+  homeTryChart,
+  awayTryChart,
+  teamLogos,
 }: {
   insights: MatchupInsight[]
   canAccessFullInsights: boolean
   freeInsightCategoryPriority: MatchupInsight["category"][]
+  homeTeam: LineupTeam | null
+  awayTeam: LineupTeam | null
+  homeTryChart: StatsinsiderTryChart | null
+  awayTryChart: StatsinsiderTryChart | null
+  teamLogos: Record<string, string>
 }) {
   const preferredFreeInsight = freeInsightCategoryPriority
     .map((category) => insights.find((insight) => insight.category === category))
@@ -2166,6 +2450,7 @@ function MatchupInsightsPanel({
   const visibleInsights = canAccessFullInsights ? orderedInsights : orderedInsights.slice(0, 1)
   const lockedPreviewInsights = canAccessFullInsights ? [] : orderedInsights.slice(1)
   const lockedInsightCount = canAccessFullInsights ? 0 : Math.max(0, insights.length - visibleInsights.length)
+  const hasTryCharts = Boolean(homeTryChart && awayTryChart)
 
   return (
     <details
@@ -2188,63 +2473,35 @@ function MatchupInsightsPanel({
         </span>
       </summary>
 
-      <div className="max-h-44 overflow-y-auto border-t border-nrl-border p-2">
-        {visibleInsights.length > 0 ? (
-          <div className="grid gap-2.5">
-            {visibleInsights.map((insight, insightIndex) => (
-              <div
-                key={`${insight.category}-${insight.title}-${insightIndex}`}
-                className="min-w-0 rounded-md border border-white/10 bg-nrl-panel-2/65 px-2 py-2 shadow-[0_8px_18px_rgba(0,0,0,0.18)]"
-              >
-                <div className="flex min-w-0 items-start gap-1.5">
-                  <span className={`${INSIGHT_CATEGORY_CLASSES[insight.category]} shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide`}>
-                    {insight.category}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-semibold leading-snug text-nrl-text">{insight.title}</div>
-                    <div className="mt-0.5 text-[9px] leading-snug text-nrl-muted">{insight.description}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {lockedInsightCount > 0 ? (
-              <div className="relative min-h-24 overflow-hidden rounded-md border border-nrl-border bg-nrl-panel-2/65 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
-                <div className="grid gap-2 p-2 opacity-45 blur-[8px] select-none">
-                  {(lockedPreviewInsights.length > 0 ? lockedPreviewInsights : visibleInsights).map((insight, insightIndex) => (
-                    <div
-                      key={`locked-${insight.category}-${insight.title}-${insightIndex}`}
-                      className="min-w-0 rounded-md border border-white/10 bg-nrl-panel/70 px-2 py-2 opacity-75"
-                    >
-                      <div className="flex min-w-0 items-start gap-1.5">
-                        <span className={`${INSIGHT_CATEGORY_CLASSES[insight.category]} shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide`}>
-                          {insight.category}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="text-[10px] font-semibold leading-snug text-nrl-text">{insight.title}</div>
-                          <div className="mt-0.5 text-[9px] leading-snug text-nrl-muted">{insight.description}</div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="absolute right-2 top-2 flex justify-end">
-                  <BillingPageLink className="block rounded-md border border-emerald-300/35 bg-slate-950/80 px-2.5 py-1.5 text-right shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-emerald-300/60">
-                    <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-100">
-                      Pro insights
-                    </div>
-                    <div className="mt-0.5 text-[9px] text-slate-400">
-                      +{lockedInsightCount} more
-                    </div>
-                  </BillingPageLink>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="rounded-md border border-white/10 bg-nrl-panel-2/55 px-2 py-1.5 text-[10px] text-nrl-muted shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
-            No strong matchup signals identified yet.
-          </div>
-        )}
+      <div className={`${canAccessFullInsights ? "max-h-[34rem] overflow-y-auto" : ""} border-t border-nrl-border p-2`}>
+        <div className="grid gap-2.5">
+          {visibleInsights.length > 0 ? (
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
+              {visibleInsights.map((insight, insightIndex) => (
+                <MatchupInsightCard key={`${insight.category}-${insight.title}-${insightIndex}`} insight={insight} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-white/10 bg-nrl-panel-2/55 px-2 py-1.5 text-[10px] text-nrl-muted shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
+              No strong matchup signals identified yet.
+            </div>
+          )}
+          {!canAccessFullInsights && (lockedInsightCount > 0 || hasTryCharts) ? (
+            <LockedProInsightsPreview
+              lockedInsights={lockedPreviewInsights}
+              visibleInsights={visibleInsights}
+              lockedInsightCount={lockedInsightCount}
+              homeTeam={homeTeam}
+              awayTeam={awayTeam}
+              homeTryChart={homeTryChart}
+              awayTryChart={awayTryChart}
+              teamLogos={teamLogos}
+            />
+          ) : null}
+          {canAccessFullInsights && hasTryCharts ? (
+            <MatchupTryCharts homeTeam={homeTeam} awayTeam={awayTeam} homeChart={homeTryChart} awayChart={awayTryChart} teamLogos={teamLogos} />
+          ) : null}
+        </div>
       </div>
     </details>
   )
@@ -2298,6 +2555,7 @@ function LineupCard({
   detail,
   detailStatus,
   initialSportsbetOdds,
+  tryChartsByTeam,
   onOpen,
 }: {
   match: LineupMatch
@@ -2311,11 +2569,13 @@ function LineupCard({
   detail: LineupMatchDetailData | null
   detailStatus: "idle" | "loading" | "loaded" | "error"
   initialSportsbetOdds: Record<string, LineupSportsbetOdds>
+  tryChartsByTeam: Record<string, StatsinsiderTryChart>
   onOpen: () => void
 }) {
   const detailMatch = detail?.match ?? match
   const detailsRef = useRef<HTMLDetailsElement | null>(null)
   const anchorId = lineupsMatchAnchorId(match)
+  const shellPlayerCount = (match.homeTeam?.players.length ?? 0) + (match.awayTeam?.players.length ?? 0)
   const matchStats = detail?.matchStats ?? null
   const tryscorerOdds = detail?.tryscorerOdds ?? {}
   const sportsbetOdds = { ...initialSportsbetOdds, ...(detail?.sportsbetOdds ?? {}) }
@@ -2340,8 +2600,6 @@ function LineupCard({
   const isFixtureOnly = detailMatch.matchId.startsWith("draw-2026-") && !hasLineupData && matchStats == null
   const [selectedPlayer, setSelectedPlayer] = useState<LineupPlayer | null>(null)
   const [detailView, setDetailView] = useState<LineupDetailView>("lineup")
-  const availableDetailViews: LineupDetailView[] = hasLineupData ? ["lineup", "stats"] : ["stats"]
-  const activeDetailView = availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
   const isLive = hasMatchStarted(displayLiveMatch)
   const hasOpenedHashTargetRef = useRef(false)
   const hasResultScore = detailMatch.homeScore != null || detailMatch.awayScore != null
@@ -2350,9 +2608,15 @@ function LineupCard({
   const homeScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.homeScore > headerScore.awayScore
   const awayScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.awayScore > headerScore.homeScore
   const showPregameContent = !isLive && !hasResultScore
+  const availableDetailViews: LineupDetailView[] = showPregameContent
+    ? ["lineup", "insights", "stats"]
+    : ["lineup", "stats"]
+  const activeDetailView = availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
   const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
   const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(detailMatch, detailMatch.homeTeam, sportsbetOdds) : null
   const awaySportsbetOdds = showPregameContent ? sportsbetOddsForTeam(detailMatch, detailMatch.awayTeam, sportsbetOdds) : null
+  const homeTryChart = tryChartsByTeam[statsinsiderTeamCode(detailMatch.homeTeam) ?? ""] ?? null
+  const awayTryChart = tryChartsByTeam[statsinsiderTeamCode(detailMatch.awayTeam) ?? ""] ?? null
   const homeLogo = resolveLogo(detailMatch.homeTeam, teamLogos)
   const awayLogo = resolveLogo(detailMatch.awayTeam, teamLogos)
   const homeWatermarkClass = isStormTeam(detailMatch.homeTeam)
@@ -2380,19 +2644,20 @@ function LineupCard({
               : null
         const opponentKey = normaliseKey(opponentTeam)
         return {
-        player: selectedPlayer,
-        liveState: getLivePlayerState(displayLiveMatch, selectedPlayer),
-        liveStats: getLivePlayerStats(displayLiveMatch, selectedPlayer),
-        baselinePpm: positionBaselineForPlayer(selectedPlayer, positionPpmBaselines).value,
-        baselineLabel: positionBaselineForPlayer(selectedPlayer, positionPpmBaselines).label,
-        averages: playerAverages[normaliseKey(selectedPlayer.player)] ?? null,
-        tryHistory: history,
-        opponent: opponentTeam,
-        opponentTryHistory: opponentKey
-          ? history.filter((entry) => normaliseKey(entry.opponent).includes(opponentKey)).slice(0, 5)
-          : [],
-        tryscorerOdds: tryscorerOdds[normaliseKey(selectedPlayer.player)] ?? null,
-      }
+          player: selectedPlayer,
+          liveState: isMatchLive(displayLiveMatch) ? getLivePlayerState(displayLiveMatch, selectedPlayer) : null,
+          liveStats: getLivePlayerStats(displayLiveMatch, selectedPlayer),
+          showPregameMetrics: showPregameContent,
+          baselinePpm: positionBaselineForPlayer(selectedPlayer, positionPpmBaselines).value,
+          baselineLabel: positionBaselineForPlayer(selectedPlayer, positionPpmBaselines).label,
+          averages: playerAverages[normaliseKey(selectedPlayer.player)] ?? null,
+          tryHistory: history,
+          opponent: opponentTeam,
+          opponentTryHistory: opponentKey
+            ? history.filter((entry) => normaliseKey(entry.opponent).includes(opponentKey)).slice(0, 5)
+            : [],
+          tryscorerOdds: tryscorerOdds[normaliseKey(selectedPlayer.player)] ?? null,
+        }
       })()
     : null
   const insights = isLive
@@ -2465,29 +2730,29 @@ function LineupCard({
           </div>
           {detailMatch.venue || weatherForecast ? (
             <div className="mx-auto mt-1 flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px]">
+              {detailMatch.venue ? <span className="min-w-0 truncate">{detailMatch.venue}</span> : null}
               {weatherForecast ? (
                 <span className="flex-none text-xs leading-none sm:text-sm" aria-hidden="true">
                   {weatherConditionEmoji(weatherForecast.condition)}
                 </span>
               ) : null}
-              {detailMatch.venue ? <span className="min-w-0 truncate">{detailMatch.venue}</span> : null}
             </div>
           ) : null}
         </div>
         <div
           className={`relative z-[1] mx-auto grid w-full items-center ${
             showSplitScore
-              ? "max-w-5xl grid-cols-[minmax(4.7rem,1fr)_3.25rem_minmax(5.15rem,auto)_3.25rem_minmax(4.7rem,1fr)] gap-1.5 sm:grid-cols-[minmax(6rem,1fr)_4.5rem_minmax(6.75rem,auto)_4.5rem_minmax(6rem,1fr)] sm:gap-5 lg:gap-10"
+              ? "max-w-5xl grid-cols-[minmax(4.7rem,1fr)_3.25rem_minmax(5.15rem,auto)_3.25rem_minmax(4.7rem,1fr)] gap-x-3 sm:grid-cols-[minmax(6rem,1fr)_4.5rem_minmax(6.75rem,auto)_4.5rem_minmax(6rem,1fr)] sm:gap-5 lg:gap-10"
               : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
           }`}
         >
-          <div className="min-w-0 justify-self-start sm:justify-self-center">
+          <div className="min-w-0 justify-self-center">
             <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
           {showSplitScore ? <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} /> : null}
           <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore={showSplitScore} />
           {showSplitScore ? <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} /> : null}
-          <div className="min-w-0 justify-self-end sm:justify-self-center">
+          <div className="min-w-0 justify-self-center">
             <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>
         </div>
@@ -2506,7 +2771,7 @@ function LineupCard({
 
       <div className="relative z-[1] border-t border-blue-300/30 px-2 pb-3 sm:px-3">
         <div className="pt-5" />
-        {detailStatus === "loading" && !detail ? (
+        {detailStatus === "loading" && !detail && shellPlayerCount === 0 ? (
           <div className="flex items-center justify-center px-4 py-5">
             <span className="h-5 w-5 animate-spin rounded-full border-[3px] border-emerald-300/25 border-t-emerald-300" aria-label="Loading match details" />
           </div>
@@ -2518,28 +2783,28 @@ function LineupCard({
           <>
         <LiveTryScorersStrip match={detailMatch} liveMatch={displayLiveMatch} />
         {availableDetailViews.length > 0 ? (
-          <div className="mb-3 grid items-center gap-2 sm:grid-cols-[1fr_auto_1fr]">
-            <div className="hidden sm:block" aria-hidden="true" />
-            <div className="inline-flex justify-self-center rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
+          <div className="mb-3 flex w-full justify-center">
+            <div className="inline-flex max-w-full items-center overflow-x-auto rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
               {availableDetailViews.map((view) => (
                 <button
                   key={view}
                   type="button"
                   onClick={() => setDetailView(view)}
-                  className={`rounded-md px-3 py-1.5 transition-colors ${
+                  className={`shrink-0 rounded-md px-3 py-1.5 transition-colors ${
                     activeDetailView === view ? "bg-nrl-accent text-nrl-bg" : "hover:text-nrl-text"
                   }`}
                 >
-                  {view === "lineup" ? "Lineup" : "Match stats"}
+                  {view === "lineup" ? "Lineup" : view === "stats" ? "Match stats" : "Insights"}
                 </button>
               ))}
-            </div>
-            <div className="flex justify-center sm:justify-end">
               <Link
                 href={bettingHref}
-                className="rounded-md border border-nrl-border bg-nrl-panel/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+                className="inline-flex shrink-0 items-center gap-1 rounded-md px-3 py-1.5 transition-colors hover:text-nrl-text"
               >
-                Betting
+                <span className="normal-case">Betting</span>
+                <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+                  <path d="M5 4h7v7M12 4 4 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </Link>
             </div>
           </div>
@@ -2547,15 +2812,19 @@ function LineupCard({
 
         {activeDetailView === "stats" ? (
           <MatchStatsPanel match={detailMatch} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />
+        ) : activeDetailView === "insights" ? (
+          <MatchupInsightsPanel
+            insights={insights}
+            canAccessFullInsights={canAccessFantasyProjections}
+            freeInsightCategoryPriority={freeInsightCategoryPriority}
+            homeTeam={detailMatch.homeTeam}
+            awayTeam={detailMatch.awayTeam}
+            homeTryChart={homeTryChart}
+            awayTryChart={awayTryChart}
+            teamLogos={teamLogos}
+          />
         ) : hasLineupData ? (
           <>
-            {showPregameContent ? (
-              <MatchupInsightsPanel
-                insights={insights}
-                canAccessFullInsights={canAccessFantasyProjections}
-                freeInsightCategoryPriority={freeInsightCategoryPriority}
-              />
-            ) : null}
             <Pitch
               homePlayers={homePlayers}
               awayPlayers={awayPlayers}
@@ -2664,6 +2933,7 @@ export function LineupsDashboard({
   selectedRound,
   teamLogos,
   sportsbetOdds: initialSportsbetOdds = {},
+  tryChartsByTeam,
   canAccessFantasyProjections,
   summaryDiagnostic,
 }: LineupsDashboardProps) {
@@ -2815,6 +3085,7 @@ export function LineupsDashboard({
                   detail={matchDetails[match.matchId]?.detail ?? null}
                   detailStatus={matchDetails[match.matchId]?.status ?? "idle"}
                   initialSportsbetOdds={initialSportsbetOdds}
+                  tryChartsByTeam={tryChartsByTeam}
                   onOpen={() => loadMatchDetail(match)}
                 />
               ))}

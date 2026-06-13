@@ -186,6 +186,35 @@ export interface LineupsMatchDetailSummary {
   playerTryHistory: PlayerTryHistory;
 }
 
+export interface StatsinsiderTryChart {
+  team: string;
+  round: number;
+  leftScored: number;
+  middleScored: number;
+  rightScored: number;
+  leftConceded: number;
+  middleConceded: number;
+  rightConceded: number;
+  leftScoredPct: number;
+  middleScoredPct: number;
+  rightScoredPct: number;
+  leftConcededPct: number;
+  middleConcededPct: number;
+  rightConcededPct: number;
+  runScored: number;
+  kickScored: number;
+  interceptScored: number;
+  runConceded: number;
+  kickConceded: number;
+  interceptConceded: number;
+  runScoredPct: number;
+  kickScoredPct: number;
+  interceptScoredPct: number;
+  runConcededPct: number;
+  kickConcededPct: number;
+  interceptConcededPct: number;
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -2630,6 +2659,41 @@ function mapLineupsPageShellSummary(row: Record<string, unknown>): LineupsPageSh
   };
 }
 
+function mapStatsinsiderTryChart(row: Record<string, unknown>): StatsinsiderTryChart | null {
+  const team = toNullableString(row.team);
+  const round = toFiniteNumber(row.round);
+  if (!team || round == null) return null;
+
+  return {
+    team,
+    round: Math.trunc(round),
+    leftScored: toFiniteNumber(row.l_scored) ?? 0,
+    middleScored: toFiniteNumber(row.m_scored) ?? 0,
+    rightScored: toFiniteNumber(row.r_scored) ?? 0,
+    leftConceded: toFiniteNumber(row.l_conceded) ?? 0,
+    middleConceded: toFiniteNumber(row.m_conceded) ?? 0,
+    rightConceded: toFiniteNumber(row.r_conceded) ?? 0,
+    leftScoredPct: toFiniteNumber(row.l_scored_perc) ?? 0,
+    middleScoredPct: toFiniteNumber(row.m_scored_perc) ?? 0,
+    rightScoredPct: toFiniteNumber(row.r_scored_perc) ?? 0,
+    leftConcededPct: toFiniteNumber(row.l_conceded_perc) ?? 0,
+    middleConcededPct: toFiniteNumber(row.m_conceded_perc) ?? 0,
+    rightConcededPct: toFiniteNumber(row.r_conceded_perc) ?? 0,
+    runScored: toFiniteNumber(row.run_scored) ?? 0,
+    kickScored: toFiniteNumber(row.kick_scored) ?? 0,
+    interceptScored: toFiniteNumber(row.int_scored) ?? 0,
+    runConceded: toFiniteNumber(row.run_conceded) ?? 0,
+    kickConceded: toFiniteNumber(row.kick_conceded) ?? 0,
+    interceptConceded: toFiniteNumber(row.int_conceded) ?? 0,
+    runScoredPct: toFiniteNumber(row.run_scored_perc) ?? 0,
+    kickScoredPct: toFiniteNumber(row.kick_scored_perc) ?? 0,
+    interceptScoredPct: toFiniteNumber(row.int_scored_perc) ?? 0,
+    runConcededPct: toFiniteNumber(row.run_conceded_perc) ?? 0,
+    kickConcededPct: toFiniteNumber(row.kick_conceded_perc) ?? 0,
+    interceptConcededPct: toFiniteNumber(row.int_conceded_perc) ?? 0,
+  };
+}
+
 const LINEUPS_PAGE_SHELL_COLUMNS = "year,round,round_options,matches,team_logos,sportsbet_odds,updated_at";
 
 async function fetchLineupsPageSummaryFromSupabase(year: number, round: string): Promise<LineupsPageSummary | null> {
@@ -2725,6 +2789,64 @@ export async function fetchLatestLineupsPageShellSummary(year: number): Promise<
   } catch (error) {
     console.warn("Unable to fetch latest lineups page shell summary.", error);
     return null;
+  }
+}
+
+export async function fetchStatsinsiderTryCharts(
+  year: number,
+  maxRound?: number | null
+): Promise<Record<string, StatsinsiderTryChart>> {
+  try {
+    const supabase = createServerSupabaseClient("nrl");
+    let query = supabase
+      .from("statsinsider_try_charts")
+      .select(
+        [
+          "team",
+          "round",
+          "l_scored",
+          "m_scored",
+          "r_scored",
+          "l_conceded",
+          "m_conceded",
+          "r_conceded",
+          "l_scored_perc",
+          "m_scored_perc",
+          "r_scored_perc",
+          "l_conceded_perc",
+          "m_conceded_perc",
+          "r_conceded_perc",
+          "run_scored",
+          "kick_scored",
+          "int_scored",
+          "run_conceded",
+          "kick_conceded",
+          "int_conceded",
+          "run_scored_perc",
+          "kick_scored_perc",
+          "int_scored_perc",
+          "run_conceded_perc",
+          "kick_conceded_perc",
+          "int_conceded_perc",
+        ].join(",")
+      )
+      .eq("year", year)
+      .order("round", { ascending: false });
+
+    if (maxRound != null && Number.isFinite(maxRound)) query = query.lte("round", Math.trunc(maxRound));
+
+    const { data, error } = await query.limit(200);
+    if (error) throw new Error(`Supabase fetch nrl.statsinsider_try_charts: ${error.message}`);
+
+    const byTeam: Record<string, StatsinsiderTryChart> = {};
+    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+      const chart = mapStatsinsiderTryChart(row);
+      if (chart && !byTeam[chart.team]) byTeam[chart.team] = chart;
+    }
+    return byTeam;
+  } catch (error) {
+    console.warn("Unable to fetch Stats Insider try charts.", error);
+    return {};
   }
 }
 

@@ -35,7 +35,7 @@ export function TabNav() {
 
   return (
     <div className="-mx-1 mt-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <nav className="inline-flex min-w-max gap-1 rounded-full border border-white/10 bg-[#121833]/82 p-1 backdrop-blur">
+      <nav className="inline-flex min-w-max gap-1 rounded-full border border-white/10 bg-[#151c3a]/82 p-1 backdrop-blur">
         {tabs.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           return (

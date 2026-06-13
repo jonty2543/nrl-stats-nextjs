@@ -1113,23 +1113,23 @@ function getPlayerThumbnailUrl(imageRow: PlayerImageRecord | null): string | nul
 
   const trimmed = source.trim()
   if (!trimmed) return null
-  if (trimmed.startsWith("http://")) return `https://${trimmed.slice("http://".length)}`
+  const upgradeHttp = (value: string) => value.startsWith("http://") ? `https://${value.slice("http://".length)}` : value
+  const decode = (value: string) => {
+    try {
+      return decodeURIComponent(value)
+    } catch {
+      return value
+    }
+  }
 
   const marker = "/remote.axd?"
   const idx = trimmed.indexOf(marker)
   if (idx >= 0) {
-    const nested = trimmed.slice(idx + marker.length)
-    if (nested.startsWith("http://")) return `https://${nested.slice("http://".length)}`
-    if (nested) return nested
+    const nested = trimmed.slice(idx + marker.length).split("&preset=")[0]
+    if (nested) return upgradeHttp(decode(nested))
   }
 
-  return trimmed
-}
-
-function getPlayerInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return "?"
-  return `${parts[0]?.[0] ?? ""}${parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : ""}`.toUpperCase()
+  return upgradeHttp(decode(trimmed))
 }
 
 function normalisePositionForComparison(value: string | null | undefined): string {
@@ -5601,19 +5601,11 @@ export function FantasyDashboard({
 	                            const content = (
 	                              <>
 	                                <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-full border-2 border-white/80 bg-nrl-panel shadow-[0_10px_22px_rgba(0,0,0,0.34)] transition-colors group-hover:border-nrl-accent/80 sm:h-14 sm:w-14">
-	                                  {thumbnailUrl ? (
-	                                    // eslint-disable-next-line @next/next/no-img-element
-	                                    <img
-                                      src={thumbnailUrl}
-                                      alt=""
-                                      className="h-full w-full object-cover object-top"
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <span className="text-[10px] text-nrl-muted">
-                                      {playerRow ? getPlayerInitials(playerRow.player.name) : slot.slot}
-                                    </span>
-                                  )}
+                                  <ImageWithFallback
+                                    sources={[thumbnailUrl ?? "", "/body-shot.png"]}
+                                    alt={playerRow ? `${playerRow.player.name} player image` : slot.slot}
+                                    className="h-full w-full object-cover object-top"
+                                  />
                                 </div>
                                 <div className="mt-1 truncate text-[10px] font-semibold leading-tight text-nrl-text" title={playerRow?.player.name ?? slot.slot}>
                                   {playerRow?.player.name ?? slot.slot}

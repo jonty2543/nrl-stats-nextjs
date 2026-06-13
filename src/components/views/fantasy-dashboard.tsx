@@ -341,7 +341,6 @@ const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
 const FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX = "fantasy-trade-ratings-visible"
 const PRO_PRICE_LABEL = "$5/month"
 const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
-const RATINGS_PRO_LABEL = "Ratings $5/mo"
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
   "inline-flex h-5 w-12 items-center justify-center rounded border border-nrl-border/60 bg-[#1c2544]/65 text-slate-100"
 const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[7px] opacity-55 select-none"
@@ -5685,11 +5684,6 @@ export function FantasyDashboard({
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <div className="flex items-center gap-0.5">
-                    {!hasFantasyPlotAccess ? (
-                      <BillingPageLink className="inline-flex min-h-[30px] shrink-0 items-center rounded-full border border-nrl-accent/50 bg-nrl-accent/10 px-2.5 text-[8px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-nrl-accent hover:text-nrl-accent sm:text-[9px]">
-                        {RATINGS_PRO_LABEL}
-                      </BillingPageLink>
-                    ) : null}
                     <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
                       <span>Ratings</span>
                       <input
@@ -5701,6 +5695,11 @@ export function FantasyDashboard({
                       <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersTradeRatings ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
                         <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersTradeRatings ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
                       </span>
+                      {!hasFantasyPlotAccess ? (
+                        <span className="rounded-full border border-nrl-accent/45 bg-nrl-accent/10 px-1.5 py-0.5 text-[7px] font-black tracking-[0.14em] text-white">
+                          Pro
+                        </span>
+                      ) : null}
                     </label>
                     <button
                       type="button"
@@ -5754,11 +5753,6 @@ export function FantasyDashboard({
                   )}
                 </Link>
                 <div className="flex shrink-0 items-center gap-0.5">
-                  {!hasFantasyPlotAccess ? (
-                    <BillingPageLink className="inline-flex min-h-[30px] shrink-0 items-center rounded-full border border-nrl-accent/50 bg-nrl-accent/10 px-2.5 text-[8px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-nrl-accent hover:text-nrl-accent sm:text-[9px]">
-                      {RATINGS_PRO_LABEL}
-                    </BillingPageLink>
-                  ) : null}
                   <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
                     <span>Ratings</span>
                     <input
@@ -5770,6 +5764,11 @@ export function FantasyDashboard({
                     <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersTradeRatings ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
                       <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersTradeRatings ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
                     </span>
+                    {!hasFantasyPlotAccess ? (
+                      <span className="rounded-full border border-nrl-accent/45 bg-nrl-accent/10 px-1.5 py-0.5 text-[7px] font-black tracking-[0.14em] text-white">
+                        Pro
+                      </span>
+                    ) : null}
                   </label>
                   <button
                     type="button"

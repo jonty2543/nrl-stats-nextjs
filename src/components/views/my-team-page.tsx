@@ -30,9 +30,55 @@ const STARTER_ROWS = [
   { slot: "WFB", count: 3 },
 ] as const
 const MY_TEAM_MAJOR_BYE_ROUNDS = [13, 16, 19] as const
+const MY_TEAM_ORIGIN_UNAVAILABLE_ROUNDS = [15, 18] as const
+const MY_TEAM_ORIGIN_FALLBACK_PLAYERS = [
+  "Addin Fonua-Blake",
+  "Blayke Brailey",
+  "Brian To'o",
+  "Briton Nikora",
+  "Cameron Munster",
+  "Cameron Murray",
+  "Casey McLean",
+  "Connor Watson",
+  "Dylan Lucas",
+  "Ethan Strange",
+  "Ezra Mam",
+  "Gehamat Shibasaki",
+  "Hamiso Tabuai-Fidow",
+  "Harry Grant",
+  "Haumole Olakau'atu",
+  "Hudson Young",
+  "Jacob Saifiti",
+  "James Tedesco",
+  "Jojo Fifita",
+  "Kalyn Ponga",
+  "Kotoni Staggs",
+  "Kulikefu Finefeuiaki",
+  "Kurt Capewell",
+  "Latrell Mitchell",
+  "Lindsay Collins",
+  "Max Plath",
+  "Mitchell Barnett",
+  "Mitchell Moses",
+  "Nathan Cleary",
+  "Patrick Carrigan",
+  "Payne Haas",
+  "Reece Robson",
+  "Reuben Cotter",
+  "Robert Toia",
+  "Selwyn Cobbo",
+  "Stephen Crichton",
+  "Thomas Flegler",
+  "Tino Fa'asuamaleaui",
+  "Tolutau Koula",
+  "Tom Dearden",
+  "Trent Loiero",
+  "Victor Radley",
+] as const
 const MY_TEAM_THIRTEEN_PLAYER_ROUNDS = [13, 15, 16, 18, 19] as const
 const MY_TEAM_PROJECTION_ROUNDS = Array.from({ length: 19 }, (_, index) => index + 1)
 const MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS = [12, 13, 15, 16, 18, 19] as const
+const MY_TEAM_ROUND_CUTOFF_MS = 2 * 60 * 60 * 1000
 const MY_TEAM_AI_ENABLED = true
 const FANTASY_SQUAD_ID_TO_TEAM: Record<number, string> = {
   500001: "Roosters",
@@ -228,7 +274,7 @@ async function buildTeamScreenshot(file: File, slot: ScreenshotSlot): Promise<Te
 }
 
 function normalisePlayerLookupValue(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim()
+  return value.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim()
 }
 
 function normaliseTeamKey(value: string | null | undefined): string {
@@ -266,6 +312,16 @@ function teamPlaysInRound(draw2026Data: Draw2026Data | null | undefined, round: 
   return roundRows.some(
     (row) => normaliseTeamKey(row.home) === teamKey || normaliseTeamKey(row.away) === teamKey,
   )
+}
+
+function getCurrentDrawRound(draw2026Data: Draw2026Data | null | undefined, now = new Date()): number | null {
+  if (!draw2026Data?.rows.length) return null
+  const cutoffMs = now.getTime() - MY_TEAM_ROUND_CUTOFF_MS
+  const nextRow = draw2026Data.rows
+    .map((row) => ({ round: row.round, kickoffMs: Date.parse(row.kickoff) }))
+    .filter((row) => Number.isFinite(row.kickoffMs) && row.kickoffMs >= cutoffMs)
+    .sort((a, b) => a.kickoffMs - b.kickoffMs)[0]
+  return nextRow?.round ?? null
 }
 
 function playerNameSignature(value: string): { initial: string; surname: string; full: string } {
@@ -610,7 +666,7 @@ function buildMyTeamAiPrompt({
       "Try to list 3 Sell watch candidates every time. Use owned squad players only, prioritising confirmed injury/unavailability, notable outs from lineups/casualty data, negative ownership change, high BE, projection below priced at, weak L3/projection, poor bye coverage, Origin risk, or a clear cash/squad problem. If fewer than 3 owned players have meaningful sell signals, list fewer rather than inventing names.",
       "Unless a player is injured, out, suspended, not named, misses the target major bye, or has another clear availability problem, their BE must be above priced at before they can be listed in Sell watch.",
       "If projection is 50+ and projection vs priced at is -5.0 or better, do not list them in Sell watch unless there is a clear offsetting issue like injury, not named, missing an upcoming major bye, likely Origin selection, or another serious squad/cash constraint.",
-      "Origin players who are likely to miss all three major bye rounds 13, 16 and 19 are priority sell/avoid candidates even if they play the next single round. Treat Tolu Koula-style cases as bad major-bye coverage, not as simply plays next bye.",
+      "Origin players are likely unavailable in rounds 15 and 18, so treat them as bad coverage for those rounds rather than rounds 16 and 19.",
       "List an owned player in Sell watch when live data shows their ownership delta is -1.0% or worse, BE is high, projection is below priced at, or they have confirmed injury/unavailability. Discuss whether they are a hard sell, possible sell, or hold using projection, priced at, BE, L3 average, ownership delta, injury/availability markers, and next major bye availability.",
       "If a player is -1.0% or worse in ownership delta but BE is lower than priced at, projection is similar to priced at, L3 is sound, and they play the next major bye, frame them as Hold / Possible sell rather than a hard sell.",
       "Do not say recent form has slipped when L3 average is above priced at.",
@@ -1281,7 +1337,7 @@ function getRoundAvailability(
   const playsRound = teamPlaysInRound(draw2026Data, round, team)
 
   if (
-    MY_TEAM_MAJOR_BYE_ROUNDS.includes(round as MyTeamMajorByeRound) &&
+    MY_TEAM_ORIGIN_UNAVAILABLE_ROUNDS.includes(round as (typeof MY_TEAM_ORIGIN_UNAVAILABLE_ROUNDS)[number]) &&
     isOriginChancePlayer(player, fantasyPlayersById, originPlayerNames)
   ) {
     return { available: false, reason: "Origin risk", isBye: false, isOriginRisk: true }
@@ -2153,10 +2209,10 @@ function TeamBoard({
   const projectedScore = scoringSide
     .reduce((sum, entry) => sum + (effectiveProjectionForPlayer(entry.player, fantasyPlayersById, fantasyCoachPlayersById, lineupsProjections) ?? 0), 0)
   const screenshotRoundNumber = Number.parseInt(team?.round ?? "", 10)
-  const appRoundNumber = typeof lineupsProjections.round === "number" && Number.isFinite(lineupsProjections.round)
+  const projectionRoundNumber = typeof lineupsProjections.round === "number" && Number.isFinite(lineupsProjections.round)
     ? lineupsProjections.round
     : screenshotRoundNumber
-  const currentRoundNumber = appRoundNumber
+  const currentRoundNumber = getCurrentDrawRound(draw2026Data) ?? projectionRoundNumber
   const currentMajorRound: MyTeamMajorByeRound | null = MY_TEAM_MAJOR_BYE_ROUNDS.includes(currentRoundNumber as MyTeamMajorByeRound)
     ? currentRoundNumber as MyTeamMajorByeRound
     : null
@@ -2540,7 +2596,10 @@ export function MyTeamPage({ fantasyPlayers, fantasyCoachPlayers, lineupsProject
   const fantasyPlayersById = useMemo(() => new Map(fantasyPlayers.map((player) => [player.id, player])), [fantasyPlayers])
   const fantasyCoachPlayersById = useMemo(() => new Map(fantasyCoachPlayers.map((player) => [player.id, player])), [fantasyCoachPlayers])
   const originPlayerNames = useMemo(
-    () => new Set(originChances.map((row) => row.player).filter(Boolean)),
+    () => new Set([
+      ...MY_TEAM_ORIGIN_FALLBACK_PLAYERS,
+      ...originChances.map((row) => row.player).filter(Boolean),
+    ]),
     [originChances],
   )
 

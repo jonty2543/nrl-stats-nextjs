@@ -868,13 +868,15 @@ function weatherConditionEmoji(condition: string): string {
   return "🌤️"
 }
 
-function ScoreNumber({ value, align, isWinner }: { value: number | null; align: "left" | "right"; isWinner: boolean }) {
+function ScoreNumber({ value, align, isWinner, lift = false }: { value: number | null; align: "left" | "right"; isWinner: boolean; lift?: boolean }) {
   return (
     <div
       className={`min-w-[1.55rem] text-[1.7rem] leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-5xl lg:text-6xl ${
         isWinner ? "font-black" : "font-normal"
       } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
+      } ${
+        lift ? "sm:-translate-y-3" : ""
       }`}
     >
       {value ?? "-"}
@@ -882,7 +884,17 @@ function ScoreNumber({ value, align, isWinner }: { value: number | null; align: 
   )
 }
 
-function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: LineupMatch; liveMatch: LineupLiveMatch | null; splitScore?: boolean }) {
+function LiveScoreHeader({
+  match,
+  liveMatch,
+  splitScore = false,
+  lift = false,
+}: {
+  match: LineupMatch
+  liveMatch: LineupLiveMatch | null
+  splitScore?: boolean
+  lift?: boolean
+}) {
   const state = liveMatch?.state
   const clock = formatGameClock(state?.gameSeconds ?? state?.liveSeconds)
   const score = matchScore(match, liveMatch)
@@ -896,7 +908,7 @@ function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: Line
   const hasScore = score.homeScore != null || score.awayScore != null
 
   return (
-    <div className={`flex flex-col justify-center px-1.5 text-center sm:px-2 ${splitScore ? "min-w-[4.7rem] sm:min-w-[6.75rem]" : "min-w-[6.4rem] sm:min-w-[10rem] sm:px-4"}`}>
+    <div className={`flex flex-col justify-center px-1.5 text-center sm:px-2 ${lift ? "sm:-translate-y-3" : ""} ${splitScore ? "min-w-[4.7rem] sm:min-w-[6.75rem]" : "min-w-[6.4rem] sm:min-w-[10rem] sm:px-4"}`}>
       {hasScore ? (
         <>
           {showLiveBadge ? (
@@ -2515,6 +2527,7 @@ function LineupCard({
   const showSplitScore = headerScore.homeScore != null || headerScore.awayScore != null
   const homeScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.homeScore > headerScore.awayScore
   const awayScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.awayScore > headerScore.homeScore
+  const showLiveCardHeader = isMatchLive(displayLiveMatch)
   const showPregameContent = !isLive && !hasResultScore
   const availableDetailViews: LineupDetailView[] = showPregameContent
     ? ["lineup", "insights", "stats"]
@@ -2632,11 +2645,13 @@ function LineupCard({
           />
         ) : null}
         <div className="relative z-[1] pb-2 text-center">
-          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white sm:text-xs sm:tracking-[0.28em]">
-            {detailMatch.round} · {formatCardDate(detailMatch)}
-          </div>
+          {showLiveCardHeader ? null : (
+            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white sm:text-xs sm:tracking-[0.28em]">
+              {detailMatch.round} · {formatCardDate(detailMatch)}
+            </div>
+          )}
           {detailMatch.venue || weatherForecast ? (
-            <div className="mx-auto mt-1 flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px]">
+            <div className={`mx-auto flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px] ${showLiveCardHeader ? "mt-0" : "mt-1"}`}>
               {detailMatch.venue ? <span className="min-w-0 truncate">{detailMatch.venue}</span> : null}
               {weatherForecast ? (
                 <span className="flex-none text-xs leading-none sm:text-sm" aria-hidden="true">
@@ -2658,10 +2673,10 @@ function LineupCard({
           </div>
           {showSplitScore ? (
             <div className="relative col-start-2 h-[5rem] sm:contents">
-              <div className="absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 -translate-y-1/2 grid-cols-[2.35rem_4.7rem_2.35rem] items-center justify-center gap-x-2 sm:static sm:contents sm:translate-x-0 sm:translate-y-0">
-                <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} />
-                <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore />
-                <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} />
+              <div className={`absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 grid-cols-[2.35rem_4.7rem_2.35rem] items-center justify-center gap-x-2 sm:static sm:contents sm:translate-x-0 ${showLiveCardHeader ? "-translate-y-[62%] sm:-translate-y-0" : "-translate-y-1/2 sm:translate-y-0"}`}>
+                <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} lift={showLiveCardHeader} />
+                <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore lift={showLiveCardHeader} />
+                <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} lift={showLiveCardHeader} />
               </div>
             </div>
           ) : (

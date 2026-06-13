@@ -6182,14 +6182,14 @@ export function FantasyDashboard({
                       </div>
                     </div>
                     {showAllPlayersTradeRatings ? (
-	                      <div className="mt-3 overflow-x-auto rounded-full border border-white/10 bg-white/[0.035] px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-	                        <div className="flex min-w-max items-center gap-2.5">
+                      <div className="mt-3 overflow-x-auto rounded-full border border-white/10 bg-white/[0.035] px-3 py-2 [scrollbar-width:none] lg:overflow-visible [&::-webkit-scrollbar]:hidden">
+                        <div className="flex min-w-max items-center gap-2.5 lg:grid lg:min-w-0 lg:grid-cols-8 lg:gap-3">
                           {tradeRatingCardStats.map((stat) => {
                             const highlighted = Boolean("highlighted" in stat && stat.highlighted)
                             return (
                               <div
                                 key={stat.key}
-                                className={`inline-flex min-h-10 min-w-24 flex-col items-center justify-center rounded-full border px-2.5 ${getTradeScorePillClass(stat.tradeScore, highlighted)}`}
+                                className={`inline-flex min-h-10 min-w-24 flex-col items-center justify-center rounded-full border px-2.5 lg:w-full lg:min-w-0 ${getTradeScorePillClass(stat.tradeScore, highlighted)}`}
                               >
                                 <span className="text-[7px] font-black uppercase tracking-[0.02em] text-white/45 sm:text-[8px]">
                                   {stat.label}

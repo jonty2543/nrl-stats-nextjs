@@ -251,6 +251,7 @@ function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[
   const seen = new Set<string>();
   const out: string[] = [];
   const upgradeHttp = (value: string) => value.startsWith("http://") ? `https://${value.slice("http://".length)}` : value;
+  const encode = (value: string) => encodeURI(value).replace(/'/g, "%27");
   const decode = (value: string) => {
     try {
       return decodeURIComponent(value);
@@ -261,7 +262,7 @@ function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[
 
   const push = (value: string | null | undefined) => {
     if (!value || typeof value !== "string") return;
-    const trimmed = upgradeHttp(decode(value.trim()));
+    const trimmed = encode(upgradeHttp(decode(value.trim())));
     if (!trimmed || seen.has(trimmed)) return;
     seen.add(trimmed);
     out.push(trimmed);
@@ -283,7 +284,7 @@ function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[
     if (idx >= 0) {
       const nested = value.slice(idx + marker.length).split("&preset=")[0];
       if (nested) {
-        pushVariant(upgradeHttp(decode(nested)));
+        pushVariant(encode(upgradeHttp(decode(nested))));
       }
     }
     pushVariant(value);

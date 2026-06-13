@@ -10,6 +10,7 @@ interface ImageWithFallbackProps {
 
 function normaliseImageSource(value: string): string {
   const upgradeHttp = (source: string) => source.startsWith("http://") ? `https://${source.slice("http://".length)}` : source
+  const encode = (source: string) => encodeURI(source).replace(/'/g, "%27")
   const decode = (source: string) => {
     try {
       return decodeURIComponent(source)
@@ -23,10 +24,10 @@ function normaliseImageSource(value: string): string {
   if (markerIndex >= 0) {
     const nested = value.slice(markerIndex + marker.length).split("&preset=")[0]
     const decoded = decode(nested)
-    if (decoded) return upgradeHttp(decoded)
+    if (decoded) return encode(upgradeHttp(decoded))
   }
 
-  return upgradeHttp(decode(value))
+  return encode(upgradeHttp(decode(value)))
 }
 
 export function ImageWithFallback({ sources, alt, className }: ImageWithFallbackProps) {

@@ -341,6 +341,7 @@ const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
 const FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX = "fantasy-trade-ratings-visible"
 const PRO_PRICE_LABEL = "$5/month"
 const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
+const RATINGS_PRO_LABEL = "Ratings $5/mo"
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
   "inline-flex h-5 w-12 items-center justify-center rounded border border-nrl-border/60 bg-[#1c2544]/65 text-slate-100"
 const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[7px] opacity-55 select-none"
@@ -1114,6 +1115,7 @@ function getPlayerThumbnailUrl(imageRow: PlayerImageRecord | null): string | nul
   const trimmed = source.trim()
   if (!trimmed) return null
   const upgradeHttp = (value: string) => value.startsWith("http://") ? `https://${value.slice("http://".length)}` : value
+  const encode = (value: string) => encodeURI(value).replace(/'/g, "%27")
   const decode = (value: string) => {
     try {
       return decodeURIComponent(value)
@@ -1126,10 +1128,10 @@ function getPlayerThumbnailUrl(imageRow: PlayerImageRecord | null): string | nul
   const idx = trimmed.indexOf(marker)
   if (idx >= 0) {
     const nested = trimmed.slice(idx + marker.length).split("&preset=")[0]
-    if (nested) return upgradeHttp(decode(nested))
+    if (nested) return encode(upgradeHttp(decode(nested)))
   }
 
-  return upgradeHttp(decode(trimmed))
+  return encode(upgradeHttp(decode(trimmed)))
 }
 
 function normalisePositionForComparison(value: string | null | undefined): string {
@@ -5685,7 +5687,7 @@ export function FantasyDashboard({
                   <div className="flex items-center gap-0.5">
                     {!hasFantasyPlotAccess ? (
                       <BillingPageLink className="inline-flex min-h-[30px] shrink-0 items-center rounded-full border border-nrl-accent/50 bg-nrl-accent/10 px-2.5 text-[8px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-nrl-accent hover:text-nrl-accent sm:text-[9px]">
-                        Pro $5/month
+                        {RATINGS_PRO_LABEL}
                       </BillingPageLink>
                     ) : null}
                     <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
@@ -5754,7 +5756,7 @@ export function FantasyDashboard({
                 <div className="flex shrink-0 items-center gap-0.5">
                   {!hasFantasyPlotAccess ? (
                     <BillingPageLink className="inline-flex min-h-[30px] shrink-0 items-center rounded-full border border-nrl-accent/50 bg-nrl-accent/10 px-2.5 text-[8px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:border-nrl-accent hover:text-nrl-accent sm:text-[9px]">
-                      Pro $5/month
+                      {RATINGS_PRO_LABEL}
                     </BillingPageLink>
                   ) : null}
                   <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">

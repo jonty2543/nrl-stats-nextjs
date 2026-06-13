@@ -711,6 +711,7 @@ function normalizePlayerImageUrl(value: string | null | undefined): string | nul
   const trimmed = typeof value === "string" ? value.trim() : "";
   if (!trimmed) return null;
   const upgradeHttp = (source: string) => source.startsWith("http://") ? `https://${source.slice("http://".length)}` : source;
+  const encode = (source: string) => encodeURI(source).replace(/'/g, "%27");
   const decode = (source: string) => {
     try {
       return decodeURIComponent(source);
@@ -722,9 +723,9 @@ function normalizePlayerImageUrl(value: string | null | undefined): string | nul
   const markerIndex = trimmed.indexOf(marker);
   if (markerIndex >= 0) {
     const nested = trimmed.slice(markerIndex + marker.length).split("&preset=")[0];
-    if (nested) return upgradeHttp(decode(nested));
+    if (nested) return encode(upgradeHttp(decode(nested)));
   }
-  return upgradeHttp(decode(trimmed));
+  return encode(upgradeHttp(decode(trimmed)));
 }
 
 function PlayerProfileImage({

@@ -875,6 +875,33 @@ function chooseTryscorerPredictionEntry(
   return nextCompleteness >= existingCompleteness ? next : existing;
 }
 
+function tryscorerPlayerLookupKeys(value: unknown): string[] {
+  const raw = String(value ?? "").trim();
+  if (!raw) return [];
+
+  const out = new Set<string>();
+  const add = (candidate: string) => {
+    const key = normaliseLookupKey(candidate);
+    if (!key) return;
+    out.add(key);
+
+    for (const aliasGroup of NRL_TEAM_LOGO_ALIAS_GROUPS) {
+      for (const alias of aliasGroup) {
+        const aliasKey = normaliseLookupKey(alias);
+        if (!aliasKey || !key.endsWith(` ${aliasKey}`)) continue;
+        const withoutTeam = key.slice(0, -aliasKey.length).trim();
+        if (withoutTeam) out.add(withoutTeam);
+      }
+    }
+  };
+
+  add(raw);
+  add(raw.replace(/\([^)]*\)/g, " "));
+  add(raw.replace(/\[[^\]]*\]/g, " "));
+
+  return [...out];
+}
+
 function buildOverrideLookup(rows: MarginOverrideRow[]): Map<string, number> {
   const out = new Map<string, number>();
   for (const raw of rows) {
@@ -970,25 +997,29 @@ function buildTryscorerPredictionLookup(rows: TryscorerPredictionRow[]): Tryscor
 
   for (const raw of rows) {
     const date = toIsoDate(raw.match_date);
-    const playerKey = normaliseLookupKey(raw.player);
-    if (!date || !playerKey) continue;
+    const playerKeys = tryscorerPlayerLookupKeys(raw.player);
+    if (!date || playerKeys.length === 0) continue;
 
     const entry: TryscorerPredictionEntry = {
       anytimeProb: toNullableProbability(raw.anytime_prob),
       updatedAtMs: toUpdatedAtMs(raw.updated_at),
     };
 
-    const datePlayerKey = `${date}|${playerKey}`;
-    byDatePlayer.set(datePlayerKey, chooseTryscorerPredictionEntry(byDatePlayer.get(datePlayerKey), entry));
+    for (const playerKey of playerKeys) {
+      const datePlayerKey = `${date}|${playerKey}`;
+      byDatePlayer.set(datePlayerKey, chooseTryscorerPredictionEntry(byDatePlayer.get(datePlayerKey), entry));
+    }
 
     const normalizedMatchKey = matchKey(raw.match);
     if (!normalizedMatchKey) continue;
 
-    const dateMatchPlayerKey = `${date}|${normalizedMatchKey}|${playerKey}`;
-    byDateMatchPlayer.set(
-      dateMatchPlayerKey,
-      chooseTryscorerPredictionEntry(byDateMatchPlayer.get(dateMatchPlayerKey), entry)
-    );
+    for (const playerKey of playerKeys) {
+      const dateMatchPlayerKey = `${date}|${normalizedMatchKey}|${playerKey}`;
+      byDateMatchPlayer.set(
+        dateMatchPlayerKey,
+        chooseTryscorerPredictionEntry(byDateMatchPlayer.get(dateMatchPlayerKey), entry)
+      );
+    }
   }
 
   return { byDatePlayer, byDateMatchPlayer };
@@ -1027,16 +1058,23 @@ function findTryscorerPredictionForOddsRow(
   lookup: TryscorerPredictionLookupMaps
 ): TryscorerPredictionEntry | null {
   const date = toIsoDate(row.date);
-  const playerKey = normaliseLookupKey(row.result);
-  if (!date || !playerKey) return null;
+  const playerKeys = tryscorerPlayerLookupKeys(row.result);
+  if (!date || playerKeys.length === 0) return null;
 
   const normalizedMatchKey = matchKey(row.match);
   if (normalizedMatchKey) {
-    const byMatch = lookup.byDateMatchPlayer.get(`${date}|${normalizedMatchKey}|${playerKey}`);
-    if (byMatch) return byMatch;
+    for (const playerKey of playerKeys) {
+      const byMatch = lookup.byDateMatchPlayer.get(`${date}|${normalizedMatchKey}|${playerKey}`);
+      if (byMatch) return byMatch;
+    }
   }
 
-  return lookup.byDatePlayer.get(`${date}|${playerKey}`) ?? null;
+  for (const playerKey of playerKeys) {
+    const byDate = lookup.byDatePlayer.get(`${date}|${playerKey}`);
+    if (byDate) return byDate;
+  }
+
+  return null;
 }
 
 function applyPredictionModelToRow(row: BettingOddsRow, lookup: PredictionLookupMaps): BettingOddsRow {

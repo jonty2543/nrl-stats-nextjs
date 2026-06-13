@@ -707,6 +707,16 @@ function lookupTryscorerVsOpponentLastFive({
   return [];
 }
 
+function normalizePlayerImageUrl(value: string | null | undefined): string | null {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed) return null;
+  if (trimmed.startsWith("http://")) return `https://${trimmed.slice("http://".length)}`;
+  if (trimmed.includes("/remote.axd?http://")) {
+    return trimmed.replace("/remote.axd?http://", "/remote.axd?https://");
+  }
+  return trimmed;
+}
+
 function PlayerProfileImage({
   image,
   name,
@@ -716,13 +726,20 @@ function PlayerProfileImage({
   name: string;
   className?: string;
 }) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const imageSrc = normalizePlayerImageUrl(image);
+  const src = imageSrc && imageSrc !== failedSrc ? imageSrc : "/body-shot.png";
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={image ?? "/body-shot.png"}
+      src={src}
       alt={name}
       className={`${className} shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover`}
       loading="lazy"
+      onError={() => {
+        if (imageSrc && src === imageSrc) setFailedSrc(imageSrc);
+      }}
     />
   );
 }

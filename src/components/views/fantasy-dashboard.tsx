@@ -3007,7 +3007,7 @@ function ProjectionBandMetricCard({
   blurValue?: boolean
 }) {
   return (
-    <div className="h-full rounded-lg border border-nrl-border bg-nrl-panel-2 px-2 py-2 sm:px-2.5 sm:py-2.5 xl:px-2.5 xl:py-2.5">
+    <div className="h-full rounded-lg border border-nrl-border bg-[#111832] px-2 py-2 sm:px-2.5 sm:py-2.5 xl:px-2.5 xl:py-2.5">
       <div className="min-h-[1.8em] text-center text-[7px] font-semibold uppercase leading-[1.15] tracking-wide text-nrl-muted">
         {label}
       </div>

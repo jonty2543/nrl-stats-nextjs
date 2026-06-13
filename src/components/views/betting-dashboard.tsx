@@ -123,6 +123,12 @@ interface TryscorerProfileSelection {
   opponent: string | null;
 }
 
+interface TryscorerResolvedProfile {
+  form: TryscorerFormSummary | null;
+  image: string | null;
+  team: string | null;
+}
+
 interface EventGroup {
   key: string;
   date: string;
@@ -318,6 +324,14 @@ function normaliseLookupKey(value: string | null | undefined): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function lookupNameParts(value: string | null | undefined): { first: string; last: string } {
+  const parts = normaliseLookupKey(value).split(/\s+/).filter(Boolean);
+  return {
+    first: parts[0] ?? "",
+    last: parts.at(-1) ?? "",
+  };
 }
 
 function areLookupTokensClose(a: string, b: string): boolean {
@@ -696,23 +710,146 @@ function lookupTryscorerVsOpponentLastFive({
 function PlayerProfileImage({
   image,
   name,
-  fallbackTeam,
-  teamLogos,
   className = "h-8 w-8",
 }: {
   image?: string | null;
   name: string;
-  fallbackTeam: string | null;
-  teamLogos: Record<string, string>;
   className?: string;
 }) {
-  if (image) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={image} alt="" className={`${className} shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover`} loading="lazy" />
-    );
-  }
-  return <TeamLogoImage teamName={fallbackTeam ?? name} teamLogos={teamLogos} className={className} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={image ?? "/body-shot.png"}
+      alt={name}
+      className={`${className} shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover`}
+      loading="lazy"
+    />
+  );
+}
+
+function playerImageSeenMs(row: PlayerImageRecord): number {
+  const parsed = row.last_seen_match_date ? Date.parse(row.last_seen_match_date) : NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function teamMatchesHint(rowTeam: string | null | undefined, teamHint: string | null | undefined): boolean {
+  const rowKey = normaliseTeamMatchKey(rowTeam ?? "");
+  const hintKey = normaliseTeamMatchKey(teamHint ?? "");
+  return Boolean(rowKey && hintKey && rowKey === hintKey);
+}
+
+function teamIsInMatch(rowTeam: string | null | undefined, match: string): boolean {
+  const rowKey = normaliseTeamMatchKey(rowTeam ?? "");
+  if (!rowKey) return false;
+  const { home, away } = parseMatch(match);
+  return rowKey === normaliseTeamMatchKey(home) || rowKey === normaliseTeamMatchKey(away);
+}
+
+function findLatestPlayerImage(
+  playerName: string,
+  playerImages: PlayerImageRecord[],
+  teamHint: string | null = null,
+  match = ""
+): PlayerImageRecord | null {
+  const targetKey = normaliseLookupKey(playerName);
+  if (!targetKey) return null;
+  const targetParts = lookupNameParts(playerName);
+  const matchingRows = playerImages
+    .filter((row) => {
+      const rowKey = normaliseLookupKey(row.player);
+      if (!rowKey) return false;
+      if (rowKey === targetKey) return true;
+      const rowParts = lookupNameParts(row.player);
+      return Boolean(
+        rowParts.last &&
+          rowParts.last === targetParts.last &&
+          rowParts.first[0] &&
+          rowParts.first[0] === targetParts.first[0]
+      );
+    })
+    .filter((row) => row.head_image || row.body_image)
+    .sort((left, right) => {
+      const leftTeamMatch = teamMatchesHint(left.team, teamHint);
+      const rightTeamMatch = teamMatchesHint(right.team, teamHint);
+      if (leftTeamMatch !== rightTeamMatch) return leftTeamMatch ? -1 : 1;
+
+      const leftMatchTeam = teamIsInMatch(left.team, match);
+      const rightMatchTeam = teamIsInMatch(right.team, match);
+      if (leftMatchTeam !== rightMatchTeam) return leftMatchTeam ? -1 : 1;
+
+      const leftHasHead = Boolean(left.head_image);
+      const rightHasHead = Boolean(right.head_image);
+      if (leftHasHead !== rightHasHead) return leftHasHead ? -1 : 1;
+
+      return playerImageSeenMs(right) - playerImageSeenMs(left);
+    });
+
+  return matchingRows[0] ?? null;
+}
+
+function mergeTryscorerFormWithLatestImage(
+  form: TryscorerFormSummary | null,
+  playerName: string,
+  playerImages: PlayerImageRecord[],
+  teamHint: string | null,
+  match: string
+): TryscorerFormSummary | null {
+  if (!form) return null;
+  const latestImage = findLatestPlayerImage(form.player || playerName, playerImages, teamHint ?? form.team ?? null, match);
+  if (!latestImage) return form;
+  return {
+    ...form,
+    headImage: latestImage.head_image ?? null,
+    bodyImage: latestImage.body_image ?? null,
+    team: form.team ?? latestImage.team ?? null,
+    position: form.position ?? latestImage.position ?? null,
+  };
+}
+
+function findTryscorerForm(
+  playerName: string,
+  tryscorerFormByPlayer: Record<string, TryscorerFormSummary>
+): TryscorerFormSummary | null {
+  const key = normaliseLookupKey(playerName);
+  const exact = tryscorerFormByPlayer[key];
+  if (exact) return exact;
+
+  const target = lookupNameParts(playerName);
+  if (!target.first || !target.last) return null;
+
+  return Object.entries(tryscorerFormByPlayer).find(([candidateKey, form]) => {
+    const candidate = lookupNameParts(form.player || candidateKey);
+    if (!candidate.first || !candidate.last) return false;
+    if (candidate.last === target.last && candidate.first[0] === target.first[0]) return true;
+    return candidate.first === target.first && areLookupTokensClose(candidate.last, target.last);
+  })?.[1] ?? null;
+}
+
+function resolveTryscorerProfile({
+  playerName,
+  match,
+  tryscorerFormByPlayer,
+  playerTeamsByName,
+  playerImages,
+}: {
+  playerName: string;
+  match: string;
+  tryscorerFormByPlayer: Record<string, TryscorerFormSummary>;
+  playerTeamsByName: Map<string, string>;
+  playerImages: PlayerImageRecord[];
+}): TryscorerResolvedProfile {
+  const key = normaliseLookupKey(playerName);
+  const form = findTryscorerForm(playerName, tryscorerFormByPlayer);
+  const teamHint = form?.team ?? playerTeamsByName.get(key) ?? null;
+  const imageRow = findLatestPlayerImage(form?.player || playerName, playerImages, teamHint, match);
+  const mergedForm = mergeTryscorerFormWithLatestImage(form, playerName, playerImages, teamHint, match);
+  const image = imageRow?.head_image ?? imageRow?.body_image ?? mergedForm?.headImage ?? mergedForm?.bodyImage ?? null;
+
+  return {
+    form: mergedForm,
+    image,
+    team: mergedForm?.team ?? teamHint ?? imageRow?.team ?? null,
+  };
 }
 
 function TryFormDots({ values }: { values: number[] }) {
@@ -2970,6 +3107,7 @@ export function BettingDashboard({
             stakeOverrides={stakeOverrides}
             oddsOverrides={oddsOverrides}
             playerTeamsByName={playerTeamsByName}
+            playerImages={playerImages}
             teamLogos={teamLogos}
             tryscorerFormByPlayer={tryscorerFormByPlayer}
             tryscorerLastFiveVsOpponentByMatch={tryscorerLastFiveVsOpponentByMatch}
@@ -3807,6 +3945,7 @@ function MarketSection({
   stakeOverrides,
   oddsOverrides,
   playerTeamsByName,
+  playerImages,
   teamLogos,
   tryscorerFormByPlayer,
   tryscorerLastFiveVsOpponentByMatch,
@@ -3829,6 +3968,7 @@ function MarketSection({
   stakeOverrides: Record<string, number>;
   oddsOverrides: Record<string, number>;
   playerTeamsByName: Map<string, string>;
+  playerImages: PlayerImageRecord[];
   teamLogos: Record<string, string>;
   tryscorerFormByPlayer: Record<string, TryscorerFormSummary>;
   tryscorerLastFiveVsOpponentByMatch: Record<string, unknown>;
@@ -4092,12 +4232,17 @@ function MarketSection({
                     const canOpenMobileBet = oddsValue != null
                       && oddsValue > 1
                       && (!showModelColumns || modelProbability != null);
-                    const tryscorerForm = group.market === "Tryscorer"
-                      ? tryscorerFormByPlayer[normaliseLookupKey(row.result)] ?? null
+                    const tryscorerProfile = group.market === "Tryscorer"
+                      ? resolveTryscorerProfile({
+                          playerName: row.result,
+                          match: group.match,
+                          tryscorerFormByPlayer,
+                          playerTeamsByName,
+                          playerImages,
+                        })
                       : null;
-                    const playerTeam = group.market === "Tryscorer"
-                      ? tryscorerForm?.team ?? playerTeamsByName.get(normaliseLookupKey(row.result)) ?? null
-                      : null;
+                    const tryscorerForm = tryscorerProfile?.form ?? null;
+                    const playerTeam = tryscorerProfile?.team ?? null;
                     const outcomeLogoTeam = group.market === "Tryscorer" ? playerTeam : row.result;
                     const tryscorerOpponent = group.market === "Tryscorer" ? opponentForTryscorer(group.match, playerTeam) : null;
                     const opponentLastFive = group.market === "Tryscorer"
@@ -4138,10 +4283,8 @@ function MarketSection({
                           <div className="flex min-w-0 flex-1 items-start gap-1.5">
                             {group.market === "Tryscorer" ? (
                               <PlayerProfileImage
-                                image={tryscorerForm?.headImage ?? tryscorerForm?.bodyImage ?? null}
+                                image={tryscorerProfile?.image ?? null}
                                 name={row.result}
-                                fallbackTeam={outcomeLogoTeam}
-                                teamLogos={teamLogos}
                                 className="mt-0.5 h-8 w-8"
                               />
                             ) : (
@@ -4352,12 +4495,17 @@ function MarketSection({
                           && oddsValue > 1
                           && Number.isFinite(stakeValue)
                           && stakeValue > 0;
-                        const tryscorerForm = group.market === "Tryscorer"
-                          ? tryscorerFormByPlayer[normaliseLookupKey(row.result)] ?? null
+                        const tryscorerProfile = group.market === "Tryscorer"
+                          ? resolveTryscorerProfile({
+                              playerName: row.result,
+                              match: group.match,
+                              tryscorerFormByPlayer,
+                              playerTeamsByName,
+                              playerImages,
+                            })
                           : null;
-                        const playerTeam = group.market === "Tryscorer"
-                          ? tryscorerForm?.team ?? playerTeamsByName.get(normaliseLookupKey(row.result)) ?? null
-                          : null;
+                        const tryscorerForm = tryscorerProfile?.form ?? null;
+                        const playerTeam = tryscorerProfile?.team ?? null;
                         const outcomeLogoTeam = group.market === "Tryscorer" ? playerTeam : row.result;
                         const tryscorerOpponent = group.market === "Tryscorer" ? opponentForTryscorer(group.match, playerTeam) : null;
                         const opponentLastFive = group.market === "Tryscorer"
@@ -4391,10 +4539,8 @@ function MarketSection({
                               <span className="inline-flex min-w-0 items-center gap-2">
                                 {group.market === "Tryscorer" ? (
                                   <PlayerProfileImage
-                                    image={tryscorerForm?.headImage ?? tryscorerForm?.bodyImage ?? null}
+                                    image={tryscorerProfile?.image ?? null}
                                     name={outcomeLabel}
-                                    fallbackTeam={outcomeLogoTeam}
-                                    teamLogos={teamLogos}
                                   />
                                 ) : (
                                   <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} />

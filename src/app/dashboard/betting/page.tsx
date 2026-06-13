@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { BettingDashboard } from "@/components/views/betting-dashboard";
 import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { fetchApprovedArticles } from "@/lib/articles";
-import { fetchBettingOddsSnapshot, fetchBettingPageSummary } from "@/lib/supabase/queries";
+import { fetchBettingOddsSnapshot, fetchBettingPageSummary, fetchPlayerImages } from "@/lib/supabase/queries";
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types";
 import type { BettingSummaryGame } from "@/lib/supabase/queries";
 
@@ -201,11 +201,12 @@ function buildLineupLinksByMatchKey(games: BettingSummaryGame[]): Record<string,
 
 export default async function BettingPage() {
   const { userId } = await auth();
-  const [snapshot, canAccessPremium, bettingSummary, approvedArticles] = await Promise.all([
+  const [snapshot, canAccessPremium, bettingSummary, approvedArticles, playerImages] = await Promise.all([
     fetchBettingOddsSnapshot(),
     getServerPremiumAccess(userId),
     fetchBettingPageSummary(),
     fetchApprovedArticles(),
+    fetchPlayerImages(),
   ]);
   const marginModelArticle = approvedArticles.find((article) =>
     normaliseArticleTitle(article.title).includes("margin model")
@@ -228,6 +229,7 @@ export default async function BettingPage() {
     <BettingDashboard
       snapshot={visibleSnapshot}
       canAccessPremium={canAccessPremium}
+      playerImages={playerImages}
       playerTeamsByName={bettingSummary.playerTeamsByName}
       teamLogos={bettingSummary.teamLogos}
       tryscorerFormByPlayer={bettingSummary.tryscorerFormByPlayer}

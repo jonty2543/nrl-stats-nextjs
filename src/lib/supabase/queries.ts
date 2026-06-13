@@ -2157,25 +2157,32 @@ function mapBettingTryscorerForm(value: unknown): BettingTryscorerFormSummary | 
   const row = asRecord(value);
   const player = typeof row.player === "string" ? row.player : "";
   if (!player) return null;
-  const lastFive = Array.isArray(row.lastFive)
-    ? row.lastFive.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+  const lastFiveSource = row.lastFive ?? row.last_five;
+  const opponentLastFiveSource = row.opponentLastFive ?? row.opponent_last_five;
+  const lastFive = Array.isArray(lastFiveSource)
+    ? lastFiveSource.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
     : [];
-  const opponentLastFive = Array.isArray(row.opponentLastFive)
-    ? row.opponentLastFive.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+  const opponentLastFive = Array.isArray(opponentLastFiveSource)
+    ? opponentLastFiveSource.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
     : undefined;
+  const gamesPlayed = row.gamesPlayed ?? row.games_played;
+  const tries2026 = row.tries2026 ?? row.tries_2026;
+  const headImage = row.headImage ?? row.head_image;
+  const bodyImage = row.bodyImage ?? row.body_image;
+  const teamLogoUrl = row.teamLogoUrl ?? row.team_logo_url;
 
   return {
     player,
     team: typeof row.team === "string" ? row.team : null,
     position: typeof row.position === "string" ? row.position : null,
-    gamesPlayed: typeof row.gamesPlayed === "number" && Number.isFinite(row.gamesPlayed) ? row.gamesPlayed : undefined,
-    tries2026: typeof row.tries2026 === "number" && Number.isFinite(row.tries2026) ? row.tries2026 : undefined,
+    gamesPlayed: typeof gamesPlayed === "number" && Number.isFinite(gamesPlayed) ? gamesPlayed : undefined,
+    tries2026: typeof tries2026 === "number" && Number.isFinite(tries2026) ? tries2026 : undefined,
     lastFive,
     opponentLastFive,
     average: typeof row.average === "number" && Number.isFinite(row.average) ? row.average : 0,
-    headImage: typeof row.headImage === "string" ? row.headImage : null,
-    bodyImage: typeof row.bodyImage === "string" ? row.bodyImage : null,
-    teamLogoUrl: typeof row.teamLogoUrl === "string" ? row.teamLogoUrl : null,
+    headImage: typeof headImage === "string" ? headImage : null,
+    bodyImage: typeof bodyImage === "string" ? bodyImage : null,
+    teamLogoUrl: typeof teamLogoUrl === "string" ? teamLogoUrl : null,
   };
 }
 
@@ -2209,7 +2216,14 @@ export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPage
   const tryscorerFormByPlayer = Object.fromEntries(
     Object.entries(asRecord(row.tryscorer_form_by_player)).flatMap(([key, value]) => {
       const mapped = mapBettingTryscorerForm(value);
-      return mapped ? [[key, mapped]] : [];
+      if (!mapped) return [];
+      const normalizedKey = normaliseLookupKey(key);
+      const normalizedPlayerKey = normaliseLookupKey(mapped.player);
+      return [
+        [key, mapped],
+        ...(normalizedKey && normalizedKey !== key ? [[normalizedKey, mapped] as const] : []),
+        ...(normalizedPlayerKey && normalizedPlayerKey !== key && normalizedPlayerKey !== normalizedKey ? [[normalizedPlayerKey, mapped] as const] : []),
+      ];
     })
   );
 

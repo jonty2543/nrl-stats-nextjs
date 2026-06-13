@@ -725,10 +725,6 @@ function formatMatchDateHeader(dateKey: string): string {
   }).format(date)
 }
 
-function formatCardDate(match: LineupMatch): string {
-  return formatMatchDateHeader(matchDateKey(match)).toUpperCase()
-}
-
 function formatKickoffTime(value: string | null): string {
   if (!value) return "TBC"
   const date = new Date(value)
@@ -2528,7 +2524,6 @@ function LineupCard({
   const homeScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.homeScore > headerScore.awayScore
   const awayScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.awayScore > headerScore.homeScore
   const showLiveCardHeader = isMatchLive(displayLiveMatch)
-  const hideScoreCardDate = showSplitScore
   const showPregameContent = !isLive && !hasResultScore
   const availableDetailViews: LineupDetailView[] = showPregameContent
     ? ["lineup", "insights", "stats"]
@@ -2646,13 +2641,8 @@ function LineupCard({
           />
         ) : null}
         <div className="relative z-[1] pb-2 text-center">
-          {hideScoreCardDate ? null : (
-            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white sm:text-xs sm:tracking-[0.28em]">
-              {detailMatch.round} · {formatCardDate(detailMatch)}
-            </div>
-          )}
           {detailMatch.venue || weatherForecast ? (
-            <div className={`mx-auto flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px] ${hideScoreCardDate ? "mt-0" : "mt-1"}`}>
+            <div className="mx-auto flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px]">
               {detailMatch.venue ? <span className="min-w-0 truncate">{detailMatch.venue}</span> : null}
               {weatherForecast ? (
                 <span className="flex-none text-xs leading-none sm:text-sm" aria-hidden="true">

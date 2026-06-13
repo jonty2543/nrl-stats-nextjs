@@ -22,6 +22,11 @@ import {
   FANTASY_POSITION_MAP,
   getFantasyCoachRoundMetrics,
 } from "@/lib/fantasy/nrl"
+import {
+  buildTradeRatingPopulation,
+  calculateTradeRating,
+  type TradeRatingScores,
+} from "@/lib/fantasy/trade-rating"
 import { fantasyPlayerSlug } from "@/lib/fantasy/player-slug"
 import { hasProPlotAccess } from "@/lib/access/pro-access"
 import {
@@ -151,6 +156,14 @@ type AllPlayersSortKey =
   | "ppm"
   | "projection"
   | "value"
+  | "tradeRating"
+  | "tradeWeeklyDelta"
+  | "tradeValue"
+  | "tradeKeeper"
+  | "tradeRole"
+  | "tradeForm"
+  | "tradeBreakeven"
+  | "tradeAvailability"
   | "breakeven"
   | "gamesPlayed"
 
@@ -208,6 +221,7 @@ interface AllPlayersTableRow {
   pricedAt: number | null
   projection: number | null
   value: number | null
+  tradeRating: TradeRatingScores | null
   breakeven: number | null
   weeklyChange: number | null
   relevantOuts: CasualtyWardRecord[]
@@ -323,6 +337,7 @@ const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin"
 const FANTASY_DASHBOARD_STATE_STORAGE_KEY = "fantasy-dashboard-ui-state-v1"
 const FANTASY_DASHBOARD_STATE_TTL_MS = 30 * 60 * 1000
 const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
+const FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX = "fantasy-trade-ratings-visible"
 const PRO_PRICE_LABEL = "$5/month"
 const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
@@ -504,6 +519,14 @@ const ALL_PLAYERS_BASE_COLUMNS: Array<{ key: AllPlayersSortKey; label: string; a
   { key: "ppm", label: "PPM", align: "center" },
   { key: "projection", label: "Proj", align: "center", proOnly: true },
   { key: "value", label: "Value", align: "center", proOnly: true },
+  { key: "tradeRating", label: "Overall", align: "center", proOnly: true },
+  { key: "tradeWeeklyDelta", label: "Pop", align: "center", proOnly: true },
+  { key: "tradeValue", label: "Value", align: "center", proOnly: true },
+  { key: "tradeKeeper", label: "Keeper", align: "center", proOnly: true },
+  { key: "tradeRole", label: "Role", align: "center", proOnly: true },
+  { key: "tradeForm", label: "Form", align: "center", proOnly: true },
+  { key: "tradeBreakeven", label: "BE", align: "center", proOnly: true },
+  { key: "tradeAvailability", label: "Avail", align: "center", proOnly: true },
   { key: "breakeven", label: "BE", align: "center", proOnly: true },
   { key: "gamesPlayed", label: "Games", align: "center" },
 ]
@@ -518,6 +541,14 @@ const ALL_PLAYERS_MOBILE_SORT_OPTIONS: Array<{ key: AllPlayersSortKey; label: st
   { key: "ppm", label: "PPM" },
   { key: "projection", label: "Proj", proOnly: true },
   { key: "value", label: "Value", proOnly: true },
+  { key: "tradeRating", label: "Overall", proOnly: true },
+  { key: "tradeWeeklyDelta", label: "Pop", proOnly: true },
+  { key: "tradeValue", label: "Value", proOnly: true },
+  { key: "tradeKeeper", label: "Keeper", proOnly: true },
+  { key: "tradeRole", label: "Role", proOnly: true },
+  { key: "tradeForm", label: "Form", proOnly: true },
+  { key: "tradeBreakeven", label: "BE", proOnly: true },
+  { key: "tradeAvailability", label: "Availability", proOnly: true },
   { key: "breakeven", label: "BE", proOnly: true },
   { key: "gamesPlayed", label: "Games" },
 ]
@@ -617,6 +648,14 @@ function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
     case "ppm":
     case "projection":
     case "value":
+    case "tradeRating":
+    case "tradeWeeklyDelta":
+    case "tradeValue":
+    case "tradeKeeper":
+    case "tradeRole":
+    case "tradeForm":
+    case "tradeBreakeven":
+    case "tradeAvailability":
     case "breakeven":
     case "gamesPlayed":
       return "w-14 min-w-14 max-w-14"
@@ -638,6 +677,16 @@ function getCenteredValueClass(key: AllPlayersSortKey): string {
       return "min-w-[2.2rem]"
     case "value":
       return "min-w-[2.6rem]"
+    case "tradeRating":
+      return "min-w-[2.3rem]"
+    case "tradeWeeklyDelta":
+    case "tradeValue":
+    case "tradeKeeper":
+    case "tradeRole":
+    case "tradeForm":
+    case "tradeBreakeven":
+    case "tradeAvailability":
+      return "min-w-[2rem]"
     default:
       return ""
   }
@@ -1131,7 +1180,7 @@ function resolveProjectionDistribution(
   position: string | null | undefined,
   sigmas: FantasyProjectionSigma[]
 ): ProjectionDistributionData | null {
-  if (projection == null) return null
+  if (projection == null || projection <= 0) return null
   const sigma = resolveProjectionSigma(position, sigmas)
   if (!sigma) return null
   const residualSigma =
@@ -1298,7 +1347,7 @@ function resolveFantasyProjectionForLineups(
     return (
       lineupsProjections.projectionByPlayerId.get(player.id) ??
       lineupsProjections.projectionByPlayerName.get(playerNameKey) ??
-      0
+      null
     )
   }
 
@@ -1317,6 +1366,10 @@ function averageNumbers(values: Array<number | null>): number | null {
   const valid = values.filter((value): value is number => value !== null && Number.isFinite(value))
   if (valid.length === 0) return null
   return valid.reduce((sum, value) => sum + value, 0) / valid.length
+}
+
+function normaliseFantasyProjection(value: number | null): number | null {
+  return value !== null && Number.isFinite(value) && value > 0 ? value : null
 }
 
 function formatTableNumber(value: number | null, digits = 1): string {
@@ -1689,6 +1742,58 @@ function getFantasyValueClass(value: number | null): string {
   if (value > 0) return "text-emerald-300"
   if (value < 0) return "text-rose-300"
   return "text-nrl-muted"
+}
+
+function tradeScore10(value: number | null | undefined): number | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null
+  return value / 10
+}
+
+function formatTradeScore(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "-"
+  return value.toFixed(1)
+}
+
+function TradeStars({ value, className = "", blurred = false }: { value: number | null | undefined; className?: string; blurred?: boolean }) {
+  if (blurred) {
+    return (
+      <span className={`inline-flex items-center gap-[1px] leading-none text-white/28 ${className}`} aria-label="Pro rating">
+        ☆☆☆☆☆
+      </span>
+    )
+  }
+
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return <span className={`text-white/20 ${className}`}>-----</span>
+  }
+
+  const filled = Math.max(0, Math.min(5, Math.round(value / 2)))
+  const colorClass = getTradeScoreColorClass(value)
+
+  return (
+    <span className={`inline-flex items-center gap-[1px] leading-none ${className}`} aria-label={`${filled} out of 5 stars`}>
+      {Array.from({ length: 5 }).map((_, index) => (
+        <span key={index} className={index < filled ? colorClass : "text-white/20"}>
+          {index < filled ? "★" : "☆"}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function getTradeScoreColorClass(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "text-nrl-muted"
+  if (value >= 8) return "text-emerald-300"
+  if (value >= 6.5) return "text-lime-300"
+  if (value >= 5) return "text-amber-300"
+  if (value >= 3.5) return "text-orange-300"
+  return "text-rose-300"
+}
+
+function getTradeScorePillClass(value: number | null | undefined, highlighted = false): string {
+  const colorClass = getTradeScoreColorClass(value)
+  const borderClass = highlighted ? "border-nrl-accent/60 bg-nrl-accent/10" : "border-white/10 bg-white/[0.035]"
+  return `${borderClass} ${colorClass}`
 }
 
 function CasualtyWardPills({ rows }: { rows: CasualtyWardRecord[] }) {
@@ -3194,6 +3299,8 @@ export function FantasyDashboard({
   const deferredAllPlayersProjectionRange = useDeferredValue(allPlayersProjectionRange)
   const deferredAllPlayersBreakevenRange = useDeferredValue(allPlayersBreakevenRange)
   const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(false)
+  const [showAllPlayersTradeRatings, setShowAllPlayersTradeRatings] = useState(true)
+  const [showAllPlayersTradeRatingInfo, setShowAllPlayersTradeRatingInfo] = useState(false)
   const [cardTagsPreferenceHydrated, setCardTagsPreferenceHydrated] = useState(false)
   const showFantasyAnalytics = initialShowFantasyAnalytics
   const [fantasyAnalyticsMetric, setFantasyAnalyticsMetric] = useState<FantasyAnalyticsMetric>("last3")
@@ -3247,6 +3354,7 @@ export function FantasyDashboard({
   const analysisLocked = !hasFantasyPlotAccess
   const playerDetailsRef = useRef<HTMLElement | null>(null)
   const cardTagsPreferenceUserIdRef = useRef<string | null>(null)
+  const tradeRatingsPreferenceUserIdRef = useRef<string | null>(null)
   const selectedPlayerAllYearsRequestKeyRef = useRef<string | null>(null)
   const selectedPlayerAllYearsKey = useMemo(
     () =>
@@ -3369,31 +3477,38 @@ export function FantasyDashboard({
     if (!isAuthLoaded) return
     if (!userId) {
       cardTagsPreferenceUserIdRef.current = null
+      tradeRatingsPreferenceUserIdRef.current = null
       setShowAllPlayersCardTags(false)
+      setShowAllPlayersTradeRatings(true)
       setCardTagsPreferenceHydrated(true)
       return
     }
 
     try {
-      const saved = window.localStorage.getItem(`${FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX}:${userId}`)
-      setShowAllPlayersCardTags(saved === "true")
+      const savedTags = window.localStorage.getItem(`${FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX}:${userId}`)
+      const savedRatings = window.localStorage.getItem(`${FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX}:${userId}`)
+      setShowAllPlayersCardTags(savedTags === "true")
+      setShowAllPlayersTradeRatings(savedRatings === null ? true : savedRatings === "true")
     } catch {
       setShowAllPlayersCardTags(false)
+      setShowAllPlayersTradeRatings(true)
     } finally {
       cardTagsPreferenceUserIdRef.current = userId
+      tradeRatingsPreferenceUserIdRef.current = userId
       setCardTagsPreferenceHydrated(true)
     }
   }, [isAuthLoaded, userId])
 
   useEffect(() => {
     if (!isAuthLoaded || !userId || !cardTagsPreferenceHydrated) return
-    if (cardTagsPreferenceUserIdRef.current !== userId) return
+    if (cardTagsPreferenceUserIdRef.current !== userId || tradeRatingsPreferenceUserIdRef.current !== userId) return
     try {
       window.localStorage.setItem(`${FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX}:${userId}`, String(showAllPlayersCardTags))
+      window.localStorage.setItem(`${FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX}:${userId}`, String(showAllPlayersTradeRatings))
     } catch {
       // Ignore preference storage failures.
     }
-  }, [cardTagsPreferenceHydrated, isAuthLoaded, showAllPlayersCardTags, userId])
+  }, [cardTagsPreferenceHydrated, isAuthLoaded, showAllPlayersCardTags, showAllPlayersTradeRatings, userId])
 
   const scrollToPlayerDetails = useCallback(() => {
     if (typeof window === "undefined") return
@@ -4128,7 +4243,7 @@ export function FantasyDashboard({
     [casualtyWardRows, relevantOutCandidates, relevantOuts]
   )
 
- const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
+ const rawAllPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
     const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
     const localNames = Array.from(new Set(rows2026.map(playerStatName).filter(Boolean))).sort()
     const rowsByName = new Map<string, PlayerStat[]>()
@@ -4265,7 +4380,7 @@ export function FantasyDashboard({
       )
       const pricedAt = displayPlayer.pricedAt
       const originChance = originChancePlayerNames.has(normaliseProjectionPlayerName(player.name))
-      const projection = precomputedRow?.projection ?? rawProjection
+      const projection = normaliseFantasyProjection(precomputedRow?.projection ?? rawProjection)
       const effectivePricedAt = precomputedRow?.pricedAt ?? pricedAt
       const value = precomputedRow?.value ?? roundedFantasyValue(projection, effectivePricedAt)
       const nextMajorByeRound = precomputedRow?.nextMajorByeRound ?? getNextMajorByeRound(projectionRound)
@@ -4303,6 +4418,7 @@ export function FantasyDashboard({
         pricedAt: effectivePricedAt,
         projection,
         value,
+        tradeRating: null,
         breakeven: precomputedRow?.breakeven ?? applyFantasyBreakEvenOffset(
           coachMetrics.breakEven ?? player.be ?? null,
           player.id,
@@ -4318,6 +4434,41 @@ export function FantasyDashboard({
       }
     })
   }, [allPlayerCardSummaryRows, allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, isAllPlayersPreview, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
+
+  const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
+    const population = buildTradeRatingPopulation(rawAllPlayersTableRows.map((row) => ({
+      weeklyChange: row.weeklyChange,
+      last3: row.last3,
+      projection: row.projection,
+      pricedAt: row.pricedAt,
+      value: row.value,
+      breakeven: row.breakeven,
+      team: row.team,
+      originChance: row.originChance,
+      relevantOuts: row.relevantOuts,
+    })))
+    const currentRound = lineupsProjections?.round ?? selectedFantasyCoachRound ?? 1
+
+    return rawAllPlayersTableRows.map((row) => ({
+      ...row,
+      tradeRating: calculateTradeRating({
+        input: {
+          weeklyChange: row.weeklyChange,
+          last3: row.last3,
+          projection: row.projection,
+          pricedAt: row.pricedAt,
+          value: row.value,
+          breakeven: row.breakeven,
+          team: row.team,
+          originChance: row.originChance,
+          relevantOuts: row.relevantOuts,
+        },
+        population,
+        draw: draw2026Data,
+        currentRound,
+      }),
+    }))
+  }, [draw2026Data, lineupsProjections?.round, rawAllPlayersTableRows, selectedFantasyCoachRound])
 
   const selectedAllPlayersTableRow = useMemo(
     () => selectedFantasyPlayer
@@ -4553,6 +4704,14 @@ export function FantasyDashboard({
       if (effectiveSort.column === "ppm") return row.ppm
       if (effectiveSort.column === "projection") return row.projection
       if (effectiveSort.column === "value") return row.value
+      if (effectiveSort.column === "tradeRating") return row.tradeRating?.overall ?? null
+      if (effectiveSort.column === "tradeWeeklyDelta") return row.tradeRating?.weeklyDelta ?? null
+      if (effectiveSort.column === "tradeValue") return row.tradeRating?.value ?? null
+      if (effectiveSort.column === "tradeKeeper") return row.tradeRating?.keeperScore ?? null
+      if (effectiveSort.column === "tradeRole") return row.tradeRating?.roleSecurityScore ?? null
+      if (effectiveSort.column === "tradeForm") return row.tradeRating?.form ?? null
+      if (effectiveSort.column === "tradeBreakeven") return row.tradeRating?.breakeven ?? null
+      if (effectiveSort.column === "tradeAvailability") return row.tradeRating?.availability ?? null
       if (effectiveSort.column === "breakeven") return row.breakeven
       if (effectiveSort.column === "gamesPlayed") return row.gamesPlayed
 
@@ -4589,6 +4748,22 @@ export function FantasyDashboard({
     hasFantasyPlotAccess,
     hasLoadedFullAllPlayersRows,
   ])
+
+  const fantasyMarketWatch = useMemo(() => {
+    const candidates = allPlayersTableRows.filter(
+      (row) => row.tradeRating !== null && Number.isFinite(row.tradeRating.overall) && row.player.cost !== null
+    )
+
+    return {
+      buys: candidates
+        .sort((a, b) => (b.tradeRating?.overall ?? 0) - (a.tradeRating?.overall ?? 0) || a.player.name.localeCompare(b.player.name))
+        .slice(0, 3),
+      sells: candidates
+        .filter((row) => (row.player.ownedBy ?? 0) > 5)
+        .sort((a, b) => (a.tradeRating?.overall ?? 0) - (b.tradeRating?.overall ?? 0) || a.player.name.localeCompare(b.player.name))
+        .slice(0, 3),
+    }
+  }, [allPlayersTableRows])
 
   const allPlayersTagFilterOptions = useMemo(() => {
     const byeOptions = new Set<string>()
@@ -4674,13 +4849,13 @@ export function FantasyDashboard({
       if (!selectedFantasyPlayer) return null
       const projectionTeam = selectedLineupRole?.team ?? fantasyCardImage?.team ?? latestLocalTeam ?? null
       const officialProjectionRoundPlays = teamPlaysInRound(draw2026Data, selectedFantasyCoachRound, projectionTeam)
-      return resolveFantasyProjectionForLineups(
+      return normaliseFantasyProjection(resolveFantasyProjectionForLineups(
         selectedFantasyPlayer,
         lineupsProjections,
         selectedFantasyCoachMetrics.projection,
         casualtyWardPlayerNames,
         officialProjectionRoundPlays === false
-      )
+      ))
     },
     [casualtyWardPlayerNames, draw2026Data, fantasyCardImage, latestLocalTeam, lineupsProjections, selectedAllPlayersTableRow, selectedFantasyCoachMetrics, selectedFantasyCoachRound, selectedFantasyPlayer, selectedLineupRole]
   )
@@ -4731,6 +4906,21 @@ export function FantasyDashboard({
     if (totalMins <= 0) return null
     return totalScore / totalMins
   }, [playerRowsForYear, selectedAllPlayersTableRow])
+  const selectedTradeRatingStats = useMemo(() => {
+    const rating = selectedAllPlayersTableRow?.tradeRating
+    if (!rating) return []
+
+    return [
+      { key: "overall", label: "Overall", tradeScore: rating.overall, highlighted: true },
+      { key: "pop", label: "Pop", tradeScore: tradeScore10(rating.weeklyDelta) },
+      { key: "value", label: "Value", tradeScore: tradeScore10(rating.value) },
+      { key: "keep", label: "Keep", tradeScore: tradeScore10(rating.keeperScore) },
+      { key: "role", label: "Role", tradeScore: tradeScore10(rating.roleSecurityScore) },
+      { key: "form", label: "Form", tradeScore: tradeScore10(rating.form) },
+      { key: "be", label: "BE", tradeScore: tradeScore10(rating.breakeven) },
+      { key: "avail", label: "Avail", tradeScore: tradeScore10(rating.availability) },
+    ]
+  }, [selectedAllPlayersTableRow?.tradeRating])
 
   const playerSearchOptions = useMemo(
     () => (fantasyPlayers.length > 0 ? fantasyPlayers.map((player) => player.name) : allPlayersTableRows.map((row) => row.player.name)),
@@ -5056,6 +5246,76 @@ export function FantasyDashboard({
   return (
     <div className={showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? "space-y-3" : "space-y-6"}>
       <div className="space-y-5 xl:space-y-8">
+        {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly && (fantasyMarketWatch.buys.length > 0 || fantasyMarketWatch.sells.length > 0) ? (
+          <section className="overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(135deg,#101a33_0%,#0b1020_58%,#111827_100%)] shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+            <div className="grid divide-y divide-white/8 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+              {[
+                { key: "buys", title: "Top 3 buys", rows: fantasyMarketWatch.buys, tone: "text-emerald-300" },
+                { key: "sells", title: "Top 3 sells", rows: fantasyMarketWatch.sells, tone: "text-rose-300" },
+              ].map((group) => (
+                <div key={group.key} className="min-w-0 px-3 py-3 sm:px-4">
+                  <div className={`mb-2 text-[11px] font-black uppercase tracking-[0.14em] ${group.tone}`}>
+                    {group.title}
+                  </div>
+                  <div className="divide-y divide-white/8">
+                    {group.rows.length > 0 ? (
+                      group.rows.map((row, index) => {
+                        const thumbnailUrl = getPlayerThumbnailUrl(row.imageRow)
+                        return (
+                          <button
+                            key={`${group.key}-${row.player.id}`}
+                            type="button"
+                            onClick={() => navigateToPlayer(row.player.name)}
+                            className="grid w-full grid-cols-[22px_42px_minmax(0,1fr)_auto] items-center gap-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.04] sm:grid-cols-[24px_46px_minmax(0,1fr)_auto]"
+                          >
+                            <span className="text-center text-[11px] font-black text-white/35">
+                              {index + 1}
+                            </span>
+                            <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-white/10 bg-black/20 text-[11px] text-nrl-muted shadow-[0_8px_18px_rgba(0,0,0,0.25)] sm:h-11 sm:w-11">
+                              {thumbnailUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={thumbnailUrl}
+                                  alt={`${row.player.name} profile`}
+                                  className="h-full w-full object-cover object-top"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span>{getPlayerInitials(row.player.name)}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate text-[13px] font-black text-white">
+                                {row.player.name}
+                              </div>
+                              <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-nrl-muted">
+                                <span>{row.player.positionLabel}</span>
+                                <span className="h-1 w-1 rounded-full bg-white/25" />
+                                <span>{formatPrice(row.player.cost)}</span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-base font-black leading-none tracking-[0.08em]">
+                                <TradeStars value={row.tradeRating?.overall ?? null} blurred={!hasFantasyPlotAccess} />
+                              </div>
+                              <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-white/35">
+                                Overall Rating
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <div className="py-4 text-center text-[11px] font-semibold text-nrl-muted">
+                        No clear {group.key === "buys" ? "buy" : "sell"} candidates in the current feed.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
           <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch">
             <Link
@@ -5430,13 +5690,6 @@ export function FantasyDashboard({
       {showOwnedCards && !showFantasyAnalyticsOnly ? (
         <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-panel-2 px-3 py-2">
-            {!hasLoadedFullAllPlayersRows ? (
-              <div>
-              <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
-                Top Weekly Buys
-              </div>
-            </div>
-            ) : null}
             {hasLoadedFullAllPlayersRows ? (
               <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-1.5">
                 <div className="flex min-w-0 shrink-0 items-center gap-1.5">
@@ -5474,26 +5727,55 @@ export function FantasyDashboard({
                     </span>
                   </label>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAllPlayersFiltersOpen((open) => !open)}
-                  className={`relative inline-grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border transition-colors ${
-                    allPlayersFiltersOpen || activeAllPlayersFilterCount > 0
-                      ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
-                      : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
-                  }`}
-                  aria-expanded={allPlayersFiltersOpen}
-                  aria-label="Filters"
-                >
-                  <span className="flex flex-col gap-0.5" aria-hidden="true">
-                    <span className="block h-0.5 w-4 rounded-full bg-current" />
-                    <span className="block h-0.5 w-4 rounded-full bg-current" />
-                    <span className="block h-0.5 w-4 rounded-full bg-current" />
-                  </span>
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex items-center gap-0.5">
+                    <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
+                      <span>Ratings</span>
+                      <input
+                        type="checkbox"
+                        checked={showAllPlayersTradeRatings}
+                        onChange={(event) => setShowAllPlayersTradeRatings(event.target.checked)}
+                        className="sr-only"
+                      />
+                      <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersTradeRatings ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                        <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersTradeRatings ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowAllPlayersTradeRatingInfo((open) => !open)}
+                      className={`grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full border text-[11px] font-black transition-colors ${
+                        showAllPlayersTradeRatingInfo
+                          ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                          : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+                      }`}
+                      aria-expanded={showAllPlayersTradeRatingInfo}
+                      aria-label="Trade rating information"
+                    >
+                      i
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAllPlayersFiltersOpen((open) => !open)}
+                    className={`relative inline-grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border transition-colors ${
+                      allPlayersFiltersOpen || activeAllPlayersFilterCount > 0
+                        ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                        : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+                    }`}
+                    aria-expanded={allPlayersFiltersOpen}
+                    aria-label="Filters"
+                  >
+                    <span className="flex flex-col gap-0.5" aria-hidden="true">
+                      <span className="block h-0.5 w-4 rounded-full bg-current" />
+                      <span className="block h-0.5 w-4 rounded-full bg-current" />
+                      <span className="block h-0.5 w-4 rounded-full bg-current" />
+                    </span>
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="flex w-full items-center justify-between gap-2">
                 <Link
                   href="/dashboard/fantasy/players"
                   onClick={() => setIsAllPlayersPending(true)}
@@ -5510,9 +5792,50 @@ export function FantasyDashboard({
                     <span aria-hidden="true">→</span>
                   )}
                 </Link>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
+                    <span>Ratings</span>
+                    <input
+                      type="checkbox"
+                      checked={showAllPlayersTradeRatings}
+                      onChange={(event) => setShowAllPlayersTradeRatings(event.target.checked)}
+                      className="sr-only"
+                    />
+                    <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersTradeRatings ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                      <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersTradeRatings ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllPlayersTradeRatingInfo((open) => !open)}
+                    className={`grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full border text-[11px] font-black transition-colors ${
+                      showAllPlayersTradeRatingInfo
+                        ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                        : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+                    }`}
+                    aria-expanded={showAllPlayersTradeRatingInfo}
+                    aria-label="Trade rating information"
+                  >
+                    i
+                  </button>
+                </div>
               </div>
             )}
           </div>
+          {showAllPlayersTradeRatingInfo ? (
+            <div className="border-b border-nrl-border bg-[#101832] px-3 py-2">
+              <div className="grid gap-1.5 text-[10px] font-semibold leading-snug text-nrl-muted sm:grid-cols-2 lg:grid-cols-4">
+                <div><span className="text-nrl-accent">Overall</span>: Combines every component with even weighting.</div>
+                <div><span className="text-nrl-accent">Pop</span>: Measures weekly trade popularity versus the player pool.</div>
+                <div><span className="text-nrl-accent">Value</span>: Compares projection to priced-at score.</div>
+                <div><span className="text-nrl-accent">Keep</span>: Rewards keeper-level projected scoring.</div>
+                <div><span className="text-nrl-accent">Role</span>: Penalises relevant casualty ward return risk.</div>
+                <div><span className="text-nrl-accent">Form</span>: Compares L3 average to priced-at score.</div>
+                <div><span className="text-nrl-accent">BE</span>: Compares priced-at score to breakeven.</div>
+                <div><span className="text-nrl-accent">Avail</span>: Counts next 6 rounds played, including byes and Origin risk.</div>
+              </div>
+            </div>
+          ) : null}
           {hasLoadedFullAllPlayersRows && allPlayersFiltersOpen ? (
             <div className="border-b border-nrl-border bg-nrl-panel px-3 py-2">
               <div className="grid grid-cols-3 gap-x-2 gap-y-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -5678,7 +6001,7 @@ export function FantasyDashboard({
               </button>
             </div>
           </div>
-          <div className={`${effectiveAllPlayersView === "cards" ? "grid" : "hidden"} ${showAllPlayersOnly ? "" : "max-h-[760px]"} grid-cols-1 gap-2 overflow-y-auto p-2.5`}>
+          <div className={`${effectiveAllPlayersView === "cards" ? "grid" : "hidden"} grid-cols-1 gap-2 p-2.5`}>
             {sortedAllPlayersTableRows.length === 0 ? (
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
                 {activeAllPlayersFilterCount > 0
@@ -5690,6 +6013,65 @@ export function FantasyDashboard({
             ) : (
               sortedAllPlayersTableRows.map((row) => {
                 const thumbnailUrl = getPlayerThumbnailUrl(row.imageRow)
+                const tradeRatingCardStats = [
+                  {
+                    key: "tradeRating",
+                    label: "Overall",
+                    value: formatTradeScore(row.tradeRating?.overall ?? null),
+                    tradeScore: row.tradeRating?.overall ?? null,
+                    locked: true,
+                    highlighted: true,
+                  },
+                  {
+                    key: "tradeWeeklyDelta",
+                    label: "Pop",
+                    value: formatTradeScore(tradeScore10(row.tradeRating?.weeklyDelta)),
+                    tradeScore: tradeScore10(row.tradeRating?.weeklyDelta),
+                    locked: true,
+                  },
+                  {
+                    key: "tradeValue",
+                    label: "Val",
+                    value: formatTradeScore(tradeScore10(row.tradeRating?.value)),
+                    tradeScore: tradeScore10(row.tradeRating?.value),
+                    locked: true,
+                  },
+                  {
+                    key: "tradeKeeper",
+                    label: "Keep",
+                    value: formatTradeScore(tradeScore10(row.tradeRating?.keeperScore)),
+                    tradeScore: tradeScore10(row.tradeRating?.keeperScore),
+                    locked: true,
+                  },
+                  {
+                    key: "tradeRole",
+                    label: "Role",
+                    value: formatTradeScore(tradeScore10(row.tradeRating?.roleSecurityScore)),
+                    tradeScore: tradeScore10(row.tradeRating?.roleSecurityScore),
+                    locked: true,
+                  },
+                  {
+                    key: "tradeForm",
+                    label: "Form",
+                    value: formatTradeScore(tradeScore10(row.tradeRating?.form)),
+                    tradeScore: tradeScore10(row.tradeRating?.form),
+                    locked: true,
+                  },
+                  {
+                    key: "tradeBreakeven",
+                    label: "BE",
+                    value: formatTradeScore(tradeScore10(row.tradeRating?.breakeven)),
+                    tradeScore: tradeScore10(row.tradeRating?.breakeven),
+                    locked: true,
+                  },
+                  {
+                    key: "tradeAvailability",
+                    label: "Avail",
+                    value: formatTradeScore(tradeScore10(row.tradeRating?.availability)),
+                    tradeScore: tradeScore10(row.tradeRating?.availability),
+                    locked: true,
+                  },
+                ]
                 const baseCardStats = [
                   {
                     key: "weeklyChange",
@@ -5773,7 +6155,7 @@ export function FantasyDashboard({
                   ? baseCardStats
                   : [...baseCardStats.filter((stat) => !stat.locked), ...baseCardStats.filter((stat) => stat.locked)]
                 const selectedCardStat =
-                  cardStats.find((stat) => stat.key === allPlayersSort.column) ??
+                  [...cardStats, ...tradeRatingCardStats].find((stat) => stat.key === allPlayersSort.column) ??
                   (allPlayersSort.column === "position"
                     ? { key: "position", label: "Pos", value: row.player.positionLabel, valueClassName: "text-nrl-text" }
                     : { key: "name", label: "Sort", value: allPlayersSort.direction === "asc" ? "A-Z" : "Z-A", valueClassName: "text-nrl-text" })
@@ -5785,7 +6167,7 @@ export function FantasyDashboard({
                     key={row.player.id}
                     type="button"
                     onClick={() => navigateToPlayer(row.player.name)}
-	                    className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-2.5 text-left transition-colors hover:border-white/25 hover:bg-[#17213d] md:flex md:items-center md:gap-4"
+	                    className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-3 text-left transition-colors hover:border-white/25 hover:bg-[#17213d]"
 	                  >
 	                    <div className="flex items-start justify-between gap-3 md:w-[250px] md:shrink-0 md:items-center">
                       <div className="flex min-w-0 items-start gap-2.5">
@@ -5828,6 +6210,10 @@ export function FantasyDashboard({
                           <div className={`ml-auto mt-0.5 ${FANTASY_LOCKED_VALUE_BOX_CLASS}`}>
                             <span className={FANTASY_LOCKED_VALUE_TEXT_CLASS}>{selectedCardStat.value}</span>
                           </div>
+                        ) : "tradeScore" in selectedCardStat ? (
+                          <div className={`ml-auto mt-0.5 inline-flex min-h-6 min-w-16 items-center justify-center rounded-full border px-2 text-[10px] font-black tracking-[0.06em] ${getTradeScorePillClass(selectedCardStat.tradeScore, "highlighted" in selectedCardStat && selectedCardStat.highlighted)}`}>
+                            <TradeStars value={selectedCardStat.tradeScore} blurred={!hasFantasyPlotAccess} />
+                          </div>
                         ) : (
                           <div className={`text-[13px] font-bold ${selectedCardStat.valueClassName}`}>
                             {selectedCardStat.value}
@@ -5835,12 +6221,37 @@ export function FantasyDashboard({
                         )}
                       </div>
                     </div>
-	                    <div className="mt-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mt-0 md:min-w-0 md:flex-1">
-	                      <div className="flex min-w-max gap-4 md:w-full md:min-w-0">
+                    {showAllPlayersTradeRatings ? (
+	                      <div className="mt-3 overflow-x-auto rounded-full border border-white/10 bg-white/[0.035] px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+	                        <div className="flex min-w-max items-center gap-2.5">
+                          {tradeRatingCardStats.map((stat) => {
+                            const highlighted = Boolean("highlighted" in stat && stat.highlighted)
+                            return (
+                              <div
+                                key={stat.key}
+                                className={`inline-flex min-h-10 min-w-[5.25rem] flex-col items-center justify-center rounded-full border px-2.5 ${getTradeScorePillClass(stat.tradeScore, highlighted)}`}
+                              >
+                                <span className="text-[8px] font-black uppercase tracking-[0.12em] text-white/45">
+                                  {stat.label}
+                                </span>
+                                <TradeStars value={stat.tradeScore} blurred={!hasFantasyPlotAccess} className="mt-0.5 text-[10px] font-black tracking-[0.06em]" />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+	                    <div className="relative mt-3 overflow-hidden md:min-w-0">
+                        <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-8 bg-[linear-gradient(90deg,rgba(17,24,50,0),#111832)]" />
+                        <span className="pointer-events-none absolute right-1.5 top-1/2 z-[2] -translate-y-1/2 text-sm font-black text-nrl-accent/70 drop-shadow-[0_0_8px_rgba(0,245,138,0.22)] md:hidden" aria-hidden="true">
+                          →
+                        </span>
+                        <div className="overflow-x-auto pb-0.5 pr-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+	                      <div className="flex min-w-max gap-3 md:gap-4">
                         {cardStats.map((stat) => (
                           <div
                             key={stat.key}
-	                            className="min-w-[4rem] md:min-w-[4.25rem]"
+	                            className="min-w-[3.75rem] md:min-w-[4.25rem]"
                           >
                             <div className={`text-[8px] font-semibold uppercase tracking-wide ${stat.key === allPlayersSort.column ? "text-nrl-accent" : "text-nrl-muted"}`}>
                               {stat.label}
@@ -5856,6 +6267,7 @@ export function FantasyDashboard({
                             )}
                           </div>
                         ))}
+                        </div>
                       </div>
                     </div>
                   </button>
@@ -5864,7 +6276,7 @@ export function FantasyDashboard({
             )}
           </div>
           <div className={`${effectiveAllPlayersView === "table" ? "block" : "hidden"} ${showAllPlayersOnly ? "" : "h-[756px]"} overflow-y-auto overflow-x-auto`}>
-            <table className="w-full min-w-[1100px] border-collapse text-left text-xs table-fixed">
+            <table className="w-full min-w-[1550px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>
                   <th
@@ -5985,6 +6397,24 @@ export function FantasyDashboard({
                           </span>
                         </span>
                       </td>
+                      {[
+                        { key: "tradeRating" as const, value: formatTradeScore(row.tradeRating?.overall ?? null), tradeScore: row.tradeRating?.overall ?? null },
+                        { key: "tradeWeeklyDelta" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.weeklyDelta)), tradeScore: tradeScore10(row.tradeRating?.weeklyDelta) },
+                        { key: "tradeValue" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.value)), tradeScore: tradeScore10(row.tradeRating?.value) },
+                        { key: "tradeKeeper" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.keeperScore)), tradeScore: tradeScore10(row.tradeRating?.keeperScore) },
+                        { key: "tradeRole" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.roleSecurityScore)), tradeScore: tradeScore10(row.tradeRating?.roleSecurityScore) },
+                        { key: "tradeForm" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.form)), tradeScore: tradeScore10(row.tradeRating?.form) },
+                        { key: "tradeBreakeven" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.breakeven)), tradeScore: tradeScore10(row.tradeRating?.breakeven) },
+                        { key: "tradeAvailability" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.availability)), tradeScore: tradeScore10(row.tradeRating?.availability) },
+                      ].map((score) => (
+                        <td key={score.key} className={`w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getTradeScoreColorClass(score.tradeScore)}`}>
+                          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass(score.key)}`}>
+                            <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
+                            {score.value}
+                            </span>
+                          </span>
+                        </td>
+                      ))}
                       <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : "inline-block"}>
                           <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
@@ -6053,28 +6483,30 @@ export function FantasyDashboard({
                     </div>
 
                     <div className={`grid items-start gap-3 pt-4 sm:gap-4 sm:pt-6 lg:grid-cols-[minmax(0,1fr)_15.25rem] xl:grid-cols-1 xl:gap-5 ${fantasyCardPlayerName ? "grid-cols-[minmax(0,1fr)_10.75rem] min-[420px]:grid-cols-[minmax(0,1fr)_11.5rem] sm:grid-cols-[minmax(0,1fr)_14.25rem]" : "grid-cols-1"}`}>
-                      <div className="grid w-full auto-rows-fr grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
-                        <MetricCard compact mobileTight softSurface label="Price" value={formatPrice(selectedDisplayFantasyPlayer?.cost ?? null)} />
-                        <MetricCard compact mobileTight softSurface label="PPM" value={formatNumber(localPpm, 2)} />
-                        <MetricCard
-                          compact
-                          mobileTight
-                          softSurface
-                          label="Own %"
-                          value={formatPercent(selectedDisplayFantasyPlayer?.ownedBy ?? null)}
-                          sublabel={
-                            ownershipBaselineSnapshot
-                              ? `Weekly ${formatOwnershipDelta(selectedOwnershipDelta)}`
-                              : undefined
-                          }
-                        />
-                        <MetricCard
-                          compact
-                          mobileTight
-                          softSurface
-                          label="Priced At"
-                          value={formatNumber(selectedDisplayFantasyPlayer?.pricedAt ?? null, 0)}
-                        />
+                      <div className="min-w-0 space-y-3">
+                        <div className="grid w-full auto-rows-fr grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+                          <MetricCard compact mobileTight softSurface label="Price" value={formatPrice(selectedDisplayFantasyPlayer?.cost ?? null)} />
+                          <MetricCard compact mobileTight softSurface label="PPM" value={formatNumber(localPpm, 2)} />
+                          <MetricCard
+                            compact
+                            mobileTight
+                            softSurface
+                            label="Own %"
+                            value={formatPercent(selectedDisplayFantasyPlayer?.ownedBy ?? null)}
+                            sublabel={
+                              ownershipBaselineSnapshot
+                                ? `Weekly ${formatOwnershipDelta(selectedOwnershipDelta)}`
+                                : undefined
+                            }
+                          />
+                          <MetricCard
+                            compact
+                            mobileTight
+                            softSurface
+                            label="Priced At"
+                            value={formatNumber(selectedDisplayFantasyPlayer?.pricedAt ?? null, 0)}
+                          />
+                        </div>
                       </div>
 
                       {fantasyCardPlayerName ? (
@@ -6127,10 +6559,6 @@ export function FantasyDashboard({
               <RelevantOutsList rows={selectedRelevantOuts} />
 
               <div className="rounded-xl border border-nrl-border bg-[#111832] p-4">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Filters</div>
-                  <div className="text-[10px] text-nrl-muted">Applies to player game log and filtered analysis</div>
-                </div>
                 <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
                   <YearRangeSlider
                     label="Season"
@@ -6233,20 +6661,9 @@ export function FantasyDashboard({
               </div>
 
               <div
-                className={`order-6 relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-[#111832]"
+                className={`${analysisLocked ? "order-6" : "order-4"} relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-[#111832]"
                   }`}
               >
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div
-                    className={`text-xs font-bold uppercase tracking-wide ${analysisLocked ? "text-slate-400" : "text-nrl-accent"
-                      }`}
-                  >
-                    Analysis
-                  </div>
-                  <div className={`text-xs ${analysisLocked ? "text-slate-500" : "text-nrl-muted"}`}>
-                    Showing <span className="font-semibold text-nrl-text">{filteredRows.length}</span> games
-                  </div>
-                </div>
                 <div className={analysisLocked ? "select-none" : undefined}>
                   <div className="mx-auto mb-5 grid w-full grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
                     {selectedProjectionBand ? (
@@ -6276,6 +6693,53 @@ export function FantasyDashboard({
                       prominentValue
                     />
                   </div>
+                  {selectedTradeRatingStats.length > 0 ? (
+                    <div className="mx-auto mb-5 w-full max-w-[43rem] rounded-xl border border-white/10 bg-white/[0.035] px-3 py-3">
+                      <div className="mb-2 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowAllPlayersTradeRatingInfo((open) => !open)}
+                          className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[11px] font-black transition-colors ${
+                            showAllPlayersTradeRatingInfo
+                              ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                              : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+                          }`}
+                          aria-expanded={showAllPlayersTradeRatingInfo}
+                          aria-label="Trade rating information"
+                        >
+                          i
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                          {selectedTradeRatingStats.map((stat) => {
+                            const highlighted = Boolean("highlighted" in stat && stat.highlighted)
+                            return (
+                              <div
+                                key={stat.key}
+                                className={`inline-flex min-h-10 w-full flex-col items-center justify-center rounded-full border px-2.5 ${getTradeScorePillClass(stat.tradeScore, highlighted)}`}
+                              >
+                                <span className="text-[8px] font-black uppercase tracking-[0.12em] text-white/45">
+                                  {stat.label}
+                                </span>
+                                <TradeStars value={stat.tradeScore} blurred={!hasFantasyPlotAccess} className="mt-0.5 text-[10px] font-black tracking-[0.06em]" />
+                              </div>
+                            )
+                          })}
+                      </div>
+                      {showAllPlayersTradeRatingInfo ? (
+                        <div className="mt-3 grid gap-1.5 border-t border-white/8 pt-3 text-[10px] font-semibold leading-snug text-nrl-muted sm:grid-cols-2">
+                          <div><span className="text-nrl-accent">Overall</span>: Combines every component with even weighting.</div>
+                          <div><span className="text-nrl-accent">Pop</span>: Measures weekly trade popularity versus the player pool.</div>
+                          <div><span className="text-nrl-accent">Value</span>: Compares projection to priced-at score.</div>
+                          <div><span className="text-nrl-accent">Keep</span>: Rewards keeper-level projected scoring.</div>
+                          <div><span className="text-nrl-accent">Role</span>: Penalises relevant casualty ward return risk.</div>
+                          <div><span className="text-nrl-accent">Form</span>: Compares L3 average to priced-at score.</div>
+                          <div><span className="text-nrl-accent">BE</span>: Compares priced-at score to breakeven.</div>
+                          <div><span className="text-nrl-accent">Avail</span>: Counts next 6 rounds played, including byes and Origin risk.</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="relative mx-auto w-full max-w-[43rem]">
                     <div className={`grid grid-cols-2 gap-2 ${analysisLocked ? "pointer-events-none opacity-65" : ""}`}>
                       <FantasyPlotToggleButton
@@ -6847,11 +7311,6 @@ export function FantasyDashboard({
               </div>
 
               <div className="order-5 overflow-hidden rounded-xl border border-nrl-border bg-[#111832]">
-                <div className="border-b border-nrl-border bg-[#0f162d] px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">
-                    Player Game Log
-                  </div>
-                </div>
                 <div className="relative">
                   <div
                     className={`overflow-x-auto ${isGameLogCollapsed ? "overflow-y-hidden" : ""}`}

@@ -871,7 +871,7 @@ function weatherConditionEmoji(condition: string): string {
 function ScoreNumber({ value, align, isWinner }: { value: number | null; align: "left" | "right"; isWinner: boolean }) {
   return (
     <div
-      className={`min-w-[1.8rem] text-[2rem] leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-5xl lg:text-6xl ${
+      className={`min-w-[1.55rem] text-[1.7rem] leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-5xl lg:text-6xl ${
         isWinner ? "font-black" : "font-normal"
       } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
@@ -896,11 +896,11 @@ function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: Line
   const hasScore = score.homeScore != null || score.awayScore != null
 
   return (
-    <div className={`flex flex-col justify-center px-2 text-center ${splitScore ? "min-w-[5.5rem] sm:min-w-[6.75rem]" : "min-w-[7.5rem] sm:min-w-[10rem] sm:px-4"}`}>
+    <div className={`flex flex-col justify-center px-1.5 text-center sm:px-2 ${splitScore ? "min-w-[4.7rem] sm:min-w-[6.75rem]" : "min-w-[6.4rem] sm:min-w-[10rem] sm:px-4"}`}>
       {hasScore ? (
         <>
           {showLiveBadge ? (
-            <div className={`${splitScore ? "mb-2 px-2 py-1 text-[9px] sm:text-xs" : "mb-2 px-1.5 py-px text-[8px]"} inline-flex self-center items-center gap-1 rounded-md border border-red-300/30 bg-red-500/15 font-black uppercase tracking-[0.14em] text-red-100`}>
+            <div className={`${splitScore ? "mb-1.5 px-1.5 py-0.5 text-[8px] sm:mb-2 sm:px-2 sm:py-1 sm:text-xs" : "mb-2 px-1.5 py-px text-[8px]"} inline-flex self-center items-center gap-1 rounded-md border border-red-300/30 bg-red-500/15 font-black uppercase tracking-[0.14em] text-red-100`}>
               <span className="h-1 w-1 rounded-full bg-red-300 shadow-[0_0_8px_rgba(252,165,165,0.85)]" aria-hidden="true" />
               {splitScore ? matchStateLabel : "Live"}
             </div>
@@ -911,16 +911,16 @@ function LiveScoreHeader({ match, liveMatch, splitScore = false }: { match: Line
             </div>
           )}
           {splitScore && clock && showLiveBadge ? (
-            <div className="text-xl font-semibold leading-none tabular-nums text-nrl-text sm:text-2xl">{clock}</div>
+            <div className="text-[1.0625rem] font-semibold leading-none tabular-nums text-nrl-text sm:text-2xl">{clock}</div>
           ) : (
-            <div className={`${splitScore ? "mt-0" : "mt-4 sm:mt-5"} inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:text-[10px]`}>
+            <div className={`${splitScore ? "mt-0" : "mt-3.5 sm:mt-5"} inline-flex self-center rounded-full border border-emerald-300/35 bg-emerald-400/12 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.16)] sm:px-2 sm:text-[10px]`}>
               {matchStateLabel}{clock && showLiveBadge && !splitScore ? ` · ${clock}` : ""}
             </div>
           )}
         </>
       ) : (
         <>
-          <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
+          <div className="text-xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
             {formatKickoffTime(match.kickoffUtc)}
           </div>
         </>
@@ -1779,9 +1779,9 @@ function TeamBadge({
   const shortName = displayTeamBadgeName(team?.team ?? team?.teamName ?? "TBC")
 
   return (
-    <div className="flex min-h-[5.85rem] w-[4.7rem] min-w-0 max-w-full -translate-y-0.5 flex-col items-center justify-start gap-0.5 px-1 py-1 text-center sm:min-h-[7.5rem] sm:w-[6.75rem] sm:-translate-y-1.5 sm:px-2.5">
+    <div className="flex min-h-[5rem] w-[4rem] min-w-0 max-w-full -translate-y-0.5 flex-col items-center justify-start gap-0.5 px-1 py-1 text-center sm:min-h-[7.5rem] sm:w-[6.75rem] sm:-translate-y-1.5 sm:px-2.5">
       {logo ? (
-        <div className="relative grid h-14 w-14 place-items-center sm:h-20 sm:w-20">
+        <div className="relative grid h-12 w-12 place-items-center sm:h-20 sm:w-20">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logo}
@@ -1792,7 +1792,7 @@ function TeamBadge({
         </div>
       ) : null}
       <div className="mt-1 w-full min-w-0 sm:mt-1.5">
-        <div className="line-clamp-2 text-[11px] font-bold leading-tight text-nrl-text sm:hidden">{shortName}</div>
+        <div className="line-clamp-2 text-[10px] font-bold leading-tight text-nrl-text sm:hidden">{shortName}</div>
         <div className="hidden text-wrap text-xs font-bold leading-tight text-nrl-text sm:block">{shortName}</div>
         {sportsbetOdds ? <SportsbetOddsPill odds={sportsbetOdds} /> : null}
       </div>
@@ -2649,16 +2649,24 @@ function LineupCard({
         <div
           className={`relative z-[1] mx-auto grid w-full items-center ${
             showSplitScore
-              ? "max-w-5xl grid-cols-[minmax(4.7rem,1fr)_3.25rem_minmax(5.15rem,auto)_3.25rem_minmax(4.7rem,1fr)] gap-x-3 sm:grid-cols-[minmax(6rem,1fr)_4.5rem_minmax(6.75rem,auto)_4.5rem_minmax(6rem,1fr)] sm:gap-5 lg:gap-10"
+              ? "max-w-5xl grid-cols-[minmax(4rem,1fr)_10.4rem_minmax(4rem,1fr)] gap-x-1 sm:grid-cols-[minmax(6rem,1fr)_4.5rem_minmax(6.75rem,auto)_4.5rem_minmax(6rem,1fr)] sm:gap-5 lg:gap-10"
               : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
           }`}
         >
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} sportsbetOdds={homeSportsbetOdds} />
           </div>
-          {showSplitScore ? <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} /> : null}
-          <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore={showSplitScore} />
-          {showSplitScore ? <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} /> : null}
+          {showSplitScore ? (
+            <div className="relative col-start-2 h-[5rem] sm:contents">
+              <div className="absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 -translate-y-1/2 grid-cols-[2.35rem_4.7rem_2.35rem] items-center justify-center gap-x-2 sm:static sm:contents sm:translate-x-0 sm:translate-y-0">
+                <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} />
+                <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore />
+                <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} />
+              </div>
+            </div>
+          ) : (
+            <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} />
+          )}
           <div className="min-w-0 justify-self-center">
             <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} sportsbetOdds={awaySportsbetOdds} />
           </div>

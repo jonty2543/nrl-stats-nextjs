@@ -107,6 +107,20 @@ function keeperScoreForProjection(projection: number | null): number {
   return 10
 }
 
+function weeklyDeltaPopularityScore(delta: number | null): number {
+  if (delta === null) return 50
+  if (delta >= 10) return 100
+  if (delta >= 7.5) return 90
+  if (delta >= 5) return 80
+  if (delta >= 3) return 70
+  if (delta >= 1.5) return 60
+  if (delta > 0) return 50
+  if (delta === 0) return 40
+  if (delta >= -1.5) return 30
+  if (delta >= -3) return 20
+  return 10
+}
+
 function returnRound(returnDate: string | null): number | null {
   if (!returnDate) return null
   const match = returnDate.match(/\b(?:round|rd)\s*(\d+)\b/i) ?? returnDate.match(/\bR(\d+)\b/i)
@@ -213,7 +227,7 @@ export function calculateTradeRating({
   const keeperScore = keeperScoreForProjection(projection)
   const valueEdgeScore = percentileRank(valueEdge, population.valueEdges)
   const scores = {
-    weeklyDelta: roundScore(percentileRank(finiteNumber(input.weeklyChange), population.weeklyChanges)),
+    weeklyDelta: roundScore(weeklyDeltaPopularityScore(finiteNumber(input.weeklyChange))),
     value: roundScore(valueEdgeScore),
     keeperScore: roundScore(keeperScore),
     roleSecurityScore: roleSecurityScore(input.relevantOuts, currentRound),

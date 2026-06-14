@@ -1252,6 +1252,13 @@ function isRelevantOutsTeamMatch(left: string | null | undefined, right: string 
   return Boolean(leftGroup && rightGroup && leftGroup === rightGroup)
 }
 
+function nextOriginReturnRound(currentRound: number | null | undefined): number | null {
+  if (currentRound == null) return null
+  if (currentRound <= 15) return 16
+  if (currentRound <= 18) return 19
+  return null
+}
+
 function findFantasyPlayerForCasualtyRow(
   row: CasualtyWardRecord,
   fantasyPlayerByName: Map<string, FantasyPlayerSnapshot>
@@ -4272,6 +4279,37 @@ export function FantasyDashboard({
     const fantasyPlayerByName = new Map(
       sourceFantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
     )
+    const originReturnCandidates = baseFantasyPlayers.flatMap((originPlayer) => {
+      const playerKey = normaliseProjectionPlayerName(originPlayer.name)
+      if (!playerKey || !originChancePlayerNames.has(playerKey)) return []
+
+      const precomputedOriginRow =
+        precomputedAllPlayersRowsByKey.get(`id:${originPlayer.id}`) ??
+        precomputedAllPlayersRowsByKey.get(`name:${normaliseName(originPlayer.name)}`) ??
+        null
+      const originLocalName = precomputedOriginRow?.localName ?? findLocalPlayerMatch(originPlayer.name, localNames)
+      const originRows = originLocalName ? rowsByName.get(originLocalName) ?? [] : []
+      const originTeamHint = precomputedOriginRow?.team ?? (originRows.length > 0 ? primaryTeamForRows(originRows) : null)
+      const originImageRow =
+        resolvePlayerImage(originLocalName ?? originPlayer.name, originTeamHint, playerImages) ??
+        resolvePlayerImage(originPlayer.name, originTeamHint, playerImages)
+      const originScores = originRows.map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
+
+      return [{
+        playerKey,
+        row: {
+          player: originPlayer.name,
+          team: precomputedOriginRow?.team ?? originTeamHint ?? originImageRow?.team ?? null,
+          position: precomputedOriginRow?.position ?? originPlayer.positionLabel ?? originPlayer.positionLabels[0] ?? null,
+          injury: "Origin",
+          returnDate: null,
+          games: precomputedOriginRow?.gamesPlayed ?? (originRows.length || originPlayer.gamesPlayed || null),
+          averageFantasy: precomputedOriginRow?.avg2026 ?? averageNumbers(originScores) ?? originPlayer.avgPoints,
+          sourceUrl: null,
+          scrapedAt: null,
+        } satisfies CasualtyWardRecord,
+      }]
+    })
 
     return sourceFantasyPlayers.map((player) => {
       const precomputedRow =
@@ -4345,7 +4383,7 @@ export function FantasyDashboard({
           round,
           plays: teamPlaysInRound(draw2026Data, round, byeTeam),
         }))
-      const relevantOutRows =
+      const injuryRelevantOutRows =
         lineupsProjections?.source === "lineups" && lineupRole?.isOnField && lineupRole.team && lineupRole.position
           ? relevantOutCandidates
             .filter(
@@ -4359,6 +4397,28 @@ export function FantasyDashboard({
             )
             .slice(0, 8)
           : []
+      const injuryRelevantOutPlayerKeys = new Set(injuryRelevantOutRows.map((row) => normaliseProjectionPlayerName(row.player)).filter(Boolean))
+      const originReturnRound = nextOriginReturnRound(projectionRound)
+      const originRelevantOutRows =
+        originReturnRound !== null && lineupsProjections?.source === "lineups" && lineupRole?.isOnField && lineupRole.team && lineupRole.position
+          ? originReturnCandidates
+            .map(({ playerKey, row }) => ({
+              playerKey,
+              row: { ...row, returnDate: `Round ${originReturnRound}` },
+            }))
+            .filter(({ playerKey, row }) => (
+              !injuryRelevantOutPlayerKeys.has(playerKey) &&
+              isRelevantOutCandidate({
+                row,
+                lineupTeam: lineupRole.team,
+                lineupPosition: lineupRole.position,
+                namedLineupPlayers,
+                fantasyPlayerByName,
+              })
+            ))
+            .map(({ row }) => row)
+          : []
+      const relevantOutRows = [...injuryRelevantOutRows, ...originRelevantOutRows].slice(0, 8)
 
       return {
         player: displayPlayer,

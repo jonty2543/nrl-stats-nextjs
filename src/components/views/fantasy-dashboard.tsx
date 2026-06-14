@@ -4267,63 +4267,7 @@ export function FantasyDashboard({
     const baseFantasyPlayers = fantasyPlayers.length > 0
       ? fantasyPlayers
       : buildFallbackFantasyPlayersFromStats(rowsByName)
-    const fantasyPlayerById = new Map(baseFantasyPlayers.map((player) => [player.id, player]))
-    const fantasyPlayerByNormalizedName = new Map(
-      baseFantasyPlayers.map((player) => [normaliseName(player.name), player])
-    )
-    const previewFallbackCandidates = baseFantasyPlayers.map((player) => ({
-      player,
-      weeklyChange: ownershipDeltaByPlayerId.get(player.id),
-    }))
-    const hasPositiveWeeklyChange = previewFallbackCandidates.some((entry) => entry.weeklyChange != null && entry.weeklyChange > 0)
-    const previewFallbackPlayers = previewFallbackCandidates
-      .filter((entry) => !hasPositiveWeeklyChange || (entry.weeklyChange != null && entry.weeklyChange > 0))
-      .sort((a, b) => {
-        if (hasPositiveWeeklyChange) {
-          const aChange = a.weeklyChange ?? -Infinity
-          const bChange = b.weeklyChange ?? -Infinity
-          if (aChange !== bChange) return bChange - aChange
-        }
-        return (b.player.cost ?? -1) - (a.player.cost ?? -1)
-      })
-      .slice(0, ALL_PLAYERS_PREVIEW_LIMIT)
-      .map((entry) => entry.player)
-    const sourceFantasyPlayers = isAllPlayersPreview
-      ? allPlayerCardSummaryRows.length > 0
-        ? allPlayerCardSummaryRows.map((row, index): FantasyPlayerSnapshot => {
-          const existingPlayer =
-            (row.playerId !== null ? fantasyPlayerById.get(row.playerId) : undefined) ??
-            fantasyPlayerByNormalizedName.get(normaliseName(row.player))
-          if (existingPlayer) return existingPlayer
-          const positionLabel = row.position || "POS"
-          return {
-            id: row.playerId ?? -100000 - index,
-            firstName: "",
-            lastName: row.player,
-            name: row.player,
-            squadId: null,
-            cost: row.price,
-            status: null,
-            positions: [],
-            positionLabels: positionLabel ? [positionLabel] : [],
-            positionLabel,
-            ownedBy: row.ownedBy,
-            selections: null,
-            avgPoints: row.avg2026,
-            projectedAvg: row.projection,
-            gamesPlayed: row.gamesPlayed,
-            totalPoints: null,
-            tog: null,
-            be: row.breakeven,
-            pricedAt: row.pricedAt,
-            isBye: false,
-            locked: false,
-            priceHistory: {},
-            scoreHistory: {},
-          }
-        })
-        : previewFallbackPlayers
-      : baseFantasyPlayers
+    const sourceFantasyPlayers = baseFantasyPlayers
     const namedLineupPlayers = new Set(lineupsProjections?.roleByPlayerName.keys() ?? [])
     const fantasyPlayerByName = new Map(
       sourceFantasyPlayers.map((player) => [normaliseProjectionPlayerName(player.name), player])
@@ -4442,7 +4386,7 @@ export function FantasyDashboard({
         team: projectionTeam ?? imageRow?.team ?? teamHint,
       }
     })
-  }, [allPlayerCardSummaryRows, allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, isAllPlayersPreview, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
+  }, [allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
 
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
     const population = buildTradeRatingPopulation(rawAllPlayersTableRows.map((row) => ({
@@ -4727,7 +4671,7 @@ export function FantasyDashboard({
       return null
     }
 
-    return [...filteredRows].sort((a, b) => {
+    const sortedRows = [...filteredRows].sort((a, b) => {
       const aValue = getSortValue(a)
       const bValue = getSortValue(b)
       if (aValue === null && bValue === null) return a.player.name.localeCompare(b.player.name)
@@ -4742,6 +4686,8 @@ export function FantasyDashboard({
 
       return String(aValue).localeCompare(String(bValue)) * direction
     })
+
+    return hasLoadedFullAllPlayersRows ? sortedRows : sortedRows.slice(0, ALL_PLAYERS_PREVIEW_LIMIT)
   }, [
     deferredAllPlayersOwnershipRange,
     deferredAllPlayersAverageRange,

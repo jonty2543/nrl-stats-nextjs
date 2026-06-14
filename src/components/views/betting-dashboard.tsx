@@ -731,11 +731,13 @@ function normalizePlayerImageUrl(value: string | null | undefined): string | nul
 function PlayerProfileImage({
   image,
   name,
-  className = "h-8 w-8",
+  className = "h-10 w-10 p-0.5",
+  reveal = true,
 }: {
   image?: string | null;
   name: string;
   className?: string;
+  reveal?: boolean;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const imageSrc = normalizePlayerImageUrl(image);
@@ -746,13 +748,47 @@ function PlayerProfileImage({
     <img
       src={src}
       alt={name}
-      className={`${className} shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover`}
-      loading="lazy"
+      className={`${className} shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover transition-opacity duration-150 ${reveal ? "opacity-100" : "opacity-0"}`}
+      loading="eager"
+      decoding="async"
+      fetchPriority="high"
       onError={() => {
         if (imageSrc && src === imageSrc) setFailedSrc(imageSrc);
       }}
     />
   );
+}
+
+function useBatchedImagePreload(sources: string[], timeoutMs = 900) {
+  const [preloadState, setPreloadState] = useState({ sourceKey: "", ready: false });
+  const sourceKey = sources.join("\n");
+
+  useEffect(() => {
+    const sourceList = sourceKey ? sourceKey.split("\n") : [];
+    if (sourceList.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const settle = () => {
+      if (!cancelled) setPreloadState({ sourceKey, ready: true });
+    };
+    const timerId = window.setTimeout(settle, timeoutMs);
+
+    Promise.all(sourceList.map((source) => new Promise<void>((resolve) => {
+      const image = new window.Image();
+      image.onload = () => resolve();
+      image.onerror = () => resolve();
+      image.src = source;
+    }))).then(settle);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
+  }, [sourceKey, timeoutMs]);
+
+  return sourceKey.length === 0 || (preloadState.sourceKey === sourceKey && preloadState.ready);
 }
 
 function playerImageSeenMs(row: PlayerImageRecord): number {
@@ -4059,6 +4095,30 @@ function MarketSection({
     });
   }, [activeGroups, jumpTarget, market]);
 
+  const visibleTryscorerImageSources = useMemo(() => {
+    if (market !== "Tryscorer") return [];
+    const sources = new Set<string>();
+    activeGroups.forEach((group) => {
+      if (group.market !== "Tryscorer") return;
+      const selectedTryscorerValue = tryscorerValueByGroup[group.key] ?? 1;
+      group.outcomes
+        .filter((row) => row.bestValueComputed === selectedTryscorerValue)
+        .forEach((row) => {
+          const profile = resolveTryscorerProfile({
+            playerName: row.result,
+            match: group.match,
+            tryscorerFormByPlayer,
+            playerTeamsByName,
+            playerImages,
+          });
+          const source = normalizePlayerImageUrl(profile.image);
+          if (source) sources.add(source);
+        });
+    });
+    return [...sources];
+  }, [activeGroups, market, playerImages, playerTeamsByName, tryscorerFormByPlayer, tryscorerValueByGroup]);
+  const visibleTryscorerImagesReady = useBatchedImagePreload(visibleTryscorerImageSources);
+
   if (activeGroups.length === 0) {
     return (
       <div>
@@ -4301,12 +4361,13 @@ function MarketSection({
                         className={`rounded-lg border border-nrl-border/70 bg-nrl-panel-2/45 px-3 py-4 shadow-[0_10px_24px_rgba(2,6,23,0.12)] ${openTryscorerProfile ? "cursor-pointer transition-colors hover:border-emerald-300/35" : ""}`}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="flex min-w-0 flex-1 items-start gap-1.5">
+                          <div className="flex min-w-0 flex-1 items-start gap-3.5">
                             {group.market === "Tryscorer" ? (
                               <PlayerProfileImage
                                 image={tryscorerProfile?.image ?? null}
                                 name={row.result}
-                                className="mt-0.5 h-8 w-8"
+                                className="mt-0.5 h-9 w-9 p-0.5"
+                                reveal={visibleTryscorerImagesReady}
                               />
                             ) : (
                               <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} className="mt-0.5 h-4 w-4" />
@@ -4327,7 +4388,7 @@ function MarketSection({
                                   {showModelColumns ? (
                                     <span className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] ${edgeClass}`}>
                                       Edge:
-                                      <span className={blurPremiumColumns ? "inline-block select-none opacity-75 blur-[2px]" : "tabular-nums"}>
+                                      <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : "tabular-nums"}>
                                         {formatEdge(edgePp)}
                                       </span>
                                     </span>
@@ -4557,11 +4618,12 @@ function MarketSection({
                             className={`border-b border-nrl-border/50 ${openTryscorerProfile ? "cursor-pointer transition-colors hover:bg-emerald-400/5" : ""}`}
                           >
                             <td className="py-2 pr-3 font-medium text-nrl-text">
-                              <span className="inline-flex min-w-0 items-center gap-2">
+                              <span className="inline-flex min-w-0 items-center gap-4">
                                 {group.market === "Tryscorer" ? (
                                   <PlayerProfileImage
                                     image={tryscorerProfile?.image ?? null}
                                     name={outcomeLabel}
+                                    reveal={visibleTryscorerImagesReady}
                                   />
                                 ) : (
                                   <TeamLogoImage teamName={outcomeLogoTeam} teamLogos={teamLogos} />
@@ -4641,7 +4703,7 @@ function MarketSection({
                                   </span>
                                 </td>
                                 <td className={`py-2 pr-3 ${edgeClass}`}>
-                                  <span className={blurPremiumColumns ? "inline-block select-none opacity-75 blur-[2px]" : ""}>
+                                  <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}>
                                     {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
                                   </span>
                                 </td>

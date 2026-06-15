@@ -695,13 +695,13 @@ function formatOriginChanceContext(
   if (visibleOriginPlayers.length === 0 && buyOriginPlayers.length === 0) return "";
 
   return [
-    "NRL Origin chance context:",
+    "NRL Origin lineup context:",
     visibleOriginPlayers.length > 0
-      ? `Visible owned players in origin_chances: ${visibleOriginPlayers.join(", ")}. Be more willing to sell these players when other sell signals exist. Be less inclined to sell non-Origin-risk players with similar profiles.`
-      : "No visible owned player matched origin_chances.",
+      ? `Visible owned players in current origin_lineups: ${visibleOriginPlayers.join(", ")}. Be more willing to sell these players when other sell signals exist. Be less inclined to sell non-Origin-risk players with similar profiles.`
+      : "No visible owned player matched current origin_lineups.",
     buyOriginPlayers.length > 0
-      ? `Trade-in candidates in origin_chances: ${buyOriginPlayers.map((player) => `${player.name}${player.value != null ? ` (value ${player.value >= 0 ? "+" : ""}${player.value.toFixed(1)})` : ""}`).join(", ")}. Avoid recommending them as buys unless the value/form signal is clearly strong; if recommended, mention Origin risk.`
-      : "No trade-in candidate matched origin_chances.",
+      ? `Trade-in candidates in current origin_lineups: ${buyOriginPlayers.map((player) => `${player.name}${player.value != null ? ` (value ${player.value >= 0 ? "+" : ""}${player.value.toFixed(1)})` : ""}`).join(", ")}. Avoid recommending them as buys unless the value/form signal is clearly strong; if recommended, mention Origin risk.`
+      : "No trade-in candidate matched current origin_lineups.",
   ].join("\n");
 }
 
@@ -1051,7 +1051,7 @@ function buildFallbackTradeInLines(
     ].filter((reason): reason is string => reason !== null);
     const secondaryReasons = [
       playsNextMajorByeRound === true ? "he plays the next major bye" : null,
-      includeProMetrics && !originRisk ? "he is not flagged as an Origin chance" : null,
+      includeProMetrics && !originRisk ? "he is not in the current Origin lineups" : null,
     ].filter((reason): reason is string => reason !== null);
     const fallbackReason =
       primaryReasons.length > 0
@@ -1064,7 +1064,7 @@ function buildFallbackTradeInLines(
       playsNextMajorByeRound === false
         ? " Note that he misses the next major bye."
         : includeProMetrics && originRisk
-          ? " He is an Origin chance, so factor in the missed-game risk."
+          ? " He is in the current Origin lineups, so factor in the missed-game risk."
           : "";
 
     const details = includeProMetrics
@@ -5169,7 +5169,7 @@ export async function runAiModelChat(
           "- If the casualty ward says the player is out for 3 weeks or more, treat that as a strong sell signal.",
           "- If the casualty ward return is TBC/unknown, or no matching casualty ward row is supplied for a red cross/plus player, say the timeline is uncertain and suggest checking the latest injury news before locking the trade.",
           "- Use the secondary casualty ward role/security context only as a small tie-breaker. If a same-team/same-position casualty ward player with 30+ fantasy average and 2+ games is back within 3 weeks, mention possible role pressure only for owned players under $600k. If that casualty ward player is out longer than 3 weeks, treat it as a modest job-security buy signal for same-team/same-position candidates, not a sell signal.",
-          "- Use Origin chance context as a risk adjustment. Avoid recommending Origin chance players as buys unless the value/form signal is clearly strong; if you recommend one, mention the Origin risk. In Sell Watch, be a little more willing to sell Origin chance players when other sell signals exist, and a little less willing to sell similar non-Origin-risk players.",
+          "- Use current Origin lineup context as a risk adjustment. Avoid recommending Origin players as buys unless the value/form signal is clearly strong; if you recommend one, mention the Origin risk. In Sell Watch, be a little more willing to sell Origin players when other sell signals exist, and a little less willing to sell similar non-Origin-risk players.",
           "- Do not let casualty ward role pressure or Origin risk dominate the answer. They are secondary context, not primary trade rules.",
         ]
         : []),

@@ -103,7 +103,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
     withPlayerPageContextTimeout("player images", fetchPlayerImages(), []),
     withPlayerPageContextTimeout("team logos", fetchTeamLogos(), {}),
     withPlayerPageContextTimeout("ownership baseline", fetchLatestFantasyOwnershipBaselineSnapshot(), null),
-    withPlayerPageContextTimeout("Origin chances", fetchOriginChances(), []),
+    withPlayerPageContextTimeout("Origin lineups", fetchOriginChances(), []),
     withPlayerPageContextTimeout("fantasy player card summaries", fetchFantasyPlayerCardSummaries(), []),
   ])
 

@@ -2514,21 +2514,37 @@ export async function fetchRelevantCasualtyWardOutCandidates(): Promise<Casualty
 export async function fetchOriginChances(): Promise<OriginChanceRecord[]> {
   const supabase = createServerSupabaseClient("nrl");
   const { data, error } = await supabase
-    .from("origin_chances")
-    .select("player, created_at, updated_at")
+    .from("origin_lineups")
+    .select("player, match_date, created_at, scraped_at")
+    .order("match_date", { ascending: false })
     .order("player", { ascending: true })
     .limit(1000);
 
   if (error) {
-    console.warn("Unable to fetch Origin chance rows; using empty set.", error);
+    console.warn("Unable to fetch Origin lineup rows; using empty set.", error);
     return [];
   }
 
-  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
-    player: toNullableString(row.player) ?? "",
-    createdAt: toNullableString(row.created_at),
-    updatedAt: toNullableString(row.updated_at),
-  }));
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const latestMatchDate = rows.map((row) => toNullableString(row.match_date)).find(Boolean) ?? null;
+  const seenPlayers = new Set<string>();
+
+  return rows.flatMap((row) => {
+    if (latestMatchDate && toNullableString(row.match_date) !== latestMatchDate) return [];
+
+    const player = toNullableString(row.player);
+    if (!player) return [];
+
+    const playerKey = normaliseLookupKey(player);
+    if (!playerKey || seenPlayers.has(playerKey)) return [];
+    seenPlayers.add(playerKey);
+
+    return [{
+      player,
+      createdAt: toNullableString(row.created_at),
+      updatedAt: toNullableString(row.scraped_at),
+    }];
+  });
 }
 
 function mapFantasyPlayerCardSummary(row: Record<string, unknown>): FantasyPlayerCardSummary | null {

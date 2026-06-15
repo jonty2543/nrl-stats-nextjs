@@ -77,7 +77,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
     withFantasyPageContextTimeout("approved articles", fetchApprovedArticleLinks(), [], FANTASY_PAGE_ARTICLE_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("relevant casualty candidates", fetchRelevantCasualtyWardOutCandidates(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("2026 draw", loadDraw2026Data(), null, FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
-    withFantasyPageContextTimeout("Origin chances", fetchOriginChances(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
+    withFantasyPageContextTimeout("Origin lineups", fetchOriginChances(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("top weekly fantasy player card summaries", fetchTopWeeklyFantasyPlayerCardSummaries(), []),
   ])
   const fantasyProjectionArticle = approvedArticleLinks.find((article) => {

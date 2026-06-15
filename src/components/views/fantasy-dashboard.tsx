@@ -3603,7 +3603,7 @@ export function FantasyDashboard({
       ...(hasFantasyPlotAccess
         ? [
           "For any visible player with a red cross/plus injury marker or clear out/unavailable status, use casualty ward context to decide hold versus sell: 2 weeks or less can be a hold, especially with a low BE; 3 weeks or more is a stronger sell; TBC/unknown should be called uncertain with a note to check the latest injury news.",
-          "Use supplied casualty ward role-pressure and Origin chance context only as secondary tie-breakers. Do not let them outweigh clear ownership, form, value, injury, bye or lineup signals.",
+          "Use supplied casualty ward role-pressure and current Origin lineup context only as secondary tie-breakers. Do not let them outweigh clear ownership, form, value, injury, bye or lineup signals.",
           "If casualty ward lists a player but current lineups say he is named to play this week, ignore casualty ward for that player and do not describe him as injured from casualty ward.",
         ]
         : []),
@@ -4441,7 +4441,7 @@ export function FantasyDashboard({
         majorByeRoundTags,
         nextMajorByeRound,
         playsNextMajorBye,
-        originChance: precomputedRow?.originChance ?? originChance,
+        originChance,
         gamesPlayed: Math.trunc(precomputedStatsRow?.gamesPlayed ?? (playerRows.length || player.gamesPlayed || 0)),
         team: projectionTeam ?? imageRow?.team ?? teamHint,
       }

@@ -777,9 +777,19 @@ async function fetchOwnershipBaseline(supabase) {
 }
 
 async function fetchOriginChanceNames(supabase) {
-  const { data, error } = await supabase.from("origin_chances").select("player").limit(1000);
+  const { data, error } = await supabase
+    .from("origin_lineups")
+    .select("player, match_date")
+    .order("match_date", { ascending: false })
+    .limit(1000);
   if (error) return new Set();
-  return new Set((data ?? []).map((row) => normaliseProjectionPlayerName(row.player)).filter(Boolean));
+  const latestMatchDate = (data ?? []).map((row) => row.match_date).find(Boolean) ?? null;
+  return new Set(
+    (data ?? [])
+      .filter((row) => !latestMatchDate || row.match_date === latestMatchDate)
+      .map((row) => normaliseProjectionPlayerName(row.player))
+      .filter(Boolean)
+  );
 }
 
 async function loadDrawRows() {

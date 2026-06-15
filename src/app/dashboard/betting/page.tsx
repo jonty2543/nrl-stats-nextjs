@@ -1,14 +1,16 @@
 import { auth } from "@clerk/nextjs/server";
+import { headers } from "next/headers";
 import { BettingDashboard } from "@/components/views/betting-dashboard";
 import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { fetchApprovedArticles } from "@/lib/articles";
-import { fetchBettingOddsSnapshot, fetchBettingPageSummary, fetchPlayerImages } from "@/lib/supabase/queries";
+import { fetchBettingOddsSnapshot, fetchBettingOddsSnapshotFromRawTables, fetchBettingPageSummary, fetchPlayerImages } from "@/lib/supabase/queries";
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types";
 import type { BettingSummaryGame } from "@/lib/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
 const SUNDAY_BETTING_RELEASE_UTC_HOUR = 11;
+const LOCALHOST_NAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 function normalisePlayerKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -110,6 +112,92 @@ function filterUnreleasedBettingRounds(
   };
 }
 
+async function isLocalhostRequest(): Promise<boolean> {
+  const headerStore = await headers();
+  const host = headerStore.get("host")?.split(":")[0].toLowerCase() ?? "";
+  const forwardedHost = headerStore.get("x-forwarded-host")?.split(":")[0].toLowerCase() ?? "";
+  return LOCALHOST_NAMES.has(host) || LOCALHOST_NAMES.has(forwardedHost);
+}
+
+function filterBettingSnapshotToDates(snapshot: BettingOddsSnapshot, dates: Set<string>): BettingOddsSnapshot {
+  const filterRows = (rows: BettingOddsRow[]) => rows.filter((row) => dates.has(row.date));
+  return {
+    ...snapshot,
+    h2h: filterRows(snapshot.h2h),
+    line: filterRows(snapshot.line),
+    total: filterRows(snapshot.total),
+    tryscorer: filterRows(snapshot.tryscorer),
+  };
+}
+
+function bettingSnapshotDates(snapshot: BettingOddsSnapshot): string[] {
+  return Array.from(new Set([
+    ...snapshot.h2h.map((row) => row.date),
+    ...snapshot.line.map((row) => row.date),
+    ...snapshot.total.map((row) => row.date),
+    ...snapshot.tryscorer.map((row) => row.date),
+  ].filter(Boolean))).sort();
+}
+
+function bettingSnapshotHasRows(snapshot: BettingOddsSnapshot): boolean {
+  return snapshot.h2h.length + snapshot.line.length + snapshot.total.length + snapshot.tryscorer.length > 0;
+}
+
+function isoDateDaysBefore(dateIso: string, days: number): string {
+  const parsed = Date.parse(`${dateIso}T00:00:00Z`);
+  if (!Number.isFinite(parsed)) return dateIso;
+  return new Date(parsed - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function isoDateDaysAfter(dateIso: string, days: number): string {
+  const parsed = Date.parse(`${dateIso}T00:00:00Z`);
+  if (!Number.isFinite(parsed)) return dateIso;
+  return new Date(parsed + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function localhostScreenshotWindowSnapshot(
+  snapshot: BettingOddsSnapshot,
+  now = new Date()
+): { snapshot: BettingOddsSnapshot; displayTodayIso: string | null; showPastMarkets: boolean } {
+  const todayIso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const dates = bettingSnapshotDates(snapshot);
+  const completedDates = dates.filter((date) => date <= todayIso);
+  const upcomingDates = dates.filter((date) => date > todayIso);
+  const selectedDates = new Set<string>();
+
+  const latestCompletedDate = completedDates.at(-1) ?? null;
+  if (latestCompletedDate) {
+    const completedWindowStart = isoDateDaysBefore(latestCompletedDate, 7);
+    for (const date of completedDates) {
+      if (date >= completedWindowStart && date <= latestCompletedDate) selectedDates.add(date);
+    }
+  }
+
+  const firstUpcomingDate = upcomingDates[0] ?? null;
+  if (firstUpcomingDate) {
+    const upcomingWindowEnd = isoDateDaysAfter(firstUpcomingDate, 7);
+    for (const date of upcomingDates) {
+      if (date >= firstUpcomingDate && date <= upcomingWindowEnd) selectedDates.add(date);
+    }
+  }
+
+  if (selectedDates.size === 0) {
+    return { snapshot, displayTodayIso: null, showPastMarkets: true };
+  }
+
+  const screenshotSnapshot = filterBettingSnapshotToDates(snapshot, selectedDates);
+  return {
+    snapshot: bettingSnapshotHasRows(screenshotSnapshot) ? screenshotSnapshot : snapshot,
+    displayTodayIso: latestCompletedDate ?? firstUpcomingDate,
+    showPastMarkets: true,
+  };
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -201,12 +289,13 @@ function buildLineupLinksByMatchKey(games: BettingSummaryGame[]): Record<string,
 
 export default async function BettingPage() {
   const { userId } = await auth();
-  const [snapshot, canAccessPremium, bettingSummary, approvedArticles, playerImages] = await Promise.all([
+  const [snapshot, canAccessPremium, bettingSummary, approvedArticles, playerImages, localhostRequest] = await Promise.all([
     fetchBettingOddsSnapshot(),
     getServerPremiumAccess(userId),
     fetchBettingPageSummary(),
     fetchApprovedArticles(),
     fetchPlayerImages(),
+    isLocalhostRequest(),
   ]);
   const marginModelArticle = approvedArticles.find((article) =>
     normaliseArticleTitle(article.title).includes("margin model")
@@ -219,16 +308,27 @@ export default async function BettingPage() {
     );
   }) ?? null;
   const lineupsFilteredSnapshot = filterTryscorersToLineups(
-    snapshot,
+    localhostRequest
+      ? await fetchBettingOddsSnapshotFromRawTables().catch((error) => {
+          console.warn("Unable to fetch raw betting odds for localhost screenshot mode; using summary snapshot.", error);
+          return snapshot;
+        })
+      : snapshot,
     bettingSummary.lineupPlayersByMatch,
     bettingSummary.games
   );
-  const visibleSnapshot = filterUnreleasedBettingRounds(lineupsFilteredSnapshot, bettingSummary.games);
+  const releasedSnapshot = filterUnreleasedBettingRounds(lineupsFilteredSnapshot, bettingSummary.games);
+  const localhostSnapshot = localhostRequest
+    ? localhostScreenshotWindowSnapshot(lineupsFilteredSnapshot)
+    : null;
+  const visibleSnapshot = localhostSnapshot?.snapshot ?? releasedSnapshot;
 
   return (
     <BettingDashboard
       snapshot={visibleSnapshot}
       canAccessPremium={canAccessPremium}
+      displayTodayIso={localhostSnapshot?.displayTodayIso ?? undefined}
+      showPastMarkets={localhostSnapshot?.showPastMarkets ?? false}
       playerImages={playerImages}
       playerTeamsByName={bettingSummary.playerTeamsByName}
       teamLogos={bettingSummary.teamLogos}

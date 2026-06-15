@@ -4371,9 +4371,14 @@ export function FantasyDashboard({
       )
       const pricedAt = displayPlayer.pricedAt
       const originChance = originChancePlayerNames.has(normaliseProjectionPlayerName(player.name))
-      const projection = normaliseFantasyProjection(precomputedRow?.projection ?? rawProjection)
+      const precomputedProjection = normaliseFantasyProjection(precomputedRow?.projection ?? null)
+      const projection = precomputedProjection ?? normaliseFantasyProjection(rawProjection)
       const effectivePricedAt = precomputedRow?.pricedAt ?? pricedAt
-      const value = precomputedRow?.value ?? roundedFantasyValue(projection, effectivePricedAt)
+      const value = projection == null
+        ? null
+        : precomputedProjection !== null
+          ? precomputedRow?.value ?? roundedFantasyValue(projection, effectivePricedAt)
+          : roundedFantasyValue(projection, effectivePricedAt)
       const nextMajorByeRound = precomputedRow?.nextMajorByeRound ?? getNextMajorByeRound(projectionRound)
       const byeTeam = projectionTeam
       const playsNextMajorBye = precomputedRow?.playsNextMajorBye ?? teamPlaysInRound(draw2026Data, nextMajorByeRound, byeTeam)
@@ -6208,16 +6213,16 @@ export function FantasyDashboard({
                       </div>
                     ) : null}
 	                    <div className="relative mt-3 overflow-hidden md:min-w-0">
-                        <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-8 bg-[linear-gradient(90deg,rgba(17,24,50,0),#111832)]" />
+                        <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-8 bg-[linear-gradient(90deg,rgba(17,24,50,0),#111832)] md:hidden" />
                         <span className="pointer-events-none absolute right-1.5 top-1/2 z-[2] -translate-y-1/2 text-sm font-black text-nrl-accent/70 drop-shadow-[0_0_8px_rgba(0,245,138,0.22)] md:hidden" aria-hidden="true">
                           →
                         </span>
-                        <div className="overflow-x-auto pb-0.5 pr-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-	                      <div className="flex min-w-max gap-3 md:gap-4">
+                        <div className="overflow-x-auto pb-0.5 pr-6 [scrollbar-width:none] md:overflow-visible md:pr-0 [&::-webkit-scrollbar]:hidden">
+	                      <div className="flex min-w-max gap-3 md:grid md:w-full md:min-w-0 md:grid-cols-11 md:gap-4">
                         {cardStats.map((stat) => (
                           <div
                             key={stat.key}
-	                            className="min-w-[3.75rem] md:min-w-[4.25rem]"
+	                            className="min-w-[3.75rem] md:min-w-0"
                           >
                             <div className={`text-[8px] font-semibold uppercase tracking-wide ${stat.key === allPlayersSort.column ? "text-nrl-accent" : "text-nrl-muted"}`}>
                               {stat.label}

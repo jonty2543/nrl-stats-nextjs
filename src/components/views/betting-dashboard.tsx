@@ -18,6 +18,8 @@ import {
 interface BettingDashboardProps {
   snapshot: BettingOddsSnapshot;
   canAccessPremium?: boolean;
+  displayTodayIso?: string;
+  showPastMarkets?: boolean;
   playerImages?: PlayerImageRecord[];
   playerTeamsByName?: Record<string, string>;
   teamLogos?: Record<string, string>;
@@ -1736,6 +1738,8 @@ function BookieLogo({
 export function BettingDashboard({
   snapshot,
   canAccessPremium = false,
+  displayTodayIso,
+  showPastMarkets = false,
   playerImages = [],
   playerTeamsByName: playerTeamsByNameProp = {},
   teamLogos = {},
@@ -1749,7 +1753,7 @@ export function BettingDashboard({
   const { isLoaded, userId } = useAuth();
   const { user } = useUser();
   const hasPremiumBettingAccess = canAccessPremium || hasPremiumAccess(userId, user?.publicMetadata);
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayIso = useMemo(() => displayTodayIso ?? new Date().toISOString().slice(0, 10), [displayTodayIso]);
   const [bankroll, setBankroll] = useState(1000);
   const [stakingMode, setStakingMode] = useState<StakingMode>("percentage");
   const [percentageStakePct, setPercentageStakePct] = useState(2);
@@ -3172,6 +3176,7 @@ export function BettingDashboard({
             lineupLinksByMatchKey={lineupLinksByMatchKey}
             market={selectedMarket}
             jumpTarget={marketJumpTarget}
+            showPastMarkets={showPastMarkets}
             onStakeOverride={handleStakeOverride}
             onOddsOverride={handleOddsOverride}
             onAddBet={handleAddBet}
@@ -4010,6 +4015,7 @@ function MarketSection({
   lineupLinksByMatchKey,
   market,
   jumpTarget,
+  showPastMarkets,
   onStakeOverride,
   onOddsOverride,
   onAddBet,
@@ -4033,6 +4039,7 @@ function MarketSection({
   lineupLinksByMatchKey: Record<string, string>;
   market: BettingMarket;
   jumpTarget: BettingMarketJumpTarget | null;
+  showPastMarkets?: boolean;
   onStakeOverride: (key: string, value: number) => void;
   onOddsOverride: (key: string, value: number) => void;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
@@ -4051,6 +4058,7 @@ function MarketSection({
 
   const activeGroups = groups
     .filter((group) => {
+      if (showPastMarkets) return true;
       if (group.market !== "Tryscorer") return true;
       const kickoffKey = buildMatchKickoffKey(group.date, group.match);
       const kickoff = kickoffKey ? tryscorerKickoffsByMatch[kickoffKey] : null;

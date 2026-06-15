@@ -36,31 +36,23 @@ export interface TradeRatingScores {
   overall: number
 }
 
-interface TradeRatingPopulation {
-  weeklyChanges: number[]
-  valueEdges: number[]
-  formEdges: number[]
-  breakevenEdges: number[]
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
-
-function roundScore(value: number): number {
-  return Math.round(clamp(value, 0, 100))
-}
-
 function finiteNumber(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
-function percentileRank(value: number | null, population: number[], fallback = 50): number {
-  if (value === null || population.length === 0) return fallback
-  const sorted = [...population].sort((a, b) => a - b)
-  const below = sorted.filter((candidate) => candidate < value).length
-  const equal = sorted.filter((candidate) => candidate === value).length
-  return ((below + equal * 0.5) / sorted.length) * 100
+function scoreAtLeast(value: number | null, bands: ReadonlyArray<readonly [number, number]>, fallback = 50): number {
+  if (value === null) return fallback
+  for (const [threshold, score] of bands) {
+    if (value >= threshold) return score
+  }
+  return 10
+}
+
+function scoreAtMost(value: number, bands: ReadonlyArray<readonly [number, number]>): number {
+  for (const [threshold, score] of bands) {
+    if (value <= threshold) return score
+  }
+  return 10
 }
 
 function normaliseTeamKey(value: string | null | undefined): string {
@@ -96,43 +88,59 @@ function breakevenEdgeForInput(input: TradeRatingInput): number | null {
 }
 
 function keeperScoreForProjection(projection: number | null): number {
-  if (projection === null) return 50
-  if (projection >= 60) return 100
-  if (projection >= 55) return 90
-  if (projection >= 50) return 78
-  if (projection >= 45) return 64
-  if (projection >= 40) return 48
-  if (projection >= 35) return 32
-  if (projection >= 30) return 20
-  return 10
+  return scoreAtLeast(projection, [
+    [65, 100],
+    [60, 90],
+    [55, 80],
+    [50, 70],
+    [45, 60],
+    [40, 50],
+    [35, 40],
+    [30, 30],
+    [25, 20],
+  ])
 }
 
-function weeklyDeltaPopularityScore(delta: number | null): number {
-  if (delta === null) return 50
-  if (delta >= 10) return 100
-  if (delta >= 7.5) return 90
-  if (delta >= 5) return 80
-  if (delta >= 3) return 70
-  if (delta >= 1.5) return 60
-  if (delta > 0) return 50
-  if (delta === 0) return 40
-  if (delta >= -1.5) return 30
-  if (delta >= -3) return 20
-  return 10
+function popularityScore(weeklyChange: number | null): number {
+  return scoreAtLeast(weeklyChange, [
+    [5, 100],
+    [3, 90],
+    [2, 80],
+    [1, 70],
+    [0.25, 60],
+    [-0.25, 50],
+    [-1, 40],
+    [-2, 30],
+    [-4, 20],
+  ])
 }
 
-function valueScore(value: number | null): number {
-  if (value === null) return 50
-  if (value >= 10) return 100
-  if (value >= 7.5) return 90
-  if (value >= 5) return 80
-  if (value >= 3) return 70
-  if (value >= 1.5) return 60
-  if (value > 0) return 50
-  if (value === 0) return 40
-  if (value >= -3) return 30
-  if (value >= -6) return 20
-  return 10
+function pointEdgeScore(edge: number | null): number {
+  return scoreAtLeast(edge, [
+    [12, 100],
+    [9, 90],
+    [6, 80],
+    [4, 70],
+    [2, 60],
+    [-2, 50],
+    [-4, 40],
+    [-7, 30],
+    [-10, 20],
+  ])
+}
+
+function breakevenScore(edge: number | null): number {
+  return scoreAtLeast(edge, [
+    [18, 100],
+    [14, 90],
+    [10, 80],
+    [7, 70],
+    [4, 60],
+    [0, 50],
+    [-4, 40],
+    [-8, 30],
+    [-12, 20],
+  ])
 }
 
 function returnRound(returnDate: string | null): number | null {
@@ -143,7 +151,7 @@ function returnRound(returnDate: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function roleSecurityScore(relevantOuts: TradeRatingCasualtyWardRecord[], currentRound: number): number {
+function roleSecurityPenalty(relevantOuts: TradeRatingCasualtyWardRecord[], currentRound: number): number {
   let penalty = 0
 
   for (const row of relevantOuts) {
@@ -166,7 +174,21 @@ function roleSecurityScore(relevantOuts: TradeRatingCasualtyWardRecord[], curren
     penalty += rowPenalty
   }
 
-  return roundScore(100 - clamp(penalty, 0, 35))
+  return penalty
+}
+
+function roleSecurityScore(relevantOuts: TradeRatingCasualtyWardRecord[], currentRound: number): number {
+  return scoreAtMost(roleSecurityPenalty(relevantOuts, currentRound), [
+    [0, 100],
+    [4, 90],
+    [8, 80],
+    [12, 70],
+    [16, 60],
+    [20, 50],
+    [24, 40],
+    [28, 30],
+    [32, 20],
+  ])
 }
 
 function teamPlaysInRound(draw: Draw2026Data | null | undefined, round: number, team: string | null): boolean | null {
@@ -190,47 +212,36 @@ function availabilityScore({
   team: string | null
   originChance: boolean
 }): number {
-  if (!team) return 50
+  if (!team) return 30
+  if (!draw?.rows?.length) return 50
 
   let played = 0
+  let knownRounds = 0
   for (let offset = 0; offset < 6; offset += 1) {
     const round = currentRound + offset
     const plays = teamPlaysInRound(draw, round, team)
+    if (plays !== null) knownRounds += 1
     if (plays === true && !(originChance && MAJOR_BYE_ROUNDS.includes(round as typeof MAJOR_BYE_ROUNDS[number]))) {
       played += 1
     }
   }
 
-  return roundScore((played / 6) * 100)
-}
-
-export function buildTradeRatingPopulation(inputs: TradeRatingInput[]): TradeRatingPopulation {
-  return inputs.reduce<TradeRatingPopulation>(
-    (population, input) => {
-      const weeklyChange = finiteNumber(input.weeklyChange)
-      const valueEdge = valueEdgeForInput(input)
-      const formEdge = formEdgeForInput(input)
-      const breakevenEdge = breakevenEdgeForInput(input)
-
-      if (weeklyChange !== null) population.weeklyChanges.push(weeklyChange)
-      if (valueEdge !== null) population.valueEdges.push(valueEdge)
-      if (formEdge !== null) population.formEdges.push(formEdge)
-      if (breakevenEdge !== null) population.breakevenEdges.push(breakevenEdge)
-
-      return population
-    },
-    { weeklyChanges: [], valueEdges: [], formEdges: [], breakevenEdges: [] }
-  )
+  if (knownRounds === 0) return 50
+  if (played >= 6) return 100
+  if (played === 5) return 90
+  if (played === 4) return 80
+  if (played === 3) return 70
+  if (played === 2) return 60
+  if (played === 1) return 50
+  return 40
 }
 
 export function calculateTradeRating({
   input,
-  population,
   draw,
   currentRound,
 }: {
   input: TradeRatingInput
-  population: TradeRatingPopulation
   draw: Draw2026Data | null | undefined
   currentRound: number
 }): TradeRatingScores {
@@ -240,12 +251,12 @@ export function calculateTradeRating({
   const breakevenEdge = breakevenEdgeForInput(input)
   const keeperScore = keeperScoreForProjection(projection)
   const scores = {
-    weeklyDelta: roundScore(weeklyDeltaPopularityScore(finiteNumber(input.weeklyChange))),
-    value: roundScore(valueScore(valueEdge)),
-    keeperScore: roundScore(keeperScore),
+    weeklyDelta: popularityScore(finiteNumber(input.weeklyChange)),
+    value: pointEdgeScore(valueEdge),
+    keeperScore,
     roleSecurityScore: roleSecurityScore(input.relevantOuts, currentRound),
-    form: roundScore(percentileRank(formEdge, population.formEdges)),
-    breakeven: roundScore(percentileRank(breakevenEdge, population.breakevenEdges)),
+    form: pointEdgeScore(formEdge),
+    breakeven: breakevenScore(breakevenEdge),
     availability: availabilityScore({ draw, currentRound, team: input.team, originChance: input.originChance }),
   }
   const total =

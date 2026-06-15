@@ -24,7 +24,6 @@ import {
   getFantasyCoachRoundMetrics,
 } from "@/lib/fantasy/nrl"
 import {
-  buildTradeRatingPopulation,
   calculateTradeRating,
   type TradeRatingScores,
 } from "@/lib/fantasy/trade-rating"
@@ -4469,17 +4468,6 @@ export function FantasyDashboard({
   }, [allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
 
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
-    const population = buildTradeRatingPopulation(rawAllPlayersTableRows.map((row) => ({
-      weeklyChange: row.weeklyChange,
-      last3: row.last3,
-      projection: row.projection,
-      pricedAt: row.pricedAt,
-      value: row.value,
-      breakeven: row.breakeven,
-      team: row.team,
-      originChance: row.originChance,
-      relevantOuts: row.relevantOuts,
-    })))
     const currentRound = lineupsProjections?.round ?? selectedFantasyCoachRound ?? 1
 
     return rawAllPlayersTableRows.map((row) => ({
@@ -4496,7 +4484,6 @@ export function FantasyDashboard({
           originChance: row.originChance,
           relevantOuts: row.relevantOuts,
         },
-        population,
         draw: draw2026Data,
         currentRound,
       }),

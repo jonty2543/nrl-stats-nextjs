@@ -2525,9 +2525,11 @@ function LineupCard({
   const awayScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.awayScore > headerScore.homeScore
   const showLiveCardHeader = isMatchLive(displayLiveMatch)
   const showPregameContent = !isLive && !hasResultScore
-  const availableDetailViews: LineupDetailView[] = showPregameContent
-    ? ["lineup", "insights", "stats"]
-    : ["lineup", "stats"]
+  const availableDetailViews: LineupDetailView[] = [
+    ...(hasLineupData ? ["lineup" as const] : []),
+    ...(showPregameContent ? ["insights" as const] : []),
+    "stats" as const,
+  ]
   const activeDetailView = availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
   const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
   const homeSportsbetOdds = showPregameContent ? sportsbetOddsForTeam(detailMatch, detailMatch.homeTeam, sportsbetOdds) : null

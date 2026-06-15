@@ -1133,6 +1133,21 @@ function getPlayerThumbnailUrl(imageRow: PlayerImageRecord | null): string | nul
   return encode(upgradeHttp(decode(trimmed)))
 }
 
+function getPlayerThumbnailSources(imageRow: PlayerImageRecord | null): string[] {
+  const seen = new Set<string>()
+  const sources: string[] = []
+
+  for (const source of [imageRow?.head_image, imageRow?.body_image]) {
+    if (!source) continue
+    const trimmed = source.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    sources.push(trimmed)
+  }
+
+  return sources
+}
+
 function normalisePositionForComparison(value: string | null | undefined): string {
   return String(value ?? "")
     .toLowerCase()
@@ -5270,7 +5285,7 @@ export function FantasyDashboard({
               </div>
               <div className="divide-y divide-white/8">
                 {fantasyMarketWatch.buys.map((row, index) => {
-                  const thumbnailUrl = getPlayerThumbnailUrl(row.imageRow)
+                  const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
                   return (
                     <button
                       key={`buy-${row.player.id}`}
@@ -5282,7 +5297,7 @@ export function FantasyDashboard({
                         {index + 1}
                       </span>
                       <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-white/10 bg-black/20 text-[11px] text-nrl-muted shadow-[0_8px_18px_rgba(0,0,0,0.25)] sm:h-11 sm:w-11">
-                        <ImageWithFallback sources={[thumbnailUrl ?? "", "/body-shot.png"]} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
+                        <ImageWithFallback sources={[...thumbnailSources, "/body-shot.png"]} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                       </div>
                       <div className="min-w-0">
                         <div className="truncate text-[13px] font-black text-white">
@@ -5615,7 +5630,7 @@ export function FantasyDashboard({
                         >
 	                          {templateRow.slots.map((slot, index) => {
 	                            const playerRow = slot.row
-	                            const thumbnailUrl = playerRow ? getPlayerThumbnailUrl(playerRow.imageRow) : null
+	                            const thumbnailSources = playerRow ? getPlayerThumbnailSources(playerRow.imageRow) : []
 	                            const playerHref = playerRow
 	                              ? `${playerRouteBasePath}/${fantasyPlayerSlug(playerRow.player.name)}`
 	                              : null
@@ -5631,7 +5646,7 @@ export function FantasyDashboard({
 	                              <>
 	                                <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-full border-2 border-white/80 bg-nrl-panel shadow-[0_10px_22px_rgba(0,0,0,0.34)] transition-colors group-hover:border-nrl-accent/80 sm:h-14 sm:w-14">
                                   <ImageWithFallback
-                                    sources={[thumbnailUrl ?? "", "/body-shot.png"]}
+                                    sources={[...thumbnailSources, "/body-shot.png"]}
                                     alt={playerRow ? `${playerRow.player.name} player image` : slot.slot}
                                     className="h-full w-full object-cover object-top"
                                   />
@@ -5993,7 +6008,7 @@ export function FantasyDashboard({
               </div>
             ) : (
               sortedAllPlayersTableRows.map((row) => {
-                const thumbnailUrl = getPlayerThumbnailUrl(row.imageRow)
+                const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
                 const tradeRatingCardStats = [
                   {
                     key: "tradeRating",
@@ -6153,7 +6168,7 @@ export function FantasyDashboard({
 	                    <div className="flex items-start justify-between gap-3 md:w-[250px] md:shrink-0 md:items-center">
                       <div className="flex min-w-0 items-start gap-2.5">
                         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-[11px] text-nrl-muted">
-                          <ImageWithFallback sources={[thumbnailUrl ?? "", "/body-shot.png"]} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
+                          <ImageWithFallback sources={[...thumbnailSources, "/body-shot.png"]} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                         </div>
                         <div className="min-w-0">
                           <div className="min-w-0">
@@ -6291,7 +6306,7 @@ export function FantasyDashboard({
                   </tr>
                 ) : (
                   sortedAllPlayersTableRows.map((row) => {
-                    const thumbnailUrl = getPlayerThumbnailUrl(row.imageRow)
+                    const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
                     return (
                       <tr
                         key={row.player.id}
@@ -6300,7 +6315,7 @@ export function FantasyDashboard({
                       >
                         <td className="sticky left-0 z-[1] w-13 min-w-13 max-w-13 border-r border-nrl-border bg-nrl-panel px-1 py-1 sm:w-15 sm:min-w-15 sm:max-w-15">
                           <div className="mx-auto grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
-                            <ImageWithFallback sources={[thumbnailUrl ?? "", "/body-shot.png"]} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
+                            <ImageWithFallback sources={[...thumbnailSources, "/body-shot.png"]} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                           </div>
                         </td>
                         <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-1 text-xs font-semibold text-nrl-text sm:w-32 sm:min-w-32 sm:max-w-32 sm:px-2 lg:sticky lg:left-[3.75rem] lg:z-[1]">

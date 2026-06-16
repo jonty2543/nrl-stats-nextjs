@@ -4510,6 +4510,7 @@ export function FantasyDashboard({
           breakeven: row.breakeven,
           team: row.team,
           originChance: row.originChance,
+          playsNextMajorBye: row.playsNextMajorBye,
           relevantOuts: row.relevantOuts,
         },
         draw: draw2026Data,

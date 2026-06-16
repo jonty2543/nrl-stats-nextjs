@@ -1,6 +1,9 @@
 import type { Draw2026Data } from "@/lib/draw/types"
 
 const MAJOR_BYE_ROUNDS = [12, 15, 18] as const
+const AVAILABILITY_MAJOR_BYE_STAR_PENALTY = 100 / 3
+const AVAILABILITY_MAJOR_BYE_MISS_MAX_SCORE = (2 / 3) * 100
+const AVAILABILITY_ORIGIN_MAJOR_BYE_MAX_SCORE = 100 / 3
 const TRADE_RATING_COMPONENT_WEIGHTS = {
   weeklyDelta: 5,
   value: 5,
@@ -31,6 +34,7 @@ export interface TradeRatingInput {
   breakeven: number | null
   team: string | null
   originChance: boolean
+  playsNextMajorBye: boolean | null
   relevantOuts: TradeRatingCasualtyWardRecord[]
 }
 
@@ -215,14 +219,19 @@ function availabilityScore({
   currentRound,
   team,
   originChance,
+  playsNextMajorBye,
 }: {
   draw: Draw2026Data | null | undefined
   currentRound: number
   team: string | null
   originChance: boolean
+  playsNextMajorBye: boolean | null
 }): number {
+  const hasUpcomingMajorBye = MAJOR_BYE_ROUNDS.some((byeRound) => byeRound >= currentRound)
   if (!team) return 30
-  if (!draw?.rows?.length) return 50
+  if (!draw?.rows?.length) {
+    return originChance && hasUpcomingMajorBye ? AVAILABILITY_ORIGIN_MAJOR_BYE_MAX_SCORE : 50
+  }
 
   let played = 0
   let knownRounds = 0
@@ -235,14 +244,27 @@ function availabilityScore({
     }
   }
 
-  if (knownRounds === 0) return 50
-  if (played >= 6) return 100
-  if (played === 5) return 90
-  if (played === 4) return 80
-  if (played === 3) return 70
-  if (played === 2) return 60
-  if (played === 1) return 50
-  return 40
+  let score = 40
+  if (knownRounds === 0) score = 50
+  else if (played >= 6) score = 100
+  else if (played === 5) score = 90
+  else if (played === 4) score = 80
+  else if (played === 3) score = 70
+  else if (played === 2) score = 60
+  else if (played === 1) score = 50
+
+  const missesUpcomingMajorBye = MAJOR_BYE_ROUNDS.some((byeRound) => (
+    byeRound >= currentRound && teamPlaysInRound(draw, byeRound, team) === false
+  ))
+
+  if (playsNextMajorBye === false || missesUpcomingMajorBye) {
+    score = Math.min(AVAILABILITY_MAJOR_BYE_MISS_MAX_SCORE, Math.max(0, score - AVAILABILITY_MAJOR_BYE_STAR_PENALTY))
+  }
+  if (originChance && hasUpcomingMajorBye) {
+    score = Math.min(AVAILABILITY_ORIGIN_MAJOR_BYE_MAX_SCORE, score)
+  }
+
+  return score
 }
 
 export function calculateTradeRating({
@@ -266,7 +288,13 @@ export function calculateTradeRating({
     roleSecurityScore: roleSecurityScore(input.relevantOuts, currentRound),
     form: pointEdgeScore(formEdge),
     breakeven: breakevenScore(breakevenEdge),
-    availability: availabilityScore({ draw, currentRound, team: input.team, originChance: input.originChance }),
+    availability: availabilityScore({
+      draw,
+      currentRound,
+      team: input.team,
+      originChance: input.originChance,
+      playsNextMajorBye: input.playsNextMajorBye,
+    }),
   }
   const total =
     scores.weeklyDelta * TRADE_RATING_COMPONENT_WEIGHTS.weeklyDelta +

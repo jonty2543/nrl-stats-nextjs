@@ -337,7 +337,8 @@ const FANTASY_FILTER_TAG_ORIGIN_CHANCE = "Origin"
 const FANTASY_DASHBOARD_STATE_STORAGE_KEY = "fantasy-dashboard-ui-state-v1"
 const FANTASY_DASHBOARD_STATE_TTL_MS = 30 * 60 * 1000
 const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
-const FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX = "fantasy-trade-ratings-visible"
+const FANTASY_TRADE_RATINGS_LEGACY_STORAGE_KEY_PREFIX = "fantasy-trade-ratings-visible"
+const FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX = "fantasy-trade-ratings-visible:v2"
 const PRO_PRICE_LABEL = "$5/month"
 const PRO_UNLOCK_COPY = `Pro ${PRO_PRICE_LABEL}`
 const FANTASY_LOCKED_VALUE_BOX_CLASS =
@@ -1777,28 +1778,44 @@ function formatTradeScore(value: number | null | undefined): string {
   return value.toFixed(1)
 }
 
-function TradeStars({ value, className = "", blurred = false }: { value: number | null | undefined; className?: string; blurred?: boolean }) {
+const LOW_WEIGHT_TRADE_RATING_MAX_STARS = 3
+
+function TradeStars({
+  value,
+  className = "",
+  blurred = false,
+  maxStars = 5,
+}: {
+  value: number | null | undefined
+  className?: string
+  blurred?: boolean
+  maxStars?: number
+}) {
+  const starCount = Math.max(1, Math.trunc(maxStars))
+  const emptyStars = "☆".repeat(starCount)
+  const fullStars = "★".repeat(starCount)
+
   if (blurred) {
     return (
       <span className={`inline-flex items-center gap-[1px] leading-none text-white/28 ${className}`} aria-label="Pro rating">
-        ☆☆☆☆☆
+        {emptyStars}
       </span>
     )
   }
 
   if (value === null || value === undefined || !Number.isFinite(value)) {
-    return <span className={`text-white/20 ${className}`}>-----</span>
+    return <span className={`text-white/20 ${className}`}>{"-".repeat(starCount)}</span>
   }
 
-  const rating = Math.max(0, Math.min(5, value / 2))
-  const fillWidth = `${rating * 20}%`
+  const rating = Math.max(0, Math.min(starCount, (value / 10) * starCount))
+  const fillWidth = `${(rating / starCount) * 100}%`
   const colorClass = getTradeScoreColorClass(value)
 
   return (
-    <span className={`relative inline-block leading-none ${className}`} aria-label={`${rating.toFixed(1)} out of 5 stars`}>
-      <span className="text-white/20">★★★★★</span>
+    <span className={`relative inline-block leading-none ${className}`} aria-label={`${rating.toFixed(1)} out of ${starCount} stars`}>
+      <span className="text-white/20">{fullStars}</span>
       <span className={`absolute inset-y-0 left-0 overflow-hidden whitespace-nowrap ${colorClass}`} style={{ width: fillWidth }} aria-hidden="true">
-        ★★★★★
+        {fullStars}
       </span>
     </span>
   )
@@ -3014,39 +3031,44 @@ function MetricCard({
   )
 }
 
-function ProjectionBandMetricCard({
-  label,
+function ProjectionBreakevenMetricGrid({
   projection,
   lower,
   upper,
+  breakeven,
   blurValue = false,
 }: {
-  label: string
   projection: string
   lower: string
   upper: string
+  breakeven: string
   blurValue?: boolean
 }) {
+  const metrics = [
+    { label: "Low 5%", value: lower, className: "text-red-300" },
+    { label: "Projection", value: projection, className: "text-nrl-text" },
+    { label: "High 5%", value: upper, className: "text-emerald-300" },
+    { label: "Breakeven", value: breakeven, className: "text-nrl-text" },
+  ]
+
   return (
-    <div className="h-full rounded-lg border border-nrl-border bg-[#111832] px-2 py-2 sm:px-2.5 sm:py-2.5 xl:px-2.5 xl:py-2.5">
-      <div className="min-h-[1.8em] text-center text-[7px] font-semibold uppercase leading-[1.15] tracking-wide text-nrl-muted">
-        {label}
-      </div>
-      <div className={`grid min-h-[2.75rem] grid-cols-[minmax(0,0.75fr)_minmax(3rem,1fr)_minmax(0,0.75fr)] items-center gap-1 sm:min-h-[3rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}>
-        <div className="min-w-0 text-left" aria-hidden={blurValue || undefined}>
-          <div className="text-[8px] font-semibold uppercase tracking-wide text-red-300/80">LOW 5%</div>
-          <div className="mt-0.5 text-sm font-bold leading-none text-red-300 sm:text-base">{lower}</div>
-        </div>
-        <div className="min-w-0 text-center" aria-hidden={blurValue || undefined}>
-          <div className="text-[1.35rem] font-bold leading-none tracking-tight text-nrl-text sm:text-[1.7rem]">
-            {projection}
+    <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+      {metrics.map((metric) => (
+        <div
+          key={metric.label}
+          className="rounded-lg border border-nrl-border bg-[#111832] px-2 py-3 text-center sm:px-2.5"
+        >
+          <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
+            {metric.label}
+          </div>
+          <div
+            className={`mt-2 text-[1.6rem] font-bold leading-none tracking-tight sm:text-[1.85rem] ${metric.className} ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
+            aria-hidden={blurValue || undefined}
+          >
+            {metric.value}
           </div>
         </div>
-        <div className="min-w-0 text-right" aria-hidden={blurValue || undefined}>
-          <div className="text-[8px] font-semibold uppercase tracking-wide text-emerald-300/80">HIGH 5%</div>
-          <div className="mt-0.5 text-sm font-bold leading-none text-emerald-300 sm:text-base">{upper}</div>
-        </div>
-      </div>
+      ))}
     </div>
   )
 }
@@ -3329,7 +3351,7 @@ export function FantasyDashboard({
   const deferredAllPlayersProjectionRange = useDeferredValue(allPlayersProjectionRange)
   const deferredAllPlayersBreakevenRange = useDeferredValue(allPlayersBreakevenRange)
   const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(false)
-  const [showAllPlayersTradeRatings, setShowAllPlayersTradeRatings] = useState(true)
+  const [showAllPlayersTradeRatings, setShowAllPlayersTradeRatings] = useState(false)
   const [showAllPlayersTradeRatingInfo, setShowAllPlayersTradeRatingInfo] = useState(false)
   const [cardTagsPreferenceHydrated, setCardTagsPreferenceHydrated] = useState(false)
   const showFantasyAnalytics = initialShowFantasyAnalytics
@@ -3378,7 +3400,7 @@ export function FantasyDashboard({
   useEffect(() => {
     setAllPlayerCardSummaryRows(precomputedAllPlayersRows)
   }, [precomputedAllPlayersRows])
-  const { user } = useUser()
+  const { isLoaded: isUserLoaded, user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
   const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata)
   const analysisLocked = !hasFantasyPlotAccess
@@ -3504,12 +3526,13 @@ export function FantasyDashboard({
   ])
 
   useEffect(() => {
-    if (!isAuthLoaded) return
+    if (!isAuthLoaded || (userId && !isUserLoaded)) return
+    const defaultTradeRatingsVisible = hasFantasyPlotAccess
     if (!userId) {
       cardTagsPreferenceUserIdRef.current = null
       tradeRatingsPreferenceUserIdRef.current = null
       setShowAllPlayersCardTags(false)
-      setShowAllPlayersTradeRatings(true)
+      setShowAllPlayersTradeRatings(false)
       setCardTagsPreferenceHydrated(true)
       return
     }
@@ -3517,20 +3540,25 @@ export function FantasyDashboard({
     try {
       const savedTags = window.localStorage.getItem(`${FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX}:${userId}`)
       const savedRatings = window.localStorage.getItem(`${FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX}:${userId}`)
+      const legacySavedRatings = window.localStorage.getItem(`${FANTASY_TRADE_RATINGS_LEGACY_STORAGE_KEY_PREFIX}:${userId}`)
       setShowAllPlayersCardTags(savedTags === "true")
-      setShowAllPlayersTradeRatings(savedRatings === null ? true : savedRatings === "true")
+      setShowAllPlayersTradeRatings(
+        savedRatings === null
+          ? legacySavedRatings === "false" ? false : defaultTradeRatingsVisible
+          : savedRatings === "true"
+      )
     } catch {
       setShowAllPlayersCardTags(false)
-      setShowAllPlayersTradeRatings(true)
+      setShowAllPlayersTradeRatings(defaultTradeRatingsVisible)
     } finally {
       cardTagsPreferenceUserIdRef.current = userId
       tradeRatingsPreferenceUserIdRef.current = userId
       setCardTagsPreferenceHydrated(true)
     }
-  }, [isAuthLoaded, userId])
+  }, [hasFantasyPlotAccess, isAuthLoaded, isUserLoaded, userId])
 
   useEffect(() => {
-    if (!isAuthLoaded || !userId || !cardTagsPreferenceHydrated) return
+    if (!isAuthLoaded || !isUserLoaded || !userId || !cardTagsPreferenceHydrated) return
     if (cardTagsPreferenceUserIdRef.current !== userId || tradeRatingsPreferenceUserIdRef.current !== userId) return
     try {
       window.localStorage.setItem(`${FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX}:${userId}`, String(showAllPlayersCardTags))
@@ -3538,7 +3566,7 @@ export function FantasyDashboard({
     } catch {
       // Ignore preference storage failures.
     }
-  }, [cardTagsPreferenceHydrated, isAuthLoaded, showAllPlayersCardTags, showAllPlayersTradeRatings, userId])
+  }, [cardTagsPreferenceHydrated, isAuthLoaded, isUserLoaded, showAllPlayersCardTags, showAllPlayersTradeRatings, userId])
 
   const scrollToPlayerDetails = useCallback(() => {
     if (typeof window === "undefined") return
@@ -4933,10 +4961,10 @@ export function FantasyDashboard({
       { key: "pop", label: "Popularity", tradeScore: tradeScore10(rating.weeklyDelta) },
       { key: "value", label: "Value", tradeScore: tradeScore10(rating.value) },
       { key: "keep", label: "Keeper", tradeScore: tradeScore10(rating.keeperScore) },
-      { key: "role", label: "Role", tradeScore: tradeScore10(rating.roleSecurityScore) },
-      { key: "form", label: "Form", tradeScore: tradeScore10(rating.form) },
-      { key: "be", label: "BE", tradeScore: tradeScore10(rating.breakeven) },
-      { key: "avail", label: "Avail", tradeScore: tradeScore10(rating.availability) },
+      { key: "role", label: "Role", tradeScore: tradeScore10(rating.roleSecurityScore), maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS },
+      { key: "form", label: "Form", tradeScore: tradeScore10(rating.form), maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS },
+      { key: "be", label: "BE", tradeScore: tradeScore10(rating.breakeven), maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS },
+      { key: "avail", label: "Avail", tradeScore: tradeScore10(rating.availability), maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS },
     ]
   }, [selectedAllPlayersTableRow?.tradeRating])
 
@@ -6032,6 +6060,7 @@ export function FantasyDashboard({
                     value: formatTradeScore(tradeScore10(row.tradeRating?.roleSecurityScore)),
                     tradeScore: tradeScore10(row.tradeRating?.roleSecurityScore),
                     locked: true,
+                    maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
                   },
                   {
                     key: "tradeForm",
@@ -6039,6 +6068,7 @@ export function FantasyDashboard({
                     value: formatTradeScore(tradeScore10(row.tradeRating?.form)),
                     tradeScore: tradeScore10(row.tradeRating?.form),
                     locked: true,
+                    maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
                   },
                   {
                     key: "tradeBreakeven",
@@ -6046,6 +6076,7 @@ export function FantasyDashboard({
                     value: formatTradeScore(tradeScore10(row.tradeRating?.breakeven)),
                     tradeScore: tradeScore10(row.tradeRating?.breakeven),
                     locked: true,
+                    maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
                   },
                   {
                     key: "tradeAvailability",
@@ -6053,6 +6084,7 @@ export function FantasyDashboard({
                     value: formatTradeScore(tradeScore10(row.tradeRating?.availability)),
                     tradeScore: tradeScore10(row.tradeRating?.availability),
                     locked: true,
+                    maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
                   },
                 ]
                 const baseCardStats = [
@@ -6185,7 +6217,11 @@ export function FantasyDashboard({
                           </div>
                         ) : "tradeScore" in selectedCardStat ? (
                           <div className={`ml-auto mt-0.5 inline-flex min-h-6 min-w-16 items-center justify-center rounded-full border px-2 text-[10px] font-black tracking-[0.06em] ${getTradeScorePillClass(selectedCardStat.tradeScore, "highlighted" in selectedCardStat && selectedCardStat.highlighted)}`}>
-                            <TradeStars value={selectedCardStat.tradeScore} blurred={!hasFantasyPlotAccess} />
+                            <TradeStars
+                              value={selectedCardStat.tradeScore}
+                              blurred={!hasFantasyPlotAccess}
+                              maxStars={"maxStars" in selectedCardStat ? selectedCardStat.maxStars : undefined}
+                            />
                           </div>
                         ) : (
                           <div className={`text-[13px] font-bold ${selectedCardStat.valueClassName}`}>
@@ -6207,7 +6243,12 @@ export function FantasyDashboard({
                                 <span className="text-[7px] font-black uppercase tracking-[0.02em] text-white/45 sm:text-[8px]">
                                   {stat.label}
                                 </span>
-                                <TradeStars value={stat.tradeScore} blurred={!hasFantasyPlotAccess} className="mt-0.5 text-[10px] font-black tracking-[0.06em]" />
+                                <TradeStars
+                                  value={stat.tradeScore}
+                                  blurred={!hasFantasyPlotAccess}
+                                  maxStars={stat.maxStars}
+                                  className="mt-0.5 text-[10px] font-black tracking-[0.06em]"
+                                />
                               </div>
                             )
                           })}
@@ -6628,32 +6669,13 @@ export function FantasyDashboard({
                   }`}
               >
                 <div className={analysisLocked ? "select-none" : undefined}>
-                  <div className="mx-auto mb-5 grid w-full grid-cols-2 gap-4 sm:max-w-[520px] sm:gap-5">
-                    {selectedProjectionBand ? (
-                      <ProjectionBandMetricCard
-                        label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
-                        projection={formatNumber(selectedAdjustedProjection, 0)}
-                        lower={formatNumber(selectedProjectionBand.lower, 0)}
-                        upper={formatNumber(selectedProjectionBand.upper, 0)}
-                        blurValue={analysisLocked}
-                      />
-                    ) : (
-                      <MetricCard
-                        compact
-                        label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Projection` : "Projection"}
-                        value={formatNumber(selectedAdjustedProjection, 0)}
-                        blurValue={analysisLocked}
-                        center
-                        prominentValue
-                      />
-                    )}
-                    <MetricCard
-                      compact
-                      label={selectedFantasyCoachRound != null ? `Round ${selectedFantasyCoachRound} Breakeven` : "Breakeven"}
-                      value={formatNumber(selectedAdjustedBreakEven, 0)}
+                  <div className="mx-auto mb-5 w-full sm:max-w-[760px]">
+                    <ProjectionBreakevenMetricGrid
+                      projection={formatNumber(selectedAdjustedProjection, 0)}
+                      lower={selectedProjectionBand ? formatNumber(selectedProjectionBand.lower, 0) : "-"}
+                      upper={selectedProjectionBand ? formatNumber(selectedProjectionBand.upper, 0) : "-"}
+                      breakeven={formatNumber(selectedAdjustedBreakEven, 0)}
                       blurValue={analysisLocked}
-                      center
-                      prominentValue
                     />
                   </div>
                   {selectedTradeRatingStats.length > 0 ? (
@@ -6685,7 +6707,12 @@ export function FantasyDashboard({
                                 <span className="text-[7px] font-black uppercase tracking-[0.02em] text-white/45 sm:text-[8px]">
                                   {stat.label}
                                 </span>
-                                <TradeStars value={stat.tradeScore} blurred={!hasFantasyPlotAccess} className="mt-0.5 text-[10px] font-black tracking-[0.06em]" />
+                                <TradeStars
+                                  value={stat.tradeScore}
+                                  blurred={!hasFantasyPlotAccess}
+                                  maxStars={stat.maxStars}
+                                  className="mt-0.5 text-[10px] font-black tracking-[0.06em]"
+                                />
                               </div>
                             )
                           })}

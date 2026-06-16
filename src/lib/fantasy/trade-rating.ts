@@ -1,7 +1,16 @@
 import type { Draw2026Data } from "@/lib/draw/types"
 
 const MAJOR_BYE_ROUNDS = [12, 15, 18] as const
-const TRADE_RATING_COMPONENT_COUNT = 7
+const TRADE_RATING_COMPONENT_WEIGHTS = {
+  weeklyDelta: 5,
+  value: 5,
+  keeperScore: 5,
+  roleSecurityScore: 3,
+  form: 3,
+  breakeven: 3,
+  availability: 3,
+} as const
+const TRADE_RATING_TOTAL_WEIGHT = Object.values(TRADE_RATING_COMPONENT_WEIGHTS).reduce((sum, weight) => sum + weight, 0)
 
 export interface TradeRatingCasualtyWardRecord {
   player: string
@@ -260,16 +269,16 @@ export function calculateTradeRating({
     availability: availabilityScore({ draw, currentRound, team: input.team, originChance: input.originChance }),
   }
   const total =
-    scores.weeklyDelta +
-    scores.value +
-    scores.keeperScore +
-    scores.roleSecurityScore +
-    scores.form +
-    scores.breakeven +
-    scores.availability
+    scores.weeklyDelta * TRADE_RATING_COMPONENT_WEIGHTS.weeklyDelta +
+    scores.value * TRADE_RATING_COMPONENT_WEIGHTS.value +
+    scores.keeperScore * TRADE_RATING_COMPONENT_WEIGHTS.keeperScore +
+    scores.roleSecurityScore * TRADE_RATING_COMPONENT_WEIGHTS.roleSecurityScore +
+    scores.form * TRADE_RATING_COMPONENT_WEIGHTS.form +
+    scores.breakeven * TRADE_RATING_COMPONENT_WEIGHTS.breakeven +
+    scores.availability * TRADE_RATING_COMPONENT_WEIGHTS.availability
 
   return {
     ...scores,
-    overall: Number(((total / TRADE_RATING_COMPONENT_COUNT) / 10).toFixed(1)),
+    overall: Number(((total / TRADE_RATING_TOTAL_WEIGHT) / 10).toFixed(1)),
   }
 }

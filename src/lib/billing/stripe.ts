@@ -63,6 +63,16 @@ export async function getStripeProPriceId(): Promise<string> {
   return resolvePriceIdFromEnv("STRIPE_PRICE_ID_PRO_MONTHLY", "STRIPE_PRICE_ID_PRO");
 }
 
+export async function getStripePremiumPriceId(): Promise<string> {
+  return resolvePriceIdFromEnv("STRIPE_PRICE_ID_PREMIUM_MONTHLY", "STRIPE_PRICE_ID_PREMIUM");
+}
+
+export type StripeBillingPlan = "pro" | "premium";
+
+export async function getStripePriceIdForPlan(plan: StripeBillingPlan): Promise<string> {
+  return plan === "premium" ? getStripePremiumPriceId() : getStripeProPriceId();
+}
+
 function getOptionalPriceIds(...names: string[]): string[] {
   return names
     .map((name) => process.env[name]?.trim())

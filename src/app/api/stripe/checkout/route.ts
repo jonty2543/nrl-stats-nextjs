@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { getPrimaryEmailAddress, getStripeCustomerIdFromPrivateMetadata, setStripeCustomerIdForUser } from "@/lib/billing/clerk";
-import { getRequestBaseUrl, getStripe, getStripeProPriceId } from "@/lib/billing/stripe";
+import { getRequestBaseUrl, getStripe, getStripePriceIdForPlan, type StripeBillingPlan } from "@/lib/billing/stripe";
 
 export const runtime = "nodejs";
 
@@ -47,6 +47,23 @@ async function resolveStripeCustomerId(
   return customer.id;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+async function getRequestedPlan(request: Request): Promise<StripeBillingPlan> {
+  try {
+    const payload: unknown = await request.json();
+    if (isRecord(payload) && payload.plan === "premium") {
+      return "premium";
+    }
+  } catch {
+    // Existing callers may post without a JSON body; keep Pro as the default checkout.
+  }
+
+  return "pro";
+}
+
 export async function POST(request: Request) {
   try {
     const { userId } = await auth();
@@ -70,7 +87,8 @@ export async function POST(request: Request) {
 
     await setStripeCustomerIdForUser(userId, customerId);
 
-    const proPriceId = await getStripeProPriceId();
+    const requestedPlan = await getRequestedPlan(request);
+    const priceId = await getStripePriceIdForPlan(requestedPlan);
     const billingReturnBaseUrl = `${baseUrl}/dashboard/billing/return`;
 
     const session = await getStripe().checkout.sessions.create({
@@ -80,16 +98,18 @@ export async function POST(request: Request) {
       allow_promotion_codes: true,
       line_items: [
         {
-          price: proPriceId,
+          price: priceId,
           quantity: 1,
         },
       ],
       metadata: {
         clerkUserId: userId,
+        plan: requestedPlan,
       },
       subscription_data: {
         metadata: {
           clerkUserId: userId,
+          plan: requestedPlan,
         },
       },
       success_url: `${billingReturnBaseUrl}?billing=success`,

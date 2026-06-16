@@ -153,7 +153,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
               <PlanCard
                 title="Free"
                 price="$0"
-                className="order-2 lg:order-1"
+                className="order-3 lg:order-1"
                 description="The base tier for exploring the app before you upgrade."
                 features={[
                   "Core app access",
@@ -196,7 +196,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                   "Everything in Free",
                   "Fantasy projections and breakevens",
                   "All plots unlocked in Fantasy and Stats",
-                  "Full stats years",
+                  "Fantasy trade ratings",
                   "New features as they release",
                   formatAiQuota("pro"),
                 ]}
@@ -222,11 +222,10 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
 
               <PlanCard
                 title="Premium"
-                price="Coming Soon"
-                className="order-3"
-                priceClassName="text-2xl sm:text-4xl"
-                priceRowClassName="items-center"
-                description="The future top tier above Pro for premium-only capabilities."
+                price="$40"
+                suffix="/month"
+                className="order-2 lg:order-3"
+                description="The top tier for premium-only capabilities."
                 features={[
                   "Everything in Pro",
                   "Betting model predictions for H2H, line, total and tryscorers",
@@ -236,9 +235,26 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                   formatAiQuota("premium"),
                 ]}
                 cta={
-                  <div className="flex h-11 items-center justify-center rounded-xl border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted">
-                    {currentPlan === "premium" ? "Current plan" : "Premium coming soon"}
-                  </div>
+                  currentPlan === "premium" ? (
+                    <div className="flex h-11 items-center justify-center rounded-xl border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted">
+                      Current plan
+                    </div>
+                  ) : currentPlan === "pro" ? (
+                    <BillingActionButton
+                      action="portal"
+                      className="flex h-11 w-full items-center justify-center rounded-xl border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                    >
+                      Upgrade to Premium
+                    </BillingActionButton>
+                  ) : (
+                    <BillingActionButton
+                      action="checkout"
+                      plan="premium"
+                      className="flex h-11 w-full items-center justify-center rounded-xl border border-nrl-accent/50 bg-nrl-accent/15 text-sm font-semibold text-nrl-text transition-colors hover:border-nrl-accent hover:bg-nrl-accent/20"
+                    >
+                      Upgrade to Premium
+                    </BillingActionButton>
+                  )
                 }
               />
             </div>

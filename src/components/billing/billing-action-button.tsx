@@ -7,9 +7,11 @@ import { BillingPageLink } from "@/components/billing/billing-page-link";
 import { hasProPlotAccess } from "@/lib/access/pro-access";
 
 type BillingAction = "auto" | "checkout" | "portal";
+type BillingPlan = "pro" | "premium";
 
 interface BillingActionButtonProps {
   action?: BillingAction;
+  plan?: BillingPlan;
   className?: string;
   children: ReactNode;
   signedOutHref?: string;
@@ -28,6 +30,7 @@ function useResolvedBillingAction(action: BillingAction) {
 
 export function BillingActionButton({
   action = "auto",
+  plan = "pro",
   className,
   children,
   signedOutHref = "/sign-up",
@@ -45,6 +48,8 @@ export function BillingActionButton({
     try {
       const response = await fetch(`/api/stripe/${resolvedAction}`, {
         method: "POST",
+        headers: resolvedAction === "checkout" ? { "Content-Type": "application/json" } : undefined,
+        body: resolvedAction === "checkout" ? JSON.stringify({ plan }) : undefined,
       });
       const rawBody = await response.text();
       const payload = (() => {
@@ -77,7 +82,7 @@ export function BillingActionButton({
       );
       setIsPending(false);
     }
-  }, [isPending, resolvedAction, userId]);
+  }, [isPending, plan, resolvedAction, userId]);
 
   if (!userId) {
     return (

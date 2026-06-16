@@ -31,6 +31,7 @@ import {
 
 const PAGE_SIZE = 1000;
 const DAILY_REVALIDATE_SECONDS = 86400;
+const DIRECT_PLAYER_STATS_TIMEOUT_MS = 2000;
 const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
@@ -1832,6 +1833,36 @@ async function fetchPlayerStatsForLocalNameAllYearsFromSupabase(
   return buildPlayerStatsRows(rawPlayers, rawMatches);
 }
 
+async function fetchFantasyPlayerStatsDirectFromSupabase(
+  fantasyName: string,
+  years?: string[]
+): Promise<PlayerStat[]> {
+  const exactRows = await fetchPlayerStatsForLocalNameAllYearsFromSupabase(fantasyName, years);
+  if (exactRows.length > 0) return exactRows;
+
+  const teammateRows = await fetchTeammateLookupRowsFromSupabase(years);
+  if (teammateRows.length === 0) return [];
+
+  const localNames = Array.from(new Set(teammateRows.map((row) => row.Name))).sort();
+  const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
+  if (!matchedLocalName) return [];
+
+  return fetchPlayerStatsForLocalNameAllYearsFromSupabase(matchedLocalName, years);
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export async function fetchFantasyPlayerStatsForYears(
   fantasyName: string,
   years?: string[]
@@ -1839,6 +1870,17 @@ export async function fetchFantasyPlayerStatsForYears(
   if (!fantasyName.trim()) return [];
   const normalizedYears = years?.filter(Boolean).sort();
   try {
+    try {
+      const directRows = await withTimeout(
+        fetchFantasyPlayerStatsDirectFromSupabase(fantasyName, normalizedYears),
+        DIRECT_PLAYER_STATS_TIMEOUT_MS,
+        "Direct fantasy player stats fetch timed out"
+      );
+      if (directRows.length > 0) return directRows;
+    } catch (error) {
+      console.warn("Unable to fetch fantasy player stats directly; falling back to cache.", error);
+    }
+
     const serverCache = await readPlayerStatsServerCache(normalizedYears);
 
     if (serverCache) {

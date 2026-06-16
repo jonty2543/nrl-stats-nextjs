@@ -1,0 +1,3 @@
+-- Speeds up selected-player game log queries from /api/player-stats?player=...
+create index if not exists player_stats_player_match_date_idx
+  on public.player_stats (player, match_date);

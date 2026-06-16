@@ -4856,10 +4856,10 @@ export function FantasyDashboard({
     () => ALL_PLAYERS_MOBILE_SORT_OPTIONS.filter((option) => hasFantasyPlotAccess || !option.proOnly),
     [hasFantasyPlotAccess]
   )
-  const selectedAllPlayersMobileSortLabel =
-    availableAllPlayersMobileSortOptions.find((option) => option.key === allPlayersSort.column)?.label ??
-    availableAllPlayersMobileSortOptions[0]?.label ??
-    "Weekly"
+  const selectedAllPlayersMobileSortValue =
+    availableAllPlayersMobileSortOptions.find((option) => option.key === allPlayersSort.column)?.key ??
+    availableAllPlayersMobileSortOptions[0]?.key ??
+    "weeklyChange"
   const allPlayersPlotPositionFilter =
     allPlayersPositionFilters.length === 1 ? allPlayersPositionFilters[0] : "All Positions"
   const activeAllPlayersFilterCount =
@@ -5985,10 +5985,13 @@ export function FantasyDashboard({
               <div className="w-40">
                 <Select
                   label="Sort by"
-                  value={selectedAllPlayersMobileSortLabel}
-                  options={availableAllPlayersMobileSortOptions.map((option) => option.label)}
-                  onChange={(label) => {
-                    const option = availableAllPlayersMobileSortOptions.find((item) => item.label === label)
+                  value={selectedAllPlayersMobileSortValue}
+                  options={availableAllPlayersMobileSortOptions.map((option) => ({
+                    value: option.key,
+                    label: option.label,
+                  }))}
+                  onChange={(sortKey) => {
+                    const option = availableAllPlayersMobileSortOptions.find((item) => item.key === sortKey)
                     if (!option) return
                     setAllPlayersSort((current) => ({
                       column: option.key,

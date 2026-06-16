@@ -13,7 +13,7 @@ interface BillingPageProps {
   }>;
 }
 
-type PlanTone = "default" | "featured";
+type PlanTone = "default" | "featured" | "premium";
 
 function statusMessage(billingStatus: string | undefined) {
   if (billingStatus === "success") {
@@ -55,6 +55,7 @@ function formatAiQuota(plan: AiPlan): string {
 
 function PlanCard({
   title,
+  badge,
   price,
   suffix,
   priceClassName,
@@ -66,6 +67,7 @@ function PlanCard({
   cta,
 }: {
   title: string;
+  badge?: string;
   price: string;
   suffix?: string;
   priceClassName?: string;
@@ -77,15 +79,29 @@ function PlanCard({
   cta: React.ReactNode;
 }) {
   const isFeatured = tone === "featured";
+  const isPremium = tone === "premium";
 
   return (
     <article
       className={`grid min-w-0 grid-rows-[auto_auto_auto_1fr_auto] rounded-[24px] border p-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)] sm:p-6 ${
-        isFeatured
+        isPremium
+          ? "border-emerald-300/70 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_38%),linear-gradient(180deg,rgba(20,44,45,0.98),rgba(12,18,31,1))] shadow-[0_24px_60px_rgba(16,185,129,0.16)]"
+          : isFeatured
           ? "border-[#7a5cff] bg-[linear-gradient(180deg,rgba(28,23,49,0.98),rgba(14,18,34,1))]"
           : "border-nrl-border bg-[linear-gradient(180deg,rgba(27,32,54,0.94),rgba(17,21,38,1))]"
       } ${className ?? ""}`}
     >
+      {badge ? (
+        <div
+          className={`mb-3 justify-self-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+            isPremium
+              ? "border-emerald-300/40 bg-emerald-300/12 text-emerald-100"
+              : "border-nrl-border bg-nrl-panel/80 text-nrl-muted"
+          }`}
+        >
+          {badge}
+        </div>
+      ) : null}
       <div className="text-center text-xl font-semibold text-nrl-text sm:text-3xl">{title}</div>
 
       <div
@@ -222,16 +238,18 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
 
               <PlanCard
                 title="Premium"
+                badge="Best for betting"
                 price="$40"
                 suffix="/month"
                 className="order-2 lg:order-3"
-                description="The top tier for premium-only capabilities."
+                tone="premium"
+                description="Unlock the betting model, bet tracking and matchup context built for weekly decisions."
                 features={[
                   "Everything in Pro",
-                  "Betting model predictions for H2H, line, total and tryscorers",
-                  "Bet tracker with history",
-                  "Full matchup insights",
-                  "New features as they release",
+                  "H2H, line, total and tryscorer model predictions",
+                  "Bet tracker with history and review",
+                  "Full matchup insights before kickoff",
+                  "Premium features first as they release",
                   formatAiQuota("premium"),
                 ]}
                 cta={
@@ -242,7 +260,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                   ) : currentPlan === "pro" ? (
                     <BillingActionButton
                       action="portal"
-                      className="flex h-11 w-full items-center justify-center rounded-xl border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-text"
+                      className="flex h-11 w-full items-center justify-center rounded-xl border border-emerald-300/50 bg-emerald-300/15 text-sm font-semibold text-emerald-50 shadow-[0_12px_32px_rgba(16,185,129,0.18)] transition-colors hover:border-emerald-200 hover:bg-emerald-300/20"
                     >
                       Upgrade to Premium
                     </BillingActionButton>
@@ -250,7 +268,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                     <BillingActionButton
                       action="checkout"
                       plan="premium"
-                      className="flex h-11 w-full items-center justify-center rounded-xl border border-nrl-accent/50 bg-nrl-accent/15 text-sm font-semibold text-nrl-text transition-colors hover:border-nrl-accent hover:bg-nrl-accent/20"
+                      className="flex h-11 w-full items-center justify-center rounded-xl bg-[linear-gradient(135deg,#10b981,#22d3ee)] text-sm font-semibold text-slate-950 shadow-[0_14px_36px_rgba(16,185,129,0.28)] transition-transform hover:scale-[1.01]"
                     >
                       Upgrade to Premium
                     </BillingActionButton>

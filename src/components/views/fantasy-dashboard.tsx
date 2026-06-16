@@ -6679,7 +6679,7 @@ export function FantasyDashboard({
                     />
                   </div>
                   {selectedTradeRatingStats.length > 0 ? (
-                    <div className="mx-auto mb-5 w-full max-w-[43rem] rounded-xl border border-white/10 bg-white/[0.035] px-3 py-3">
+                    <div className="mx-auto mb-5 w-full max-w-[43rem] rounded-xl border border-white/10 bg-white/[0.035] px-3 py-3 sm:max-w-[760px]">
                       <div className="relative mb-2 flex items-center justify-end gap-2">
                         <button
                           type="button"
@@ -6719,7 +6719,7 @@ export function FantasyDashboard({
                       </div>
                     </div>
                   ) : null}
-                  <div className="relative mx-auto w-full max-w-[43rem]">
+                  <div className="relative mx-auto w-full max-w-[43rem] sm:max-w-[760px]">
                     <div className={`grid grid-cols-2 gap-2 ${analysisLocked ? "pointer-events-none opacity-65" : ""}`}>
                       <FantasyPlotToggleButton
                         active={showRollingAveragePlot}

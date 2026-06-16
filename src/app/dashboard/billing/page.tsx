@@ -83,11 +83,11 @@ function PlanCard({
 
   return (
     <article
-      className={`grid min-w-0 grid-rows-[auto_auto_auto_1fr_auto] rounded-[24px] border p-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)] sm:p-6 ${
+      className={`grid min-w-0 grid-rows-[auto_auto_auto_auto_1fr_auto] rounded-[24px] border p-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)] sm:p-6 ${
         isPremium
-          ? "border-emerald-300/70 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_38%),linear-gradient(180deg,rgba(20,44,45,0.98),rgba(12,18,31,1))] shadow-[0_24px_60px_rgba(16,185,129,0.16)]"
+          ? "border-[#7a5cff] bg-[radial-gradient(circle_at_top,rgba(122,92,255,0.2),transparent_38%),linear-gradient(180deg,rgba(28,23,49,0.98),rgba(14,18,34,1))] shadow-[0_24px_60px_rgba(122,92,255,0.16)]"
           : isFeatured
-          ? "border-[#7a5cff] bg-[linear-gradient(180deg,rgba(28,23,49,0.98),rgba(14,18,34,1))]"
+          ? "border-emerald-300/70 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_38%),linear-gradient(180deg,rgba(20,44,45,0.98),rgba(12,18,31,1))] shadow-[0_24px_60px_rgba(16,185,129,0.16)]"
           : "border-nrl-border bg-[linear-gradient(180deg,rgba(27,32,54,0.94),rgba(17,21,38,1))]"
       } ${className ?? ""}`}
     >
@@ -96,8 +96,8 @@ function PlanCard({
           <div
             className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
               isPremium
-                ? "border-emerald-300/40 bg-emerald-300/12 text-emerald-100"
-                : "border-[#7a5cff]/45 bg-[#7a5cff]/12 text-violet-100"
+                ? "border-[#7a5cff]/45 bg-[#7a5cff]/12 text-violet-100"
+                : "border-emerald-300/40 bg-emerald-300/12 text-emerald-100"
             }`}
           >
             {badge}
@@ -221,17 +221,17 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 ]}
                 cta={
                   currentPlan === "pro" ? (
-                    <div className="flex h-11 items-center justify-center rounded-xl border border-[#7a5cff] bg-[linear-gradient(135deg,rgba(111,76,255,0.18),rgba(141,92,255,0.18))] text-sm font-semibold text-white">
+                    <div className="flex h-11 items-center justify-center rounded-xl border border-emerald-300/50 bg-emerald-300/15 text-sm font-semibold text-emerald-50">
                       Current plan
                     </div>
                   ) : currentPlan === "premium" ? (
-                    <div className="flex h-11 items-center justify-center rounded-xl border border-[#7a5cff]/40 bg-[linear-gradient(135deg,rgba(111,76,255,0.12),rgba(141,92,255,0.12))] text-sm font-semibold text-white/80">
+                    <div className="flex h-11 items-center justify-center rounded-xl border border-emerald-300/35 bg-emerald-300/10 text-sm font-semibold text-emerald-50/80">
                       Included in Premium
                     </div>
                   ) : (
                     <BillingActionButton
                       action="checkout"
-                      className="flex h-11 w-full items-center justify-center rounded-xl bg-[linear-gradient(135deg,#6f4cff,#8d5cff)] text-sm font-semibold text-white shadow-[0_10px_30px_rgba(111,76,255,0.35)] transition-transform hover:scale-[1.01]"
+                      className="flex h-11 w-full items-center justify-center rounded-xl bg-[linear-gradient(135deg,#10b981,#22d3ee)] text-sm font-semibold text-slate-950 shadow-[0_14px_36px_rgba(16,185,129,0.28)] transition-transform hover:scale-[1.01]"
                     >
                       Upgrade to Pro
                     </BillingActionButton>
@@ -263,7 +263,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                   ) : currentPlan === "pro" ? (
                     <BillingActionButton
                       action="portal"
-                      className="flex h-11 w-full items-center justify-center rounded-xl border border-emerald-300/50 bg-emerald-300/15 text-sm font-semibold text-emerald-50 shadow-[0_12px_32px_rgba(16,185,129,0.18)] transition-colors hover:border-emerald-200 hover:bg-emerald-300/20"
+                      className="flex h-11 w-full items-center justify-center rounded-xl border border-[#7a5cff]/50 bg-[#7a5cff]/15 text-sm font-semibold text-violet-50 shadow-[0_12px_32px_rgba(122,92,255,0.18)] transition-colors hover:border-[#9b7cff] hover:bg-[#7a5cff]/20"
                     >
                       Upgrade to Premium
                     </BillingActionButton>
@@ -271,7 +271,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                     <BillingActionButton
                       action="checkout"
                       plan="premium"
-                      className="flex h-11 w-full items-center justify-center rounded-xl bg-[linear-gradient(135deg,#10b981,#22d3ee)] text-sm font-semibold text-slate-950 shadow-[0_14px_36px_rgba(16,185,129,0.28)] transition-transform hover:scale-[1.01]"
+                      className="flex h-11 w-full items-center justify-center rounded-xl bg-[linear-gradient(135deg,#6f4cff,#8d5cff)] text-sm font-semibold text-white shadow-[0_10px_30px_rgba(111,76,255,0.35)] transition-transform hover:scale-[1.01]"
                     >
                       Upgrade to Premium
                     </BillingActionButton>

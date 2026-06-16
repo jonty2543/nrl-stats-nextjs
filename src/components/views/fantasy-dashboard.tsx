@@ -6255,7 +6255,7 @@ export function FantasyDashboard({
                         </div>
                       </div>
                     ) : null}
-	                    <div className="relative mt-3 overflow-hidden md:min-w-0">
+	                    <div className={`relative ${showAllPlayersTradeRatings ? "mt-5" : "mt-3"} overflow-hidden md:min-w-0`}>
                         <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-8 bg-[linear-gradient(90deg,rgba(17,24,50,0),#111832)] md:hidden" />
                         <span className="pointer-events-none absolute right-1.5 top-1/2 z-[2] -translate-y-1/2 text-sm font-black text-nrl-accent/70 drop-shadow-[0_0_8px_rgba(0,245,138,0.22)] md:hidden" aria-hidden="true">
                           →

@@ -8,26 +8,47 @@ interface ImageWithFallbackProps {
   className?: string
 }
 
-function normaliseImageSource(value: string): string {
-  const upgradeHttp = (source: string) => source.startsWith("http://") ? `https://${source.slice("http://".length)}` : source
-  const encode = (source: string) => encodeURI(source).replace(/'/g, "%27")
-  const decode = (source: string) => {
-    try {
-      return decodeURIComponent(source)
-    } catch {
-      return source
-    }
+function upgradeHttpSource(source: string): string {
+  return source.startsWith("http://") ? `https://${source.slice("http://".length)}` : source
+}
+
+function encodeImageSource(source: string): string {
+  return encodeURI(source).replace(/'/g, "%27")
+}
+
+function decodeImageSource(source: string): string {
+  try {
+    return decodeURIComponent(source)
+  } catch {
+    return source
+  }
+}
+
+function imageSourceCandidates(value: string): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const push = (source: string | null | undefined) => {
+    const normalised = source ? encodeImageSource(upgradeHttpSource(source.trim())) : ""
+    if (!normalised || seen.has(normalised)) return
+    seen.add(normalised)
+    out.push(normalised)
   }
 
+  const trimmed = value.trim()
+  const decoded = decodeImageSource(trimmed)
   const marker = "/remote.axd?"
-  const markerIndex = value.indexOf(marker)
+  const markerIndex = trimmed.indexOf(marker)
   if (markerIndex >= 0) {
-    const nested = value.slice(markerIndex + marker.length).split("&preset=")[0]
-    const decoded = decode(nested)
-    if (decoded) return encode(upgradeHttp(decoded))
+    const nested = trimmed.slice(markerIndex + marker.length).split("&preset=")[0]
+    push(trimmed)
+    push(decoded)
+    push(decodeImageSource(nested))
+    return out
   }
 
-  return encode(upgradeHttp(decode(value)))
+  push(decoded)
+  push(trimmed)
+  return out
 }
 
 export function ImageWithFallback({ sources, alt, className }: ImageWithFallbackProps) {
@@ -37,10 +58,11 @@ export function ImageWithFallback({ sources, alt, className }: ImageWithFallback
     for (const source of sources) {
       const trimmed = source?.trim()
       if (!trimmed || seen.has(trimmed)) continue
-      const normalised = normaliseImageSource(trimmed)
-      if (seen.has(normalised)) continue
-      seen.add(normalised)
-      out.push(normalised)
+      for (const normalised of imageSourceCandidates(trimmed)) {
+        if (seen.has(normalised)) continue
+        seen.add(normalised)
+        out.push(normalised)
+      }
     }
     return out
   }, [sources])

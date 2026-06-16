@@ -6,9 +6,11 @@ import { isAccessibleSeason } from "@/lib/access/season-access";
 
 export async function GET(request: NextRequest) {
   try {
+    const startedAt = performance.now();
     const { userId } = await auth();
     const canAccessLoginSeason = Boolean(userId);
     const canAccessProSeason = await getServerProPlotAccess(userId);
+    const accessResolvedAt = performance.now();
     const { searchParams } = request.nextUrl;
     const yearsParam = searchParams.get("years");
     const playerParam = searchParams.get("player")?.trim();
@@ -34,7 +36,14 @@ export async function GET(request: NextRequest) {
     const data = playerParam
       ? await fetchFantasyPlayerStatsForYears(playerParam, allowedYears)
       : await fetchPlayerStats(allowedYears);
-    return NextResponse.json(data);
+    const dataResolvedAt = performance.now();
+    const response = NextResponse.json(data);
+    response.headers.set("x-player-stats-mode", playerParam ? "player" : "bulk");
+    response.headers.set("x-player-stats-count", String(Array.isArray(data) ? data.length : 0));
+    response.headers.set("x-player-stats-access-ms", String(Math.round(accessResolvedAt - startedAt)));
+    response.headers.set("x-player-stats-data-ms", String(Math.round(dataResolvedAt - accessResolvedAt)));
+    response.headers.set("x-player-stats-ms", String(Math.round(dataResolvedAt - startedAt)));
+    return response;
   } catch (error) {
     console.error("Error fetching player stats:", error);
     return NextResponse.json(

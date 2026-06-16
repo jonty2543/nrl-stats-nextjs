@@ -91,17 +91,19 @@ function PlanCard({
           : "border-nrl-border bg-[linear-gradient(180deg,rgba(27,32,54,0.94),rgba(17,21,38,1))]"
       } ${className ?? ""}`}
     >
-      {badge ? (
-        <div
-          className={`mb-3 justify-self-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
-            isPremium
-              ? "border-emerald-300/40 bg-emerald-300/12 text-emerald-100"
-              : "border-nrl-border bg-nrl-panel/80 text-nrl-muted"
-          }`}
-        >
-          {badge}
-        </div>
-      ) : null}
+      <div className="mb-3 flex h-[28px] items-center justify-center">
+        {badge ? (
+          <div
+            className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+              isPremium
+                ? "border-emerald-300/40 bg-emerald-300/12 text-emerald-100"
+                : "border-[#7a5cff]/45 bg-[#7a5cff]/12 text-violet-100"
+            }`}
+          >
+            {badge}
+          </div>
+        ) : null}
+      </div>
       <div className="text-center text-xl font-semibold text-nrl-text sm:text-3xl">{title}</div>
 
       <div
@@ -203,6 +205,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
 
               <PlanCard
                 title="Pro"
+                badge="Best for fantasy"
                 price="$5"
                 suffix="/month"
                 className="order-1 lg:order-2"

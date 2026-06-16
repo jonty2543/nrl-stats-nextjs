@@ -3044,31 +3044,56 @@ function ProjectionBreakevenMetricGrid({
   breakeven: string
   blurValue?: boolean
 }) {
-  const metrics = [
-    { label: "Low 5%", value: lower, className: "text-red-300" },
-    { label: "Projection", value: projection, className: "text-nrl-text" },
-    { label: "High 5%", value: upper, className: "text-emerald-300" },
-    { label: "Breakeven", value: breakeven, className: "text-nrl-text" },
-  ]
-
   return (
-    <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-      {metrics.map((metric) => (
-        <div
-          key={metric.label}
-          className="rounded-lg border border-nrl-border bg-[#111832] px-2 py-3 text-center sm:px-2.5"
-        >
-          <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
-            {metric.label}
+    <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-4 sm:gap-4">
+      <div className="rounded-lg border border-nrl-border bg-[#111832] px-2.5 py-3 text-center sm:col-span-3 sm:px-4">
+        <div className="grid h-full grid-cols-3 items-center gap-2">
+          <div>
+            <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
+              Low 5%
+            </div>
+            <div
+              className={`mt-2 text-[1.25rem] font-bold leading-none tracking-tight text-red-300 sm:text-[1.45rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
+              aria-hidden={blurValue || undefined}
+            >
+              {lower}
+            </div>
           </div>
-          <div
-            className={`mt-2 text-[1.6rem] font-bold leading-none tracking-tight sm:text-[1.85rem] ${metric.className} ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
-            aria-hidden={blurValue || undefined}
-          >
-            {metric.value}
+          <div>
+            <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
+              Projection
+            </div>
+            <div
+              className={`mt-2 text-[1.7rem] font-bold leading-none tracking-tight text-nrl-text sm:text-[2rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
+              aria-hidden={blurValue || undefined}
+            >
+              {projection}
+            </div>
+          </div>
+          <div>
+            <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
+              High 5%
+            </div>
+            <div
+              className={`mt-2 text-[1.25rem] font-bold leading-none tracking-tight text-emerald-300 sm:text-[1.45rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
+              aria-hidden={blurValue || undefined}
+            >
+              {upper}
+            </div>
           </div>
         </div>
-      ))}
+      </div>
+      <div className="rounded-lg border border-nrl-border bg-[#111832] px-2 py-3 text-center sm:px-2.5">
+        <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
+          Breakeven
+        </div>
+        <div
+          className={`mt-2 text-[1.6rem] font-bold leading-none tracking-tight text-nrl-text sm:text-[1.85rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
+          aria-hidden={blurValue || undefined}
+        >
+          {breakeven}
+        </div>
+      </div>
     </div>
   )
 }

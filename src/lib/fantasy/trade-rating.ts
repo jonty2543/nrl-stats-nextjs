@@ -277,10 +277,11 @@ export function calculateTradeRating({
   currentRound: number
 }): TradeRatingScores {
   const projection = finiteNumber(input.projection)
+  const keeperProjection = projection ?? finiteNumber(input.pricedAt)
   const valueEdge = valueEdgeForInput(input)
   const formEdge = formEdgeForInput(input)
   const breakevenEdge = breakevenEdgeForInput(input)
-  const keeperScore = keeperScoreForProjection(projection)
+  const keeperScore = keeperScoreForProjection(keeperProjection)
   const scores = {
     weeklyDelta: popularityScore(finiteNumber(input.weeklyChange)),
     value: pointEdgeScore(valueEdge),

@@ -8,6 +8,7 @@ import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } f
 import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
 import type {
   LineupCasualtyOut,
+  LineupCompetition,
   LineupLiveMatch,
   LineupLivePlayerState,
   LineupLivePlayerStats,
@@ -15,11 +16,11 @@ import type {
   LineupMatchStats,
   LineupPlayer,
   LineupRecentResult,
-  LineupRoundOption,
   LineupSportsbetOdds,
   LineupTeam,
   LineupTeamMatchStats,
   LineupTryscorerOdds,
+  LineupYearOption,
 } from "@/lib/lineups/nrl-lineups"
 import type { LineupWeatherForecast } from "@/lib/lineups/weather"
 
@@ -28,8 +29,10 @@ interface LineupsDashboardProps {
   year: number
   liveMatches: Record<string, LineupLiveMatch>
   weatherForecasts: Record<string, LineupWeatherForecast>
-  roundOptions: LineupRoundOption[]
+  yearOptions: LineupYearOption[]
   selectedRound: string
+  selectedYear: number
+  selectedCompetition: LineupCompetition
   teamLogos: Record<string, string>
   sportsbetOdds?: Record<string, LineupSportsbetOdds>
   tryChartsByTeam: Record<string, StatsinsiderTryChart>
@@ -277,6 +280,8 @@ const TEAM_ALIAS_GROUPS = [
   ["titans", "gold coast titans"],
   ["warriors", "new zealand warriors", "nz warriors"],
   ["wests tigers", "tigers", "western suburbs magpies"],
+  ["maroons", "queensland", "qld", "queensland maroons"],
+  ["blues", "new south wales", "nsw", "new south wales blues"],
 ]
 
 const STATSINSIDER_TEAM_CODES: Record<string, string> = {
@@ -297,6 +302,17 @@ const STATSINSIDER_TEAM_CODES: Record<string, string> = {
   titans: "GLD",
   warriors: "WAR",
   "wests tigers": "WST",
+}
+
+const ORIGIN_TEAM_LOGOS: Record<string, string> = {
+  maroons: "/qld.jpeg",
+  queensland: "/qld.jpeg",
+  qld: "/qld.jpeg",
+  "queensland maroons": "/qld.jpeg",
+  blues: "/nsw.png",
+  "new south wales": "/nsw.png",
+  nsw: "/nsw.png",
+  "new south wales blues": "/nsw.png",
 }
 
 function teamAliases(value: string | null | undefined): string[] {
@@ -650,7 +666,8 @@ function resolveTeamLogo(teamName: string | null | undefined, teamLogos: Record<
     teamName.replace(/^Gold Coast /, ""),
   ]
   for (const candidate of candidates) {
-    const logo = teamLogos[normaliseKey(candidate)]
+    const key = normaliseKey(candidate)
+    const logo = ORIGIN_TEAM_LOGOS[key] ?? teamLogos[key]
     if (logo) return logo
   }
   return null
@@ -2814,33 +2831,52 @@ function LineupCard({
   )
 }
 
-function RoundSelector({
-  roundOptions,
-  selectedRound,
+function LineupSelectors({
+  yearOptions,
+  selectedYear,
+  selectedCompetition,
 }: {
-  roundOptions: LineupRoundOption[]
-  selectedRound: string
+  yearOptions: LineupYearOption[]
+  selectedYear: number
+  selectedCompetition: LineupCompetition
 }) {
-  if (roundOptions.length === 0) return null
-
   return (
-    <div className="flex justify-end">
-      <label className="block w-40 sm:w-48">
-        <span className="sr-only">Select round</span>
+    <div className="flex flex-wrap justify-end gap-2">
+      <label className="block w-36 sm:w-40">
+        <span className="sr-only">Select competition</span>
         <select
-          value={selectedRound}
+          value={selectedCompetition}
           onChange={(event) => {
-            window.location.href = `/dashboard/lineups?round=${encodeURIComponent(event.target.value)}`
+            const params = new URLSearchParams({ year: String(selectedYear) })
+            if (event.target.value === "origin") params.set("competition", "origin")
+            window.location.href = `/dashboard/lineups${params.toString() ? `?${params.toString()}` : ""}`
           }}
           className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
         >
-          {roundOptions.map((round) => (
-            <option key={round.value} value={round.value}>
-              {round.label}
-            </option>
-          ))}
+          <option value="nrl">NRL</option>
+          <option value="origin">Origin</option>
         </select>
       </label>
+      {yearOptions.length > 0 ? (
+        <label className="block w-40 sm:w-48">
+          <span className="sr-only">Select year</span>
+          <select
+            value={String(selectedYear)}
+            onChange={(event) => {
+              const params = new URLSearchParams({ year: event.target.value })
+              if (selectedCompetition === "origin") params.set("competition", "origin")
+              window.location.href = `/dashboard/lineups?${params.toString()}`
+            }}
+            className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
+          >
+            {yearOptions.map((year) => (
+              <option key={year.value} value={year.value}>
+                {year.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
     </div>
   )
 }
@@ -2850,8 +2886,10 @@ export function LineupsDashboard({
   year,
   liveMatches: initialLiveMatches,
   weatherForecasts: initialWeatherForecasts,
-  roundOptions,
+  yearOptions,
   selectedRound,
+  selectedYear,
+  selectedCompetition,
   teamLogos,
   sportsbetOdds: initialSportsbetOdds = {},
   tryChartsByTeam,
@@ -2887,7 +2925,7 @@ export function LineupsDashboard({
     fetch("/api/lineups/match-detail", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ matchId: match.matchId, round: selectedRound, year, match }),
+      body: JSON.stringify({ matchId: match.matchId, round: match.round || selectedRound, year, match, competition: selectedCompetition }),
     })
       .then((response) => response.ok ? response.json() : null)
       .then((data: { detail?: LineupMatchDetailData | null } | null) => {
@@ -2982,7 +3020,7 @@ export function LineupsDashboard({
           {summaryDiagnostic}
         </div>
       ) : null}
-      <RoundSelector roundOptions={roundOptions} selectedRound={selectedRound} />
+      <LineupSelectors yearOptions={yearOptions} selectedYear={selectedYear} selectedCompetition={selectedCompetition} />
       {matches.length > 0 ? (
         <div className="space-y-11">
           {matchDateGroups.map((group) => (

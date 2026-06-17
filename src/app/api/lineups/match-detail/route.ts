@@ -4,6 +4,7 @@ import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { fetchLineupsForRound } from "@/lib/lineups/nrl-lineups"
 import { fetchLineupsMatchDetailSummary } from "@/lib/supabase/queries"
 import type { LineupMatch } from "@/lib/lineups/nrl-lineups"
+import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
@@ -16,6 +17,10 @@ function numberValue(value: unknown): number | null {
     return Number.isFinite(parsed) ? Math.trunc(parsed) : null
   }
   return null
+}
+
+function parseCompetition(value: unknown): LineupCompetition {
+  return value === "origin" ? "origin" : "nrl"
 }
 
 function fallbackMatch(value: unknown, matchId: string): LineupMatch | null {
@@ -100,6 +105,7 @@ export async function POST(request: NextRequest) {
     const matchId = text(body.matchId)
     const round = text(body.round)
     const year = numberValue(body.year)
+    const competition = parseCompetition(body.competition)
     const shellMatch = fallbackMatch(body.match, matchId)
 
     if (!matchId || !round || year == null) {
@@ -108,7 +114,9 @@ export async function POST(request: NextRequest) {
 
     const { userId } = await auth()
     const hasProAccess = await getServerProPlotAccess(userId)
-    const detail = await fetchLineupsMatchDetailSummary(year, round, matchId)
+    const detail = competition === "nrl"
+      ? await fetchLineupsMatchDetailSummary(year, round, matchId)
+      : null
     let hydratedMatch: LineupMatch | null = null
     let hydratedMatchStats = detail?.matchStats ?? null
     const detailMatch = detail?.match ?? shellMatch
@@ -124,6 +132,7 @@ export async function POST(request: NextRequest) {
         round,
         year,
         includeFantasyProjections: hasProAccess,
+        competition,
       })
       hydratedMatch =
         roundLineups.matches.find((candidate) => candidate.matchId === matchId) ??

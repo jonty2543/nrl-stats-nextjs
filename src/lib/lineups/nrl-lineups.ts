@@ -3,6 +3,7 @@ import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import type { Draw2026Row } from "@/lib/draw/types"
 
 export type LineupSide = "left" | "right" | "middle" | "spine" | "bench" | "unknown"
+export type LineupCompetition = "nrl" | "origin"
 
 export interface LineupPlayer {
   matchId: string
@@ -63,6 +64,12 @@ export interface LineupRoundOption {
   roundNumber: number
   startDate: string
   endDate: string
+}
+
+export interface LineupYearOption {
+  value: string
+  label: string
+  year: number
 }
 
 export interface LineupTeamMatchStats {
@@ -203,6 +210,10 @@ type RawRow = Record<string, unknown>
 
 const PAGE_SIZE = 1000
 const LINEUPS_FETCH_TIMEOUT_MS = 2000
+const LINEUP_COMPETITION_TABLES: Record<LineupCompetition, { lineups: string; matches: string; playerStats: string }> = {
+  nrl: { lineups: "lineups", matches: "matches", playerStats: "player_stats" },
+  origin: { lineups: "origin_lineups", matches: "origin_matches", playerStats: "origin_player_stats" },
+}
 const LINEUP_SELECT_BASE = [
   "match_id",
   "match_date",
@@ -227,6 +238,7 @@ const LINEUP_SELECT_BASE = [
 
 interface FetchUpcomingLineupsOptions {
   includeFantasyProjections?: boolean
+  competition?: LineupCompetition
 }
 
 function text(value: unknown): string {
@@ -450,6 +462,12 @@ function addRoundOption(options: Map<string, LineupRoundOption>, round: string, 
   )
 }
 
+function addYearOption(options: Map<number, LineupYearOption>, matchDate: string) {
+  const year = Number(matchDate.slice(0, 4))
+  if (!Number.isFinite(year)) return
+  options.set(year, { value: String(year), label: String(year), year })
+}
+
 function getBrisbaneWeekdayIndex(): number {
   const weekday = new Intl.DateTimeFormat("en-US", {
     timeZone: "Australia/Brisbane",
@@ -494,18 +512,21 @@ function projectionOverrideKey(matchId: string, playerId: number | null): string
   return `${matchId}|${playerId ?? ""}`
 }
 
-async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: boolean): Promise<RawRow[]> {
+async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: boolean, competition: LineupCompetition): Promise<RawRow[]> {
   const supabase = createServerSupabaseClient("nrl")
+  const table = LINEUP_COMPETITION_TABLES[competition].lineups
   const rows: RawRow[] = []
   let start = 0
-  const selectColumns = includeFantasyProjections
+  const selectColumns = competition === "origin"
+    ? "*"
+    : includeFantasyProjections
     ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
 
   while (true) {
     const end = start + PAGE_SIZE - 1
     const { data, error } = await supabase
-      .from("lineups")
+      .from(table)
       .select(selectColumns)
       .gte("match_date", fromDate)
       .order("match_date", { ascending: true })
@@ -515,7 +536,7 @@ async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: b
       .order("number", { ascending: true })
       .range(start, end)
 
-    if (error) throw new Error(`Supabase fetch nrl.lineups: ${error.message}`)
+    if (error) throw new Error(`Supabase fetch nrl.${table}: ${error.message}`)
     const page = (data ?? []) as unknown as RawRow[]
     rows.push(...page)
     if (page.length < PAGE_SIZE) break
@@ -525,10 +546,13 @@ async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: b
   return rows
 }
 
-async function fetchLineupRowsForRound(round: string, year: number, includeFantasyProjections: boolean): Promise<RawRow[]> {
+async function fetchLineupRowsForRound(round: string, year: number, includeFantasyProjections: boolean, competition: LineupCompetition): Promise<RawRow[]> {
   const supabase = createServerSupabaseClient("nrl")
+  const table = LINEUP_COMPETITION_TABLES[competition].lineups
   const rows: RawRow[] = []
-  const selectColumns = includeFantasyProjections
+  const selectColumns = competition === "origin"
+    ? "*"
+    : includeFantasyProjections
     ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
   let start = 0
@@ -536,7 +560,7 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
   while (true) {
     const end = start + PAGE_SIZE - 1
     const { data, error } = await supabase
-      .from("lineups")
+      .from(table)
       .select(selectColumns)
       .eq("round", round)
       .gte("match_date", `${year}-01-01`)
@@ -548,7 +572,7 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
       .order("number", { ascending: true })
       .range(start, end)
 
-    if (error) throw new Error(`Supabase fetch nrl.lineups round ${round}: ${error.message}`)
+    if (error) throw new Error(`Supabase fetch nrl.${table} round ${round}: ${error.message}`)
     const page = (data ?? []) as unknown as RawRow[]
     rows.push(...page)
     if (page.length < PAGE_SIZE) break
@@ -648,6 +672,10 @@ function teamFromPlayers(players: LineupPlayer[], teamType: string): LineupTeam 
   }
 }
 
+function teamMatchesName(team: string, name: string | undefined): boolean {
+  return Boolean(name && canonicalTeamKey(team) === canonicalTeamKey(name))
+}
+
 function emptyTeam(team: string, teamType: "Home" | "Away"): LineupTeam {
   return {
     team,
@@ -674,8 +702,18 @@ function buildMatchesFromLineupRows(
   }
 
   return [...matches.values()].map(({ base, players }) => {
-    const homePlayers = players.filter((player) => player.teamType.toLowerCase() === "home")
-    const awayPlayers = players.filter((player) => player.teamType.toLowerCase() === "away")
+    const [homeName, awayName] = text(base.match).split(/\s+vs\s+/i).map((part) => part.trim())
+    const fallbackTeams = [...new Map(players.map((player) => [canonicalTeamKey(player.team), player.team])).values()]
+    const resolvedHome = homeName || fallbackTeams[0]
+    const resolvedAway = awayName || fallbackTeams.find((team) => !teamMatchesName(team, resolvedHome))
+    const homePlayers = players.filter((player) =>
+      player.teamType.toLowerCase() === "home" ||
+      (!player.teamType && teamMatchesName(player.team, resolvedHome))
+    )
+    const awayPlayers = players.filter((player) =>
+      player.teamType.toLowerCase() === "away" ||
+      (!player.teamType && teamMatchesName(player.team, resolvedAway))
+    )
     return {
       matchId: text(base.match_id),
       matchDate: text(base.match_date),
@@ -700,9 +738,10 @@ function livePlayerKey(playerId: number | null, team: string | null, player: str
 export async function fetchUpcomingLineups(options: FetchUpcomingLineupsOptions = {}): Promise<LineupMatch[]> {
   try {
     const fromDate = getLineupWindowStartInBrisbane()
+    const competition = options.competition ?? "nrl"
     const includeFantasyProjections = options.includeFantasyProjections === true
     const [rows, overrides, projectionOverrides] = await Promise.all([
-      fetchAllLineupRows(fromDate, includeFantasyProjections),
+      fetchAllLineupRows(fromDate, includeFantasyProjections, competition),
       fetchSideOverrides().catch(() => new Map<string, LineupSide>()),
       includeFantasyProjections
         ? fetchProjectionOverrides().catch(() => new Map<string, number>())
@@ -716,27 +755,42 @@ export async function fetchUpcomingLineups(options: FetchUpcomingLineupsOptions 
   }
 }
 
-export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane()): Promise<LineupRoundOption[]> {
+export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(), competition: LineupCompetition = "nrl"): Promise<LineupRoundOption[]> {
   try {
     const supabase = createServerSupabaseClient("nrl")
-    const draw2026DataPromise = year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} })
-    const { data, error } = await withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
-      supabase
-        .from("matches")
-        .select("round,round_number,match_date")
-        .gte("match_date", `${year}-01-01`)
-        .lt("match_date", `${year + 1}-01-01`)
-        .order("match_date", { ascending: true }) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
-      { data: null, error: null },
-      LINEUPS_FETCH_TIMEOUT_MS,
-      `Supabase fetch nrl.matches round options for ${year}`
-    )
+    const tables = LINEUP_COMPETITION_TABLES[competition]
+    const draw2026DataPromise = competition === "nrl" && year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} })
+    const [{ data, error }, { data: lineupData, error: lineupError }] = await Promise.all([
+      withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
+        supabase
+          .from(tables.matches)
+          .select(competition === "origin" ? "*" : "round,round_number,match_date")
+          .gte("match_date", `${year}-01-01`)
+          .lt("match_date", `${year + 1}-01-01`)
+          .order("match_date", { ascending: true }) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
+        { data: null, error: null },
+        LINEUPS_FETCH_TIMEOUT_MS,
+        `Supabase fetch nrl.${tables.matches} round options for ${year}`
+      ),
+      withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
+        supabase
+          .from(tables.lineups)
+          .select("round,match_date")
+          .gte("match_date", `${year}-01-01`)
+          .lt("match_date", `${year + 1}-01-01`)
+          .order("match_date", { ascending: true }) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
+        { data: null, error: null },
+        LINEUPS_FETCH_TIMEOUT_MS,
+        `Supabase fetch nrl.${tables.lineups} round options for ${year}`
+      ),
+    ])
     const draw2026Data = await draw2026DataPromise
 
-    if (error) console.warn(`Unable to fetch nrl.matches round options for ${year}; using local draw fallback where available.`, error)
+    if (error) console.warn(`Unable to fetch nrl.${tables.matches} round options for ${year}; using local draw fallback where available.`, error)
+    if (lineupError) console.warn(`Unable to fetch nrl.${tables.lineups} round options for ${year}.`, lineupError)
 
     const options = new Map<string, LineupRoundOption>()
-    for (const row of (data ?? []) as unknown as RawRow[]) {
+    for (const row of [...((data ?? []) as unknown as RawRow[]), ...((lineupData ?? []) as unknown as RawRow[])]) {
       const round = text(row.round)
       const matchDate = text(row.match_date).slice(0, 10)
       if (!round || !matchDate) continue
@@ -751,6 +805,48 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane())
     return [...options.values()].sort((a, b) => a.roundNumber - b.roundNumber || a.label.localeCompare(b.label))
   } catch (error) {
     console.warn("Unable to fetch lineup round options.", error)
+    return []
+  }
+}
+
+export async function fetchLineupYearOptions(competition: LineupCompetition = "nrl"): Promise<LineupYearOption[]> {
+  try {
+    const supabase = createServerSupabaseClient("nrl")
+    const tables = LINEUP_COMPETITION_TABLES[competition]
+    const [{ data, error }, { data: lineupData, error: lineupError }] = await Promise.all([
+      withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
+        supabase
+          .from(tables.matches)
+          .select("match_date")
+          .order("match_date", { ascending: false })
+          .limit(2000) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
+        { data: null, error: null },
+        LINEUPS_FETCH_TIMEOUT_MS,
+        `Supabase fetch nrl.${tables.matches} year options`
+      ),
+      withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
+        supabase
+          .from(tables.lineups)
+          .select("match_date")
+          .order("match_date", { ascending: false })
+          .limit(2000) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
+        { data: null, error: null },
+        LINEUPS_FETCH_TIMEOUT_MS,
+        `Supabase fetch nrl.${tables.lineups} year options`
+      ),
+    ])
+
+    if (error) console.warn(`Unable to fetch nrl.${tables.matches} year options.`, error)
+    if (lineupError) console.warn(`Unable to fetch nrl.${tables.lineups} year options.`, lineupError)
+
+    const options = new Map<number, LineupYearOption>()
+    for (const row of [...((data ?? []) as unknown as RawRow[]), ...((lineupData ?? []) as unknown as RawRow[])]) {
+      addYearOption(options, text(row.match_date))
+    }
+    if (competition === "nrl") addYearOption(options, `${getCurrentYearInBrisbane()}-01-01`)
+    return [...options.values()].sort((a, b) => b.year - a.year)
+  } catch (error) {
+    console.warn("Unable to fetch lineup year options.", error)
     return []
   }
 }
@@ -801,13 +897,14 @@ function recentResultKey(result: LineupRecentResult): string {
   return [result.matchDate.slice(0, 10), ...teams].join("|")
 }
 
-async function fetchRecentMatchResults(year: number): Promise<LineupRecentResult[]> {
+async function fetchRecentMatchResults(year: number, competition: LineupCompetition): Promise<LineupRecentResult[]> {
   try {
     const supabase = createServerSupabaseClient("nrl")
+    const table = LINEUP_COMPETITION_TABLES[competition].matches
     const rows: RawRow[] = []
     for (let from = 0; ; from += PAGE_SIZE) {
       const { data, error } = await supabase
-        .from("matches")
+        .from(table)
         .select("match_date,round,team,opponent_team,score,opponent_score,is_home")
         .lt("match_date", `${year + 1}-01-01`)
         .not("score", "is", null)
@@ -837,12 +934,15 @@ interface HistoricalRoundPlayerStats {
   playerStatsByMatchKey: Map<string, Record<string, LineupLivePlayerStats>>
 }
 
-async function fetchHistoricalPlayerStatsForRound(round: string, year: number): Promise<HistoricalRoundPlayerStats> {
+async function fetchHistoricalPlayerStatsForRound(round: string, year: number, competition: LineupCompetition): Promise<HistoricalRoundPlayerStats> {
   const supabase = createServerSupabaseClient("nrl")
+  const table = LINEUP_COMPETITION_TABLES[competition].playerStats
   const { data, error } = await supabase
-    .from("player_stats")
+    .from(table)
     .select(
-      [
+      competition === "origin"
+        ? "*"
+        : [
         "match_date",
         "match",
         "round",
@@ -968,19 +1068,24 @@ export async function fetchLineupsForRound({
   round,
   year = getCurrentYearInBrisbane(),
   includeFantasyProjections = false,
+  competition = "nrl",
 }: {
   round: string
   year?: number
   includeFantasyProjections?: boolean
+  competition?: LineupCompetition
 }): Promise<LineupRoundMatchesResult> {
   try {
     const supabase = createServerSupabaseClient("nrl")
+    const table = LINEUP_COMPETITION_TABLES[competition].matches
     const [{ data, error }, lineupRows, overrides, projectionOverrides, historicalPlayerStats, recentResults, draw2026Data] = await Promise.all([
       withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
         supabase
-        .from("matches")
+        .from(table)
         .select(
-          [
+          competition === "origin"
+            ? "*"
+            : [
             "url",
             "match_date",
             "round",
@@ -1022,15 +1127,15 @@ export async function fetchLineupsForRound({
         .order("match_date", { ascending: true }) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
         { data: null, error: null },
         LINEUPS_FETCH_TIMEOUT_MS,
-        `Supabase fetch nrl.matches round ${round}`
+        `Supabase fetch nrl.${table} round ${round}`
       ),
-      withTimeout(fetchLineupRowsForRound(round, year, includeFantasyProjections), [], LINEUPS_FETCH_TIMEOUT_MS, `Supabase fetch nrl.lineups round ${round}`),
+      withTimeout(fetchLineupRowsForRound(round, year, includeFantasyProjections, competition), [], LINEUPS_FETCH_TIMEOUT_MS, `Supabase fetch nrl.${LINEUP_COMPETITION_TABLES[competition].lineups} round ${round}`),
       withTimeout(fetchSideOverrides(), new Map<string, LineupSide>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup side overrides"),
       includeFantasyProjections
         ? withTimeout(fetchProjectionOverrides(), new Map<string, number>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup projection overrides")
         : Promise.resolve(new Map<string, number>()),
       withTimeout(
-        fetchHistoricalPlayerStatsForRound(round, year),
+        fetchHistoricalPlayerStatsForRound(round, year, competition),
         {
           fantasyTotals: new Map<string, number>(),
           playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
@@ -1038,11 +1143,11 @@ export async function fetchLineupsForRound({
         LINEUPS_FETCH_TIMEOUT_MS,
         `Supabase fetch historical player stats for ${round}`
       ),
-      withTimeout(fetchRecentMatchResults(year), [], LINEUPS_FETCH_TIMEOUT_MS, `Supabase fetch recent match results for ${year}`),
-      year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} }),
+      withTimeout(fetchRecentMatchResults(year, competition), [], LINEUPS_FETCH_TIMEOUT_MS, `Supabase fetch recent match results for ${year}`),
+      competition === "nrl" && year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} }),
     ])
 
-    if (error) console.warn(`Unable to fetch nrl.matches round ${round}; using lineup/draw fallback where available.`, error)
+    if (error) console.warn(`Unable to fetch nrl.${table} round ${round}; using lineup/draw fallback where available.`, error)
 
     const lineupMatches = buildMatchesFromLineupRows(lineupRows, overrides, projectionOverrides, includeFantasyProjections)
     const lineupsByKey = new Map<string, LineupMatch>()

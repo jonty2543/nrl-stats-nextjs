@@ -4,11 +4,13 @@ import { LineupsDashboard } from "@/components/views/lineups-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import {
   fetchLineupRoundOptions,
+  fetchLineupYearOptions,
   fetchLiveLineupData,
   fetchLineupsForRound,
 } from "@/lib/lineups/nrl-lineups"
 import { fetchLatestLineupsPageShellSummary, fetchLineupsPageShellSummary, fetchStatsinsiderTryCharts, fetchTeamLogos } from "@/lib/supabase/queries"
-import type { LineupMatch, LineupRoundOption } from "@/lib/lineups/nrl-lineups"
+import type { LineupMatch, LineupRoundOption, LineupYearOption } from "@/lib/lineups/nrl-lineups"
+import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
 
 export const dynamic = "force-dynamic"
 
@@ -52,7 +54,9 @@ function isDrawFallbackMatch(match: LineupMatch): boolean {
 
 interface LineupsPageProps {
   searchParams: Promise<{
+    competition?: string
     round?: string
+    year?: string
   }>
 }
 
@@ -116,6 +120,16 @@ function mergeRoundOptions(...optionGroups: LineupRoundOption[][]): LineupRoundO
   return [...byRound.values()].sort((a, b) => a.roundNumber - b.roundNumber || a.label.localeCompare(b.label))
 }
 
+function mergeYearOptions(...optionGroups: LineupYearOption[][]): LineupYearOption[] {
+  const byYear = new Map<number, LineupYearOption>()
+  for (const options of optionGroups) {
+    for (const option of options) {
+      byYear.set(option.year, option)
+    }
+  }
+  return [...byYear.values()].sort((a, b) => b.year - a.year)
+}
+
 async function shouldShowLineupsSummaryDiagnostic(): Promise<boolean> {
   if (process.env.VERCEL_GIT_COMMIT_REF === "betting/testing") return true
 
@@ -164,19 +178,40 @@ function matchShell(match: LineupMatch): LineupMatch {
   }
 }
 
+function parseCompetition(value: string | undefined): LineupCompetition {
+  return value === "origin" ? "origin" : "nrl"
+}
+
+function parseYear(value: string | undefined): number | null {
+  if (!value) return null
+  const year = Number(value)
+  return Number.isInteger(year) && year >= 1908 && year <= 2100 ? year : null
+}
+
 export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const params = await searchParams
   const { userId } = await auth()
   const hasProAccess = await getServerProPlotAccess(userId)
-  const year = currentYearInBrisbane()
+  const currentYear = currentYearInBrisbane()
+  const selectedCompetition = parseCompetition(params.competition)
+  const fetchedYearOptions = await withFallback(fetchLineupYearOptions(selectedCompetition), [], "Lineups year options")
+  const selectedYear = parseYear(params.year) ?? (selectedCompetition === "origin" ? fetchedYearOptions[0]?.year : currentYear) ?? currentYear
+  const yearOptions = mergeYearOptions(
+    fetchedYearOptions,
+    [{ value: String(selectedYear), label: String(selectedYear), year: selectedYear }],
+    selectedCompetition === "nrl" ? [{ value: String(currentYear), label: String(currentYear), year: currentYear }] : []
+  )
   const requestedRound = params.round?.trim()
-  const initialSummary = requestedRound
-    ? await withFallback(fetchLineupsPageShellSummary(year, requestedRound), null, "Lineups page shell summary")
-    : await withFallback(fetchLatestLineupsPageShellSummary(year), null, "Latest lineups page shell summary")
-  const latestSummaryForOptions = requestedRound
-    ? await withFallback(fetchLatestLineupsPageShellSummary(year), null, "Latest lineups page shell summary")
+  const shouldUseSummary = selectedCompetition === "nrl"
+  const initialSummary = shouldUseSummary && requestedRound
+    ? await withFallback(fetchLineupsPageShellSummary(selectedYear, requestedRound), null, "Lineups page shell summary")
+    : shouldUseSummary
+      ? await withFallback(fetchLatestLineupsPageShellSummary(selectedYear), null, "Latest lineups page shell summary")
+      : null
+  const latestSummaryForOptions = shouldUseSummary && requestedRound
+    ? await withFallback(fetchLatestLineupsPageShellSummary(selectedYear), null, "Latest lineups page shell summary")
     : initialSummary
-  const fallbackRoundOptions = await withFallback(fetchLineupRoundOptions(year), [], "Lineups round options")
+  const fallbackRoundOptions = await withFallback(fetchLineupRoundOptions(selectedYear, selectedCompetition), [], "Lineups round options")
   const initialRoundOptions = mergeRoundOptions(
     initialSummary?.roundOptions ?? [],
     latestSummaryForOptions?.roundOptions ?? [],
@@ -190,21 +225,40 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
     "Round 1"
   const rawSummary = initialSummary?.round === selectedRound
     ? initialSummary
-    : await withFallback(fetchLineupsPageShellSummary(year, selectedRound), null, "Lineups page shell summary")
-  const summaryMissReason = lineupsSummaryMissReason(rawSummary)
+    : shouldUseSummary
+      ? await withFallback(fetchLineupsPageShellSummary(selectedYear, selectedRound), null, "Lineups page shell summary")
+      : null
+  const summaryMissReason = shouldUseSummary ? lineupsSummaryMissReason(rawSummary) : null
   const summary = summaryMissReason ? null : rawSummary
   const fallbackData = summary ? null : await (async () => {
-    const [teamLogos, lineupRound] = await Promise.all([
+    const roundsToFetch = selectedCompetition === "origin"
+      ? initialRoundOptions
+      : initialRoundOptions.filter((option) => option.value === selectedRound)
+    const effectiveRoundsToFetch = roundsToFetch.length > 0
+      ? roundsToFetch
+      : selectedRound
+        ? [{ value: selectedRound, label: selectedRound, roundNumber: roundNumberFromLabel(selectedRound) ?? 0, startDate: "", endDate: "" }]
+        : []
+    const [teamLogos, lineupRounds] = await Promise.all([
       withFallback(fetchTeamLogos(), {}, "Lineups team logos"),
-      fetchLineupsForRound({
-        round: selectedRound,
-        year,
-        includeFantasyProjections: hasProAccess,
-      }),
+      Promise.all(effectiveRoundsToFetch.map((option) =>
+        fetchLineupsForRound({
+          round: option.value,
+          year: selectedYear,
+          includeFantasyProjections: hasProAccess,
+          competition: selectedCompetition,
+        })
+      )),
     ])
+    const matchesById = new Map<string, LineupMatch>()
+    for (const lineupRound of lineupRounds) {
+      for (const match of lineupRound.matches) {
+        matchesById.set(match.matchId, match)
+      }
+    }
     return {
       teamLogos,
-      matches: lineupRound.matches,
+      matches: [...matchesById.values()].sort((a, b) => a.matchDate.localeCompare(b.matchDate) || (a.kickoffUtc ?? "").localeCompare(b.kickoffUtc ?? "")),
     }
   })()
   const shouldUseShellMatches = process.env.NODE_ENV === "production"
@@ -216,17 +270,19 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
     ? summaryTeamLogos
     : fallbackData?.teamLogos ?? await withFallback(fetchTeamLogos(), {}, "Lineups team logos")
   const visibleMatches = matches.filter((match) => match.homeTeam || match.awayTeam || isDrawFallbackMatch(match) || !isPastMatch(match))
-  const initialLiveMatches = visibleMatches.length > 0
+  const initialLiveMatches = selectedCompetition === "nrl" && visibleMatches.length > 0
     ? await withFallback(fetchLiveLineupData(visibleMatches.map((match) => match.matchId)), {}, "Live lineups data")
     : {}
-  const tryChartsByTeam = await withFallback(
-    fetchStatsinsiderTryCharts(year, roundNumberFromLabel(selectedRound)),
-    {},
-    "Stats Insider try charts"
-  )
+  const tryChartsByTeam = selectedCompetition === "nrl"
+    ? await withFallback(
+        fetchStatsinsiderTryCharts(selectedYear, roundNumberFromLabel(selectedRound)),
+        {},
+        "Stats Insider try charts"
+      )
+    : {}
   const summarySparseReason = lineupsSummarySparseReason(summary)
   const summaryDiagnosticReason = summaryMissReason
-    ? `lineups_page_summary miss: ${summaryMissReason} Heavy fallback data path is active for ${year} ${selectedRound}.`
+    ? `lineups_page_summary miss: ${summaryMissReason} Heavy fallback data path is active for ${selectedYear} ${selectedRound}.`
     : summarySparseReason
   const summaryDiagnostic = summaryDiagnosticReason && await shouldShowLineupsSummaryDiagnostic()
     ? summaryDiagnosticReason
@@ -235,11 +291,13 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   return (
     <LineupsDashboard
       matches={visibleMatches}
-      year={year}
+      year={selectedYear}
       liveMatches={initialLiveMatches}
       weatherForecasts={{}}
-      roundOptions={mergeRoundOptions(initialRoundOptions, summary?.roundOptions ?? [])}
+      yearOptions={yearOptions}
       selectedRound={selectedRound}
+      selectedYear={selectedYear}
+      selectedCompetition={selectedCompetition}
       teamLogos={teamLogos}
       sportsbetOdds={summary?.sportsbetOdds ?? {}}
       tryChartsByTeam={tryChartsByTeam}

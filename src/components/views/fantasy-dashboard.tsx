@@ -1825,14 +1825,14 @@ function TradeRatingInfoPopover({ className = "" }: { className?: string }) {
   return (
     <div className={`absolute right-0 top-full z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-nrl-border bg-[#101832] p-3 text-left shadow-2xl shadow-black/40 ${className}`}>
       <div className="grid gap-1.5 text-[10px] font-semibold leading-snug text-nrl-muted sm:grid-cols-2">
-        <div><span className="text-nrl-accent">Overall</span>: Combines every component with even weighting.</div>
-        <div><span className="text-nrl-accent">Popularity</span>: Scores weekly ownership movement against fixed thresholds.</div>
-        <div><span className="text-nrl-accent">Value</span>: Scores projection versus priced-at against fixed thresholds.</div>
-        <div><span className="text-nrl-accent">Keeper</span>: Rewards keeper-level projected scoring.</div>
-        <div><span className="text-nrl-accent">Role</span>: Penalises relevant casualty ward return risk.</div>
-        <div><span className="text-nrl-accent">Form</span>: Compares L3 average to priced-at score.</div>
-        <div><span className="text-nrl-accent">BE</span>: Compares priced-at score to breakeven.</div>
-        <div><span className="text-nrl-accent">Avail</span>: Counts next 6 rounds played, including byes and Origin risk.</div>
+        <div><span className="text-nrl-accent">Overall</span>: Combines all individual ratings to get an overall trade rating.</div>
+        <div><span className="text-nrl-accent">Popularity</span>: Looks at how many people are trading the player in this week.</div>
+        <div><span className="text-nrl-accent">Value</span>: Uses Short Side projections vs priced-at score to get a value rating.</div>
+        <div><span className="text-nrl-accent">Keeper</span>: Uses projected scoring to rate how likely a player is to stay in your team all year.</div>
+        <div><span className="text-nrl-accent">Role Security</span>: Uses casualty ward information and Origin lineups to see if injured players could return and threaten their spot.</div>
+        <div><span className="text-nrl-accent">Form</span>: Looks at L3 average vs priced-at score.</div>
+        <div><span className="text-nrl-accent">Breakeven</span>: Compares their breakeven against their priced-at score.</div>
+        <div><span className="text-nrl-accent">Availability</span>: Looks at how many of the next 6 games their team plays, with Origin players and major bye absences weighted down.</div>
       </div>
     </div>
   )
@@ -5730,8 +5730,8 @@ export function FantasyDashboard({
         <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-panel-2 px-3 py-2">
             {hasLoadedFullAllPlayersRows ? (
-              <div className="flex w-full min-w-0 flex-nowrap items-center justify-between gap-1.5">
-                <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+              <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:gap-1.5">
+                <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:shrink-0">
                   {showAllPlayersOnly ? (
                     <FantasyBackLink href="/dashboard/fantasy" label="Back to Fantasy Dashboard" />
                   ) : null}
@@ -5766,7 +5766,7 @@ export function FantasyDashboard({
                     </span>
                   </label>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:w-auto sm:justify-end sm:gap-1.5">
                   <div className="relative flex items-center gap-0.5">
                     <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
                       <span>Ratings</span>

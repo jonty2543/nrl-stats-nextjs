@@ -24,6 +24,11 @@ function decodeImageSource(source: string): string {
   }
 }
 
+function isDefaultPlayerImageSource(source: string): boolean {
+  const normalised = source.trim().toLowerCase()
+  return normalised === "/body-shot.png" || normalised.endsWith("/body-shot.png")
+}
+
 function imageSourceCandidates(value: string): string[] {
   const out: string[] = []
   const seen = new Set<string>()
@@ -40,9 +45,9 @@ function imageSourceCandidates(value: string): string[] {
   const markerIndex = trimmed.indexOf(marker)
   if (markerIndex >= 0) {
     const nested = trimmed.slice(markerIndex + marker.length).split("&preset=")[0]
-    push(trimmed)
-    push(decoded)
     push(decodeImageSource(nested))
+    push(decoded)
+    push(trimmed)
     return out
   }
 
@@ -54,17 +59,22 @@ function imageSourceCandidates(value: string): string[] {
 export function ImageWithFallback({ sources, alt, className }: ImageWithFallbackProps) {
   const uniqueSources = useMemo(() => {
     const seen = new Set<string>()
-    const out: string[] = []
+    const realSources: string[] = []
+    const defaultSources: string[] = []
     for (const source of sources) {
       const trimmed = source?.trim()
       if (!trimmed || seen.has(trimmed)) continue
       for (const normalised of imageSourceCandidates(trimmed)) {
         if (seen.has(normalised)) continue
         seen.add(normalised)
-        out.push(normalised)
+        if (isDefaultPlayerImageSource(normalised)) {
+          defaultSources.push(normalised)
+        } else {
+          realSources.push(normalised)
+        }
       }
     }
-    return out
+    return [...realSources, ...defaultSources]
   }, [sources])
 
   const sourceSignature = uniqueSources.join("|")

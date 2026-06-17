@@ -520,7 +520,7 @@ const ALL_PLAYERS_BASE_COLUMNS: Array<{ key: AllPlayersSortKey; label: string; a
   { key: "ppm", label: "PPM", align: "center" },
   { key: "projection", label: "Proj", align: "center", proOnly: true },
   { key: "value", label: "Value", align: "center", proOnly: true },
-  { key: "tradeRating", label: "Overall", align: "center", proOnly: true },
+  { key: "tradeRating", label: "Overall", align: "center" },
   { key: "tradeWeeklyDelta", label: "Pop", align: "center", proOnly: true },
   { key: "tradeValue", label: "Value", align: "center", proOnly: true },
   { key: "tradeKeeper", label: "Keeper", align: "center", proOnly: true },
@@ -542,7 +542,7 @@ const ALL_PLAYERS_MOBILE_SORT_OPTIONS: Array<{ key: AllPlayersSortKey; label: st
   { key: "ppm", label: "PPM" },
   { key: "projection", label: "Proj", proOnly: true },
   { key: "value", label: "Value", proOnly: true },
-  { key: "tradeRating", label: "Overall", proOnly: true },
+  { key: "tradeRating", label: "Overall" },
   { key: "tradeWeeklyDelta", label: "Pop", proOnly: true },
   { key: "tradeValue", label: "Value", proOnly: true },
   { key: "tradeKeeper", label: "Keeper", proOnly: true },
@@ -6059,7 +6059,7 @@ export function FantasyDashboard({
                     label: "Overall",
                     value: formatTradeScore(row.tradeRating?.overall ?? null),
                     tradeScore: row.tradeRating?.overall ?? null,
-                    locked: true,
+                    locked: false,
                     highlighted: true,
                   },
                   {
@@ -6248,7 +6248,7 @@ export function FantasyDashboard({
                           <div className={`ml-auto mt-0.5 inline-flex min-h-6 min-w-16 items-center justify-center rounded-full border px-2 text-[10px] font-black tracking-[0.06em] ${getTradeScorePillClass(selectedCardStat.tradeScore, "highlighted" in selectedCardStat && selectedCardStat.highlighted)}`}>
                             <TradeStars
                               value={selectedCardStat.tradeScore}
-                              blurred={!hasFantasyPlotAccess}
+                              blurred={selectedCardStatLocked}
                               maxStars={"maxStars" in selectedCardStat ? selectedCardStat.maxStars : undefined}
                             />
                           </div>
@@ -6274,7 +6274,7 @@ export function FantasyDashboard({
                                 </span>
                                 <TradeStars
                                   value={stat.tradeScore}
-                                  blurred={!hasFantasyPlotAccess}
+                                  blurred={!hasFantasyPlotAccess && stat.locked}
                                   maxStars={stat.maxStars}
                                   className="mt-0.5 text-[10px] font-black tracking-[0.06em]"
                                 />
@@ -6441,8 +6441,8 @@ export function FantasyDashboard({
                         { key: "tradeAvailability" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.availability)), tradeScore: tradeScore10(row.tradeRating?.availability) },
                       ].map((score) => (
                         <td key={score.key} className={`w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getTradeScoreColorClass(score.tradeScore)}`}>
-                          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass(score.key)}`}>
-                            <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
+                          <span className={!hasFantasyPlotAccess && score.key !== "tradeRating" ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass(score.key)}`}>
+                            <span className={!hasFantasyPlotAccess && score.key !== "tradeRating" ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
                             {score.value}
                             </span>
                           </span>
@@ -6738,7 +6738,7 @@ export function FantasyDashboard({
                                 </span>
                                 <TradeStars
                                   value={stat.tradeScore}
-                                  blurred={!hasFantasyPlotAccess}
+                                  blurred={!hasFantasyPlotAccess && stat.key !== "overall"}
                                   maxStars={stat.maxStars}
                                   className="mt-0.5 text-[10px] font-black tracking-[0.06em]"
                                 />

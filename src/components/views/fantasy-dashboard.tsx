@@ -1779,6 +1779,14 @@ function formatTradeScore(value: number | null | undefined): string {
 }
 
 const LOW_WEIGHT_TRADE_RATING_MAX_STARS = 3
+const ALL_PLAYERS_CARD_CONTENT_STYLE = {
+  contentVisibility: "auto",
+  containIntrinsicSize: "120px",
+} satisfies CSSProperties
+const ALL_PLAYERS_RATED_CARD_CONTENT_STYLE = {
+  contentVisibility: "auto",
+  containIntrinsicSize: "180px",
+} satisfies CSSProperties
 
 function TradeStars({
   value,
@@ -3377,6 +3385,8 @@ export function FantasyDashboard({
   const deferredAllPlayersBreakevenRange = useDeferredValue(allPlayersBreakevenRange)
   const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(false)
   const [showAllPlayersTradeRatings, setShowAllPlayersTradeRatings] = useState(false)
+  const deferredShowAllPlayersTradeRatings = useDeferredValue(showAllPlayersTradeRatings)
+  const renderAllPlayersTradeRatings = showAllPlayersTradeRatings && deferredShowAllPlayersTradeRatings
   const [showAllPlayersTradeRatingInfo, setShowAllPlayersTradeRatingInfo] = useState(false)
   const [cardTagsPreferenceHydrated, setCardTagsPreferenceHydrated] = useState(false)
   const showFantasyAnalytics = initialShowFantasyAnalytics
@@ -6212,6 +6222,7 @@ export function FantasyDashboard({
                     type="button"
                     onClick={() => navigateToPlayer(row.player.name)}
 	                    className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-3 text-left transition-colors hover:border-white/25 hover:bg-[#17213d]"
+                    style={renderAllPlayersTradeRatings ? ALL_PLAYERS_RATED_CARD_CONTENT_STYLE : ALL_PLAYERS_CARD_CONTENT_STYLE}
 	                  >
 	                    <div className="flex items-start justify-between gap-3 md:w-[250px] md:shrink-0 md:items-center">
                       <div className="flex min-w-0 items-start gap-2.5">
@@ -6259,7 +6270,7 @@ export function FantasyDashboard({
                         )}
                       </div>
                     </div>
-                    {showAllPlayersTradeRatings ? (
+                    {renderAllPlayersTradeRatings ? (
                       <div className="mt-3 overflow-x-auto rounded-full border border-white/10 bg-white/[0.035] px-3 py-2 [scrollbar-width:none] lg:overflow-visible [&::-webkit-scrollbar]:hidden">
                         <div className="flex min-w-max items-center gap-2.5 lg:grid lg:min-w-0 lg:grid-cols-8 lg:gap-3">
                           {tradeRatingCardStats.map((stat) => {
@@ -6284,7 +6295,7 @@ export function FantasyDashboard({
                         </div>
                       </div>
                     ) : null}
-	                    <div className={`relative ${showAllPlayersTradeRatings ? "mt-5" : "mt-3"} overflow-hidden md:min-w-0`}>
+	                    <div className={`relative ${renderAllPlayersTradeRatings ? "mt-5" : "mt-3"} overflow-hidden md:min-w-0`}>
                         <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-8 bg-[linear-gradient(90deg,rgba(17,24,50,0),#111832)] md:hidden" />
                         <span className="pointer-events-none absolute right-1.5 top-1/2 z-[2] -translate-y-1/2 text-sm font-black text-nrl-accent/70 drop-shadow-[0_0_8px_rgba(0,245,138,0.22)] md:hidden" aria-hidden="true">
                           →

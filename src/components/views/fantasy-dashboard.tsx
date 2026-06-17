@@ -224,6 +224,7 @@ interface AllPlayersTableRow {
   tradeRating: TradeRatingScores | null
   breakeven: number | null
   weeklyChange: number | null
+  playerCasualtyWard: CasualtyWardRecord | null
   relevantOuts: CasualtyWardRecord[]
   majorByeRoundTags: MajorByeRoundTag[]
   nextMajorByeRound: number | null
@@ -4340,6 +4341,16 @@ export function FantasyDashboard({
     ),
     [casualtyWardRows, relevantOutCandidates, relevantOuts]
   )
+  const casualtyWardRowsByPlayerName = useMemo(() => {
+    const rowsByName = new Map<string, CasualtyWardRecord>()
+    for (const row of [...casualtyWardRows, ...relevantOuts, ...relevantOutCandidates]) {
+      const playerKey = normaliseProjectionPlayerName(row.player)
+      if (!playerKey) continue
+      const existing = rowsByName.get(playerKey)
+      if (!existing || (!existing.returnDate && row.returnDate)) rowsByName.set(playerKey, row)
+    }
+    return rowsByName
+  }, [casualtyWardRows, relevantOutCandidates, relevantOuts])
 
  const rawAllPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
     const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
@@ -4433,6 +4444,7 @@ export function FantasyDashboard({
       const coachPlayer = fantasyCoachPlayers.find((entry) => entry.id === player.id)
       const coachMetrics = getFantasyCoachRoundMetrics(coachPlayer)
       const ownershipDelta = ownershipDeltaByPlayerId.get(player.id) ?? null
+      const playerCasualtyWard = casualtyWardRowsByPlayerName.get(normaliseProjectionPlayerName(player.name)) ?? null
       const teamHint = precomputedRow?.team ?? (playerRows.length > 0 ? primaryTeamForRows(playerRows) : null)
       const imageRow =
         resolvePlayerImage(localName ?? player.name, teamHint, playerImages) ??
@@ -4515,6 +4527,7 @@ export function FantasyDashboard({
         last3: precomputedStatsRow?.last3 ?? averageNumbers(recentScores),
         ppm: precomputedStatsRow?.ppm ?? (totalMinutes > 0 ? totalFantasy / totalMinutes : null),
         weeklyChange: precomputedRow?.weeklyChange ?? ownershipDelta,
+        playerCasualtyWard,
         pricedAt: effectivePricedAt,
         projection,
         value,
@@ -4533,7 +4546,7 @@ export function FantasyDashboard({
         team: projectionTeam ?? imageRow?.team ?? teamHint,
       }
     })
-  }, [allPlayersStatsSourceData, casualtyWardPlayerNames, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
+  }, [allPlayersStatsSourceData, casualtyWardPlayerNames, casualtyWardRowsByPlayerName, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
 
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
     const currentRound = lineupsProjections?.round ?? selectedFantasyCoachRound ?? 1
@@ -4551,6 +4564,7 @@ export function FantasyDashboard({
           team: row.team,
           originChance: row.originChance,
           playsNextMajorBye: row.playsNextMajorBye,
+          playerCasualtyWard: row.playerCasualtyWard,
           relevantOuts: row.relevantOuts,
         },
         draw: draw2026Data,

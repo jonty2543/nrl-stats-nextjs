@@ -2,6 +2,7 @@ import type { Draw2026Data } from "@/lib/draw/types"
 
 const MAJOR_BYE_ROUNDS = [12, 15, 18] as const
 const AVAILABILITY_MAJOR_BYE_STAR_PENALTY = 100 / 3
+const AVAILABILITY_TBC_CASUALTY_STAR_PENALTY = 100 / 3
 const AVAILABILITY_MAJOR_BYE_MISS_MAX_SCORE = (2 / 3) * 100
 const AVAILABILITY_ORIGIN_MAJOR_BYE_MAX_SCORE = 100 / 3
 const TRADE_RATING_COMPONENT_WEIGHTS = {
@@ -35,6 +36,7 @@ export interface TradeRatingInput {
   team: string | null
   originChance: boolean
   playsNextMajorBye: boolean | null
+  playerCasualtyWard: TradeRatingCasualtyWardRecord | null
   relevantOuts: TradeRatingCasualtyWardRecord[]
 }
 
@@ -220,12 +222,14 @@ function availabilityScore({
   team,
   originChance,
   playsNextMajorBye,
+  playerCasualtyWard,
 }: {
   draw: Draw2026Data | null | undefined
   currentRound: number
   team: string | null
   originChance: boolean
   playsNextMajorBye: boolean | null
+  playerCasualtyWard: TradeRatingCasualtyWardRecord | null
 }): number {
   const hasUpcomingMajorBye = MAJOR_BYE_ROUNDS.some((byeRound) => byeRound >= currentRound)
   if (!team) return 30
@@ -235,11 +239,13 @@ function availabilityScore({
 
   let played = 0
   let knownRounds = 0
+  const casualtyReturnRound = returnRound(playerCasualtyWard?.returnDate ?? null)
   for (let offset = 0; offset < 6; offset += 1) {
     const round = currentRound + offset
     const plays = teamPlaysInRound(draw, round, team)
+    const playerUnavailable = casualtyReturnRound !== null && round < casualtyReturnRound
     if (plays !== null) knownRounds += 1
-    if (plays === true && !(originChance && MAJOR_BYE_ROUNDS.includes(round as typeof MAJOR_BYE_ROUNDS[number]))) {
+    if (plays === true && !playerUnavailable && !(originChance && MAJOR_BYE_ROUNDS.includes(round as typeof MAJOR_BYE_ROUNDS[number]))) {
       played += 1
     }
   }
@@ -259,6 +265,9 @@ function availabilityScore({
 
   if (playsNextMajorBye === false || missesUpcomingMajorBye) {
     score = Math.min(AVAILABILITY_MAJOR_BYE_MISS_MAX_SCORE, Math.max(0, score - AVAILABILITY_MAJOR_BYE_STAR_PENALTY))
+  }
+  if (playerCasualtyWard !== null && casualtyReturnRound === null) {
+    score = Math.max(0, score - AVAILABILITY_TBC_CASUALTY_STAR_PENALTY)
   }
   if (originChance && hasUpcomingMajorBye) {
     score = Math.min(AVAILABILITY_ORIGIN_MAJOR_BYE_MAX_SCORE, score)
@@ -295,6 +304,7 @@ export function calculateTradeRating({
       team: input.team,
       originChance: input.originChance,
       playsNextMajorBye: input.playsNextMajorBye,
+      playerCasualtyWard: input.playerCasualtyWard,
     }),
   }
   const total =

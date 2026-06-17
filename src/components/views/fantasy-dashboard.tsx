@@ -622,6 +622,11 @@ function matchesAllPlayersNumberRange(value: number | null, range: NumberRange):
   return value !== null && value >= range.min && value <= range.max
 }
 
+function matchesAllPlayersProjectionRange(value: number | null, range: NumberRange): boolean {
+  if (value === null) return isFullNumberRange(range, ALL_PLAYERS_SCORE_RANGE)
+  return matchesAllPlayersNumberRange(value, range)
+}
+
 function matchesAllPlayersPositionFilters(positionLabels: string[], filters: string[]): boolean {
   return filters.length === 0 || filters.some((position) => positionLabels.includes(position))
 }
@@ -4594,7 +4599,7 @@ export function FantasyDashboard({
           matchesAllPlayersNumberRange(point.ownPercent, deferredAllPlayersOwnershipRange) &&
           matchesAllPlayersNumberRange(point.avg2026, deferredAllPlayersAverageRange) &&
           matchesAllPlayersNumberRange(point.last3, deferredAllPlayersLast3Range) &&
-          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.projection, deferredAllPlayersProjectionRange)) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersProjectionRange(point.projection, deferredAllPlayersProjectionRange)) &&
           (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.breakeven, deferredAllPlayersBreakevenRange)) &&
           point.pricedAt !== null &&
           metricValue !== null &&
@@ -4681,7 +4686,7 @@ export function FantasyDashboard({
           matchesAllPlayersNumberRange(point.ownPercent, deferredAllPlayersOwnershipRange) &&
           matchesAllPlayersNumberRange(point.avg2026, deferredAllPlayersAverageRange) &&
           matchesAllPlayersNumberRange(point.last3, deferredAllPlayersLast3Range) &&
-          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.projection, deferredAllPlayersProjectionRange)) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersProjectionRange(point.projection, deferredAllPlayersProjectionRange)) &&
           (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(point.breakeven, deferredAllPlayersBreakevenRange))
       ),
     [
@@ -4761,7 +4766,7 @@ export function FantasyDashboard({
           matchesAllPlayersNumberRange(row.player.ownedBy, deferredAllPlayersOwnershipRange) &&
           matchesAllPlayersNumberRange(row.avg2026, deferredAllPlayersAverageRange) &&
           matchesAllPlayersNumberRange(row.last3, deferredAllPlayersLast3Range) &&
-          (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(row.projection, deferredAllPlayersProjectionRange)) &&
+          (!hasFantasyPlotAccess || matchesAllPlayersProjectionRange(row.projection, deferredAllPlayersProjectionRange)) &&
           (!hasFantasyPlotAccess || matchesAllPlayersNumberRange(row.breakeven, deferredAllPlayersBreakevenRange))
       )
     }

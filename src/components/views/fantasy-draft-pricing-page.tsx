@@ -287,8 +287,6 @@ function playerImageSources(
   for (const source of [row?.body_image, row?.head_image]) {
     pushVariants(source)
   }
-  push("/body-shot.png")
-
   return out
 }
 
@@ -538,7 +536,7 @@ function teamAvatarSources(
   const validPlayers = players.filter((player): player is DraftPricingPlayer => player != null)
   const captain = validPlayers.find((player) => player.id === selectedCaptainId)
   const leadPlayer = captain ?? validPlayers[0] ?? null
-  if (!leadPlayer) return ["/body-shot.png"]
+  if (!leadPlayer) return []
   return playerImageSources(leadPlayer, playerPoolById, fantasyPlayersById, playerImages)
 }
 
@@ -851,7 +849,7 @@ function EditableBoardRow({
       <div className="grid grid-cols-[20px_minmax(0,1fr)] items-center gap-1 md:grid-cols-[30px_minmax(0,1fr)] md:gap-1.5">
         <div className={`group relative flex h-5 w-5 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${leftPlayer?.id === leftCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
           <ImageWithFallback
-            sources={leftPlayer ? playerImageSources(leftPlayer, playerPoolById, fantasyPlayersById, playerImages) : ["/body-shot.png"]}
+            sources={leftPlayer ? playerImageSources(leftPlayer, playerPoolById, fantasyPlayersById, playerImages) : []}
             alt={leftName || "Player"}
             className="h-full w-full object-cover object-top"
           />
@@ -949,7 +947,7 @@ function EditableBoardRow({
         </div>
         <div className={`group relative flex h-5 w-5 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${rightPlayer?.id === rightCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
           <ImageWithFallback
-            sources={rightPlayer ? playerImageSources(rightPlayer, playerPoolById, fantasyPlayersById, playerImages) : ["/body-shot.png"]}
+            sources={rightPlayer ? playerImageSources(rightPlayer, playerPoolById, fantasyPlayersById, playerImages) : []}
             alt={rightName || "Player"}
             className="h-full w-full object-cover object-top"
           />

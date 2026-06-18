@@ -704,7 +704,6 @@ function playerImageSources(...sources: Array<string | null | undefined>): strin
     const normalised = normaliseImageUrl(source ?? null)
     return normalised ? [normalised] : []
   })
-  out.push("/body-shot.png")
   return out
 }
 

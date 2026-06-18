@@ -245,7 +245,15 @@ function parsePersonName(value: string): { first: string; last: string } {
 }
 
 const preferredImageIndexByCandidatesKey = new Map<string, number>();
-const PLAYER_IMAGE_FALLBACK_URL = "/body-shot.png";
+
+function playerImageInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "?";
+}
 
 function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[] {
   const seen = new Set<string>();
@@ -298,7 +306,6 @@ function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[
     }
   }
 
-  push(PLAYER_IMAGE_FALLBACK_URL);
   return out;
 }
 
@@ -628,17 +635,7 @@ export function PlayerImageCard({
                   }));
                 }}
               />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={PLAYER_IMAGE_FALLBACK_URL}
-                alt={`${playerName} player image`}
-                className={frameless ? "relative z-10 max-h-[99%] w-auto object-contain" : "relative z-10 max-h-[94%] w-auto object-contain"}
-                loading="eager"
-                fetchPriority={priority ? "high" : "auto"}
-                decoding="async"
-              />
-            )}
+            ) : null}
           </div>
 
           {/* Combined name/team + stats panel */}
@@ -756,15 +753,9 @@ export function SimplePlayerPhotoTile({
             }}
           />
         ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={PLAYER_IMAGE_FALLBACK_URL}
-            alt={`${playerName} player image`}
-            className="relative z-10 max-h-[96%] w-auto object-contain"
-            loading="eager"
-            fetchPriority={priority ? "high" : "auto"}
-            decoding="async"
-          />
+          <span className="relative z-10 grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-white/55 sm:h-20 sm:w-20 sm:text-xl">
+            {playerImageInitials(playerName)}
+          </span>
         )}
       </div>
       {showName ? (
@@ -810,14 +801,7 @@ function PlayerStatsTableThumbnail({
           }}
         />
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={PLAYER_IMAGE_FALLBACK_URL}
-          alt={`${name} player image`}
-          className="h-full w-full object-cover object-top"
-          loading="lazy"
-          decoding="async"
-        />
+        <span aria-label={`${name} player image`}>{playerImageInitials(name)}</span>
       )}
     </div>
   );

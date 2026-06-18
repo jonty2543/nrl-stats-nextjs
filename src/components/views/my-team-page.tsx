@@ -559,7 +559,6 @@ function imageSourcesForPlayer(
   for (const source of [imageRow?.body_image, imageRow?.head_image]) {
     pushVariants(source)
   }
-  push("/body-shot.png")
   return out
 }
 

@@ -59,22 +59,18 @@ function imageSourceCandidates(value: string): string[] {
 export function ImageWithFallback({ sources, alt, className }: ImageWithFallbackProps) {
   const uniqueSources = useMemo(() => {
     const seen = new Set<string>()
-    const realSources: string[] = []
-    const defaultSources: string[] = []
+    const out: string[] = []
     for (const source of sources) {
       const trimmed = source?.trim()
       if (!trimmed || seen.has(trimmed)) continue
       for (const normalised of imageSourceCandidates(trimmed)) {
         if (seen.has(normalised)) continue
         seen.add(normalised)
-        if (isDefaultPlayerImageSource(normalised)) {
-          defaultSources.push(normalised)
-        } else {
-          realSources.push(normalised)
-        }
+        if (isDefaultPlayerImageSource(normalised)) continue
+        out.push(normalised)
       }
     }
-    return [...realSources, ...defaultSources]
+    return out
   }, [sources])
 
   const sourceSignature = uniqueSources.join("|")
@@ -97,7 +93,7 @@ export function ImageWithFallback({ sources, alt, className }: ImageWithFallback
       onError={() => {
         setState((current) => {
           const baseIndex = current.signature === sourceSignature ? current.index : 0
-          const nextIndex = baseIndex < uniqueSources.length - 1 ? baseIndex + 1 : baseIndex
+          const nextIndex = Math.min(baseIndex + 1, uniqueSources.length)
           return {
             signature: sourceSignature,
             index: nextIndex,

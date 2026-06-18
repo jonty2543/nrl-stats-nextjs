@@ -133,7 +133,6 @@ interface TeamLeaderCardData extends TeamLeaderStatConfig {
   leaders: TeamLeaderEntry[]
 }
 
-const PLAYER_IMAGE_FALLBACK_URL = "/body-shot.png"
 const PLAYER_RATE_STATS = new Set<PlayerLeaderStatKey>([
   "Average Play The Ball Speed",
   "Passes To Run Ratio",
@@ -408,7 +407,6 @@ function buildPlayerImageSources(
       }
     }
   }
-  out.push(PLAYER_IMAGE_FALLBACK_URL)
   return out
 }
 

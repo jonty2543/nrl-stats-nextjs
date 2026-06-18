@@ -179,12 +179,12 @@ const STATIC_DATA: LandingStaticSnapshotData = {
     tryscorer: [],
   },
   playerImages: [
-    { player: "Nathan Cleary", team: "Panthers", number: "23", position: "HLF", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-31" },
-    { player: "Nicholas Hynes", team: "Sharks", number: "7", position: "HLF", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
-    { player: "Payne Haas", team: "Broncos", number: "10", position: "MID", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
-    { player: "Harry Grant", team: "Storm", number: "9", position: "HOK", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
+    { player: "Nathan Cleary", team: "Panthers", number: "23", position: "HLF", head_image: null, body_image: null, last_seen_match_date: "2026-05-31" },
+    { player: "Nicholas Hynes", team: "Sharks", number: "7", position: "HLF", head_image: null, body_image: null, last_seen_match_date: "2026-05-29" },
+    { player: "Payne Haas", team: "Broncos", number: "10", position: "MID", head_image: null, body_image: null, last_seen_match_date: "2026-05-29" },
+    { player: "Harry Grant", team: "Storm", number: "9", position: "HOK", head_image: null, body_image: null, last_seen_match_date: "2026-05-29" },
     { player: "Dylan Edwards", team: "Panthers", number: "1", position: "WFB", head_image: null, body_image: PLAYER_IMAGES.dylanEdwards, last_seen_match_date: "2026-05-31" },
-    { player: "Kalyn Ponga", team: "Knights", number: "1", position: "WFB", head_image: null, body_image: "/body-shot.png", last_seen_match_date: "2026-05-29" },
+    { player: "Kalyn Ponga", team: "Knights", number: "1", position: "WFB", head_image: null, body_image: null, last_seen_match_date: "2026-05-29" },
   ],
   approvedArticles: [
     {

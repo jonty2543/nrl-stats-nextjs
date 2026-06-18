@@ -743,7 +743,24 @@ function PlayerProfileImage({
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const imageSrc = normalizePlayerImageUrl(image);
-  const src = imageSrc && imageSrc !== failedSrc ? imageSrc : "/body-shot.png";
+  const src = imageSrc && imageSrc !== failedSrc ? imageSrc : null;
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "?";
+
+  if (!src) {
+    return (
+      <span
+        aria-label={name}
+        className={`${className} grid shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-[10px] font-semibold text-white/55 transition-opacity duration-150 ${reveal ? "opacity-100" : "opacity-0"}`}
+      >
+        {initials}
+      </span>
+    );
+  }
 
   return (
     // eslint-disable-next-line @next/next/no-img-element

@@ -61,7 +61,6 @@ function PlanCard({
   priceClassName,
   priceRowClassName,
   className,
-  description,
   features,
   tone = "default",
   cta,
@@ -73,7 +72,6 @@ function PlanCard({
   priceClassName?: string;
   priceRowClassName?: string;
   className?: string;
-  description: string;
   features: string[];
   tone?: PlanTone;
   cta: React.ReactNode;
@@ -83,7 +81,7 @@ function PlanCard({
 
   return (
     <article
-      className={`grid min-w-0 grid-rows-[auto_auto_auto_auto_1fr_auto] rounded-[24px] border p-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)] sm:p-6 ${
+      className={`grid min-w-0 grid-rows-[auto_auto_auto_1fr_auto] rounded-[24px] border p-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)] sm:p-6 ${
         isPremium
           ? "border-[#7a5cff] bg-[radial-gradient(circle_at_top,rgba(122,92,255,0.2),transparent_38%),linear-gradient(180deg,rgba(28,23,49,0.98),rgba(14,18,34,1))] shadow-[0_24px_60px_rgba(122,92,255,0.16)]"
           : isFeatured
@@ -119,10 +117,6 @@ function PlanCard({
         {suffix ? (
           <span className="pb-1 text-xs text-nrl-muted sm:text-base">{suffix}</span>
         ) : null}
-      </div>
-
-      <div className="mt-3 min-h-[44px] text-[11px] leading-5 text-nrl-muted sm:min-h-[56px] sm:text-sm">
-        {description}
       </div>
 
       <ul className="mt-6 space-y-3 self-start sm:mt-8 sm:space-y-4">
@@ -172,7 +166,6 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 title="Free"
                 price="$0"
                 className="order-3 lg:order-1"
-                description="The base tier for exploring the app before you upgrade."
                 features={[
                   "Core app access",
                   "Current free stats access",
@@ -209,7 +202,6 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 price="$5"
                 suffix="/month"
                 className="order-1 lg:order-2"
-                description="All paid access available today starts here."
                 tone="featured"
                 features={[
                   "Everything in Free",
@@ -246,7 +238,6 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                 suffix="/month"
                 className="order-2 lg:order-3"
                 tone="premium"
-                description="Unlock the betting model, bet tracking and matchup context built for weekly decisions."
                 features={[
                   "Everything in Pro",
                   "H2H, line, total and tryscorer model predictions",

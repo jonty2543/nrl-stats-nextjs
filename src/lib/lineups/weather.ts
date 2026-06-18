@@ -1,3 +1,4 @@
+import { createServerSupabaseClient } from "@/lib/supabase/client"
 import type { LineupMatch } from "@/lib/lineups/nrl-lineups"
 
 export interface LineupWeatherForecast {
@@ -5,6 +6,7 @@ export interface LineupWeatherForecast {
   venue: string
   location: string
   provider: "Open-Meteo"
+  weatherCode: number | null
   forecastTimeUtc: string
   condition: string
   temperatureC: number | null
@@ -38,6 +40,26 @@ interface OpenMeteoForecast {
 }
 
 const MAX_FORECAST_DAYS = 16
+const WEATHER_CACHE_MAX_AGE_MS = 30 * 60 * 1000
+const WEATHER_FORECAST_TABLE = "lineup_weather_forecasts"
+
+interface StoredLineupWeatherForecast {
+  match_id: string
+  kickoff_utc: string | null
+  venue: string | null
+  location: string | null
+  provider: "Open-Meteo" | string | null
+  forecast_time_utc: string | null
+  weather_code: number | null
+  condition: string | null
+  temperature_c: number | null
+  apparent_temperature_c: number | null
+  precipitation_probability_pct: number | null
+  precipitation_mm: number | null
+  wind_kmh: number | null
+  gust_kmh: number | null
+  fetched_at: string | null
+}
 
 const STADIUM_LOCATIONS: StadiumLocation[] = [
   { name: "Accor Stadium", latitude: -33.8472, longitude: 151.0634, aliases: ["accor stadium", "stadium australia"] },
@@ -130,6 +152,99 @@ function hasKickoffPassed(kickoff: Date, now = new Date()): boolean {
   return kickoff.getTime() <= now.getTime()
 }
 
+function parseDateMs(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function storedForecastIsFresh(row: StoredLineupWeatherForecast, match: LineupMatch, now = new Date()): boolean {
+  const kickoffMs = parseDateMs(match.kickoffUtc ?? row.kickoff_utc)
+  if (kickoffMs != null && kickoffMs <= now.getTime()) return true
+
+  const fetchedAtMs = parseDateMs(row.fetched_at)
+  return fetchedAtMs != null && now.getTime() - fetchedAtMs <= WEATHER_CACHE_MAX_AGE_MS
+}
+
+function storedForecastToLineupForecast(row: StoredLineupWeatherForecast): LineupWeatherForecast | null {
+  if (!row.match_id || !row.forecast_time_utc) return null
+
+  return {
+    matchId: row.match_id,
+    venue: row.venue ?? "",
+    location: row.location ?? row.venue ?? "",
+    provider: "Open-Meteo",
+    forecastTimeUtc: row.forecast_time_utc,
+    weatherCode: row.weather_code,
+    condition: row.condition ?? weatherCodeLabel(row.weather_code),
+    temperatureC: row.temperature_c,
+    apparentTemperatureC: row.apparent_temperature_c,
+    precipitationProbabilityPct: row.precipitation_probability_pct,
+    precipitationMm: row.precipitation_mm,
+    windKmh: row.wind_kmh,
+    gustKmh: row.gust_kmh,
+  }
+}
+
+function forecastToStoredRow(match: LineupMatch, forecast: LineupWeatherForecast) {
+  return {
+    match_id: forecast.matchId,
+    kickoff_utc: match.kickoffUtc ?? null,
+    venue: forecast.venue,
+    location: forecast.location,
+    provider: forecast.provider,
+    forecast_time_utc: forecast.forecastTimeUtc,
+    weather_code: forecast.weatherCode,
+    condition: forecast.condition,
+    temperature_c: forecast.temperatureC,
+    apparent_temperature_c: forecast.apparentTemperatureC,
+    precipitation_probability_pct: forecast.precipitationProbabilityPct,
+    precipitation_mm: forecast.precipitationMm,
+    wind_kmh: forecast.windKmh,
+    gust_kmh: forecast.gustKmh,
+    fetched_at: new Date().toISOString(),
+  }
+}
+
+async function fetchStoredWeatherForecasts(matches: LineupMatch[]): Promise<Map<string, StoredLineupWeatherForecast>> {
+  const matchIds = Array.from(new Set(matches.map((match) => match.matchId).filter(Boolean)))
+  if (matchIds.length === 0) return new Map()
+
+  try {
+    const supabase = createServerSupabaseClient("nrl")
+    const { data, error } = await supabase
+      .from(WEATHER_FORECAST_TABLE)
+      .select("*")
+      .in("match_id", matchIds)
+
+    if (error) throw new Error(error.message)
+
+    return new Map(
+      ((data ?? []) as StoredLineupWeatherForecast[])
+        .filter((row) => row.match_id)
+        .map((row) => [row.match_id, row])
+    )
+  } catch (error) {
+    console.warn("Unable to read stored lineup weather forecasts.", error)
+    return new Map()
+  }
+}
+
+async function upsertStoredWeatherForecasts(rows: ReturnType<typeof forecastToStoredRow>[]): Promise<void> {
+  if (rows.length === 0) return
+
+  try {
+    const supabase = createServerSupabaseClient("nrl")
+    const { error } = await supabase
+      .from(WEATHER_FORECAST_TABLE)
+      .upsert(rows, { onConflict: "match_id" })
+
+    if (error) throw new Error(error.message)
+  } catch (error) {
+    console.warn("Unable to store lineup weather forecasts.", error)
+  }
+}
+
 function nearestHourlyIndex(times: unknown[] | undefined, kickoff: Date): number | null {
   if (!times?.length) return null
   let bestIndex: number | null = null
@@ -189,13 +304,15 @@ async function fetchWeatherForMatch(match: LineupMatch): Promise<LineupWeatherFo
   if (index == null) return null
 
   const forecastTime = stringValue(hourly?.time?.[index])
+  const weatherCode = numericValue(hourly?.weather_code?.[index])
   return {
     matchId: match.matchId,
     venue: match.venue,
     location: stadium.name,
     provider: "Open-Meteo",
+    weatherCode,
     forecastTimeUtc: forecastTime ? `${forecastTime.replace(/Z$/, "")}Z` : match.kickoffUtc,
-    condition: weatherCodeLabel(numericValue(hourly?.weather_code?.[index])),
+    condition: weatherCodeLabel(weatherCode),
     temperatureC: numericValue(hourly?.temperature_2m?.[index]),
     apparentTemperatureC: numericValue(hourly?.apparent_temperature?.[index]),
     precipitationProbabilityPct: numericValue(hourly?.precipitation_probability?.[index]),
@@ -207,12 +324,33 @@ async function fetchWeatherForMatch(match: LineupMatch): Promise<LineupWeatherFo
 
 export async function fetchLineupWeatherForecasts(matches: LineupMatch[]): Promise<Record<string, LineupWeatherForecast>> {
   try {
-    const forecasts = await Promise.all(matches.map((match) => fetchWeatherForMatch(match).catch(() => null)))
-    return Object.fromEntries(
-      forecasts
-        .filter((forecast): forecast is LineupWeatherForecast => forecast != null)
-        .map((forecast) => [forecast.matchId, forecast])
-    )
+    const storedRows = await fetchStoredWeatherForecasts(matches)
+    const forecastsByMatchId = new Map<string, LineupWeatherForecast>()
+    const matchesToFetch: LineupMatch[] = []
+
+    for (const match of matches) {
+      const storedRow = storedRows.get(match.matchId)
+      const storedForecast = storedRow ? storedForecastToLineupForecast(storedRow) : null
+      if (storedForecast) forecastsByMatchId.set(match.matchId, storedForecast)
+
+      if (!storedRow || !storedForecastIsFresh(storedRow, match)) {
+        matchesToFetch.push(match)
+      }
+    }
+
+    const fetchedForecasts = await Promise.all(matchesToFetch.map((match) => fetchWeatherForMatch(match).catch(() => null)))
+    const rowsToStore: ReturnType<typeof forecastToStoredRow>[] = []
+
+    fetchedForecasts.forEach((forecast, index) => {
+      if (!forecast) return
+      const match = matchesToFetch[index]
+      forecastsByMatchId.set(forecast.matchId, forecast)
+      rowsToStore.push(forecastToStoredRow(match, forecast))
+    })
+
+    await upsertStoredWeatherForecasts(rowsToStore)
+
+    return Object.fromEntries(forecastsByMatchId)
   } catch (error) {
     console.warn("Unable to fetch lineup weather forecasts.", error)
     return {}

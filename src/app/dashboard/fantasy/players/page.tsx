@@ -1,7 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { isAccessibleSeason } from "@/lib/access/season-access"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchFantasyCoachPlayersSnapshot,
@@ -52,19 +51,14 @@ export default async function FantasyPlayersPage() {
     fetchFantasyPlayerCardSummaries(),
   ])
 
-  const unlockedYears = canAccessLoginSeason
-    ? availableYears
-    : availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason))
-  const initialYears = defaultRecentYears(
-    unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
-  )
+  const initialYears = defaultRecentYears(availableYears)
 
   return (
     <FantasyDashboard
       fantasyPlayers={fantasyPlayers}
       fantasyCoachPlayers={fantasyCoachPlayers}
       lineupsProjections={lineupsProjections}
-      availableYears={unlockedYears}
+      availableYears={availableYears}
       defaultYears={initialYears}
       initialPlayerStats={[]}
       initialAllPlayerStats={[]}

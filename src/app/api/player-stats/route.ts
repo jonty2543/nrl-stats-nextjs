@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const yearsParam = searchParams.get("years");
     const playerParam = searchParams.get("player")?.trim();
+    const isFantasyContext = searchParams.get("context") === "fantasy";
     const requestedYears = yearsParam
       ? yearsParam
           .split(",")
@@ -22,12 +23,16 @@ export async function GET(request: NextRequest) {
       : null;
 
     const allowedYears = requestedYears
-      ? requestedYears.filter((year) =>
-          isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
-        )
-      : (await fetchAvailableYears()).filter((year) =>
-          isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
-        );
+      ? isFantasyContext
+        ? requestedYears
+        : requestedYears.filter((year) =>
+            isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
+          )
+      : isFantasyContext
+        ? await fetchAvailableYears()
+        : (await fetchAvailableYears()).filter((year) =>
+            isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
+          );
 
     if (allowedYears.length === 0) {
       return NextResponse.json([]);

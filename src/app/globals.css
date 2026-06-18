@@ -73,10 +73,12 @@ body {
   color: var(--color-nrl-text);
   font-family: var(--font-sans);
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 html {
   font-size: 90%;
+  overflow-x: clip;
 }
 
 button {

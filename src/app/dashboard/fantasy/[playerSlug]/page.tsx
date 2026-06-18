@@ -3,7 +3,6 @@ import { notFound } from "next/navigation"
 import { FantasyBackLink } from "@/components/fantasy/fantasy-back-link"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { isAccessibleSeason } from "@/lib/access/season-access"
 import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
@@ -118,12 +117,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
     row.playerId === selectedPlayer.id || fantasyPlayerSlug(row.player) === decodeURIComponent(playerSlug)
   ) ?? null
 
-  const unlockedYears = canAccessLoginSeason
-    ? availableYears
-    : availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason))
-  const initialYears = defaultRecentYears(
-    unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
-  )
+  const initialYears = defaultRecentYears(availableYears)
   const preferredPlayerStatsYears = ["2026", "2025"].filter((year) => initialYears.includes(year))
   const initialPlayerStatsYears = preferredPlayerStatsYears.length > 0
     ? preferredPlayerStatsYears
@@ -170,7 +164,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
         fantasyCoachPlayers={fantasyCoachPlayers}
         lineupsProjections={lineupsProjections}
         fantasyProjectionSigmas={projectionSigmas}
-        availableYears={unlockedYears}
+        availableYears={availableYears}
         defaultYears={initialPlayerStatsYears}
         initialPlayerStats={initialPlayerStats}
         precomputedAllPlayersRows={selectedPrecomputedRow ? [selectedPrecomputedRow] : []}

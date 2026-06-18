@@ -2,7 +2,6 @@ import { auth } from "@clerk/nextjs/server"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { fetchApprovedArticles } from "@/lib/articles"
-import { isAccessibleSeason } from "@/lib/access/season-access"
 import {
   fetchFantasyCoachPlayersSnapshot,
   fetchFantasyPlayersSnapshot,
@@ -43,18 +42,13 @@ export default async function FantasyAnalyticsPage() {
     return title.includes("fantasy projection model") || (title.includes("fantasy") && title.includes("model"))
   }) ?? null
 
-  const unlockedYears = canAccessLoginSeason
-    ? availableYears
-    : availableYears.filter((year) => isAccessibleSeason(year, canAccessLoginSeason))
-  const initialYears = defaultRecentYears(
-    unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1)
-  )
+  const initialYears = defaultRecentYears(availableYears)
   return (
     <FantasyDashboard
       fantasyPlayers={fantasyPlayers}
       fantasyCoachPlayers={fantasyCoachPlayers}
       lineupsProjections={lineupsProjections}
-      availableYears={unlockedYears}
+      availableYears={availableYears}
       defaultYears={initialYears}
       initialPlayerStats={[]}
       initialAllPlayerStats={initialAllPlayerStats}

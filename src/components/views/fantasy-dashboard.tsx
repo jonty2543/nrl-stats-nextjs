@@ -1028,6 +1028,7 @@ function hasAllPlayerStatsForYear(rows: PlayerStat[], year: string): boolean {
 
 function playerStatsApiUrl(years: string[], playerName?: string): string {
   const params = new URLSearchParams()
+  params.set("context", "fantasy")
   if (years.length > 0) params.set("years", years.join(","))
   if (playerName) params.set("player", playerName)
   const query = params.toString()
@@ -1799,11 +1800,13 @@ function TradeStars({
   className = "",
   blurred = false,
   maxStars = 5,
+  showScore = false,
 }: {
   value: number | null | undefined
   className?: string
   blurred?: boolean
   maxStars?: number
+  showScore?: boolean
 }) {
   const starCount = Math.max(1, Math.trunc(maxStars))
   const emptyStars = "☆".repeat(starCount)
@@ -1826,11 +1829,18 @@ function TradeStars({
   const colorClass = getTradeScoreColorClass(value)
 
   return (
-    <span className={`relative inline-block leading-none ${className}`} aria-label={`${rating.toFixed(1)} out of ${starCount} stars`}>
-      <span className="text-white/20">{fullStars}</span>
-      <span className={`absolute inset-y-0 left-0 overflow-hidden whitespace-nowrap ${colorClass}`} style={{ width: fillWidth }} aria-hidden="true">
-        {fullStars}
+    <span className={`inline-flex items-baseline gap-1 leading-none ${className}`} aria-label={`${rating.toFixed(1)} out of ${starCount} stars`}>
+      <span className="relative inline-block">
+        <span className="text-white/20">{fullStars}</span>
+        <span className={`absolute inset-y-0 left-0 overflow-hidden whitespace-nowrap ${colorClass}`} style={{ width: fillWidth }} aria-hidden="true">
+          {fullStars}
+        </span>
       </span>
+      {showScore ? (
+        <span className="text-[0.72em] font-black tabular-nums text-white/55">
+          {rating.toFixed(1)}/{starCount}
+        </span>
+      ) : null}
     </span>
   )
 }
@@ -5381,7 +5391,7 @@ export function FantasyDashboard({
                       </div>
                       <div className="text-right">
                         <div className="text-base font-black leading-none tracking-[0.08em]">
-                          <TradeStars value={row.tradeRating?.overall ?? null} />
+                          <TradeStars value={row.tradeRating?.overall ?? null} showScore />
                         </div>
                         <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-white/35">
                           Overall Rating
@@ -6280,6 +6290,7 @@ export function FantasyDashboard({
                               value={selectedCardStat.tradeScore}
                               blurred={selectedCardStatLocked}
                               maxStars={"maxStars" in selectedCardStat ? selectedCardStat.maxStars : undefined}
+                              showScore
                             />
                           </div>
                         ) : (
@@ -6306,6 +6317,7 @@ export function FantasyDashboard({
                                   value={stat.tradeScore}
                                   blurred={!hasFantasyPlotAccess && stat.locked}
                                   maxStars={stat.maxStars}
+                                  showScore
                                   className="mt-0.5 text-[10px] font-black tracking-[0.06em]"
                                 />
                               </div>
@@ -6663,20 +6675,6 @@ export function FantasyDashboard({
                   />
                 </div>
 
-                {!hasLoginAccess ? (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <div className="text-[10px] text-nrl-muted">Sign in to access pre-2025 seasons</div>
-                    <SignInButton mode="modal">
-                      <button
-                        type="button"
-                        className="cursor-pointer rounded border border-nrl-accent/45 px-2 py-0.5 text-[10px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10"
-                      >
-                        Sign in
-                      </button>
-                    </SignInButton>
-                  </div>
-                ) : null}
-
                 <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_auto]">
                   <SearchableSelect
                     label="Teammate"
@@ -6770,6 +6768,7 @@ export function FantasyDashboard({
                                   value={stat.tradeScore}
                                   blurred={!hasFantasyPlotAccess && stat.key !== "overall"}
                                   maxStars={stat.maxStars}
+                                  showScore
                                   className="mt-0.5 text-[10px] font-black tracking-[0.06em]"
                                 />
                               </div>

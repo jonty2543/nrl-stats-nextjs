@@ -183,6 +183,7 @@ export interface LineupsMatchDetailSummary {
   sportsbetOdds: Record<string, LineupSportsbetOdds>;
   casualtyWardOuts: Record<string, LineupCasualtyOut[]>;
   playerAverages: Record<string, Record<string, number>>;
+  playerAverageSources: Record<string, Record<string, Record<string, number>>>;
   positionPpmBaselines: Record<string, number>;
   playerTryHistory: PlayerTryHistory;
 }
@@ -2976,6 +2977,157 @@ function filterRecordByKeys<T>(record: Record<string, T>, keys: Iterable<string>
   return filtered;
 }
 
+const LINEUP_PLAYER_AVERAGE_COLUMNS = [
+  "player",
+  "match_date",
+  "tries",
+  "try_assists",
+  "all_run_metres",
+  "post_contact_metres",
+  "tackles_made",
+  "missed_tackles",
+  "ineffective_tackles",
+  "line_breaks",
+  "line_break_assists",
+  "errors",
+  "receipts",
+  "tackle_breaks",
+  "offloads",
+].join(",");
+
+type PlayerAverageAccumulator = {
+  games: number;
+  tries: number;
+  tryAssists: number;
+  allRunMetres: number;
+  postContactMetres: number;
+  tacklesMade: number;
+  missedTackles: number;
+  ineffectiveTackles: number;
+  lineBreaks: number;
+  lineBreakAssists: number;
+  errors: number;
+  receipts: number;
+  tackleBreaks: number;
+  offloads: number;
+}
+
+function emptyPlayerAverageAccumulator(): PlayerAverageAccumulator {
+  return {
+    games: 0,
+    tries: 0,
+    tryAssists: 0,
+    allRunMetres: 0,
+    postContactMetres: 0,
+    tacklesMade: 0,
+    missedTackles: 0,
+    ineffectiveTackles: 0,
+    lineBreaks: 0,
+    lineBreakAssists: 0,
+    errors: 0,
+    receipts: 0,
+    tackleBreaks: 0,
+    offloads: 0,
+  };
+}
+
+function averageAccumulatorToRecord(accumulator: PlayerAverageAccumulator): Record<string, number> {
+  const games = accumulator.games || 1;
+  const tackleAttempts = accumulator.tacklesMade + accumulator.missedTackles + accumulator.ineffectiveTackles;
+  return {
+    Tries: accumulator.tries / games,
+    "Try Assists": accumulator.tryAssists / games,
+    "All Run Metres": accumulator.allRunMetres / games,
+    "Post Contact Metres": accumulator.postContactMetres / games,
+    "Tackles Made": accumulator.tacklesMade / games,
+    "Tackle Efficiency": tackleAttempts > 0 ? (accumulator.tacklesMade / tackleAttempts) * 100 : 0,
+    "Line Breaks": accumulator.lineBreaks / games,
+    "Line Break Assists": accumulator.lineBreakAssists / games,
+    Errors: accumulator.errors / games,
+    Receipts: accumulator.receipts / games,
+    "Tackle Breaks": accumulator.tackleBreaks / games,
+    Offloads: accumulator.offloads / games,
+    "Missed Tackles": accumulator.missedTackles / games,
+  };
+}
+
+async function fetchPlayerAveragesFromStatsTable(
+  table: "player_stats" | "origin_player_stats",
+  playerNames: string[],
+  year?: number
+): Promise<Record<string, Record<string, number>>> {
+  const names = [...new Set(playerNames.map((name) => name.trim()).filter(Boolean))];
+  if (names.length === 0) return {};
+
+  const supabase = createServerSupabaseClient("nrl");
+  let query = supabase
+    .from(table)
+    .select(LINEUP_PLAYER_AVERAGE_COLUMNS)
+    .in("player", names);
+
+  if (year != null) {
+    query = query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`);
+  }
+
+  const { data, error } = await query
+    .order("match_date", { ascending: false })
+    .limit(5000);
+  if (error) {
+    console.warn(`Unable to fetch nrl.${table} player averages.`, error);
+    return {};
+  }
+
+  const accumulators = new Map<string, PlayerAverageAccumulator>();
+  for (const row of ((data ?? []) as unknown as Record<string, unknown>[])) {
+    const player = toNullableString(row.player);
+    if (!player) continue;
+    const key = normaliseLookupKey(player);
+    const accumulator = accumulators.get(key) ?? emptyPlayerAverageAccumulator();
+    accumulator.games += 1;
+    accumulator.tries += toFiniteNumber(row.tries) ?? 0;
+    accumulator.tryAssists += toFiniteNumber(row.try_assists) ?? 0;
+    accumulator.allRunMetres += toFiniteNumber(row.all_run_metres) ?? 0;
+    accumulator.postContactMetres += toFiniteNumber(row.post_contact_metres) ?? 0;
+    accumulator.tacklesMade += toFiniteNumber(row.tackles_made) ?? 0;
+    accumulator.missedTackles += toFiniteNumber(row.missed_tackles) ?? 0;
+    accumulator.ineffectiveTackles += toFiniteNumber(row.ineffective_tackles) ?? 0;
+    accumulator.lineBreaks += toFiniteNumber(row.line_breaks) ?? 0;
+    accumulator.lineBreakAssists += toFiniteNumber(row.line_break_assists) ?? 0;
+    accumulator.errors += toFiniteNumber(row.errors) ?? 0;
+    accumulator.receipts += toFiniteNumber(row.receipts) ?? 0;
+    accumulator.tackleBreaks += toFiniteNumber(row.tackle_breaks) ?? 0;
+    accumulator.offloads += toFiniteNumber(row.offloads) ?? 0;
+    accumulators.set(key, accumulator);
+  }
+
+  return Object.fromEntries(
+    [...accumulators.entries()]
+      .filter(([, accumulator]) => accumulator.games > 0)
+      .map(([key, accumulator]) => [key, averageAccumulatorToRecord(accumulator)])
+  );
+}
+
+export async function fetchLineupPlayerAverageSources(
+  match: LineupMatch
+): Promise<Record<string, Record<string, Record<string, number>>>> {
+  const playerNames = [
+    ...(match.homeTeam?.players ?? []),
+    ...(match.awayTeam?.players ?? []),
+  ].map((player) => player.player);
+
+  const [nrl2026, origin2026, originLifetime] = await Promise.all([
+    fetchPlayerAveragesFromStatsTable("player_stats", playerNames, 2026),
+    fetchPlayerAveragesFromStatsTable("origin_player_stats", playerNames, 2026),
+    fetchPlayerAveragesFromStatsTable("origin_player_stats", playerNames),
+  ]);
+
+  return {
+    nrl2026,
+    origin2026,
+    originLifetime,
+  };
+}
+
 async function fetchLineupPlayerTryHistoryForKeys(playerKeys: string[]): Promise<PlayerTryHistory> {
   const keys = [...new Set(playerKeys)].filter(Boolean);
   if (keys.length === 0) return {};
@@ -3037,6 +3189,8 @@ export async function fetchLineupsMatchDetailSummary(
     ].filter(Boolean);
     const sportsbetOdds = jsonRecord<LineupSportsbetOdds>(row.sportsbet_odds);
     const matchStats = jsonRecord<LineupMatchStats>(row.match_stats)[matchId] ?? null;
+    const playerAverageSources = await fetchLineupPlayerAverageSources(match);
+    const summaryPlayerAverages = filterRecordByKeys(jsonRecord<Record<string, number>>(row.player_averages), playerKeys);
 
     return {
       match,
@@ -3049,7 +3203,13 @@ export async function fetchLineupsMatchDetailSummary(
         )
       ),
       casualtyWardOuts: filterRecordByKeys(jsonRecord<LineupCasualtyOut[]>(row.casualty_ward_outs), teamKeys),
-      playerAverages: filterRecordByKeys(jsonRecord<Record<string, number>>(row.player_averages), playerKeys),
+      playerAverages: summaryPlayerAverages,
+      playerAverageSources: {
+        ...playerAverageSources,
+        nrl2026: Object.keys(playerAverageSources.nrl2026 ?? {}).length > 0
+          ? playerAverageSources.nrl2026
+          : summaryPlayerAverages,
+      },
       positionPpmBaselines: jsonRecord<number>(row.position_ppm_baselines),
       playerTryHistory: await fetchLineupPlayerTryHistoryForKeys(playerKeys),
     };
@@ -3103,16 +3263,21 @@ export async function fetchTopWeeklyFantasyPlayerCardSummaries(): Promise<Fantas
 
 export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord[]> {
   const raw = await fetchAllRows<Record<string, unknown>>("player_images");
-  return raw.map((row) => ({
-    player: typeof row.player === "string" ? row.player : "",
-    team: typeof row.team === "string" ? row.team : null,
-    number: row.number == null ? null : String(row.number),
-    position: typeof row.position === "string" ? row.position : null,
-    head_image: typeof row.head_image === "string" ? row.head_image : null,
-    body_image: typeof row.body_image === "string" ? row.body_image : null,
-    last_seen_match_date:
-      typeof row.last_seen_match_date === "string" ? row.last_seen_match_date : null,
-  }));
+  const currentSeasonStartMs = Date.parse("2026-01-01");
+  return raw.map((row) => {
+    const lastSeen = typeof row.last_seen_match_date === "string" ? row.last_seen_match_date : null;
+    const lastSeenMs = lastSeen ? Date.parse(lastSeen) : NaN;
+    const hasCurrentImage = Number.isFinite(lastSeenMs) && lastSeenMs >= currentSeasonStartMs;
+    return {
+      player: typeof row.player === "string" ? row.player : "",
+      team: typeof row.team === "string" ? row.team : null,
+      number: row.number == null ? null : String(row.number),
+      position: typeof row.position === "string" ? row.position : null,
+      head_image: hasCurrentImage && typeof row.head_image === "string" ? row.head_image : null,
+      body_image: hasCurrentImage && typeof row.body_image === "string" ? row.body_image : null,
+      last_seen_match_date: lastSeen,
+    };
+  });
 }
 
 const fetchPlayerImagesCached = unstable_cache(

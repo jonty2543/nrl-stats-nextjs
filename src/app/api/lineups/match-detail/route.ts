@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { fetchLineupsForRound } from "@/lib/lineups/nrl-lineups"
-import { fetchLineupsMatchDetailSummary } from "@/lib/supabase/queries"
+import { fetchLineupPlayerAverageSources, fetchLineupsMatchDetailSummary } from "@/lib/supabase/queries"
 import type { LineupMatch } from "@/lib/lineups/nrl-lineups"
 import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
 
@@ -152,6 +152,7 @@ export async function POST(request: NextRequest) {
           sportsbetOdds: {},
           casualtyWardOuts: {},
           playerAverages: {},
+          playerAverageSources: await fetchLineupPlayerAverageSources(hydratedMatch ?? shellMatch),
           positionPpmBaselines: {},
           playerTryHistory: {},
       }

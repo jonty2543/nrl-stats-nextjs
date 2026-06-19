@@ -259,6 +259,27 @@ function numberOrNull(value: unknown): number | null {
   return null
 }
 
+function possessionTimeSeconds(value: unknown): number | null {
+  const numeric = numberOrNull(value)
+  if (numeric != null) return numeric
+  if (typeof value !== "string") return null
+
+  const parts = value.trim().split(":").map((part) => Number(part))
+  if (parts.length < 2 || parts.length > 3 || parts.some((part) => !Number.isFinite(part))) return null
+  return parts.length === 3
+    ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+    : parts[0] * 60 + parts[1]
+}
+
+function possessionPctFromTimes(primary: unknown, opponent: unknown): number | null {
+  const primarySeconds = possessionTimeSeconds(primary)
+  const opponentSeconds = possessionTimeSeconds(opponent)
+  if (primarySeconds == null || opponentSeconds == null) return null
+
+  const totalSeconds = primarySeconds + opponentSeconds
+  return totalSeconds > 0 ? Number(((primarySeconds / totalSeconds) * 100).toFixed(1)) : null
+}
+
 function booleanValue(value: unknown): boolean {
   if (typeof value === "boolean") return value
   if (typeof value === "number") return value === 1
@@ -855,7 +876,8 @@ function teamStatsFromMatchRow(row: RawRow, fantasyPoints: number | null): Lineu
   return {
     team: text(row.team),
     score: numberOrNull(row.score),
-    possessionPct: numberOrNull(row.possession_pct),
+    possessionPct:
+      numberOrNull(row.possession_pct) ?? possessionPctFromTimes(row.time_in_possession, row.opponent_time_in_possession),
     completionRate: numberOrNull(row.completion_rate),
     fantasyPoints,
     tries: numberOrNull(row.tries),
@@ -1099,6 +1121,8 @@ export async function fetchLineupsForRound({
             "opponent_tries_summary",
             "possession_pct",
             "opponent_possession_pct",
+            "time_in_possession",
+            "opponent_time_in_possession",
             "completion_rate",
             "opponent_completion_rate",
             "tries",
@@ -1203,7 +1227,9 @@ export async function fetchLineupsForRound({
           ...teamStatsFromMatchRow(row, awayFantasy),
           team: awayTeam,
           score: numberOrNull(row.opponent_score),
-          possessionPct: numberOrNull(row.opponent_possession_pct),
+          possessionPct:
+            numberOrNull(row.opponent_possession_pct) ??
+            possessionPctFromTimes(row.opponent_time_in_possession, row.time_in_possession),
           completionRate: numberOrNull(row.opponent_completion_rate),
           fantasyPoints: awayFantasy,
           tries: numberOrNull(row.opponent_tries),

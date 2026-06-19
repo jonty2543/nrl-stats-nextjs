@@ -53,7 +53,7 @@ interface LineupMatchDetailData {
 
 type Slot = "FB" | "LW" | "LC" | "RW" | "RC" | "FE" | "HLF" | "LK" | "L2R" | "R2R" | "HK" | "PR"
 type Orientation = "landscape" | "portrait"
-type DisplayMode = AverageStatKey
+type DisplayMode = "fantasy" | "odds" | AverageStatKey
 type StatsSource = "nrl2026" | "origin2026" | "originLifetime"
 type LineupDetailView = "lineup" | "stats" | "insights"
 type PlayerStatsSelection = {
@@ -67,6 +67,7 @@ type PlayerStatsSelection = {
   tryHistory: PlayerTryHistory[string]
   opponent: string | null
   opponentTryHistory: PlayerTryHistory[string]
+  tryscorerOdds: LineupTryscorerOdds | null
 }
 
 type PlayerStatDisplayItem = {
@@ -122,7 +123,20 @@ const MATCH_CARD_TEXTURE_STYLE: CSSProperties = {
   backgroundSize: "18px 18px, 22px 22px, 28px 28px, 32px 32px",
 }
 
+const BOOKIE_LOGOS: Record<string, string> = {
+  Sportsbet: "/logos/sportsbet.png",
+  Pointsbet: "/logos/pointsbet.png",
+  Unibet: "/logos/unibet.png",
+  Palmerbet: "/logos/palmerbet.png",
+  Betright: "/logos/betright.png",
+  Betr: "/logos/betr.png",
+  Deluxebet: "/logos/deluxebet.png",
+  Surgebet: "/logos/surgebet.png",
+}
+
 const DISPLAY_MODES: { key: DisplayMode; label: string; shortLabel: string }[] = [
+  { key: "odds", label: "Best Odds", shortLabel: "Odds" },
+  { key: "fantasy", label: "Fantasy Projection", shortLabel: "Proj" },
   { key: "Tries", label: "Try Scoring Avg", shortLabel: "Tries" },
   { key: "Try Assists", label: "Try Assists Avg", shortLabel: "TA" },
   { key: "All Run Metres", label: "Run Metres Avg", shortLabel: "RM" },
@@ -143,6 +157,10 @@ const STATS_SOURCES: { key: StatsSource; label: string }[] = [
   { key: "origin2026", label: "2026 Origin" },
   { key: "originLifetime", label: "Origin lifetime" },
 ]
+
+function isAverageDisplayMode(mode: DisplayMode): mode is AverageStatKey {
+  return mode !== "odds" && mode !== "fantasy"
+}
 
 function displayModeShortLabel(mode: DisplayMode): string {
   return DISPLAY_MODES.find((displayMode) => displayMode.key === mode)?.shortLabel ?? String(mode)
@@ -307,6 +325,24 @@ function statsinsiderTeamCode(team: LineupTeam | null): string | null {
     if (code) return code
   }
   return null
+}
+
+function normaliseBookieKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "")
+}
+
+const BOOKIE_LOGOS_BY_KEY = Object.fromEntries(
+  Object.entries(BOOKIE_LOGOS).map(([bookie, logo]) => [normaliseBookieKey(bookie), logo])
+)
+
+function resolveBookieLogo(bookie: string | null | undefined): string | null {
+  if (!bookie) return null
+  const candidates = bookie.split(/[,/&+]+/).map((part) => normaliseBookieKey(part)).filter(Boolean)
+  for (const candidate of candidates) {
+    const logo = BOOKIE_LOGOS_BY_KEY[candidate]
+    if (logo) return logo
+  }
+  return BOOKIE_LOGOS_BY_KEY[normaliseBookieKey(bookie)] ?? null
 }
 
 function lineupsMatchTeams(match: LineupMatch): { home: string; away: string } {
@@ -723,16 +759,49 @@ function formatAverage(value: number | null | undefined, mode: AverageStatKey): 
 function PlayerMetric({
   player,
   displayMode,
+  tryscorerOdds,
   playerAverages,
+  canAccessFantasyProjections,
   compact,
 }: {
   player: LineupPlayer
   displayMode: DisplayMode
+  tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
+  canAccessFantasyProjections: boolean
   compact: boolean
 }) {
   const playerKey = normaliseKey(player.player)
   const textClass = compact ? "text-[10px]" : "text-[11px]"
+
+  if (displayMode === "fantasy") {
+    if (!canAccessFantasyProjections) {
+      return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    }
+    return player.fantasyProjection != null ? (
+      <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>{Math.round(player.fantasyProjection)} proj</div>
+    ) : (
+      <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    )
+  }
+
+  if (displayMode === "odds") {
+    const odds = tryscorerOdds[playerKey]
+    const logo = resolveBookieLogo(odds?.bestBookie)
+    return odds?.bestPrice != null ? (
+      <div className={`mt-0.5 flex items-center justify-center gap-1 ${textClass} font-semibold leading-tight text-emerald-100/90`}>
+        {logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={odds.bestBookie ?? ""} className={`${compact ? "h-2.5" : "h-3"} w-auto object-contain`} loading="lazy" />
+        ) : null}
+        <span>{odds.bestPrice.toFixed(2)}</span>
+      </div>
+    ) : (
+      <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    )
+  }
+
+  if (!isAverageDisplayMode(displayMode)) return null
 
   const statLabel = statPerGameLabel(displayMode)
   return (
@@ -1357,7 +1426,7 @@ function shortLineupTeamName(value: string | null): string {
 }
 
 function PlayerTryFormPanel({ selection }: { selection: PlayerStatsSelection }) {
-  const { player, averages, tryHistory, opponent, opponentTryHistory, baselineLabel } = selection
+  const { player, averages, tryHistory, opponent, opponentTryHistory, tryscorerOdds, baselineLabel } = selection
   const recentFive = tryHistory.slice(0, 5)
   const recentTen = tryHistory.slice(0, 10)
   const scoredFive = recentFive.filter((entry) => entry.tries > 0).length
@@ -1394,6 +1463,7 @@ function PlayerTryFormPanel({ selection }: { selection: PlayerStatsSelection }) 
         <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Starts: {player.position || "TBC"}</span>
         <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Edge: {player.side}</span>
         {baselineLabel ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">{baselineLabel}</span> : null}
+        {tryscorerOdds?.bestPrice != null ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Anytime best: {tryscorerOdds.bestPrice.toFixed(2)}</span> : null}
         {averages?.Tries != null ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">Avg tries: {averages.Tries.toFixed(2)}</span> : null}
         {triesTen > 0 ? <span className="rounded-md border border-blue-300/20 bg-white/[0.03] px-2 py-1 text-nrl-muted">L10 tries: {triesTen}</span> : null}
       </div>
@@ -1407,6 +1477,7 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
   const fantasyPpm = fantasyPointsPerMinute(liveStats)
   const imageSources = playerImageSources(player.headImage, player.bodyImage)
   const averageItems: PlayerStatDisplayItem[] = DISPLAY_MODES
+    .filter((mode): mode is { key: AverageStatKey; label: string; shortLabel: string } => isAverageDisplayMode(mode.key))
     .map((mode) => ({
       label: mode.shortLabel,
       value: selection.averages?.[mode.key] == null ? "-" : formatAverage(selection.averages[mode.key], mode.key),
@@ -1710,7 +1781,9 @@ function PitchPlayer({
   side,
   orientation,
   displayMode,
+  tryscorerOdds,
   playerAverages,
+  canAccessFantasyProjections,
   showPlayerMetric,
   showLiveIndicators,
   liveMatch,
@@ -1722,7 +1795,9 @@ function PitchPlayer({
   side: "home" | "away"
   orientation: Orientation
   displayMode: DisplayMode
+  tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
+  canAccessFantasyProjections: boolean
   showPlayerMetric: boolean
   showLiveIndicators: boolean
   liveMatch: LineupLiveMatch | null
@@ -1765,7 +1840,9 @@ function PitchPlayer({
         <PlayerMetric
           player={player}
           displayMode={displayMode}
+          tryscorerOdds={tryscorerOdds}
           playerAverages={playerAverages}
+          canAccessFantasyProjections={canAccessFantasyProjections}
           compact={compact}
         />
       ) : null}
@@ -1817,7 +1894,10 @@ function Pitch({
   onDisplayModeChange,
   statsSource,
   onStatsSourceChange,
+  selectedCompetition,
+  tryscorerOdds,
   playerAverages,
+  canAccessFantasyProjections,
   liveMatch,
   positionPpmBaselines,
   showLiveIndicators,
@@ -1832,7 +1912,10 @@ function Pitch({
   onDisplayModeChange: (mode: DisplayMode) => void
   statsSource: StatsSource
   onStatsSourceChange: (source: StatsSource) => void
+  selectedCompetition: LineupCompetition
+  tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
+  canAccessFantasyProjections: boolean
   liveMatch: LineupLiveMatch | null
   positionPpmBaselines: Record<string, number>
   showLiveIndicators: boolean
@@ -1857,6 +1940,7 @@ function Pitch({
             onDisplayModeChange={onDisplayModeChange}
             statsSource={statsSource}
             onStatsSourceChange={onStatsSourceChange}
+            selectedCompetition={selectedCompetition}
             showStatsSourceControl={showStatsSourceControl}
             compact={orientation === "portrait"}
           />
@@ -1873,7 +1957,9 @@ function Pitch({
             side="home"
             orientation={orientation}
             displayMode={displayMode}
+            tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
+            canAccessFantasyProjections={canAccessFantasyProjections}
             showPlayerMetric={showPregameMetrics}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
@@ -1893,7 +1979,9 @@ function Pitch({
             side="away"
             orientation={orientation}
             displayMode={displayMode}
+            tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
+            canAccessFantasyProjections={canAccessFantasyProjections}
             showPlayerMetric={showPregameMetrics}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
@@ -2210,7 +2298,7 @@ function TeamTryChartCard({
       </div>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] font-bold uppercase tracking-[0.12em]">
         <span className="text-emerald-200">Green scored</span>
-        <span className="text-[#ffe4e6]">Red conceded</span>
+        <span className="text-red-300">Red conceded</span>
       </div>
       <TryChartField chart={chart} opponentChart={opponentChart} teamName={teamName} opponentName={opponentName} teamLogo={teamLogo} opponentLogo={opponentLogo} />
       <div className="mt-2 space-y-1.5">
@@ -2320,6 +2408,7 @@ function DisplayModeControl({
   onDisplayModeChange,
   statsSource,
   onStatsSourceChange,
+  selectedCompetition,
   showStatsSourceControl,
   compact = false,
 }: {
@@ -2327,10 +2416,14 @@ function DisplayModeControl({
   onDisplayModeChange: (mode: DisplayMode) => void
   statsSource: StatsSource
   onStatsSourceChange: (source: StatsSource) => void
+  selectedCompetition: LineupCompetition
   showStatsSourceControl: boolean
   compact?: boolean
 }) {
   const statsSourceOptions = STATS_SOURCES.filter((source) => source.key !== "nrl2026")
+  const displayModes = selectedCompetition === "nrl"
+    ? DISPLAY_MODES
+    : DISPLAY_MODES.filter((mode) => isAverageDisplayMode(mode.key))
 
   return (
     <div className={`flex ${showStatsSourceControl ? compact ? "w-[13.5rem] gap-1" : "w-[23rem] max-w-[70vw] gap-2" : compact ? "w-[8.5rem]" : "w-[16rem] max-w-[52vw]"}`}>
@@ -2341,7 +2434,7 @@ function DisplayModeControl({
           onChange={(event) => onDisplayModeChange(event.target.value as DisplayMode)}
           className={`${compact ? "text-[10px]" : "text-[11px]"} w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent`}
         >
-          {DISPLAY_MODES.map((mode) => (
+          {displayModes.map((mode) => (
             <option key={mode.key} value={mode.key}>
               {compact ? mode.shortLabel : mode.label}
             </option>
@@ -2378,6 +2471,7 @@ function LineupCard({
   statsSource,
   onStatsSourceChange,
   selectedCompetition,
+  canAccessFantasyProjections,
   detail,
   detailStatus,
   tryChartsByTeam,
@@ -2392,6 +2486,7 @@ function LineupCard({
   statsSource: StatsSource
   onStatsSourceChange: (source: StatsSource) => void
   selectedCompetition: LineupCompetition
+  canAccessFantasyProjections: boolean
   detail: LineupMatchDetailData | null
   detailStatus: "idle" | "loading" | "loaded" | "error"
   tryChartsByTeam: Record<string, StatsinsiderTryChart>
@@ -2479,6 +2574,7 @@ function LineupCard({
           opponentTryHistory: opponentKey
             ? history.filter((entry) => normaliseKey(entry.opponent).includes(opponentKey)).slice(0, 5)
             : [],
+          tryscorerOdds: tryscorerOdds[normaliseKey(selectedPlayer.player)] ?? null,
         }
       })()
     : null
@@ -2653,7 +2749,10 @@ function LineupCard({
               onDisplayModeChange={onDisplayModeChange}
               statsSource={statsSource}
               onStatsSourceChange={onStatsSourceChange}
+              selectedCompetition={selectedCompetition}
+              tryscorerOdds={tryscorerOdds}
               playerAverages={playerAverages}
+              canAccessFantasyProjections={canAccessFantasyProjections}
               liveMatch={displayLiveMatch}
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
@@ -2669,7 +2768,10 @@ function LineupCard({
               onDisplayModeChange={onDisplayModeChange}
               statsSource={statsSource}
               onStatsSourceChange={onStatsSourceChange}
+              selectedCompetition={selectedCompetition}
+              tryscorerOdds={tryscorerOdds}
               playerAverages={playerAverages}
+              canAccessFantasyProjections={canAccessFantasyProjections}
               liveMatch={displayLiveMatch}
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
@@ -2776,6 +2878,7 @@ export function LineupsDashboard({
   selectedCompetition,
   teamLogos,
   tryChartsByTeam,
+  canAccessFantasyProjections,
   summaryDiagnostic,
 }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("Line Breaks")
@@ -2923,6 +3026,7 @@ export function LineupsDashboard({
                   statsSource={statsSource}
                   onStatsSourceChange={setStatsSource}
                   selectedCompetition={selectedCompetition}
+                  canAccessFantasyProjections={canAccessFantasyProjections}
                   detail={matchDetails[match.matchId]?.detail ?? null}
                   detailStatus={matchDetails[match.matchId]?.status ?? "idle"}
                   tryChartsByTeam={tryChartsByTeam}

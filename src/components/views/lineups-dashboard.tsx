@@ -1822,6 +1822,7 @@ function Pitch({
   positionPpmBaselines,
   showLiveIndicators,
   showPregameMetrics,
+  showStatsSourceControl,
   onPlayerSelect,
 }: {
   homePlayers: LineupPlayer[]
@@ -1836,6 +1837,7 @@ function Pitch({
   positionPpmBaselines: Record<string, number>
   showLiveIndicators: boolean
   showPregameMetrics: boolean
+  showStatsSourceControl: boolean
   onPlayerSelect: (player: LineupPlayer) => void
 }) {
   const sizeClass =
@@ -1855,6 +1857,7 @@ function Pitch({
             onDisplayModeChange={onDisplayModeChange}
             statsSource={statsSource}
             onStatsSourceChange={onStatsSourceChange}
+            showStatsSourceControl={showStatsSourceControl}
             compact={orientation === "portrait"}
           />
         </div>
@@ -2317,17 +2320,21 @@ function DisplayModeControl({
   onDisplayModeChange,
   statsSource,
   onStatsSourceChange,
+  showStatsSourceControl,
   compact = false,
 }: {
   displayMode: DisplayMode
   onDisplayModeChange: (mode: DisplayMode) => void
   statsSource: StatsSource
   onStatsSourceChange: (source: StatsSource) => void
+  showStatsSourceControl: boolean
   compact?: boolean
 }) {
+  const statsSourceOptions = STATS_SOURCES.filter((source) => source.key !== "nrl2026")
+
   return (
-    <div className={`flex ${compact ? "w-[13.5rem] gap-1" : "w-[23rem] max-w-[70vw] gap-2"}`}>
-      <label className={compact ? "block min-w-0 flex-[1.05]" : "block min-w-0 flex-1"}>
+    <div className={`flex ${showStatsSourceControl ? compact ? "w-[13.5rem] gap-1" : "w-[23rem] max-w-[70vw] gap-2" : compact ? "w-[8.5rem]" : "w-[16rem] max-w-[52vw]"}`}>
+      <label className={showStatsSourceControl ? compact ? "block min-w-0 flex-[1.05]" : "block min-w-0 flex-1" : "block min-w-0 flex-1"}>
         <span className="sr-only">Display</span>
         <select
           value={displayMode}
@@ -2341,20 +2348,22 @@ function DisplayModeControl({
           ))}
         </select>
       </label>
-      <label className={compact ? "block min-w-0 flex-1" : "block min-w-0 flex-[0.9]"}>
-        <span className="sr-only">Stats source</span>
-        <select
-          value={statsSource}
-          onChange={(event) => onStatsSourceChange(event.target.value as StatsSource)}
-          className={`${compact ? "text-[10px]" : "text-[11px]"} w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent`}
-        >
-          {STATS_SOURCES.map((source) => (
-            <option key={source.key} value={source.key}>
-              {source.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {showStatsSourceControl ? (
+        <label className={compact ? "block min-w-0 flex-1" : "block min-w-0 flex-[0.9]"}>
+          <span className="sr-only">Stats source</span>
+          <select
+            value={statsSource}
+            onChange={(event) => onStatsSourceChange(event.target.value as StatsSource)}
+            className={`${compact ? "text-[10px]" : "text-[11px]"} w-full rounded-md border border-emerald-300/35 bg-nrl-panel/90 px-2 py-1.5 font-semibold text-nrl-text shadow-[0_8px_18px_rgba(0,0,0,0.24)] outline-none backdrop-blur transition-colors hover:border-nrl-accent/50 focus:border-nrl-accent`}
+          >
+            {statsSourceOptions.map((source) => (
+              <option key={source.key} value={source.key}>
+                {source.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
     </div>
   )
 }
@@ -2368,6 +2377,7 @@ function LineupCard({
   onDisplayModeChange,
   statsSource,
   onStatsSourceChange,
+  selectedCompetition,
   detail,
   detailStatus,
   tryChartsByTeam,
@@ -2381,6 +2391,7 @@ function LineupCard({
   onDisplayModeChange: (mode: DisplayMode) => void
   statsSource: StatsSource
   onStatsSourceChange: (source: StatsSource) => void
+  selectedCompetition: LineupCompetition
   detail: LineupMatchDetailData | null
   detailStatus: "idle" | "loading" | "loaded" | "error"
   tryChartsByTeam: Record<string, StatsinsiderTryChart>
@@ -2421,6 +2432,7 @@ function LineupCard({
   const awayScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.awayScore > headerScore.homeScore
   const showLiveCardHeader = isMatchLive(displayLiveMatch)
   const showPregameContent = !isLive && !hasResultScore
+  const showStatsSourceControl = selectedCompetition === "origin"
   const availableDetailViews: LineupDetailView[] = showPregameContent
     ? ["lineup", "insights", "stats"]
     : ["lineup", "stats"]
@@ -2646,6 +2658,7 @@ function LineupCard({
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
               showPregameMetrics={showPregameContent}
+              showStatsSourceControl={showStatsSourceControl}
               onPlayerSelect={setSelectedPlayer}
             />
             <Pitch
@@ -2661,6 +2674,7 @@ function LineupCard({
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
               showPregameMetrics={showPregameContent}
+              showStatsSourceControl={showStatsSourceControl}
               onPlayerSelect={setSelectedPlayer}
             />
 
@@ -2765,7 +2779,7 @@ export function LineupsDashboard({
   summaryDiagnostic,
 }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("Line Breaks")
-  const [statsSource, setStatsSource] = useState<StatsSource>("nrl2026")
+  const [statsSource, setStatsSource] = useState<StatsSource>(selectedCompetition === "origin" ? "origin2026" : "nrl2026")
   const [matchDetails, setMatchDetails] = useState<Record<string, { status: "loading" | "loaded" | "error"; detail: LineupMatchDetailData | null }>>({})
   const [supplementalData, setSupplementalData] = useState<{
     key: string
@@ -2908,6 +2922,7 @@ export function LineupsDashboard({
                   onDisplayModeChange={setDisplayMode}
                   statsSource={statsSource}
                   onStatsSourceChange={setStatsSource}
+                  selectedCompetition={selectedCompetition}
                   detail={matchDetails[match.matchId]?.detail ?? null}
                   detailStatus={matchDetails[match.matchId]?.status ?? "idle"}
                   tryChartsByTeam={tryChartsByTeam}

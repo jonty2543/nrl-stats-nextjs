@@ -134,8 +134,6 @@ function validateLegsForBetType(betType: BetType, legs: BetLeg[]): string | null
   if (betType === "single") return null;
   if (legs.length < 2) return `${betType === "sgm" ? "SGM" : "Multi"} bets require at least 2 legs`;
   if (betType === "multi") {
-    const bookies = new Set(legs.map((leg) => leg.bookie).filter(Boolean));
-    if (bookies.size !== 1 || legs.some((leg) => !leg.bookie)) return "multi legs must use the same bookie";
     if (new Set(legs.map(matchLegKey)).size !== legs.length) return "multi legs must be from different games";
   }
   if (betType === "sgm" && new Set(legs.map(matchLegKey)).size !== 1) {

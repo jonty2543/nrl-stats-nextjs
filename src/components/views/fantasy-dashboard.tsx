@@ -6753,13 +6753,13 @@ export function FantasyDashboard({
                         </button>
                         {showAllPlayersTradeRatingInfo ? <TradeRatingInfoPopover /> : null}
                       </div>
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                           {selectedTradeRatingStats.map((stat) => {
                             const highlighted = Boolean("highlighted" in stat && stat.highlighted)
                             return (
                               <div
                                 key={stat.key}
-                                className={`inline-flex min-h-10 w-full flex-col items-center justify-center rounded-full border px-2.5 ${getTradeScorePillClass(stat.tradeScore, highlighted)}`}
+                                className={`inline-flex min-h-10 w-full min-w-0 flex-col items-center justify-center rounded-full border px-1.5 sm:px-2.5 ${getTradeScorePillClass(stat.tradeScore, highlighted)}`}
                               >
                                 <span className="text-[7px] font-black uppercase tracking-[0.02em] text-white/45 sm:text-[8px]">
                                   {stat.label}

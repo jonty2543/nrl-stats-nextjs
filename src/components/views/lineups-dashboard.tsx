@@ -2154,9 +2154,97 @@ function TryChartLogo({ logo, label }: { logo: string | null; label: string }) {
   return <span className="grid h-4 w-4 place-items-center rounded bg-white/10 text-[7px] font-black text-nrl-muted">{label.slice(0, 1)}</span>
 }
 
+type TryChartLaneSide = "left" | "middle" | "right"
+
+const TRY_CHART_EDGE_ROLE_CONFIG: Record<Exclude<TryChartLaneSide, "middle">, Array<{ label: string; slot: Slot; numbers: number[] }>> = {
+  left: [
+    { label: "LW", slot: "LW", numbers: [5] },
+    { label: "LC", slot: "LC", numbers: [4] },
+    { label: "L2R", slot: "L2R", numbers: [11] },
+    { label: "FE", slot: "FE", numbers: [6] },
+  ],
+  right: [
+    { label: "HB", slot: "HLF", numbers: [7] },
+    { label: "R2R", slot: "R2R", numbers: [12] },
+    { label: "RC", slot: "RC", numbers: [3] },
+    { label: "RW", slot: "RW", numbers: [2] },
+  ],
+}
+
+function tryChartPlayers(
+  team: LineupTeam | null,
+  side: TryChartLaneSide,
+  inverted = false
+): Array<{ label: string; player: LineupPlayer | null }> {
+  const players = team?.players ?? []
+  const pitchSlots = buildTeamPitchSlotMap(players)
+  const middleProps = players
+    .filter((player) => player.isOnField && pitchSlots.get(pitchPlayerKey(player)) === "PR")
+    .sort((a, b) => (a.number ?? 99) - (b.number ?? 99))
+  const roles: Array<{ label: string; slot: Slot; numbers: number[]; player?: LineupPlayer | null }> = side === "middle"
+    ? [
+      { label: "PR", slot: "PR", numbers: [8, 10], player: middleProps[0] ?? null },
+      { label: "PR", slot: "PR", numbers: [8, 10], player: middleProps[1] ?? null },
+      { label: "LK", slot: "LK", numbers: [13] },
+      { label: "HK", slot: "HK", numbers: [9] },
+    ]
+    : inverted
+      ? [...TRY_CHART_EDGE_ROLE_CONFIG[side]].reverse()
+      : TRY_CHART_EDGE_ROLE_CONFIG[side]
+
+  return roles.map((role) => ({
+    label: role.label,
+    player:
+      role.player ??
+      players.find((player) => player.isOnField && pitchSlots.get(pitchPlayerKey(player)) === role.slot) ??
+      players.find((player) => player.isOnField && player.side === side && playerSlot(player) === role.slot) ??
+      players.find((player) => player.isOnField && player.number != null && role.numbers.includes(player.number)) ??
+      null,
+  }))
+}
+
+function TryChartPlayers({
+  team,
+  side,
+  tone = "attack",
+  inverted = false,
+}: {
+  team: LineupTeam | null
+  side: TryChartLaneSide
+  tone?: "attack" | "defence"
+  inverted?: boolean
+}) {
+  const players = tryChartPlayers(team, side, inverted)
+  const toneClass = tone === "defence"
+    ? "border-[#fb7185]/14 bg-[#fb7185]/8"
+    : "border-emerald-300/12 bg-emerald-300/[0.055]"
+
+  return (
+    <div className={`grid min-h-[4.75rem] grid-cols-4 gap-1 rounded border p-1 ${toneClass}`}>
+      {players.map(({ label, player }, index) => (
+        <div key={`${label}-${index}`} className="min-w-0 text-center">
+          <div className="mx-auto grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-white/10 bg-nrl-panel text-[7px] font-black text-nrl-muted">
+            {player ? (
+              <ImageWithFallback sources={playerImageSources(player.headImage, player.bodyImage)} alt={player.player} className="h-full w-full object-cover object-top" />
+            ) : (
+              label.slice(0, 1)
+            )}
+          </div>
+          <div className="mt-0.5 text-[7px] font-black uppercase leading-none tracking-wide text-nrl-muted">{label}</div>
+          <div className="mt-0.5 truncate text-[8px] font-semibold leading-tight text-slate-100" title={player?.player ?? undefined}>
+            {player?.player ?? "-"}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function TryChartField({
   chart,
   opponentChart,
+  team,
+  opponentTeam,
   teamName,
   opponentName,
   teamLogo,
@@ -2164,48 +2252,52 @@ function TryChartField({
 }: {
   chart: StatsinsiderTryChart
   opponentChart: StatsinsiderTryChart
+  team: LineupTeam | null
+  opponentTeam: LineupTeam | null
   teamName: string
   opponentName: string
   teamLogo: string | null
   opponentLogo: string | null
 }) {
   const lanes = [
-    { label: "Left", scored: chart.leftScored, scoredPct: chart.leftScoredPct, conceded: opponentChart.rightConceded, concededPct: opponentChart.rightConcededPct },
-    { label: "Middle", scored: chart.middleScored, scoredPct: chart.middleScoredPct, conceded: opponentChart.middleConceded, concededPct: opponentChart.middleConcededPct },
-    { label: "Right", scored: chart.rightScored, scoredPct: chart.rightScoredPct, conceded: opponentChart.leftConceded, concededPct: opponentChart.leftConcededPct },
+    { label: "Left", side: "left" as const, defenceSide: "right" as const, scored: chart.leftScored, scoredPct: chart.leftScoredPct, conceded: opponentChart.rightConceded, concededPct: opponentChart.rightConcededPct },
+    { label: "Middle", side: "middle" as const, defenceSide: "middle" as const, scored: chart.middleScored, scoredPct: chart.middleScoredPct, conceded: opponentChart.middleConceded, concededPct: opponentChart.middleConcededPct },
+    { label: "Right", side: "right" as const, defenceSide: "left" as const, scored: chart.rightScored, scoredPct: chart.rightScoredPct, conceded: opponentChart.leftConceded, concededPct: opponentChart.leftConcededPct },
   ]
+  const barRow = (
+    type: "conceded" | "scored",
+    lane: typeof lanes[number]
+  ) => {
+    const isConceded = type === "conceded"
+    const pct = isConceded ? lane.concededPct : lane.scoredPct
+    const count = isConceded ? lane.conceded : lane.scored
+    return (
+      <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded px-1 py-1 ${isConceded ? "bg-[#fb7185]/14" : "bg-emerald-300/15"}`}>
+        <div>
+          <div className={`h-1.5 rounded-full ${isConceded ? "bg-[#fb7185]/22" : "bg-emerald-300/20"}`}>
+            <div className={`h-full rounded-full ${isConceded ? "bg-[#fb7185]" : "bg-emerald-300"}`} style={{ width: `${Math.max(8, pct * 100)}%` }} />
+          </div>
+          <div className={`mt-0.5 text-[8px] ${isConceded ? "text-[#fecdd3]/80" : "text-emerald-100/70"}`}>{formatTryChartPct(pct)}</div>
+        </div>
+        <div className={`inline-flex min-w-[2.25rem] items-center justify-start gap-1 text-[9px] font-bold ${isConceded ? "text-[#ffe4e6]" : "text-emerald-200"}`}>
+          <TryChartLogo logo={isConceded ? opponentLogo : teamLogo} label={isConceded ? opponentName : teamName} />
+          <span>{count}</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative overflow-hidden rounded-md border border-emerald-300/20 bg-[linear-gradient(90deg,rgba(16,185,129,0.18),rgba(15,118,110,0.24)),repeating-linear-gradient(0deg,rgba(255,255,255,0.08)_0_1px,transparent_1px_20%)] p-2">
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(7.5rem,0.72fr)_minmax(0,1fr)]">
         {lanes.map((lane) => (
           <div key={lane.label} className="relative min-h-28 rounded border border-white/10 bg-slate-950/20 px-1.5 py-2 text-center">
             <div className="mb-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-200">{lane.label}</div>
             <div className="space-y-2">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded bg-[#fb7185]/14 px-1 py-1">
-                <div>
-                  <div className="h-1.5 rounded-full bg-[#fb7185]/22">
-                    <div className="h-full rounded-full bg-[#fb7185]" style={{ width: `${Math.max(8, lane.concededPct * 100)}%` }} />
-                  </div>
-                  <div className="mt-0.5 text-[8px] text-[#fecdd3]/80">{formatTryChartPct(lane.concededPct)}</div>
-                </div>
-                <div className="inline-flex min-w-[2.25rem] items-center justify-start gap-1 text-[9px] font-bold text-[#ffe4e6]">
-                  <TryChartLogo logo={opponentLogo} label={opponentName} />
-                  <span>{lane.conceded}</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded bg-emerald-300/15 px-1 py-1">
-                <div>
-                  <div className="h-1.5 rounded-full bg-emerald-300/20">
-                    <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(8, lane.scoredPct * 100)}%` }} />
-                  </div>
-                  <div className="mt-0.5 text-[8px] text-emerald-100/70">{formatTryChartPct(lane.scoredPct)}</div>
-                </div>
-                <div className="inline-flex min-w-[2.25rem] items-center justify-start gap-1 text-[9px] font-bold text-emerald-200">
-                  <TryChartLogo logo={teamLogo} label={teamName} />
-                  <span>{lane.scored}</span>
-                </div>
-              </div>
+              <TryChartPlayers team={opponentTeam} side={lane.defenceSide} tone="defence" inverted={lane.side !== "middle"} />
+              {barRow("conceded", lane)}
+              {barRow("scored", lane)}
+              <TryChartPlayers team={team} side={lane.side} />
             </div>
           </div>
         ))}
@@ -2300,7 +2392,7 @@ function TeamTryChartCard({
         <span className="text-emerald-200">Green scored</span>
         <span className="text-red-300">Red conceded</span>
       </div>
-      <TryChartField chart={chart} opponentChart={opponentChart} teamName={teamName} opponentName={opponentName} teamLogo={teamLogo} opponentLogo={opponentLogo} />
+      <TryChartField chart={chart} opponentChart={opponentChart} team={team} opponentTeam={opponentTeam} teamName={teamName} opponentName={opponentName} teamLogo={teamLogo} opponentLogo={opponentLogo} />
       <div className="mt-2 space-y-1.5">
         <TryTypeRow label="Run" scored={runScored} scoredPct={runScoredPct} conceded={runConceded} concededPct={runConcededPct} teamName={teamName} opponentName={opponentName} teamLogo={teamLogo} opponentLogo={opponentLogo} />
         <TryTypeRow label="Kick" scored={chart.kickScored} scoredPct={chart.kickScoredPct} conceded={opponentChart.kickConceded} concededPct={opponentChart.kickConcededPct} teamName={teamName} opponentName={opponentName} teamLogo={teamLogo} opponentLogo={opponentLogo} />

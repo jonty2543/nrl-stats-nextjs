@@ -1419,6 +1419,24 @@ function roundedFantasyValue(projection: number | null, pricedAt: number | null)
   return Math.round(projection) - Math.round(pricedAt)
 }
 
+function hasFantasyPlayerPlayedRound(
+  player: FantasyPlayerSnapshot,
+  rows: PlayerStat[],
+  round: number | null | undefined
+): boolean {
+  if (!round) return false
+  for (const [scoreRound, fantasyScore] of Object.entries(player.scoreHistory)) {
+    if (Number.parseInt(scoreRound, 10) === round && Number.isFinite(fantasyScore)) return true
+  }
+  return rows.some((row) => (
+    row.Round === round &&
+    (
+      playerStatMetricValue(row, "Mins Played", "mins_played") !== null ||
+      playerStatMetricValue(row, "Fantasy", "total_points") !== null
+    )
+  ))
+}
+
 function formatPercent(value: number | null): string {
   if (value === null) return "-"
   return `${value.toFixed(2)}%`
@@ -4445,12 +4463,6 @@ export function FantasyDashboard({
       const minutes = playerRows.map((row) => playerStatMetricValue(row, "Mins Played", "mins_played"))
       const totalFantasy = fantasyScores.reduce<number>((sum, value) => sum + (value ?? 0), 0)
       const totalMinutes = minutes.reduce<number>((sum, value) => sum + (value ?? 0), 0)
-      const recentScores = precomputedStatsRow?.last3 != null
-        ? []
-        : [...playerRows]
-          .sort(sortRoundsDesc)
-          .slice(0, 3)
-          .map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
       const coachPlayer = fantasyCoachPlayers.find((entry) => entry.id === player.id)
       const coachMetrics = getFantasyCoachRoundMetrics(coachPlayer)
       const ownershipDelta = ownershipDeltaByPlayerId.get(player.id) ?? null
@@ -4464,6 +4476,16 @@ export function FantasyDashboard({
         lineupsProjections?.roleByPlayerId.get(player.id) ??
         lineupsProjections?.roleByPlayerName.get(normaliseProjectionPlayerName(player.name)) ??
         null
+      const hasPlayedProjectionRound = hasFantasyPlayerPlayedRound(player, playerRows, projectionRound)
+      const recentScoreRows = hasPlayedProjectionRound
+        ? playerRows.filter((row) => row.Round !== projectionRound)
+        : playerRows
+      const recentScores = precomputedStatsRow?.last3 != null && !hasPlayedProjectionRound
+        ? []
+        : [...recentScoreRows]
+          .sort(sortRoundsDesc)
+          .slice(0, 3)
+          .map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
       const projectionTeam = lineupRole?.team ?? teamHint ?? imageRow?.team ?? null
       const officialProjectionRoundPlays = teamPlaysInRound(draw2026Data, projectionRound, projectionTeam)
       const rawProjection = resolveFantasyProjectionForLineups(
@@ -4476,11 +4498,16 @@ export function FantasyDashboard({
       const pricedAt = displayPlayer.pricedAt
       const originChance = originChancePlayerNames.has(normaliseProjectionPlayerName(player.name))
       const precomputedProjection = normaliseFantasyProjection(precomputedRow?.projection ?? null)
-      const projection = precomputedProjection ?? normaliseFantasyProjection(rawProjection)
+      const lineupsProjection = normaliseFantasyProjection(rawProjection)
+      const projection = hasPlayedProjectionRound
+        ? lineupsProjection ?? precomputedProjection
+        : precomputedProjection ?? lineupsProjection
       const effectivePricedAt = precomputedRow?.pricedAt ?? pricedAt
       const value = projection == null
         ? null
-        : precomputedProjection !== null
+        : hasPlayedProjectionRound
+          ? roundedFantasyValue(projection, effectivePricedAt)
+          : precomputedProjection !== null
           ? precomputedRow?.value ?? roundedFantasyValue(projection, effectivePricedAt)
           : roundedFantasyValue(projection, effectivePricedAt)
       const nextMajorByeRound = precomputedRow?.nextMajorByeRound ?? getNextMajorByeRound(projectionRound)
@@ -4534,7 +4561,9 @@ export function FantasyDashboard({
         localName,
         imageRow,
         avg2026: precomputedStatsRow?.avg2026 ?? averageNumbers(fantasyScores) ?? player.avgPoints,
-        last3: precomputedStatsRow?.last3 ?? averageNumbers(recentScores),
+        last3: hasPlayedProjectionRound
+          ? averageNumbers(recentScores) ?? precomputedStatsRow?.last3 ?? null
+          : precomputedStatsRow?.last3 ?? averageNumbers(recentScores),
         ppm: precomputedStatsRow?.ppm ?? (totalMinutes > 0 ? totalFantasy / totalMinutes : null),
         weeklyChange: precomputedRow?.weeklyChange ?? ownershipDelta,
         playerCasualtyWard,

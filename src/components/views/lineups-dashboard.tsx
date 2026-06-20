@@ -2182,18 +2182,6 @@ function TryChartField({
           <div key={lane.label} className="relative min-h-28 rounded border border-white/10 bg-slate-950/20 px-1.5 py-2 text-center">
             <div className="mb-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-200">{lane.label}</div>
             <div className="space-y-2">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded bg-emerald-300/15 px-1 py-1">
-                <div>
-                  <div className="h-1.5 rounded-full bg-emerald-300/20">
-                    <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(8, lane.scoredPct * 100)}%` }} />
-                  </div>
-                  <div className="mt-0.5 text-[8px] text-emerald-100/70">{formatTryChartPct(lane.scoredPct)}</div>
-                </div>
-                <div className="inline-flex min-w-[2.25rem] items-center justify-start gap-1 text-[9px] font-bold text-emerald-200">
-                  <TryChartLogo logo={teamLogo} label={teamName} />
-                  <span>{lane.scored}</span>
-                </div>
-              </div>
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded bg-[#fb7185]/14 px-1 py-1">
                 <div>
                   <div className="h-1.5 rounded-full bg-[#fb7185]/22">
@@ -2204,6 +2192,18 @@ function TryChartField({
                 <div className="inline-flex min-w-[2.25rem] items-center justify-start gap-1 text-[9px] font-bold text-[#ffe4e6]">
                   <TryChartLogo logo={opponentLogo} label={opponentName} />
                   <span>{lane.conceded}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded bg-emerald-300/15 px-1 py-1">
+                <div>
+                  <div className="h-1.5 rounded-full bg-emerald-300/20">
+                    <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(8, lane.scoredPct * 100)}%` }} />
+                  </div>
+                  <div className="mt-0.5 text-[8px] text-emerald-100/70">{formatTryChartPct(lane.scoredPct)}</div>
+                </div>
+                <div className="inline-flex min-w-[2.25rem] items-center justify-start gap-1 text-[9px] font-bold text-emerald-200">
+                  <TryChartLogo logo={teamLogo} label={teamName} />
+                  <span>{lane.scored}</span>
                 </div>
               </div>
             </div>
@@ -2241,18 +2241,6 @@ function TryTypeRow({
       <div className="space-y-1.5">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
           <div>
-            <div className="relative h-3 rounded-full bg-emerald-300/20">
-              <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, scoredPct * 100)}%` }} />
-              <div className="absolute inset-0 grid place-items-center text-[8px] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">{formatTryChartPct(scoredPct)}</div>
-            </div>
-          </div>
-          <div className="inline-flex min-w-[3.1rem] items-center justify-start gap-1 text-[9px] font-semibold text-emerald-200">
-            <TryChartLogo logo={teamLogo} label={teamName} />
-            <span>{scored}</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
-          <div>
             <div className="relative h-3 rounded-full bg-[#fb7185]/22">
               <div className="h-full rounded-full bg-[#fb7185]" style={{ width: `${Math.max(5, concededPct * 100)}%` }} />
               <div className="absolute inset-0 grid place-items-center text-[8px] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">{formatTryChartPct(concededPct)}</div>
@@ -2261,6 +2249,18 @@ function TryTypeRow({
           <div className="inline-flex min-w-[3.1rem] items-center justify-start gap-1 text-[9px] font-semibold text-[#ffe4e6]">
             <TryChartLogo logo={opponentLogo} label={opponentName} />
             <span>{conceded}</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+          <div>
+            <div className="relative h-3 rounded-full bg-emerald-300/20">
+              <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.max(5, scoredPct * 100)}%` }} />
+              <div className="absolute inset-0 grid place-items-center text-[8px] font-black leading-none text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">{formatTryChartPct(scoredPct)}</div>
+            </div>
+          </div>
+          <div className="inline-flex min-w-[3.1rem] items-center justify-start gap-1 text-[9px] font-semibold text-emerald-200">
+            <TryChartLogo logo={teamLogo} label={teamName} />
+            <span>{scored}</span>
           </div>
         </div>
       </div>

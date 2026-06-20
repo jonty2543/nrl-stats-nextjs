@@ -282,10 +282,11 @@ const BEST_BETS_CONFIG = {
   minBookies: 2,
   minArbitragePct: 0.05,
   weights: {
-    edge: 0.56,
-    liquidity: 0.2,
-    efficiency: 0.14,
-    disagreement: 0.1,
+    edge: 0.48,
+    liquidity: 0.18,
+    efficiency: 0.12,
+    disagreement: 0.08,
+    timing: 0.14,
   },
 };
 const BEST_BETS_FEATURED_OVERRIDE = {
@@ -1524,6 +1525,120 @@ function impliedProbability(price: number | null): number | null {
   return 1 / price;
 }
 
+function isoDateDiffDays(fromIso: string, toIso: string): number | null {
+  const fromMs = Date.parse(`${fromIso}T00:00:00`);
+  const toMs = Date.parse(`${toIso}T00:00:00`);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
+  return Math.round((toMs - fromMs) / (24 * 60 * 60 * 1000));
+}
+
+function eventProximityScore(eventDate: string, todayIso: string): number {
+  const daysUntil = isoDateDiffDays(todayIso, eventDate);
+  if (daysUntil == null) return 0.72;
+  if (daysUntil <= 0) return 0.3;
+  if (daysUntil === 1) return 0.5;
+  if (daysUntil === 2) return 0.68;
+  if (daysUntil === 3) return 0.84;
+  return 1;
+}
+
+function buildMarketSignals(row: OutcomeRow, marketEfficiencyPct: number | null) {
+  const offers = BETTING_BOOKIE_COLUMNS
+    .map((bookie) => row.bookieOffers[bookie])
+    .filter((offer): offer is BookieOffer => offer != null);
+  const bestPrice = row.bestPriceComputed;
+  const lowerPrices = bestPrice == null
+    ? []
+    : offers
+        .map((offer) => offer.price)
+        .filter((price) => price > 1 && price < bestPrice - 1e-9);
+  const averageLowerPrice = lowerPrices.length > 0
+    ? lowerPrices.reduce((sum, price) => sum + price, 0) / lowerPrices.length
+    : null;
+  const marketDisagreementPct = bestPrice != null && averageLowerPrice != null && averageLowerPrice > 0
+    ? ((bestPrice / averageLowerPrice) - 1) * 100
+    : null;
+  const liquidityScore = clamp(offers.length / BETTING_BOOKIE_COLUMNS.length, 0, 1);
+  const efficiencyScore = marketEfficiencyPct != null
+    ? clamp(1 - Math.max(0, marketEfficiencyPct - 100) / 14, 0, 1)
+    : clamp(0.5 + liquidityScore * 0.35, 0, 1);
+  const lowerBookConsensusScore = offers.length > 1 ? clamp(lowerPrices.length / (offers.length - 1), 0, 1) : 0;
+  const disagreementScore = clamp((marketDisagreementPct ?? 0) / 14, 0, 1) * (0.35 + (lowerBookConsensusScore * 0.65));
+
+  return {
+    offerCount: offers.length,
+    marketDisagreementPct,
+    marketEfficiencyPct,
+    liquidityScore,
+    efficiencyScore,
+    disagreementScore,
+  };
+}
+
+function calculateBetScore({
+  edgePp,
+  eventDate,
+  todayIso,
+  liquidityScore,
+  efficiencyScore,
+  disagreementScore,
+}: {
+  edgePp: number;
+  eventDate: string;
+  todayIso: string;
+  liquidityScore: number;
+  efficiencyScore: number;
+  disagreementScore: number;
+}): number {
+  const edgeScore = clamp(edgePp / 12, -1, 1);
+  const timingScore = eventProximityScore(eventDate, todayIso);
+  const contextWeight =
+    BEST_BETS_CONFIG.weights.liquidity +
+    BEST_BETS_CONFIG.weights.efficiency +
+    BEST_BETS_CONFIG.weights.disagreement +
+    BEST_BETS_CONFIG.weights.timing;
+  const contextScore = contextWeight > 0 ? (
+    (liquidityScore * BEST_BETS_CONFIG.weights.liquidity) +
+    (efficiencyScore * BEST_BETS_CONFIG.weights.efficiency) +
+    (disagreementScore * BEST_BETS_CONFIG.weights.disagreement) +
+    (timingScore * BEST_BETS_CONFIG.weights.timing)
+  ) / contextWeight : 0.5;
+  const edgeSwing = 0.28 + (contextScore * 0.17);
+  return clamp(0.5 + (edgeScore * edgeSwing), 0, 1);
+}
+
+function adjustedKellyProbability({
+  modelProbability,
+  impliedProbability,
+  eventDate,
+  todayIso,
+  liquidityScore,
+  efficiencyScore,
+  disagreementScore,
+}: {
+  modelProbability: number;
+  impliedProbability: number;
+  eventDate: string;
+  todayIso: string;
+  liquidityScore: number;
+  efficiencyScore: number;
+  disagreementScore: number;
+}): number {
+  const edge = modelProbability - impliedProbability;
+  if (edge <= 0) return modelProbability;
+
+  const timingScore = eventProximityScore(eventDate, todayIso);
+  const marketMaturityPressure = clamp(
+    (liquidityScore * 0.55) +
+    (efficiencyScore * 0.35) +
+    ((1 - disagreementScore) * 0.1),
+    0,
+    1
+  );
+  const edgeWeight = clamp(1 - ((1 - timingScore) * marketMaturityPressure * 0.9), 0.25, 1);
+  return clamp(impliedProbability + (edge * edgeWeight), 0.01, 0.99);
+}
+
 function kellyFraction(probability: number, price: number): number {
   const b = price - 1;
   if (b <= 0) return 0;
@@ -1622,30 +1737,27 @@ function buildBestBets({
       const edgePp = (modelProbability - implied) * 100;
       if (edgePp < BEST_BETS_CONFIG.minEdgePp) continue;
 
-      const offers = BETTING_BOOKIE_COLUMNS
-        .map((bookie) => row.bookieOffers[bookie])
-        .filter((offer): offer is BookieOffer => offer != null);
-      if (offers.length < BEST_BETS_CONFIG.minBookies) continue;
+      const signals = buildMarketSignals(row, group.marketPctFromBest);
+      if (signals.offerCount < BEST_BETS_CONFIG.minBookies) continue;
 
-      const prices = offers.map((offer) => offer.price);
-      const minPrice = Math.min(...prices);
-      const maxPrice = Math.max(...prices);
-      const marketDisagreementPct = minPrice > 0 && maxPrice > minPrice
-        ? ((maxPrice / minPrice) - 1) * 100
-        : null;
-      const liquidityScore = clamp(offers.length / BETTING_BOOKIE_COLUMNS.length, 0, 1);
-      const marketEfficiencyPct = group.marketPctFromBest;
-      const efficiencyScore = marketEfficiencyPct != null
-        ? clamp(1 - Math.max(0, marketEfficiencyPct - 100) / 14, 0, 1)
-        : clamp(0.5 + liquidityScore * 0.35, 0, 1);
-      const disagreementScore = clamp((marketDisagreementPct ?? 0) / 14, 0, 1);
-      const edgeScore = clamp(edgePp / 8, 0, 1);
-      const score =
-        (edgeScore * BEST_BETS_CONFIG.weights.edge) +
-        (liquidityScore * BEST_BETS_CONFIG.weights.liquidity) +
-        (efficiencyScore * BEST_BETS_CONFIG.weights.efficiency) +
-        (disagreementScore * BEST_BETS_CONFIG.weights.disagreement);
-      const fullKelly = kellyFraction(modelProbability, odds);
+      const score = calculateBetScore({
+        edgePp,
+        eventDate: group.date,
+        todayIso,
+        liquidityScore: signals.liquidityScore,
+        efficiencyScore: signals.efficiencyScore,
+        disagreementScore: signals.disagreementScore,
+      });
+      const kellyProbability = adjustedKellyProbability({
+        modelProbability,
+        impliedProbability: implied,
+        eventDate: group.date,
+        todayIso,
+        liquidityScore: signals.liquidityScore,
+        efficiencyScore: signals.efficiencyScore,
+        disagreementScore: signals.disagreementScore,
+      });
+      const fullKelly = kellyFraction(kellyProbability, odds);
       const rawKellyStake = Math.max(0, bankroll * fullKelly * kellyScale);
       const kellyStake = rawKellyStake > 0 && rawKellyStake < 1 ? 1 : Math.round(rawKellyStake);
 
@@ -1666,8 +1778,8 @@ function buildBestBets({
         edgePp,
         kellyStake,
         score,
-        marketDisagreementPct,
-        marketEfficiencyPct,
+        marketDisagreementPct: signals.marketDisagreementPct,
+        marketEfficiencyPct: signals.marketEfficiencyPct,
       });
     }
   }
@@ -3220,6 +3332,7 @@ export function BettingDashboard({
             tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
             lineupLinksByMatchKey={lineupLinksByMatchKey}
             market={selectedMarket}
+            todayIso={todayIso}
             jumpTarget={marketJumpTarget}
             showPastMarkets={showPastMarkets}
             onStakeOverride={handleStakeOverride}
@@ -3458,19 +3571,19 @@ function BestBetsHero({
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                {!isArbitrage ? (
-                  <div className="mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
-                    Score <span className="text-nrl-text">{formatBestBetScore((featuredItem as BestBetCandidate).score)}</span>
-                  </div>
-                ) : null}
                 <div className={`text-3xl font-bold leading-none sm:text-4xl ${activeTheme.metric}`}>
                   {isArbitrage
                     ? `+${(featuredItem as ArbitrageCandidate).returnPct.toFixed(2)}%`
-                    : `+${(featuredItem as BestBetCandidate).edgePp.toFixed(2)}%`}
+                    : formatBestBetScore((featuredItem as BestBetCandidate).score)}
                 </div>
                 <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
-                  {isArbitrage ? "return" : "edge"}
+                  {isArbitrage ? "return" : "bet score"}
                 </div>
+                {!isArbitrage ? (
+                  <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                    Edge <span className="text-nrl-text">+{(featuredItem as BestBetCandidate).edgePp.toFixed(2)}%</span>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -3652,21 +3765,21 @@ function BestBetsHero({
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
-                        {!isLocked && !isArbitrage ? (
-                          <div className="mb-1 text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
-                            {formatBestBetScore((item as BestBetCandidate).score)}
-                          </div>
-                        ) : null}
                         <div className={`text-base font-bold leading-none ${isLocked ? "text-nrl-muted" : activeTheme.metric}`}>
                           {isLocked
                             ? isArbitrage ? "ARB" : "+EV"
                             : isArbitrage
                               ? `+${(item as ArbitrageCandidate).returnPct.toFixed(2)}%`
-                              : `+${(item as BestBetCandidate).edgePp.toFixed(2)}%`}
+                              : formatBestBetScore((item as BestBetCandidate).score)}
                         </div>
                         <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
-                          {isArbitrage ? "return" : "edge"}
+                          {isArbitrage ? "return" : "score"}
                         </div>
+                        {!isLocked && !isArbitrage ? (
+                          <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                            Edge +{(item as BestBetCandidate).edgePp.toFixed(2)}%
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -4059,6 +4172,7 @@ function MarketSection({
   tryscorerKickoffsByMatch,
   lineupLinksByMatchKey,
   market,
+  todayIso,
   jumpTarget,
   showPastMarkets,
   onStakeOverride,
@@ -4083,6 +4197,7 @@ function MarketSection({
   tryscorerKickoffsByMatch: Record<string, string>;
   lineupLinksByMatchKey: Record<string, string>;
   market: BettingMarket;
+  todayIso: string;
   jumpTarget: BettingMarketJumpTarget | null;
   showPastMarkets?: boolean;
   onStakeOverride: (key: string, value: number) => void;
@@ -4396,11 +4511,31 @@ function MarketSection({
                     const edgePp = edgeDecimal == null ? null : edgeDecimal * 100;
                     const hasPositiveEdge = edgeDecimal != null && edgeDecimal > 0;
                     const overEdgeCliff = edgeDecimal != null && edgeDecimal > (maxEdge ?? 0.06);
+                    const marketSignals = buildMarketSignals(row, group.marketPctFromBest);
+                    const betScore = edgePp == null ? null : calculateBetScore({
+                      edgePp,
+                      eventDate: group.date,
+                      todayIso,
+                      liquidityScore: marketSignals.liquidityScore,
+                      efficiencyScore: marketSignals.efficiencyScore,
+                      disagreementScore: marketSignals.disagreementScore,
+                    });
+                    const kellyProbability = modelProbability != null && implied != null
+                      ? adjustedKellyProbability({
+                          modelProbability,
+                          impliedProbability: implied,
+                          eventDate: group.date,
+                          todayIso,
+                          liquidityScore: marketSignals.liquidityScore,
+                          efficiencyScore: marketSignals.efficiencyScore,
+                          disagreementScore: marketSignals.disagreementScore,
+                        })
+                      : null;
                     const bankrollValue = bankroll ?? 0;
                     const percentageStakeDecimal = clamp((percentageStakePct ?? 0) / 100, 0, 1);
                     const targetProfitDecimal = clamp((targetProfitPct ?? 0) / 100, 0, 1);
-                    const fullKelly = modelProbability != null && oddsValue != null
-                      ? kellyFraction(modelProbability, oddsValue)
+                    const fullKelly = kellyProbability != null && oddsValue != null
+                      ? kellyFraction(kellyProbability, oddsValue)
                       : null;
                     let scaledStake: number | null = null;
                     if (!canAccessPremium && oddsValue != null && oddsValue > 1) {
@@ -4503,7 +4638,7 @@ function MarketSection({
                             <div className="min-w-0 flex-1">
                               <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-y-2 text-xs font-semibold text-nrl-text">
                                 <span className="min-w-0 truncate pr-1">{row.result}</span>
-                                <div className="grid grid-cols-[minmax(0,9.75rem)_minmax(0,7.75rem)] items-center gap-x-4">
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                                   <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] text-nrl-muted">
                                     Best:
                                     <span className="text-nrl-text tabular-nums">{formatPrice(row.bestPriceComputed)}</span>
@@ -4518,6 +4653,14 @@ function MarketSection({
                                       Edge:
                                       <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : "tabular-nums"}>
                                         {formatEdge(edgePp)}
+                                      </span>
+                                    </span>
+                                  ) : null}
+                                  {showModelColumns ? (
+                                    <span className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-[10px] font-black uppercase tracking-[0.08em] ${edgeClass}`}>
+                                      Score:
+                                      <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : "tabular-nums"}>
+                                        {betScore == null ? "-" : formatBestBetScore(betScore)}
                                       </span>
                                     </span>
                                   ) : null}
@@ -4633,6 +4776,7 @@ function MarketSection({
                           <>
                             <th className="py-2 pr-3 font-semibold">Model</th>
                             <th className="py-2 pr-3 font-semibold">Edge</th>
+                            <th className="py-2 pr-3 font-semibold">Score</th>
                           </>
                         ) : null}
                         <th className="py-2 pr-3 font-semibold">Odds</th>
@@ -4644,7 +4788,7 @@ function MarketSection({
                       {visibleOutcomes.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={visibleBookieColumns.length + (showModelColumns ? 8 : 6)}
+                            colSpan={visibleBookieColumns.length + (showModelColumns ? 9 : 6)}
                             className="py-4 text-sm text-nrl-muted"
                           >
                             No odds found for {selectedTryscorerValue}+.
@@ -4664,11 +4808,31 @@ function MarketSection({
                         const edgePp = edgeDecimal == null ? null : edgeDecimal * 100;
                         const hasPositiveEdge = edgeDecimal != null && edgeDecimal > 0;
                         const overEdgeCliff = edgeDecimal != null && edgeDecimal > (maxEdge ?? 0.06);
+                        const marketSignals = buildMarketSignals(row, group.marketPctFromBest);
+                        const betScore = edgePp == null ? null : calculateBetScore({
+                          edgePp,
+                          eventDate: group.date,
+                          todayIso,
+                          liquidityScore: marketSignals.liquidityScore,
+                          efficiencyScore: marketSignals.efficiencyScore,
+                          disagreementScore: marketSignals.disagreementScore,
+                        });
+                        const kellyProbability = modelProbability != null && implied != null
+                          ? adjustedKellyProbability({
+                              modelProbability,
+                              impliedProbability: implied,
+                              eventDate: group.date,
+                              todayIso,
+                              liquidityScore: marketSignals.liquidityScore,
+                              efficiencyScore: marketSignals.efficiencyScore,
+                              disagreementScore: marketSignals.disagreementScore,
+                            })
+                          : null;
                         const bankrollValue = bankroll ?? 0;
                         const percentageStakeDecimal = clamp((percentageStakePct ?? 0) / 100, 0, 1);
                         const targetProfitDecimal = clamp((targetProfitPct ?? 0) / 100, 0, 1);
-                        const fullKelly = modelProbability != null && oddsValue != null
-                          ? kellyFraction(modelProbability, oddsValue)
+                        const fullKelly = kellyProbability != null && oddsValue != null
+                          ? kellyFraction(kellyProbability, oddsValue)
                           : null;
                         let scaledStake: number | null = null;
                         if (!canAccessPremium && oddsValue != null && oddsValue > 1) {
@@ -4842,6 +5006,11 @@ function MarketSection({
                                 <td className={`py-2 pr-3 ${edgeClass}`}>
                                   <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}>
                                     {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
+                                  </span>
+                                </td>
+                                <td className={`py-2 pr-3 font-semibold ${edgeClass}`}>
+                                  <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}>
+                                    {betScore == null ? "-" : formatBestBetScore(betScore)}
                                   </span>
                                 </td>
                               </>

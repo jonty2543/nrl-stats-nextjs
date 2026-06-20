@@ -1659,6 +1659,31 @@ function buildTeamPitchSlotMap(players: LineupPlayer[]): Map<string, Slot> {
   return slots
 }
 
+function buildPropLaneIndexMap(players: LineupPlayer[], pitchSlots: Map<string, Slot>): Map<string, number> {
+  const out = new Map<string, number>()
+  const props = players.filter((player) => pitchSlots.get(pitchPlayerKey(player)) === "PR")
+  const used = new Set<number>()
+
+  const assign = (player: LineupPlayer | undefined, lane: number) => {
+    if (!player || used.has(lane)) return
+    out.set(pitchPlayerKey(player), lane)
+    used.add(lane)
+  }
+
+  assign(props.find((player) => player.number === 8), 0)
+  assign(props.find((player) => player.number === 10), 1)
+
+  for (const player of props) {
+    const key = pitchPlayerKey(player)
+    if (out.has(key)) continue
+    const lane = [0, 1].find((candidate) => !used.has(candidate))
+    if (lane == null) break
+    assign(player, lane)
+  }
+
+  return out
+}
+
 function positionBaselineKeyForPlayer(player: LineupPlayer): string | null {
   if (player.number === 1) return "FB"
   if (player.number === 2 || player.number === 5) return "W"
@@ -1697,13 +1722,14 @@ function slotPosition(
   slot: Slot,
   player: LineupPlayer,
   side: "home" | "away",
-  orientation: Orientation
+  orientation: Orientation,
+  propLaneIndex = 0
 ): { left: string; top: string } {
   const depthMap = orientation === "portrait" ? PORTRAIT_DEPTH_X : DEPTH_X
   const laneMap = orientation === "portrait" ? PORTRAIT_LANE_Y : LANE_Y
   const propLane = orientation === "portrait" ? 82 : 79
   const depth = depthMap[slot]
-  const lane = slot === "PR" && player.number === 10 ? propLane : laneMap[slot]
+  const lane = slot === "PR" && propLaneIndex === 1 ? propLane : laneMap[slot]
 
   if (orientation === "portrait") {
     const top = side === "home" ? depth : 100 - depth
@@ -1778,6 +1804,7 @@ function TeamBadge({
 function PitchPlayer({
   player,
   slot,
+  propLaneIndex = 0,
   side,
   orientation,
   displayMode,
@@ -1792,6 +1819,7 @@ function PitchPlayer({
 }: {
   player: LineupPlayer
   slot: Slot
+  propLaneIndex?: number
   side: "home" | "away"
   orientation: Orientation
   displayMode: DisplayMode
@@ -1805,7 +1833,7 @@ function PitchPlayer({
   onPlayerSelect: (player: LineupPlayer) => void
 }) {
   const imageSources = playerImageSources(player.headImage, player.bodyImage)
-  const position = slotPosition(slot, player, side, orientation)
+  const position = slotPosition(slot, player, side, orientation, propLaneIndex)
   const compact = orientation === "portrait"
   const liveState = getLivePlayerState(liveMatch, player)
   const liveStats = getLivePlayerStats(liveMatch, player)
@@ -1929,6 +1957,8 @@ function Pitch({
       : "hidden h-[520px] w-full md:block"
   const homePitchSlots = buildTeamPitchSlotMap(homePlayers)
   const awayPitchSlots = buildTeamPitchSlotMap(awayPlayers)
+  const homePropLaneIndexes = buildPropLaneIndexMap(homePlayers, homePitchSlots)
+  const awayPropLaneIndexes = buildPropLaneIndexMap(awayPlayers, awayPitchSlots)
 
   return (
     <div className={`${sizeClass} relative overflow-hidden rounded-lg border-2 border-emerald-300/45 bg-[radial-gradient(circle_at_50%_50%,rgba(0,245,138,0.16),transparent_30%),linear-gradient(90deg,rgba(8,26,33,0.98),rgba(15,112,73,0.92)_50%,rgba(8,26,33,0.98))]`}>
@@ -1954,6 +1984,7 @@ function Pitch({
             key={`${orientation}-${player.team}-${player.playerId ?? player.number ?? player.player}`}
             player={player}
             slot={slot}
+            propLaneIndex={homePropLaneIndexes.get(pitchPlayerKey(player)) ?? 0}
             side="home"
             orientation={orientation}
             displayMode={displayMode}
@@ -1976,6 +2007,7 @@ function Pitch({
             key={`${orientation}-${player.team}-${player.playerId ?? player.number ?? player.player}`}
             player={player}
             slot={slot}
+            propLaneIndex={awayPropLaneIndexes.get(pitchPlayerKey(player)) ?? 0}
             side="away"
             orientation={orientation}
             displayMode={displayMode}
@@ -2203,6 +2235,12 @@ function tryChartPlayers(
   }))
 }
 
+function tryChartPlayerDisplayName(player: LineupPlayer | null): string {
+  if (!player) return "-"
+  const parts = player.player.trim().split(/\s+/).filter(Boolean)
+  return parts.at(-1) ?? player.player
+}
+
 function TryChartPlayers({
   team,
   side,
@@ -2232,7 +2270,7 @@ function TryChartPlayers({
           </div>
           <div className="mt-0.5 text-[7px] font-black uppercase leading-none tracking-wide text-nrl-muted">{label}</div>
           <div className="mt-0.5 truncate text-[8px] font-semibold leading-tight text-slate-100" title={player?.player ?? undefined}>
-            {player?.player ?? "-"}
+            {tryChartPlayerDisplayName(player)}
           </div>
         </div>
       ))}
@@ -2292,12 +2330,12 @@ function TryChartField({
       <div className="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(7.5rem,0.72fr)_minmax(0,1fr)]">
         {lanes.map((lane) => (
           <div key={lane.label} className="relative min-h-28 rounded border border-white/10 bg-slate-950/20 px-1.5 py-2 text-center">
-            <div className="mb-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-200">{lane.label}</div>
             <div className="space-y-2">
               <TryChartPlayers team={opponentTeam} side={lane.defenceSide} tone="defence" inverted={lane.side !== "middle"} />
               {barRow("conceded", lane)}
               {barRow("scored", lane)}
               <TryChartPlayers team={team} side={lane.side} />
+              <div className="pt-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-slate-200">{lane.label}</div>
             </div>
           </div>
         ))}
@@ -2417,7 +2455,7 @@ function MatchupTryCharts({
   if (!homeChart && !awayChart) return null
 
   return (
-    <div className="grid gap-2.5 sm:grid-cols-2">
+    <div className="grid gap-2.5">
       {homeChart && awayChart ? <TeamTryChartCard team={homeTeam} opponentTeam={awayTeam} chart={homeChart} opponentChart={awayChart} teamLogos={teamLogos} /> : null}
       {awayChart && homeChart ? <TeamTryChartCard team={awayTeam} opponentTeam={homeTeam} chart={awayChart} opponentChart={homeChart} teamLogos={teamLogos} /> : null}
     </div>
@@ -3102,7 +3140,7 @@ export function LineupsDashboard({
       {matches.length > 0 ? (
         <div className="space-y-11">
           {matchDateGroups.map((group) => (
-            <section key={group.dateKey} className="space-y-8 sm:space-y-6">
+            <section key={group.dateKey} className="space-y-10 sm:space-y-9">
               <div className="px-1 text-xs font-bold uppercase tracking-[0.18em] text-white">
                 {formatMatchDateHeader(group.dateKey)}
               </div>

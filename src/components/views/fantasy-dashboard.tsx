@@ -346,6 +346,39 @@ const FANTASY_LOCKED_VALUE_BOX_CLASS =
   "inline-flex h-5 w-12 items-center justify-center rounded border border-nrl-border/60 bg-[#1c2544]/65 text-slate-100"
 const FANTASY_LOCKED_VALUE_TEXT_CLASS = "blur-[7px] opacity-55 select-none"
 const FANTASY_LOCKED_METRIC_TEXT_CLASS = "select-none blur-[9px] opacity-50"
+type FantasyTourTarget = "top-buys" | "my-team" | "find-value" | "draft-h2h" | "player-list"
+const FANTASY_TOUR_HIGHLIGHT_CLASS = "relative z-[140] ring-2 ring-emerald-300/75 shadow-[0_20px_55px_rgba(0,0,0,0.38)]"
+const FANTASY_TOUR_STEPS: Array<{
+  target: FantasyTourTarget
+  title: string
+  body: string
+}> = [
+  {
+    target: "top-buys",
+    title: "Top 5 Buys",
+    body: "See the top 5 trade targets with the highest overall rating.",
+  },
+  {
+    target: "my-team",
+    title: "My Team",
+    body: "Upload your team screenshots, save your squad, and see your teams availability for upcoming rounds.",
+  },
+  {
+    target: "find-value",
+    title: "Find Value",
+    body: "See the weekly hottest buys and plots including all players where you can find the most value.",
+  },
+  {
+    target: "draft-h2h",
+    title: "Draft / H2H Pdds",
+    body: "Use the draft and H2H tool to upload a screenshot of your matchup and get odds and estimated scores for the matchup using our projections.",
+  },
+  {
+    target: "player-list",
+    title: "Player List",
+    body: "Browse, filter, sort and search all players and see every stat you need to make your trades.",
+  },
+]
 
 interface MajorByeRoundTag {
   round: number
@@ -3433,6 +3466,9 @@ export function FantasyDashboard({
   const [isFantasyDraftPending, setIsFantasyDraftPending] = useState(false)
   const [isMyTeamPending, setIsMyTeamPending] = useState(false)
   const [isAllPlayersPending, setIsAllPlayersPending] = useState(false)
+  const [tourStepIndex, setTourStepIndex] = useState<number | null>(null)
+  const [tourTargetRect, setTourTargetRect] = useState<DOMRect | null>(null)
+  const [signedOutGuideNudgeDismissed, setSignedOutGuideNudgeDismissed] = useState(false)
   const [isTradeSuggestorOpen, setIsTradeSuggestorOpen] = useState(false)
   const [tradeScreenshots, setTradeScreenshots] = useState<Record<TradeScreenshotSlot, FantasyTradeScreenshot | null>>({
     starters: null,
@@ -5311,6 +5347,119 @@ export function FantasyDashboard({
     ? GAME_LOG_COLLAPSED_BASE_UPSIDE_MAX_HEIGHT_PX
     : GAME_LOG_COLLAPSED_MAX_HEIGHT_PX
 
+  const activeTourStep = tourStepIndex == null ? null : FANTASY_TOUR_STEPS[tourStepIndex] ?? null
+  const tourIsOpen = activeTourStep != null
+  const showSignedOutGuideNudge =
+    isAuthLoaded &&
+    !userId &&
+    !signedOutGuideNudgeDismissed &&
+    !tourIsOpen &&
+    showOwnedCards &&
+    showFantasyActions &&
+    !showAllPlayersOnly &&
+    !showFantasyAnalyticsOnly &&
+    fantasyMarketWatch.buys.length > 0
+  const tourPopupStyle = useMemo<CSSProperties>(() => {
+    if (!tourTargetRect || typeof window === "undefined") {
+      return {
+        left: "50%",
+        top: "50%",
+        transform: "translate(-50%, -50%)",
+      }
+    }
+
+    const popupWidth = Math.min(360, window.innerWidth - 32)
+    const left = Math.min(
+      Math.max(16, tourTargetRect.left),
+      Math.max(16, window.innerWidth - popupWidth - 16)
+    )
+    const popupHeight = 156
+    const shouldPlaceBelow = activeTourStep?.target !== "player-list"
+    const belowTop = Math.min(window.innerHeight - popupHeight - 16, tourTargetRect.bottom + 16)
+    const top = shouldPlaceBelow
+      ? Math.max(16, belowTop)
+      : Math.max(16, tourTargetRect.top - popupHeight - 16)
+
+    return {
+      left,
+      top,
+      width: popupWidth,
+    }
+  }, [activeTourStep?.target, tourTargetRect])
+
+  const startFantasyTour = () => {
+    setSignedOutGuideNudgeDismissed(true)
+    setTourStepIndex(0)
+  }
+
+  const closeFantasyTour = () => {
+    setTourStepIndex(null)
+    setTourTargetRect(null)
+  }
+
+  const showNextTourStep = () => {
+    if (tourStepIndex == null || tourStepIndex >= FANTASY_TOUR_STEPS.length - 1) {
+      closeFantasyTour()
+      return
+    }
+    setTourStepIndex(tourStepIndex + 1)
+  }
+
+  const showPreviousTourStep = () => {
+    if (tourStepIndex == null || tourStepIndex <= 0) return
+    setTourStepIndex(tourStepIndex - 1)
+  }
+
+  useEffect(() => {
+    if (!activeTourStep) return
+
+    let scrollTimeoutId: number | null = null
+    let measureFrameId: number | null = null
+
+    const measureTarget = () => {
+      const target = document.querySelector<HTMLElement>(`[data-fantasy-tour="${activeTourStep.target}"]`)
+      setTourTargetRect(target ? target.getBoundingClientRect() : null)
+    }
+
+    const scrollToTarget = () => {
+      const target = document.querySelector<HTMLElement>(`[data-fantasy-tour="${activeTourStep.target}"]`)
+      if (!target) {
+        setTourTargetRect(null)
+        return
+      }
+
+      const targetTop = target.getBoundingClientRect().top + window.scrollY
+      window.scrollTo({
+        top: Math.max(0, targetTop - 220),
+        behavior: "smooth",
+      })
+      measureTarget()
+      scrollTimeoutId = window.setTimeout(measureTarget, 260)
+    }
+
+    measureFrameId = window.requestAnimationFrame(scrollToTarget)
+    window.addEventListener("resize", measureTarget)
+    window.addEventListener("scroll", measureTarget, true)
+
+    return () => {
+      if (measureFrameId != null) window.cancelAnimationFrame(measureFrameId)
+      if (scrollTimeoutId != null) window.clearTimeout(scrollTimeoutId)
+      window.removeEventListener("resize", measureTarget)
+      window.removeEventListener("scroll", measureTarget, true)
+    }
+  }, [activeTourStep])
+
+  useEffect(() => {
+    if (!tourIsOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeFantasyTour()
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [tourIsOpen])
+
   useEffect(() => {
     setIsGameLogExpanded(false)
   }, [selectedFantasyName])
@@ -5385,9 +5534,43 @@ export function FantasyDashboard({
 
   return (
     <div className={showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? "space-y-3" : "space-y-6"}>
+      {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly && fantasyMarketWatch.buys.length > 0 ? (
+        <div className="flex justify-start">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={startFantasyTour}
+              aria-label="Open fantasy guide"
+              title="Open fantasy guide"
+              className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-emerald-300/40 bg-emerald-400/12 text-sm font-black lowercase text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/18"
+            >
+              i
+            </button>
+            {showSignedOutGuideNudge ? (
+              <div className="absolute left-12 top-1/2 z-30 flex min-h-9 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-300/35 bg-[#10162f] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-300 shadow-[0_12px_32px_rgba(0,0,0,0.34)]">
+                <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-emerald-300/35 bg-[#10162f]" />
+                <span className="relative z-[1]">Guide</span>
+                <button
+                  type="button"
+                  onClick={() => setSignedOutGuideNudgeDismissed(true)}
+                  aria-label="Dismiss guide prompt"
+                  className="relative z-[1] grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded-full border border-white/10 text-xs leading-none text-nrl-muted transition-colors hover:text-nrl-text"
+                >
+                  ×
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <div className="space-y-5 xl:space-y-8">
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly && fantasyMarketWatch.buys.length > 0 ? (
-          <section className="overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(135deg,#172543_0%,#111a32_58%,#18213a_100%)] shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
+          <section
+            data-fantasy-tour="top-buys"
+            className={`scroll-mt-24 overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(135deg,#172543_0%,#111a32_58%,#18213a_100%)] shadow-[0_18px_40px_rgba(0,0,0,0.22)] ${
+              activeTourStep?.target === "top-buys" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""
+            }`}
+          >
             <div className="px-3 py-3 sm:px-4">
               <div className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-300">
                 Top 5 buys
@@ -5436,9 +5619,12 @@ export function FantasyDashboard({
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
           <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch">
             <Link
+              data-fantasy-tour="my-team"
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}
-              className="relative flex min-h-[84px] w-full cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] px-5 py-4 text-left text-nrl-text shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] xl:min-h-[108px] xl:py-3"
+              className={`relative flex min-h-[84px] w-full scroll-mt-24 cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] px-5 py-4 text-left text-nrl-text shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] xl:min-h-[108px] xl:py-3 ${
+                activeTourStep?.target === "my-team" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""
+              }`}
             >
               <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(123,92,255,0.11),rgba(0,245,138,0.045)_58%,rgba(17,24,50,0)_100%)]" />
               <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
@@ -5463,13 +5649,14 @@ export function FantasyDashboard({
             <div className={`grid items-stretch gap-2 sm:gap-3 xl:order-2 xl:col-span-2 ${fantasyProjectionArticle ? "grid-cols-3 xl:grid-cols-2" : "grid-cols-2 xl:grid-cols-1"}`}>
               <div className="contents xl:grid xl:grid-rows-2 xl:gap-3">
                 <Link
+                  data-fantasy-tour="find-value"
                   href="/dashboard/fantasy/analytics"
                   onClick={() => setIsFantasyAnalyticsPending(true)}
-                  className={`relative flex h-full min-h-[44px] w-full cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
+                  className={`relative flex h-full min-h-[44px] w-full scroll-mt-24 cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
                     showFantasyAnalytics
                       ? "border-nrl-accent bg-[#111832]"
                       : "border-[rgba(123,92,255,0.35)] bg-[#111832]"
-                  }`}
+                  } ${activeTourStep?.target === "find-value" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""}`}
                 >
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
                     <TrendGraphIcon className="h-4 w-4 text-nrl-accent" />
@@ -5483,7 +5670,12 @@ export function FantasyDashboard({
                     </span>
                   ) : null}
                 </Link>
-                <div className="group h-full self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] p-0 shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d]">
+                <div
+                  data-fantasy-tour="draft-h2h"
+                  className={`group h-full scroll-mt-24 self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] p-0 shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] ${
+                    activeTourStep?.target === "draft-h2h" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""
+                  }`}
+                >
                   {hasFantasyPlotAccess ? (
                     <Link
                       href="/dashboard/fantasy/draft"
@@ -5795,7 +5987,13 @@ export function FantasyDashboard({
       ) : null}
 
       {showOwnedCards && !showFantasyAnalyticsOnly ? (
-        <section id="fantasy-all-players" className="scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
+        <section
+          id="fantasy-all-players"
+          data-fantasy-tour="player-list"
+          className={`scroll-mt-24 rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden ${
+            activeTourStep?.target === "player-list" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""
+          }`}
+        >
           <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-panel-2 px-3 py-2">
             {hasLoadedFullAllPlayersRows ? (
               <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:gap-1.5">
@@ -6537,6 +6735,43 @@ export function FantasyDashboard({
             </table>
           </div>
         </section>
+      ) : null}
+
+      {tourIsOpen && activeTourStep ? (
+        <>
+          <div className="fixed inset-0 z-[130] bg-black/75" onClick={closeFantasyTour} />
+          <div
+            className="fixed z-[150] w-[calc(100vw-2rem)] max-w-[360px] rounded-xl border border-emerald-300/35 bg-[#10162f] p-4 text-nrl-text shadow-[0_24px_80px_rgba(0,0,0,0.56)]"
+            style={tourPopupStyle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fantasy-tour-title"
+          >
+            <h2 id="fantasy-tour-title" className="text-base font-bold text-white">
+              {tourStepIndex == null ? 1 : tourStepIndex + 1}. {activeTourStep.title}
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-nrl-muted">
+              {activeTourStep.body}
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={showPreviousTourStep}
+                disabled={tourStepIndex == null || tourStepIndex === 0}
+                className="cursor-pointer rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-white/20 hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={showNextTourStep}
+                className="cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/18"
+              >
+                {tourStepIndex === FANTASY_TOUR_STEPS.length - 1 ? "Done" : "Next"}
+              </button>
+            </div>
+          </div>
+        </>
       ) : null}
 
       {showPlayerDetails && selectedFantasyPlayer ? (

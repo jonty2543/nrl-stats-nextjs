@@ -195,6 +195,7 @@ interface ArbitrageCandidate {
 type StakingMode = "percentage" | "targetProfit" | "kelly";
 type TrackedBetStatus = "pending" | "won" | "lost" | "push";
 type TrackedBetType = "single" | "multi" | "sgm";
+type BettingTourTarget = "best-bets" | "staking-calculator" | "bet-tracker" | "main-dashboard";
 
 interface BetLeg {
   market: BettingMarket;
@@ -273,6 +274,33 @@ const DEFAULT_BETTING_MARKET: BettingMarket = "H2H";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const BETTING_PANEL_HEADER_CLASS = "text-[10px] font-bold uppercase tracking-[0.22em]";
+const BETTING_TOUR_HIGHLIGHT_CLASS = "relative z-[140] ring-2 ring-emerald-300/75 shadow-[0_20px_55px_rgba(0,0,0,0.38)]";
+const BETTING_TOUR_STEPS: Array<{
+  target: BettingTourTarget;
+  title: string;
+  body: string;
+}> = [
+  {
+    target: "best-bets",
+    title: "Best Bets",
+    body: "See the top rated bets scored by model edge, market disagreement, and proximity to event.",
+  },
+  {
+    target: "staking-calculator",
+    title: "Staking Calculator",
+    body: "Set your bankroll and staking method here so suggested stakes match the way you want to manage risk.",
+  },
+  {
+    target: "bet-tracker",
+    title: "Bet Tracker",
+    body: "Track your placed bets, update results, and monitor bankroll, ROI, win rate, and profit over time.",
+  },
+  {
+    target: "main-dashboard",
+    title: "Main Dashboard",
+    body: "Use the market tabs and odds tables here to compare bookies, model probabilities, edge, and staking outputs.",
+  },
+];
 const IMPLIED_LINE_SIGMA = 16.85;
 const IMPLIED_TOTAL_SIGMA = 16.85;
 const BEST_BETS_CONFIG = {
@@ -1948,6 +1976,9 @@ export function BettingDashboard({
   const [manualError, setManualError] = useState<string | null>(null);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
   const [marketJumpTarget, setMarketJumpTarget] = useState<BettingMarketJumpTarget | null>(null);
+  const [tourStepIndex, setTourStepIndex] = useState<number | null>(null);
+  const [tourTargetRect, setTourTargetRect] = useState<DOMRect | null>(null);
+  const [signedOutGuideNudgeDismissed, setSignedOutGuideNudgeDismissed] = useState(false);
   const playerTeamsByName = useMemo(() => {
     const out = new Map<string, string>();
     for (const [key, team] of Object.entries(playerTeamsByNameProp)) {
@@ -2283,6 +2314,112 @@ export function BettingDashboard({
     const timeout = window.setTimeout(() => setBetRemovedMessage(null), 2200);
     return () => window.clearTimeout(timeout);
   }, [betRemovedMessage]);
+
+  const activeTourStep = tourStepIndex == null ? null : BETTING_TOUR_STEPS[tourStepIndex] ?? null;
+  const tourIsOpen = activeTourStep != null;
+  const showSignedOutGuideNudge =
+    isLoaded &&
+    !userId &&
+    !signedOutGuideNudgeDismissed &&
+    !tourIsOpen;
+  const tourPopupStyle = useMemo(() => {
+    if (!tourTargetRect || typeof window === "undefined") {
+      return {
+        left: "50%",
+        top: "50%",
+        transform: "translate(-50%, -50%)",
+      };
+    }
+
+    const popupWidth = Math.min(360, window.innerWidth - 32);
+    const left = Math.min(
+      Math.max(16, tourTargetRect.left),
+      Math.max(16, window.innerWidth - popupWidth - 16)
+    );
+    const hasRoomBelow = tourTargetRect.bottom + 210 < window.innerHeight;
+    const top = hasRoomBelow
+      ? tourTargetRect.bottom + 16
+      : Math.max(16, tourTargetRect.top - 196);
+
+    return {
+      left,
+      top,
+      width: popupWidth,
+    };
+  }, [tourTargetRect]);
+
+  const startBettingTour = () => {
+    setSignedOutGuideNudgeDismissed(true);
+    setTrackerOpen(true);
+    setTourStepIndex(0);
+  };
+
+  const closeBettingTour = () => {
+    setTourStepIndex(null);
+    setTourTargetRect(null);
+  };
+
+  const showNextTourStep = () => {
+    if (tourStepIndex == null || tourStepIndex >= BETTING_TOUR_STEPS.length - 1) {
+      closeBettingTour();
+      return;
+    }
+    setTourStepIndex(tourStepIndex + 1);
+  };
+
+  const showPreviousTourStep = () => {
+    if (tourStepIndex == null || tourStepIndex <= 0) return;
+    setTourStepIndex(tourStepIndex - 1);
+  };
+
+  useEffect(() => {
+    if (!activeTourStep) return;
+    if (activeTourStep.target === "bet-tracker") {
+      setTrackerOpen(true);
+    }
+
+    let scrollTimeoutId: number | null = null;
+    let measureFrameId: number | null = null;
+
+    const measureTarget = () => {
+      const target = document.querySelector<HTMLElement>(`[data-betting-tour="${activeTourStep.target}"]`);
+      setTourTargetRect(target ? target.getBoundingClientRect() : null);
+    };
+
+    const scrollToTarget = () => {
+      const target = document.querySelector<HTMLElement>(`[data-betting-tour="${activeTourStep.target}"]`);
+      if (!target) {
+        setTourTargetRect(null);
+        return;
+      }
+
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      measureTarget();
+      scrollTimeoutId = window.setTimeout(measureTarget, 260);
+    };
+
+    measureFrameId = window.requestAnimationFrame(scrollToTarget);
+    window.addEventListener("resize", measureTarget);
+    window.addEventListener("scroll", measureTarget, true);
+
+    return () => {
+      if (measureFrameId != null) window.cancelAnimationFrame(measureFrameId);
+      if (scrollTimeoutId != null) window.clearTimeout(scrollTimeoutId);
+      window.removeEventListener("resize", measureTarget);
+      window.removeEventListener("scroll", measureTarget, true);
+    };
+  }, [activeTourStep]);
+
+  useEffect(() => {
+    if (!tourIsOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeBettingTour();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [tourIsOpen]);
 
   const handleStakeOverride = (key: string, value: number) => {
     setStakeOverrides((prev) => ({
@@ -2664,6 +2801,34 @@ export function BettingDashboard({
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-start">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={startBettingTour}
+            aria-label="Open betting guide"
+            title="Open betting guide"
+            className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-emerald-300/40 bg-emerald-400/12 text-sm font-black lowercase text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/18"
+          >
+            i
+          </button>
+          {showSignedOutGuideNudge ? (
+            <div className="absolute left-12 top-1/2 z-30 flex min-h-9 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-300/35 bg-[#10162f] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-300 shadow-[0_12px_32px_rgba(0,0,0,0.34)]">
+              <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-emerald-300/35 bg-[#10162f]" />
+              <span className="relative z-[1]">Guide</span>
+              <button
+                type="button"
+                onClick={() => setSignedOutGuideNudgeDismissed(true)}
+                aria-label="Dismiss guide prompt"
+                className="relative z-[1] grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded-full border border-white/10 text-xs leading-none text-nrl-muted transition-colors hover:text-nrl-text"
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       <BestBetsHero
         modelBets={bestBets}
         arbitrageBets={arbitrageBets}
@@ -2672,6 +2837,7 @@ export function BettingDashboard({
         tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
         onOpenMarket={handleBestBetMarketOpen}
         onAddBet={handleAddBet}
+        isTourActive={activeTourStep?.target === "best-bets"}
       />
 
       {bettingArticleLinks.length > 0 ? (
@@ -2682,7 +2848,12 @@ export function BettingDashboard({
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-nrl-border bg-[#10162f]/96 p-4 sm:p-5">
+      <section
+        data-betting-tour="staking-calculator"
+        className={`scroll-mt-24 rounded-xl border border-nrl-border bg-[#10162f]/96 p-4 sm:p-5 ${
+          activeTourStep?.target === "staking-calculator" ? BETTING_TOUR_HIGHLIGHT_CLASS : ""
+        }`}
+      >
         <h2 className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>Staking Calculator</h2>
         {stakingPreferencesLoading ? (
           <div className="mt-4 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-4 text-xs text-nrl-muted">
@@ -2803,7 +2974,12 @@ export function BettingDashboard({
       </section>
 
       {hasPremiumBettingAccess ? (
-        <section className="overflow-hidden rounded-xl border border-nrl-border bg-[#10162f]/96 shadow-[0_18px_42px_rgba(0,0,0,0.24)]">
+        <section
+          data-betting-tour="bet-tracker"
+          className={`scroll-mt-24 overflow-hidden rounded-xl border border-nrl-border bg-[#10162f]/96 shadow-[0_18px_42px_rgba(0,0,0,0.24)] ${
+            activeTourStep?.target === "bet-tracker" ? BETTING_TOUR_HIGHLIGHT_CLASS : ""
+          }`}
+        >
           <div className="border-b border-white/8 bg-[#10162f]/96 px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -3310,7 +3486,12 @@ export function BettingDashboard({
         </div>
       ) : null}
 
-      <div className="space-y-7">
+      <div
+        data-betting-tour="main-dashboard"
+        className={`scroll-mt-24 space-y-7 rounded-xl ${
+          activeTourStep?.target === "main-dashboard" ? BETTING_TOUR_HIGHLIGHT_CLASS : ""
+        }`}
+      >
         <MarketTabsRail selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
         <section className="min-w-0">
           <MarketSection
@@ -3341,6 +3522,43 @@ export function BettingDashboard({
           />
         </section>
       </div>
+
+      {tourIsOpen && activeTourStep ? (
+        <>
+          <div className="fixed inset-0 z-[130] bg-black/75" onClick={closeBettingTour} />
+          <div
+            className="fixed z-[150] w-[calc(100vw-2rem)] max-w-[360px] rounded-xl border border-emerald-300/35 bg-[#10162f] p-4 text-nrl-text shadow-[0_24px_80px_rgba(0,0,0,0.56)]"
+            style={tourPopupStyle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="betting-tour-title"
+          >
+            <h2 id="betting-tour-title" className="text-base font-bold text-white">
+              {tourStepIndex == null ? 1 : tourStepIndex + 1}. {activeTourStep.title}
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-nrl-muted">
+              {activeTourStep.body}
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={showPreviousTourStep}
+                  disabled={tourStepIndex == null || tourStepIndex === 0}
+                  className="cursor-pointer rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-white/20 hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={showNextTourStep}
+                  className="cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/18"
+                >
+                  {tourStepIndex === BETTING_TOUR_STEPS.length - 1 ? "Done" : "Next"}
+                </button>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -3353,6 +3571,7 @@ function BestBetsHero({
   tryscorerKickoffsByMatch,
   onOpenMarket,
   onAddBet,
+  isTourActive = false,
 }: {
   modelBets: BestBetCandidate[];
   arbitrageBets: ArbitrageCandidate[];
@@ -3361,6 +3580,7 @@ function BestBetsHero({
   tryscorerKickoffsByMatch: Record<string, string>;
   onOpenMarket: (bet: BestBetCandidate) => void;
   onAddBet: (draft: BetDraft) => void | Promise<void>;
+  isTourActive?: boolean;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
   const [selectedModelMarket, setSelectedModelMarket] = useState<BettingMarket>("H2H");
@@ -3469,7 +3689,12 @@ function BestBetsHero({
   };
 
   return (
-    <section className="overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)]">
+    <section
+      data-betting-tour="best-bets"
+      className={`scroll-mt-24 overflow-hidden rounded-lg border border-nrl-border bg-[#10162f]/96 shadow-[0_14px_36px_rgba(0,0,0,0.22)] ${
+        isTourActive ? BETTING_TOUR_HIGHLIGHT_CLASS : ""
+      }`}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3 sm:px-5">
         <div className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>
           Today&apos;s Best Bets

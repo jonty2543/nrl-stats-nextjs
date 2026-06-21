@@ -2137,7 +2137,6 @@ export function BettingDashboard({
 
   const startBettingTour = () => {
     setSignedOutGuideNudgeDismissed(true);
-    setTrackerOpen(true);
     setTourStepIndex(0);
   };
 
@@ -2161,9 +2160,6 @@ export function BettingDashboard({
 
   useEffect(() => {
     if (!activeTourStep) return;
-    if (activeTourStep.target === "bet-tracker") {
-      setTrackerOpen(true);
-    }
 
     let scrollTimeoutId: number | null = null;
     let measureFrameId: number | null = null;
@@ -2180,7 +2176,15 @@ export function BettingDashboard({
         return;
       }
 
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (activeTourStep.target === "main-dashboard") {
+        const targetTop = target.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({
+          top: Math.max(0, targetTop - 220),
+          behavior: "smooth",
+        });
+      } else {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
       measureTarget();
       scrollTimeoutId = window.setTimeout(measureTarget, 260);
     };

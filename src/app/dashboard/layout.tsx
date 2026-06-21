@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/layout/app-header";
+import { FeedbackPrompt } from "@/components/feedback/feedback-prompt";
 
 export default function DashboardLayout({
   children,
@@ -15,6 +16,7 @@ export default function DashboardLayout({
         <main className="min-h-0 flex-1 px-4 pb-5 pt-2 sm:px-6 sm:pb-6 sm:pt-3 lg:px-8 lg:pb-8 lg:pt-4">
           {children}
         </main>
+        <FeedbackPrompt />
       </div>
     </div>
   );

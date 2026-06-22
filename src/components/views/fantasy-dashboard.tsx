@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import dynamic from "next/dynamic"
-import { Fragment, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type MouseEvent, type PointerEvent } from "react"
+import { Fragment, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type MouseEvent, type PointerEvent } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
@@ -5380,9 +5380,9 @@ export function FantasyDashboard({
   const tourPopupStyle = useMemo<CSSProperties>(() => {
     if (!tourTargetRect || typeof window === "undefined") {
       return {
-        left: "50%",
-        top: "50%",
-        transform: "translate(-50%, -50%)",
+        left: 0,
+        top: 0,
+        width: 0,
       }
     }
 
@@ -5407,6 +5407,7 @@ export function FantasyDashboard({
 
   const startFantasyTour = () => {
     setSignedOutGuideNudgeDismissed(true)
+    setTourTargetRect(null)
     setTourStepIndex(0)
   }
 
@@ -5420,29 +5421,42 @@ export function FantasyDashboard({
       closeFantasyTour()
       return
     }
+    setTourTargetRect(null)
     setTourStepIndex(tourStepIndex + 1)
   }
 
   const showPreviousTourStep = () => {
     if (tourStepIndex == null || tourStepIndex <= 0) return
+    setTourTargetRect(null)
     setTourStepIndex(tourStepIndex - 1)
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!activeTourStep) return
 
-    let measureFrameId: number | null = null
     let trackingFrameId: number | null = null
     const isTargetComfortablyVisible = (rect: DOMRect) =>
       rect.top >= 92 && rect.bottom <= window.innerHeight - 132
 
     const measureTarget = () => {
       const target = document.querySelector<HTMLElement>(`[data-fantasy-tour="${activeTourStep.target}"]`)
-      setTourTargetRect(target ? target.getBoundingClientRect() : null)
+      if (!target) {
+        setTourTargetRect(null)
+        return
+      }
+
+      const rect = target.getBoundingClientRect()
+      setTourTargetRect(isTargetComfortablyVisible(rect) ? rect : null)
     }
 
     const trackTargetDuringScroll = (startedAt: number) => {
-      measureTarget()
+      const target = document.querySelector<HTMLElement>(`[data-fantasy-tour="${activeTourStep.target}"]`)
+      if (!target) {
+        setTourTargetRect(null)
+      } else {
+        const rect = target.getBoundingClientRect()
+        setTourTargetRect(isTargetComfortablyVisible(rect) ? rect : null)
+      }
       if (window.performance.now() - startedAt < 650) {
         trackingFrameId = window.requestAnimationFrame(() => trackTargetDuringScroll(startedAt))
       }
@@ -5456,9 +5470,12 @@ export function FantasyDashboard({
       }
 
       const rect = target.getBoundingClientRect()
-      setTourTargetRect(rect)
-      if (isTargetComfortablyVisible(rect)) return
+      if (isTargetComfortablyVisible(rect)) {
+        setTourTargetRect(rect)
+        return
+      }
 
+      setTourTargetRect(null)
       const targetTop = rect.top + window.scrollY
       window.scrollTo({
         top: Math.max(0, targetTop - 220),
@@ -5467,12 +5484,11 @@ export function FantasyDashboard({
       trackingFrameId = window.requestAnimationFrame(() => trackTargetDuringScroll(window.performance.now()))
     }
 
-    measureFrameId = window.requestAnimationFrame(scrollToTarget)
+    scrollToTarget()
     window.addEventListener("resize", measureTarget)
     window.addEventListener("scroll", measureTarget, true)
 
     return () => {
-      if (measureFrameId != null) window.cancelAnimationFrame(measureFrameId)
       if (trackingFrameId != null) window.cancelAnimationFrame(trackingFrameId)
       window.removeEventListener("resize", measureTarget)
       window.removeEventListener("scroll", measureTarget, true)
@@ -6784,37 +6800,39 @@ export function FantasyDashboard({
       {tourIsOpen && activeTourStep ? (
         <>
           <div className="fixed inset-0 z-[130] bg-black/75" onClick={closeFantasyTour} />
-          <div
-            className="fixed z-[150] w-[calc(100vw-2rem)] max-w-[360px] rounded-xl border border-emerald-300/35 bg-[#10162f] p-4 text-nrl-text shadow-[0_24px_80px_rgba(0,0,0,0.56)] transition-[left,top] duration-200 ease-out motion-reduce:transition-none"
-            style={tourPopupStyle}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="fantasy-tour-title"
-          >
-            <h2 id="fantasy-tour-title" className="text-base font-bold text-white">
-              {tourStepIndex == null ? 1 : tourStepIndex + 1}. {activeTourStep.title}
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-nrl-muted">
-              {activeTourStep.body}
-            </p>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={showPreviousTourStep}
-                disabled={tourStepIndex == null || tourStepIndex === 0}
-                className="cursor-pointer rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-white/20 hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={showNextTourStep}
-                className="cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/18"
-              >
-                {tourStepIndex === FANTASY_TOUR_STEPS.length - 1 ? "Done" : "Next"}
-              </button>
+          {tourTargetRect ? (
+            <div
+              className="fixed z-[150] w-[calc(100vw-2rem)] max-w-[360px] rounded-xl border border-emerald-300/35 bg-[#10162f] p-4 text-nrl-text shadow-[0_24px_80px_rgba(0,0,0,0.56)] transition-[left,top] duration-200 ease-out motion-reduce:transition-none"
+              style={tourPopupStyle}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="fantasy-tour-title"
+            >
+              <h2 id="fantasy-tour-title" className="text-base font-bold text-white">
+                {tourStepIndex == null ? 1 : tourStepIndex + 1}. {activeTourStep.title}
+              </h2>
+              <p className="mt-2 text-xs leading-relaxed text-nrl-muted">
+                {activeTourStep.body}
+              </p>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={showPreviousTourStep}
+                  disabled={tourStepIndex == null || tourStepIndex === 0}
+                  className="cursor-pointer rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-white/20 hover:text-nrl-text disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={showNextTourStep}
+                  className="cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/18"
+                >
+                  {tourStepIndex === FANTASY_TOUR_STEPS.length - 1 ? "Done" : "Next"}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
         </>
       ) : null}
 

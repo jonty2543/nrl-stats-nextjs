@@ -5433,6 +5433,8 @@ export function FantasyDashboard({
 
     let measureFrameId: number | null = null
     let trackingFrameId: number | null = null
+    const isTargetComfortablyVisible = (rect: DOMRect) =>
+      rect.top >= 92 && rect.bottom <= window.innerHeight - 132
 
     const measureTarget = () => {
       const target = document.querySelector<HTMLElement>(`[data-fantasy-tour="${activeTourStep.target}"]`)
@@ -5453,8 +5455,11 @@ export function FantasyDashboard({
         return
       }
 
-      setTourTargetRect(target.getBoundingClientRect())
-      const targetTop = target.getBoundingClientRect().top + window.scrollY
+      const rect = target.getBoundingClientRect()
+      setTourTargetRect(rect)
+      if (isTargetComfortablyVisible(rect)) return
+
+      const targetTop = rect.top + window.scrollY
       window.scrollTo({
         top: Math.max(0, targetTop - 220),
         behavior: "smooth",
@@ -6780,7 +6785,7 @@ export function FantasyDashboard({
         <>
           <div className="fixed inset-0 z-[130] bg-black/75" onClick={closeFantasyTour} />
           <div
-            className="fixed z-[150] w-[calc(100vw-2rem)] max-w-[360px] rounded-xl border border-emerald-300/35 bg-[#10162f] p-4 text-nrl-text shadow-[0_24px_80px_rgba(0,0,0,0.56)]"
+            className="fixed z-[150] w-[calc(100vw-2rem)] max-w-[360px] rounded-xl border border-emerald-300/35 bg-[#10162f] p-4 text-nrl-text shadow-[0_24px_80px_rgba(0,0,0,0.56)] transition-[left,top] duration-200 ease-out motion-reduce:transition-none"
             style={tourPopupStyle}
             role="dialog"
             aria-modal="true"

@@ -5413,12 +5413,19 @@ export function FantasyDashboard({
   useEffect(() => {
     if (!activeTourStep) return
 
-    let scrollTimeoutId: number | null = null
     let measureFrameId: number | null = null
+    let trackingFrameId: number | null = null
 
     const measureTarget = () => {
       const target = document.querySelector<HTMLElement>(`[data-fantasy-tour="${activeTourStep.target}"]`)
       setTourTargetRect(target ? target.getBoundingClientRect() : null)
+    }
+
+    const trackTargetDuringScroll = (startedAt: number) => {
+      measureTarget()
+      if (window.performance.now() - startedAt < 650) {
+        trackingFrameId = window.requestAnimationFrame(() => trackTargetDuringScroll(startedAt))
+      }
     }
 
     const scrollToTarget = () => {
@@ -5428,13 +5435,13 @@ export function FantasyDashboard({
         return
       }
 
+      setTourTargetRect(target.getBoundingClientRect())
       const targetTop = target.getBoundingClientRect().top + window.scrollY
       window.scrollTo({
         top: Math.max(0, targetTop - 220),
         behavior: "smooth",
       })
-      measureTarget()
-      scrollTimeoutId = window.setTimeout(measureTarget, 260)
+      trackingFrameId = window.requestAnimationFrame(() => trackTargetDuringScroll(window.performance.now()))
     }
 
     measureFrameId = window.requestAnimationFrame(scrollToTarget)
@@ -5443,7 +5450,7 @@ export function FantasyDashboard({
 
     return () => {
       if (measureFrameId != null) window.cancelAnimationFrame(measureFrameId)
-      if (scrollTimeoutId != null) window.clearTimeout(scrollTimeoutId)
+      if (trackingFrameId != null) window.cancelAnimationFrame(trackingFrameId)
       window.removeEventListener("resize", measureTarget)
       window.removeEventListener("scroll", measureTarget, true)
     }

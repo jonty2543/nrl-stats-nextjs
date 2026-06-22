@@ -3424,6 +3424,7 @@ export function FantasyDashboard({
   const [selectedRollingAverageStat, setSelectedRollingAverageStat] = useState<string>("Fantasy")
   const [selectedStatVsFantasyLabel, setSelectedStatVsFantasyLabel] = useState<StatVsFantasyOptionLabel>("Run Metres")
   const [showWithWithoutPlot, setShowWithWithoutPlot] = useState(false)
+  const [gameLogFiltersOpen, setGameLogFiltersOpen] = useState(false)
   const [isGameLogExpanded, setIsGameLogExpanded] = useState(false)
   const [gameLogSort, setGameLogSort] = useState<{ column: GameLogColumn; direction: GameLogSortDirection } | null>(
     null
@@ -5353,6 +5354,16 @@ export function FantasyDashboard({
   const gameLogCollapsedMaxHeight = showBaseUpsideBars
     ? GAME_LOG_COLLAPSED_BASE_UPSIDE_MAX_HEIGHT_PX
     : GAME_LOG_COLLAPSED_MAX_HEIGHT_PX
+  const activeGameLogFilterCount =
+    (selectedYears.length !== initialSelectedYears.length ||
+    selectedYears.some((year, index) => year !== initialSelectedYears[index]) ? 1 : 0) +
+    (opponentFilter !== "All Opponents" ? 1 : 0) +
+    (positionFilter !== "All Positions" ? 1 : 0) +
+    (finalsMode !== "Yes" ? 1 : 0) +
+    (minutesOverFilter !== "Any" ? 1 : 0) +
+    (minutesUnderFilter !== "Any" ? 1 : 0) +
+    (teammate !== "None" ? 1 : 0) +
+    (teammatePosition !== "All" ? 1 : 0)
 
   const activeTourStep = tourStepIndex == null ? null : FANTASY_TOUR_STEPS[tourStepIndex] ?? null
   const tourIsOpen = activeTourStep != null
@@ -6925,94 +6936,6 @@ export function FantasyDashboard({
 
               <RelevantOutsList rows={selectedRelevantOuts} />
 
-              <div className="rounded-xl border border-nrl-border bg-[#111832] p-4">
-                <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
-                  <YearRangeSlider
-                    label="Season"
-                    value={selectedYears}
-                    options={availableYears}
-                    onChange={(years) => {
-                      void handleYearsChange(years)
-                    }}
-                  />
-                  <Select
-                    label="Opponent"
-                    value={opponentFilter}
-                    options={["All Opponents", ...opponentOptions]}
-                    onChange={setOpponentFilter}
-                  />
-                  <Select
-                    label="Position"
-                    value={positionFilter}
-                    options={["All Positions", ...positionOptions]}
-                    onChange={setPositionFilter}
-                  />
-                  <Select
-                    label="Finals"
-                    value={finalsMode}
-                    options={["Yes", "No"]}
-                    onChange={(value) => setFinalsMode(value as "Yes" | "No")}
-                  />
-                  <Select
-                    label="Minutes Over"
-                    value={minutesOverFilter}
-                    options={[...MINUTES_FILTER_OPTIONS]}
-                    onChange={setMinutesOverFilter}
-                  />
-                  <Select
-                    label="Minutes Under"
-                    value={minutesUnderFilter}
-                    options={[...MINUTES_FILTER_OPTIONS]}
-                    onChange={setMinutesUnderFilter}
-                  />
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_auto]">
-                  <SearchableSelect
-                    label="Teammate"
-                    value={teammate}
-                    options={["None", ...teammateOptions]}
-                    onChange={setTeammate}
-                    placeholder="Filter by teammate..."
-                    disabled={!matchedLocalName || !hasLoginAccess}
-                  />
-                  <Select
-                    label="Teammate Position"
-                    value={teammatePosition}
-                    options={["All", ...teammatePositionOptions]}
-                    onChange={setTeammatePosition}
-                    disabled={!hasLoginAccess}
-                  />
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
-                      With / Without
-                    </label>
-                    <div className="flex min-h-[30px] items-center">
-                      <PillRadio
-                        options={["With", "Without"]}
-                        value={teammateMode}
-                        onChange={(value) => setTeammateMode(value as TeammateMode)}
-                        disabled={teammate === "None" || !hasLoginAccess}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {!hasLoginAccess ? (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <div className="text-[10px] text-nrl-muted">Sign in to unlock teammate filtering</div>
-                    <SignInButton mode="modal">
-                      <button
-                        type="button"
-                        className="cursor-pointer rounded border border-nrl-accent/45 px-2 py-0.5 text-[10px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10"
-                      >
-                        Sign in
-                      </button>
-                    </SignInButton>
-                  </div>
-                ) : null}
-              </div>
-
               <div
                 className={`${analysisLocked ? "order-6" : "order-4"} relative rounded-xl border p-4 ${analysisLocked ? "border-white/8 bg-white/[0.03]" : "border-nrl-border bg-[#111832]"
                   }`}
@@ -7640,6 +7563,123 @@ export function FantasyDashboard({
               </div>
 
               <div className="order-5 overflow-hidden rounded-xl border border-nrl-border bg-[#111832]">
+                <div className="flex items-center justify-between gap-3 border-b border-nrl-border bg-nrl-panel-2 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+                      Player Game Log
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-nrl-muted">
+                      {sortedFilteredRows.length} games
+                      {activeGameLogFilterCount > 0 ? ` | ${activeGameLogFilterCount} filters` : ""}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setGameLogFiltersOpen((open) => !open)}
+                    className={`relative inline-grid h-9 w-9 shrink-0 place-items-center rounded-full border transition-colors ${
+                      gameLogFiltersOpen || activeGameLogFilterCount > 0
+                        ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                        : "border-nrl-border bg-nrl-panel text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+                    }`}
+                    aria-expanded={gameLogFiltersOpen}
+                    aria-label="Game log filters"
+                  >
+                    <span className="flex flex-col gap-0.5" aria-hidden="true">
+                      <span className="block h-0.5 w-4 rounded-full bg-current" />
+                      <span className="block h-0.5 w-4 rounded-full bg-current" />
+                      <span className="block h-0.5 w-4 rounded-full bg-current" />
+                    </span>
+                  </button>
+                </div>
+                {gameLogFiltersOpen ? (
+                  <div className="border-b border-nrl-border bg-[#101832] px-3 py-3">
+                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
+                      <YearRangeSlider
+                        label="Season"
+                        value={selectedYears}
+                        options={availableYears}
+                        onChange={(years) => {
+                          void handleYearsChange(years)
+                        }}
+                      />
+                      <Select
+                        label="Opponent"
+                        value={opponentFilter}
+                        options={["All Opponents", ...opponentOptions]}
+                        onChange={setOpponentFilter}
+                      />
+                      <Select
+                        label="Position"
+                        value={positionFilter}
+                        options={["All Positions", ...positionOptions]}
+                        onChange={setPositionFilter}
+                      />
+                      <Select
+                        label="Finals"
+                        value={finalsMode}
+                        options={["Yes", "No"]}
+                        onChange={(value) => setFinalsMode(value as "Yes" | "No")}
+                      />
+                      <Select
+                        label="Minutes Over"
+                        value={minutesOverFilter}
+                        options={[...MINUTES_FILTER_OPTIONS]}
+                        onChange={setMinutesOverFilter}
+                      />
+                      <Select
+                        label="Minutes Under"
+                        value={minutesUnderFilter}
+                        options={[...MINUTES_FILTER_OPTIONS]}
+                        onChange={setMinutesUnderFilter}
+                      />
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-[minmax(220px,1fr)_180px_auto]">
+                      <SearchableSelect
+                        label="Teammate"
+                        value={teammate}
+                        options={["None", ...teammateOptions]}
+                        onChange={setTeammate}
+                        placeholder="Filter by teammate..."
+                        disabled={!matchedLocalName || !hasLoginAccess}
+                      />
+                      <Select
+                        label="Teammate Position"
+                        value={teammatePosition}
+                        options={["All", ...teammatePositionOptions]}
+                        onChange={setTeammatePosition}
+                        disabled={!hasLoginAccess}
+                      />
+                      <div className="flex flex-col gap-0.5">
+                        <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
+                          With / Without
+                        </label>
+                        <div className="flex min-h-[30px] items-center">
+                          <PillRadio
+                            options={["With", "Without"]}
+                            value={teammateMode}
+                            onChange={(value) => setTeammateMode(value as TeammateMode)}
+                            disabled={teammate === "None" || !hasLoginAccess}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {!hasLoginAccess ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <div className="text-[10px] text-nrl-muted">Sign in to unlock teammate filtering</div>
+                        <SignInButton mode="modal">
+                          <button
+                            type="button"
+                            className="cursor-pointer rounded border border-nrl-accent/45 px-2 py-0.5 text-[10px] font-semibold text-nrl-accent transition-colors hover:border-nrl-accent hover:bg-nrl-accent/10"
+                          >
+                            Sign in
+                          </button>
+                        </SignInButton>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="relative">
                   <div
                     className={`overflow-x-auto ${isGameLogCollapsed ? "overflow-y-hidden" : ""}`}

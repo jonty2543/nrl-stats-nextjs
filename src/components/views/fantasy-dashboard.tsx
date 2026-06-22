@@ -3451,6 +3451,7 @@ export function FantasyDashboard({
   const deferredAllPlayersProjectionRange = useDeferredValue(allPlayersProjectionRange)
   const deferredAllPlayersBreakevenRange = useDeferredValue(allPlayersBreakevenRange)
   const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(false)
+  const [showAllPlayersCardStats, setShowAllPlayersCardStats] = useState(false)
   const [showAllPlayersTradeRatings, setShowAllPlayersTradeRatings] = useState(false)
   const deferredShowAllPlayersTradeRatings = useDeferredValue(showAllPlayersTradeRatings)
   const renderAllPlayersTradeRatings = showAllPlayersTradeRatings && deferredShowAllPlayersTradeRatings
@@ -4986,8 +4987,14 @@ export function FantasyDashboard({
     () => ALL_PLAYERS_MOBILE_SORT_OPTIONS.filter((option) => hasFantasyPlotAccess || !option.proOnly),
     [hasFantasyPlotAccess]
   )
+  const allPlayersSortDisplayColumn: AllPlayersSortKey =
+    allPlayersSort.column === "weeklyChange" &&
+    sortedAllPlayersTableRows.length > 0 &&
+    sortedAllPlayersTableRows.every((row) => row.weeklyChange === null || row.weeklyChange === 0)
+      ? "price"
+      : allPlayersSort.column
   const selectedAllPlayersMobileSortValue =
-    availableAllPlayersMobileSortOptions.find((option) => option.key === allPlayersSort.column)?.key ??
+    availableAllPlayersMobileSortOptions.find((option) => option.key === allPlayersSortDisplayColumn)?.key ??
     availableAllPlayersMobileSortOptions[0]?.key ??
     "weeklyChange"
   const allPlayersPlotPositionFilter =
@@ -5570,7 +5577,7 @@ export function FantasyDashboard({
           </div>
         </div>
       ) : null}
-      <div className="space-y-5 xl:space-y-8">
+      <div className="space-y-3">
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly && fantasyMarketWatch.buys.length > 0 ? (
           <section
             data-fantasy-tour="top-buys"
@@ -5624,28 +5631,28 @@ export function FantasyDashboard({
           </section>
         ) : null}
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
-          <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             <Link
               data-fantasy-tour="my-team"
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}
-              className={`relative flex min-h-[84px] w-full scroll-mt-24 cursor-pointer flex-col items-start justify-center gap-2 overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] px-5 py-4 text-left text-nrl-text shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] xl:min-h-[108px] xl:py-3 ${
+              className={`relative flex min-h-[52px] w-full scroll-mt-24 cursor-pointer items-center gap-3 overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] px-3 py-2 text-left text-nrl-text shadow-[0_8px_16px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] ${
                 activeTourStep?.target === "my-team" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""
               }`}
             >
-              <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(123,92,255,0.11),rgba(0,245,138,0.045)_58%,rgba(17,24,50,0)_100%)]" />
-              <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+              <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(123,92,255,0.08),rgba(0,245,138,0.035)_58%,rgba(17,24,50,0)_100%)]" />
+              <span className="pointer-events-none absolute inset-0 hidden overflow-hidden rounded-xl lg:block">
                 <span className="absolute -left-3 top-2 h-14 w-36 rounded-full opacity-16 [background-image:radial-gradient(circle,#00f58a_1.25px,transparent_1.6px)] [background-size:9px_9px]" />
                 <span className="absolute -bottom-2 right-8 h-14 w-40 rounded-full opacity-12 [background-image:radial-gradient(circle,#00f58a_1.25px,transparent_1.6px)] [background-size:9px_9px]" />
               </span>
-              <span className="relative z-10 inline-flex items-center gap-2">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10 text-nrl-accent">
-                  <PersonIcon className="h-4 w-4" />
-                </span>
-                <span className="text-base font-black leading-none">My Team</span>
+              <span className="relative z-10 grid h-9 w-9 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10 text-nrl-accent">
+                <PersonIcon className="h-4 w-4" />
               </span>
-              <span className="relative z-10 max-w-[280px] text-[11px] font-semibold leading-snug text-nrl-muted">
-                Upload screenshots, save your team and get personalised advice
+              <span className="relative z-10 min-w-0">
+                <span className="block truncate text-[13px] font-black leading-tight sm:text-sm">My Team</span>
+                <span className="mt-0.5 hidden truncate text-[9px] font-semibold uppercase tracking-wide text-nrl-muted sm:block">
+                  Team tools
+                </span>
               </span>
               {isMyTeamPending ? (
                 <span className="absolute inset-x-5 bottom-3 h-0.5 overflow-hidden rounded-full bg-nrl-accent/15">
@@ -5653,13 +5660,13 @@ export function FantasyDashboard({
                 </span>
               ) : null}
             </Link>
-            <div className={`grid items-stretch gap-2 sm:gap-3 xl:order-2 xl:col-span-2 ${fantasyProjectionArticle ? "grid-cols-3 xl:grid-cols-2" : "grid-cols-2 xl:grid-cols-1"}`}>
-              <div className="contents xl:grid xl:grid-rows-2 xl:gap-3">
+            <div className="contents">
+              <div className="contents">
                 <Link
                   data-fantasy-tour="find-value"
                   href="/dashboard/fantasy/analytics"
                   onClick={() => setIsFantasyAnalyticsPending(true)}
-                  className={`relative flex h-full min-h-[44px] w-full scroll-mt-24 cursor-pointer items-center justify-start gap-3 rounded-xl border px-4 py-3 text-left text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] sm:min-h-[52px] xl:min-h-0 xl:py-2 ${
+                  className={`relative flex h-full min-h-[52px] w-full scroll-mt-24 cursor-pointer items-center justify-start gap-3 rounded-xl border px-3 py-2 text-left text-white shadow-[0_8px_16px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] ${
                     showFantasyAnalytics
                       ? "border-nrl-accent bg-[#111832]"
                       : "border-[rgba(123,92,255,0.35)] bg-[#111832]"
@@ -5679,7 +5686,7 @@ export function FantasyDashboard({
                 </Link>
                 <div
                   data-fantasy-tour="draft-h2h"
-                  className={`group h-full scroll-mt-24 self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] p-0 shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] ${
+                  className={`group h-full scroll-mt-24 self-stretch rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] p-0 shadow-[0_8px_16px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] ${
                     activeTourStep?.target === "draft-h2h" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""
                   }`}
                 >
@@ -5687,7 +5694,7 @@ export function FantasyDashboard({
                     <Link
                       href="/dashboard/fantasy/draft"
                       onClick={() => setIsFantasyDraftPending(true)}
-                      className="relative inline-flex h-full min-h-[44px] w-full items-center justify-start gap-3 rounded-xl px-4 py-3 text-left leading-tight text-white transition-colors hover:text-white sm:min-h-[52px] xl:min-h-0 xl:py-2"
+                      className="relative inline-flex h-full min-h-[52px] w-full items-center justify-start gap-3 rounded-xl px-3 py-2 text-left leading-tight text-white transition-colors hover:text-white"
                     >
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
                         <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
@@ -5705,7 +5712,7 @@ export function FantasyDashboard({
                     <Link
                       href="/dashboard/fantasy/draft"
                       onClick={() => setIsFantasyDraftPending(true)}
-                      className="relative flex h-full min-h-[44px] w-full items-center justify-start gap-3 rounded-xl px-4 py-3 text-left transition-colors sm:min-h-[52px] xl:min-h-0 xl:py-2"
+                      className="relative flex h-full min-h-[52px] w-full items-center justify-start gap-3 rounded-xl px-3 py-2 text-left transition-colors"
                     >
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
                         <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
@@ -5726,7 +5733,7 @@ export function FantasyDashboard({
                 <Link
                   href={`/dashboard/articles/${fantasyProjectionArticle.slug}`}
                   aria-label={`Read ${fantasyProjectionArticle.title}`}
-                  className="group relative flex h-full min-h-[44px] w-full cursor-pointer overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] text-white shadow-[0_10px_20px_rgba(8,10,18,0.18)] transition-colors hover:border-nrl-accent/70 sm:min-h-[52px] xl:min-h-[108px]"
+                  className="group relative flex h-full min-h-[52px] w-full cursor-pointer overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] text-white shadow-[0_8px_16px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/70"
                 >
                   <div className={`absolute inset-0 grid ${fantasyProjectionArticle.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                     {fantasyProjectionArticle.imageUrls.slice(0, 2).map((url, index) => (
@@ -5743,12 +5750,12 @@ export function FantasyDashboard({
                     ))}
                   </div>
                   <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.95),rgba(14,19,48,0.74),rgba(14,19,48,0.45))]" />
-                  <div className="relative flex h-full min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 sm:min-h-[52px] sm:px-4 xl:min-h-[108px] xl:gap-3 xl:px-5 xl:py-3">
+                  <div className="relative flex h-full min-h-[52px] w-full items-center justify-between gap-2 px-3 py-2 sm:px-4">
                     <div className="min-w-0">
                       <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-nrl-accent">
                         Article
                       </div>
-                      <div className="mt-0.5 overflow-hidden text-[8px] font-bold uppercase leading-tight tracking-[0.08em] text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:1] sm:text-[9px] xl:mt-1 xl:text-[10px] xl:[-webkit-line-clamp:2]">
+                      <div className="mt-0.5 overflow-hidden text-[8px] font-bold uppercase leading-tight tracking-[0.08em] text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:1] sm:text-[9px]">
                         {fantasyProjectionArticle.title}
                       </div>
                     </div>
@@ -6036,6 +6043,18 @@ export function FantasyDashboard({
                     />
                     <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersCardTags ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
                       <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
+                    </span>
+                  </label>
+                  <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
+                    <span>Stats</span>
+                    <input
+                      type="checkbox"
+                      checked={showAllPlayersCardStats}
+                      onChange={(event) => setShowAllPlayersCardStats(event.target.checked)}
+                      className="sr-only"
+                    />
+                    <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersCardStats ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
+                      <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardStats ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
                     </span>
                   </label>
                 </div>
@@ -6472,8 +6491,8 @@ export function FantasyDashboard({
                   ? baseCardStats
                   : [...baseCardStats.filter((stat) => !stat.locked), ...baseCardStats.filter((stat) => stat.locked)]
                 const selectedCardStat =
-                  [...cardStats, ...tradeRatingCardStats].find((stat) => stat.key === allPlayersSort.column) ??
-                  (allPlayersSort.column === "position"
+                  [...cardStats, ...tradeRatingCardStats].find((stat) => stat.key === allPlayersSortDisplayColumn) ??
+                  (allPlayersSortDisplayColumn === "position"
                     ? { key: "position", label: "Pos", value: row.player.positionLabel, valueClassName: "text-nrl-text" }
                     : { key: "name", label: "Sort", value: allPlayersSort.direction === "asc" ? "A-Z" : "Z-A", valueClassName: "text-nrl-text" })
                 const selectedCardStatLocked =
@@ -6487,7 +6506,7 @@ export function FantasyDashboard({
 	                    className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-3 text-left transition-colors hover:border-white/25 hover:bg-[#17213d]"
                     style={renderAllPlayersTradeRatings ? ALL_PLAYERS_RATED_CARD_CONTENT_STYLE : ALL_PLAYERS_CARD_CONTENT_STYLE}
 	                  >
-	                    <div className="flex items-start justify-between gap-3 md:w-[250px] md:shrink-0 md:items-center">
+	                    <div className="flex w-full items-start justify-between gap-3">
                       <div className="flex min-w-0 items-start gap-2.5">
                         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-[11px] text-nrl-muted">
                           <ImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
@@ -6510,7 +6529,7 @@ export function FantasyDashboard({
                           </div>
                         </div>
                       </div>
-	                      <div className="shrink-0 text-right md:hidden">
+	                      <div className="shrink-0 text-right">
                         <div className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
                           {selectedCardStat.label}
                         </div>
@@ -6560,7 +6579,8 @@ export function FantasyDashboard({
                         </div>
                       </div>
                     ) : null}
-	                    <div className={`relative ${renderAllPlayersTradeRatings ? "mt-5" : "mt-3"} overflow-hidden md:min-w-0`}>
+	                    {showAllPlayersCardStats ? (
+	                      <div className={`relative ${renderAllPlayersTradeRatings ? "mt-5" : "mt-3"} overflow-hidden md:min-w-0`}>
                         <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-8 bg-[linear-gradient(90deg,rgba(17,24,50,0),#111832)] md:hidden" />
                         <span className="pointer-events-none absolute right-1.5 top-1/2 z-[2] -translate-y-1/2 text-sm font-black text-nrl-accent/70 drop-shadow-[0_0_8px_rgba(0,245,138,0.22)] md:hidden" aria-hidden="true">
                           →
@@ -6572,7 +6592,7 @@ export function FantasyDashboard({
                             key={stat.key}
 	                            className="min-w-[3.75rem] md:min-w-0"
                           >
-                            <div className={`text-[8px] font-semibold uppercase tracking-wide ${stat.key === allPlayersSort.column ? "text-nrl-accent" : "text-nrl-muted"}`}>
+                            <div className={`text-[8px] font-semibold uppercase tracking-wide ${stat.key === allPlayersSortDisplayColumn ? "text-nrl-accent" : "text-nrl-muted"}`}>
                               {stat.label}
                             </div>
                             {!hasFantasyPlotAccess && stat.locked ? (
@@ -6589,6 +6609,7 @@ export function FantasyDashboard({
                         </div>
                       </div>
                     </div>
+	                    ) : null}
                   </button>
                 )
               })

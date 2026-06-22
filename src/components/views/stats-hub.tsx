@@ -74,15 +74,15 @@ function InsightCard({
         />
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="text-[10px] font-black leading-tight text-nrl-text">
+        <h3 className="text-xs font-black leading-tight text-nrl-text">
           {insight.title}
         </h3>
         {isMetricCard ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="mt-3 grid grid-cols-3 gap-2">
             {insight.metrics?.map((metric) => (
-              <div key={`${insight.id}-${metric.label}`} className="rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-2">
+              <div key={`${insight.id}-${metric.label}`} className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel-2 px-2 py-2">
                 <div className="text-[6px] font-black uppercase tracking-[0.12em] text-nrl-muted">{metric.label}</div>
-                <div className={`mt-1 text-[10px] font-black ${metric.tone === "up" ? "text-nrl-accent" : metric.tone === "down" ? "text-orange-300" : "text-nrl-text"}`}>
+                <div className={`mt-1 line-clamp-2 break-words text-[10px] font-black ${metric.tone === "up" ? "text-nrl-accent" : metric.tone === "down" ? "text-orange-300" : "text-nrl-text"}`}>
                   {metric.tone === "up" ? "↑ " : metric.tone === "down" ? "↓ " : ""}
                   {metric.value}
                 </div>
@@ -90,7 +90,7 @@ function InsightCard({
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-[8px] leading-relaxed text-nrl-muted">{insight.detail}</p>
+          <p className="mt-2 text-[10px] leading-relaxed text-nrl-muted">{insight.detail}</p>
         )}
       </div>
     </article>
@@ -135,15 +135,9 @@ export function StatsHub({ model, playerImages, teamLogos }: StatsHubProps) {
             <h2 className="text-[10px] font-black uppercase tracking-wide text-nrl-accent">{group.category}</h2>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {group.insights.length > 0 ? (
-              group.insights.map((insight) => (
-                <InsightCard key={insight.id} insight={insight} playerImages={playerImages} teamLogos={teamLogos} />
-              ))
-            ) : (
-              <div className="rounded-lg border border-dashed border-nrl-border bg-nrl-panel-2 p-4 text-[8px] text-nrl-muted">
-                No standout generated insight for this section in the latest round.
-              </div>
-            )}
+            {group.insights.map((insight) => (
+              <InsightCard key={insight.id} insight={insight} playerImages={playerImages} teamLogos={teamLogos} />
+            ))}
           </div>
         </section>
       ))}

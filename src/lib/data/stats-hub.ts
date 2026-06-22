@@ -106,6 +106,20 @@ function buildPlayerGroups(rows: PlayerStat[]): Map<string, PlayerStat[]> {
   return groups;
 }
 
+function buildTeamGroups(rows: TeamStat[]): Map<string, TeamStat[]> {
+  const groups = new Map<string, TeamStat[]>();
+  rows.forEach((row) => {
+    const key = `${row.Team}|${row.Year}`;
+    const group = groups.get(key) ?? [];
+    group.push(row);
+    groups.set(key, group);
+  });
+  groups.forEach((group) => {
+    group.sort((a, b) => a.Round - b.Round);
+  });
+  return groups;
+}
+
 function minimumAverageMinutesForPosition(position: string | null | undefined): number {
   switch ((position ?? "").toLowerCase()) {
     case "prop":
@@ -213,7 +227,7 @@ function buildDueInsights(latestRows: PlayerStat[], playerGroups: Map<string, Pl
         metrics: [
           { label: "Current Drought", value: `${tryDryRounds} games`, tone: "down" },
           { label: "Prior Average", value: `${formatNumber(tryAverage)} tries / game` },
-          { label: "Last Week", value: `${formatNumber(numeric(latestRow.Tries))} tries` },
+          { label: "Latest Game", value: `${formatNumber(numeric(latestRow.Tries))} tries` },
         ],
       });
     }
@@ -237,7 +251,7 @@ function buildDueInsights(latestRows: PlayerStat[], playerGroups: Map<string, Pl
         metrics: [
           { label: "Current Drought", value: `${linebreakDryRounds} games`, tone: "down" },
           { label: "Prior Average", value: `${formatNumber(linebreakAverage)} linebreaks / game` },
-          { label: "Last Week", value: `${formatNumber(numeric(latestRow["Line Breaks"]))} linebreaks` },
+          { label: "Latest Game", value: `${formatNumber(numeric(latestRow["Line Breaks"]))} linebreaks` },
         ],
       });
     }
@@ -261,13 +275,121 @@ function buildDueInsights(latestRows: PlayerStat[], playerGroups: Map<string, Pl
         metrics: [
           { label: "50+ Score Drought", value: `${fantasyDryRounds} games`, tone: "down" },
           { label: "Season Prior Average", value: `${formatNumber(fantasyAverage)} fantasy` },
-          { label: "Last Week", value: `${formatNumber(numeric(latestRow.Fantasy))} fantasy` },
+          { label: "Latest Game", value: `${formatNumber(numeric(latestRow.Fantasy))} fantasy` },
         ],
       });
     }
   });
 
   return insights;
+}
+
+function buildPlayerTrendInsights(latestRows: PlayerStat[], playerGroups: Map<string, PlayerStat[]>): StatsHubInsight[] {
+  const specs = [
+    { key: "All Run Metres", label: "run metres", minPrior: 70, minDiff: 35, limit: 4 },
+    { key: "Tackle Breaks", label: "tackle breaks", minPrior: 1, minDiff: 2, limit: 4 },
+    { key: "Tackles Made", label: "tackles", minPrior: 18, minDiff: 8, limit: 3 },
+    { key: "Post Contact Metres", label: "post-contact metres", minPrior: 25, minDiff: 16, limit: 3 },
+    { key: "Offloads", label: "offloads", minPrior: 0.7, minDiff: 1.1, limit: 2 },
+  ] as const;
+
+  return specs.flatMap((spec) => {
+    const candidates = latestRows
+      .map((row) => {
+        const rows = playerGroups.get(playerKey(row)) ?? [];
+        const rowIndex = rows.findIndex((candidate) => candidate.Year === row.Year && candidate.Round === row.Round);
+        if (rowIndex < 0) return null;
+        const recentRows = rows.slice(Math.max(0, rowIndex - 2), rowIndex + 1);
+        const priorRows = rows.slice(0, Math.max(0, rowIndex - 2));
+        if (recentRows.length < 3 || priorRows.length < MIN_PRIOR_GAMES) return null;
+        const averageMinutes = average(priorRows.map((candidate) => numeric(candidate["Mins Played"]))) ?? 0;
+        if (averageMinutes < minimumAverageMinutesForPosition(row.Position)) return null;
+        const recentAverage = average(recentRows.map((candidate) => numeric(candidate[spec.key])));
+        const priorAverage = average(priorRows.map((candidate) => numeric(candidate[spec.key])));
+        if (recentAverage == null || priorAverage == null || priorAverage < spec.minPrior) return null;
+        const diff = recentAverage - priorAverage;
+        if (diff < spec.minDiff) return null;
+        return { row, recentAverage, priorAverage, diff };
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate != null)
+      .sort((a, b) => b.diff - a.diff)
+      .slice(0, spec.limit);
+
+    return candidates.map(({ row, recentAverage, priorAverage, diff }) => ({
+      id: insightId("player-trend", [row.Name, spec.key, row.Year, row.Round]),
+      category: "Statistical Outliers" as const,
+      title: `${row.Name}: ${spec.label} surge`,
+      detail: "",
+      score: diff,
+      statLabel: spec.label,
+      statValue: `+${formatNumber(diff)}`,
+      context: `${row.Team} ${row.Position}`,
+      entityType: "player" as const,
+      entityName: row.Name,
+      team: row.Team,
+      visualMode: "metric" as const,
+      metrics: [
+        { label: "Last 3 Avg", value: `${formatNumber(recentAverage)} ${spec.label}`, tone: "up" as const },
+        { label: "Season Prior Avg", value: `${formatNumber(priorAverage)} ${spec.label}` },
+        { label: "Difference", value: `+${formatNumber(diff)} ${spec.label}`, tone: "up" as const },
+      ],
+    }));
+  });
+}
+
+function buildTeamTrendInsights(latestRows: TeamStat[], teamGroups: Map<string, TeamStat[]>): StatsHubInsight[] {
+  const specs = [
+    { key: "Points", label: "points", minPrior: 12, minDiff: 7, direction: "up", limit: 3 },
+    { key: "Tries", label: "tries", minPrior: 2, minDiff: 1.5, direction: "up", limit: 3 },
+    { key: "Tackle Breaks", label: "tackle breaks", minPrior: 20, minDiff: 8, direction: "up", limit: 2 },
+    { key: "Opponent Points", label: "points conceded", minPrior: 12, minDiff: 8, direction: "down", limit: 3 },
+  ] as const;
+
+  return specs.flatMap((spec) => {
+    const candidates = latestRows
+      .map((row) => {
+        const rows = teamGroups.get(`${row.Team}|${row.Year}`) ?? [];
+        const rowIndex = rows.findIndex((candidate) => candidate.Round === row.Round);
+        if (rowIndex < 0) return null;
+        const recentRows = rows.slice(Math.max(0, rowIndex - 2), rowIndex + 1);
+        const priorRows = rows.slice(0, Math.max(0, rowIndex - 2));
+        if (recentRows.length < 3 || priorRows.length < 5) return null;
+        const recentAverage = average(recentRows.map((candidate) => numeric(candidate[spec.key])));
+        const priorAverage = average(priorRows.map((candidate) => numeric(candidate[spec.key])));
+        if (recentAverage == null || priorAverage == null || priorAverage < spec.minPrior) return null;
+        const diff = recentAverage - priorAverage;
+        if (Math.abs(diff) < spec.minDiff) return null;
+        if (spec.direction === "up" && diff < 0) return null;
+        if (spec.direction === "down" && diff < 0) return null;
+        return { row, recentAverage, priorAverage, diff };
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate != null)
+      .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
+      .slice(0, spec.limit);
+
+    return candidates.map(({ row, recentAverage, priorAverage, diff }) => {
+      const tone = spec.direction === "down" ? "down" as const : "up" as const;
+      return {
+        id: insightId("team-trend", [row.Team, spec.key, row.Year, row.Round]),
+        category: "Most Surprising Stats" as const,
+        title: `${row.Team}: ${spec.label} trend`,
+        detail: "",
+        score: Math.abs(diff) + (row.Result === "Win" ? 4 : 0),
+        statLabel: spec.label,
+        statValue: `${diff >= 0 ? "+" : ""}${formatNumber(diff)}`,
+        context: `${row.Team} ${row.Result.toLowerCase()}`,
+        entityType: "team" as const,
+        entityName: row.Team,
+        team: row.Team,
+        visualMode: "metric" as const,
+        metrics: [
+          { label: "Last 3 Avg", value: `${formatNumber(recentAverage)} ${spec.label}`, tone },
+          { label: "Season Prior Avg", value: `${formatNumber(priorAverage)} ${spec.label}` },
+          { label: "Difference", value: `${diff >= 0 ? "+" : ""}${formatNumber(diff)} ${spec.label}`, tone },
+        ],
+      };
+    });
+  });
 }
 
 function buildWeirdTeamInsights(latestRows: TeamStat[]): StatsHubInsight[] {
@@ -516,7 +638,7 @@ function categoryGroups(insights: StatsHubInsight[]): StatsHubModel["categories"
   return CATEGORY_ORDER.map((category) => ({
     category,
     insights: insights.filter((insight) => insight.category === category).slice(0, 6),
-  }));
+  })).filter((group) => group.insights.length > 0);
 }
 
 export function buildStatsHubModel(playerRows: PlayerStat[], teamRows: TeamStat[]): StatsHubModel {
@@ -527,14 +649,21 @@ export function buildStatsHubModel(playerRows: PlayerStat[], teamRows: TeamStat[
     (latestPlayer.round == null || latestTeam.year.localeCompare(latestPlayer.year) > 0 || (latestTeam.year === latestPlayer.year && latestTeam.round > latestPlayer.round))
       ? latestTeam
       : latestPlayer;
-  const latestPlayerRows = playerRows.filter((row) => row.Year === displayRound.year && row.Round === displayRound.round);
+  const playerStatsAreCurrentRound = latestPlayer.year === displayRound.year && latestPlayer.round === displayRound.round;
+  const latestPlayerRows = playerStatsAreCurrentRound
+    ? playerRows.filter((row) => row.Year === displayRound.year && row.Round === displayRound.round)
+    : [];
+  const latestAvailablePlayerRows = playerRows.filter((row) => row.Year === latestPlayer.year && row.Round === latestPlayer.round);
   const latestTeamRows = teamRows.filter((row) => row.Year === displayRound.year && row.Round === displayRound.round);
-  const playerGroups = buildPlayerGroups(playerRows.filter((row) => row.Year === displayRound.year));
+  const playerGroups = buildPlayerGroups(playerRows.filter((row) => row.Year === latestPlayer.year));
+  const teamGroups = buildTeamGroups(teamRows.filter((row) => row.Year === displayRound.year));
 
   const allInsights = [
+    ...buildTeamTrendInsights(latestTeamRows, teamGroups),
     ...buildOutlierInsights(latestPlayerRows, playerGroups),
     ...buildPlayerLeaderInsights(latestPlayerRows, playerGroups),
-    ...buildDueInsights(latestPlayerRows, playerGroups),
+    ...buildPlayerTrendInsights(latestAvailablePlayerRows, playerGroups),
+    ...buildDueInsights(latestAvailablePlayerRows, playerGroups),
     ...buildWeirdTeamInsights(latestTeamRows),
     ...buildScoringStreakInsights(latestPlayerRows, playerRows, teamRows),
     ...buildHistoricalInsights(latestPlayerRows, playerRows, latestTeamRows, teamRows),

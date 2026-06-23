@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { TEAM_COLOURS } from "@/lib/data/constants"
+import { playerSlug } from "@/lib/data/player-slug"
 import type { PlayerStat, TeamStat } from "@/lib/data/types"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
 
@@ -632,9 +633,12 @@ function PlayerLeaderCard({ card, valueMode }: { card: PlayerLeaderCardData; val
           <div className="flex min-w-0 flex-col justify-between pb-0 sm:max-w-[56%] sm:pb-4">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/72">{card.label}</div>
-              <div className="mt-4 text-[1.8rem] font-bold leading-tight text-white sm:mt-6 sm:text-3xl">
+              <Link
+                href={leader ? `/dashboard/players/${playerSlug(leader.name)}` : "/dashboard/players"}
+                className="mt-4 block text-[1.8rem] font-bold leading-tight text-white transition-colors hover:text-nrl-accent sm:mt-6 sm:text-3xl"
+              >
                 {leader?.name ?? "No leader"}
-              </div>
+              </Link>
               <div className="mt-1 text-sm text-white/72">{leader?.team ?? "-"}</div>
             </div>
             <div className="text-4xl font-black tracking-tight text-white sm:text-5xl">
@@ -644,11 +648,13 @@ function PlayerLeaderCard({ card, valueMode }: { card: PlayerLeaderCardData; val
 
           <div className="relative flex min-h-[9.5rem] items-end justify-end overflow-visible sm:min-w-[7rem] sm:flex-1">
             {leader ? (
-              <ImageWithFallback
-                sources={leader.imageSources}
-                alt={leader.name}
-                className="mx-auto max-h-[12.75rem] w-auto self-end object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[16.75rem]"
-              />
+              <Link href={`/dashboard/players/${playerSlug(leader.name)}`} className="contents">
+                <ImageWithFallback
+                  sources={leader.imageSources}
+                  alt={leader.name}
+                  className="mx-auto max-h-[12.75rem] w-auto self-end object-contain object-bottom drop-shadow-[0_16px_28px_rgba(0,0,0,0.32)] sm:max-h-[16.75rem]"
+                />
+              </Link>
             ) : null}
           </div>
         </div>
@@ -658,7 +664,12 @@ function PlayerLeaderCard({ card, valueMode }: { card: PlayerLeaderCardData; val
         {runnerUps.map((entry) => (
           <div key={`${card.key}-${entry.name}`} className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-nrl-text">{entry.name}</div>
+              <Link
+                href={`/dashboard/players/${playerSlug(entry.name)}`}
+                className="block truncate text-sm font-medium text-nrl-text transition-colors hover:text-nrl-accent"
+              >
+                {entry.name}
+              </Link>
               <div className="mt-0.5 truncate text-xs text-white/72">{entry.team}</div>
             </div>
             <div className="text-2xl font-bold leading-none text-nrl-text">

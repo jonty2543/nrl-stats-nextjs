@@ -1999,6 +1999,33 @@ export async function fetchFantasyPlayerStatsForYears(
   }
 }
 
+export async function fetchPlayerStatsForPlayerName(
+  playerName: string,
+  years?: string[]
+): Promise<PlayerStat[]> {
+  if (!playerName.trim()) return [];
+  const normalizedYears = years?.filter(Boolean).sort();
+  const normalizedName = normaliseNameForMatch(playerName);
+
+  try {
+    const directRows = await withTimeout(
+      fetchPlayerStatsForLocalNameAllYearsFromSupabase(playerName, normalizedYears),
+      DIRECT_PLAYER_STATS_TIMEOUT_MS,
+      "Direct player stats fetch timed out"
+    );
+    if (directRows.length > 0) return directRows;
+  } catch (error) {
+    console.warn("Unable to fetch player stats directly; falling back to cache.", error);
+  }
+
+  const serverCache = await readPlayerStatsServerCache(normalizedYears);
+  if (!serverCache) return [];
+
+  return filterPlayerStatsRowsByYears(serverCache.rows, normalizedYears).filter(
+    (row) => normaliseNameForMatch(row.Name) === normalizedName
+  );
+}
+
 export async function fetchFantasyPlayerStatsAllYears(
   fantasyName: string
 ): Promise<PlayerStat[]> {

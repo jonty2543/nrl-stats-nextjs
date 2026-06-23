@@ -1,10 +1,12 @@
 "use client";
 
 import { useAuth, useUser } from "@clerk/nextjs";
+import Link from "next/link";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import { PLAYER_STATS } from "@/lib/data/constants";
+import { playerSlug } from "@/lib/data/player-slug";
 import {
   filterByFinals,
   filterByYear,
@@ -259,7 +261,6 @@ function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[
   const seen = new Set<string>();
   const out: string[] = [];
   const upgradeHttp = (value: string) => value.startsWith("http://") ? `https://${value.slice("http://".length)}` : value;
-  const encode = (value: string) => encodeURI(value).replace(/'/g, "%27");
   const decode = (value: string) => {
     try {
       return decodeURIComponent(value);
@@ -270,7 +271,7 @@ function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[
 
   const push = (value: string | null | undefined) => {
     if (!value || typeof value !== "string") return;
-    const trimmed = encode(upgradeHttp(decode(value.trim())));
+    const trimmed = upgradeHttp(decode(value.trim()));
     if (!trimmed || seen.has(trimmed)) return;
     seen.add(trimmed);
     out.push(trimmed);
@@ -292,7 +293,7 @@ function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[
     if (idx >= 0) {
       const nested = value.slice(idx + marker.length).split("&preset=")[0];
       if (nested) {
-        pushVariant(encode(upgradeHttp(decode(nested))));
+        pushVariant(upgradeHttp(decode(nested)));
       }
     }
     pushVariant(value);
@@ -770,9 +771,11 @@ export function SimplePlayerPhotoTile({
 function PlayerStatsTableThumbnail({
   name,
   imageRow,
+  priority = false,
 }: {
   name: string;
   imageRow: PlayerImageRecord | null;
+  priority?: boolean;
 }) {
   const imageCandidates = useMemo(() => buildPlayerImageCandidates(imageRow), [imageRow]);
   const imageCandidatesKey = imageCandidates.join("|");
@@ -784,25 +787,32 @@ function PlayerStatsTableThumbnail({
   const imageUrl = imageCandidates[imageIndex] ?? null;
 
   return (
-    <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
-      {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={imageUrl}
-          alt=""
-          className="h-full w-full object-cover object-top"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => {
-            setImageAttemptState((prev) => ({
-              key: imageCandidatesKey,
-              index: (prev.key === imageCandidatesKey ? prev.index : 0) + 1,
-            }));
-          }}
-        />
-      ) : (
-        <span aria-label={`${name} player image`}>{playerImageInitials(name)}</span>
-      )}
+    <div className="flex flex-col items-center gap-0.5">
+      <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt=""
+            className="h-full w-full object-cover object-top"
+            loading="eager"
+            fetchPriority={priority ? "high" : "auto"}
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onError={() => {
+              setImageAttemptState((prev) => ({
+                key: imageCandidatesKey,
+                index: (prev.key === imageCandidatesKey ? prev.index : 0) + 1,
+              }));
+            }}
+          />
+        ) : (
+          <span aria-label={`${name} player image`}>{playerImageInitials(name)}</span>
+        )}
+      </div>
+      <div className="text-[7px] font-black uppercase leading-none tracking-wide text-nrl-muted">
+        {playerImageInitials(name)}
+      </div>
     </div>
   );
 }
@@ -855,6 +865,8 @@ export function PlayerComparison({
   );
   const [statsTablePosition, setStatsTablePosition] = useState("All Positions");
   const [statsTableTeam, setStatsTableTeam] = useState("All Teams");
+  const [statsTableSearch, setStatsTableSearch] = useState("");
+  const [statsTableFiltersOpen, setStatsTableFiltersOpen] = useState(false);
   const [statsTableSort, setStatsTableSort] = useState<{
     column: PlayerStatsTableSortKey;
     direction: PlayerStatsTableSortDirection;
@@ -977,9 +989,11 @@ export function PlayerComparison({
   );
 
   const statsTableRows = useMemo<PlayerStatsTableRow[]>(() => {
+    const search = statsTableSearch.toLowerCase().trim();
     const filteredRows = statsTableSourceRows.filter((row) => {
       if (statsTablePosition !== "All Positions" && row.Position !== statsTablePosition) return false;
       if (statsTableTeam !== "All Teams" && row.Team !== statsTableTeam) return false;
+      if (search && !row.Name.toLowerCase().includes(search)) return false;
       return true;
     });
     const byPlayer = new Map<string, PlayerStat[]>();
@@ -1010,7 +1024,7 @@ export function PlayerComparison({
         totals,
       };
     });
-  }, [playerImages, statsTablePosition, statsTableSourceRows, statsTableTeam]);
+  }, [playerImages, statsTablePosition, statsTableSearch, statsTableSourceRows, statsTableTeam]);
 
   const sortedStatsTableRows = useMemo(() => {
     const getSortValue = (row: PlayerStatsTableRow): number | string | null => {
@@ -1942,9 +1956,46 @@ export function PlayerComparison({
         </div>
       )}
       {allData.length > 0 && (
-        <section className="rounded-xl border border-nrl-border bg-nrl-panel overflow-hidden">
-          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-nrl-border bg-nrl-accent/10 px-3 py-2">
-            <div className="grid w-full grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.8fr)] items-end gap-2 md:w-auto md:grid-cols-[minmax(220px,320px)_150px_150px]">
+        <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
+          <div className="flex min-h-[44px] items-center justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-5 py-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <PillRadio
+                options={["Average", "Total"]}
+                value={statsTableValueMode}
+                onChange={(value) => setStatsTableValueMode(value as PlayerStatsTableValueMode)}
+              />
+              <input
+                type="search"
+                value={statsTableSearch}
+                onChange={(event) => setStatsTableSearch(event.target.value)}
+                placeholder="Search players"
+                className="h-9 min-w-0 max-w-xs flex-1 rounded-md border border-nrl-border bg-nrl-panel px-3 text-sm font-semibold text-nrl-text outline-none placeholder:text-nrl-muted focus:border-nrl-accent"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setStatsTableFiltersOpen((open) => !open)}
+              className={`relative inline-grid h-9 w-9 shrink-0 place-items-center rounded-full border transition-colors ${
+                statsTableFiltersOpen ||
+                statsTablePosition !== "All Positions" ||
+                statsTableTeam !== "All Teams" ||
+                statsTableYears.length !== 1 ||
+                statsTableYears[0] !== DEFAULT_STATS_TABLE_YEAR
+                  ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                  : "border-nrl-border bg-nrl-panel text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+              }`}
+              aria-expanded={statsTableFiltersOpen}
+              aria-label="Filters"
+            >
+              <span className="flex flex-col gap-0.5" aria-hidden="true">
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+              </span>
+            </button>
+          </div>
+          {statsTableFiltersOpen ? (
+            <div className="grid gap-3 border-b border-nrl-border bg-nrl-accent/10 px-3 py-3 md:grid-cols-[minmax(220px,320px)_150px_150px]">
               <FilterBar
                 years={availableYears}
                 selectedYears={statsTableYears}
@@ -1975,28 +2026,21 @@ export function PlayerComparison({
                 onChange={setStatsTableTeam}
               />
             </div>
-            <div className="flex items-end">
-              <PillRadio
-                options={["Average", "Total"]}
-                value={statsTableValueMode}
-                onChange={(value) => setStatsTableValueMode(value as PlayerStatsTableValueMode)}
-              />
-            </div>
-          </div>
-          <div className="h-[396px] overflow-auto">
+          ) : null}
+          <div className="h-[396px] overflow-auto pb-3">
             <table className="min-w-[2600px] border-collapse text-left text-xs">
               <thead>
                 <tr>
                   <th
                     aria-label="Player photo"
-                    className="sticky left-0 top-0 z-[4] w-13 min-w-13 max-w-13 border-b border-r border-nrl-border bg-nrl-panel px-1 py-2"
+                    className="sticky left-0 top-0 z-[5] w-24 min-w-24 max-w-24 border-b border-r border-nrl-border/70 bg-nrl-panel px-2 py-2"
                   />
                   {PLAYER_STATS_TABLE_BASE_COLUMNS.map((column) => {
                     const active = statsTableSort.column === column.key;
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0 ${column.key === "name" ? "left-[3.25rem] z-[3] w-44 min-w-44 max-w-44" : ""} ${column.key === "position" ? "w-[88px] min-w-[88px] max-w-[88px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-nrl-muted last:border-r-0 ${column.key === "name" ? "w-56 min-w-56 max-w-56" : ""} ${column.key === "position" ? "w-[96px] min-w-[96px] max-w-[96px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -2016,7 +2060,7 @@ export function PlayerComparison({
                     return (
                       <th
                         key={stat}
-                        className="sticky top-0 z-[2] border-b border-r border-nrl-border bg-nrl-panel px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-nrl-muted last:border-r-0"
+                        className="sticky top-0 z-[2] border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-center text-[9px] font-black uppercase tracking-[0.18em] text-nrl-muted last:border-r-0"
                       >
                         <button
                           type="button"
@@ -2043,30 +2087,39 @@ export function PlayerComparison({
                     </td>
                   </tr>
                 ) : (
-                  sortedStatsTableRows.map((row) => {
+                  sortedStatsTableRows.map((row, index) => {
                     return (
-                      <tr key={row.name} className="h-12 border-b border-nrl-border/60 transition-colors hover:bg-nrl-panel-2/70">
-                        <td className="sticky left-0 z-[1] w-13 min-w-13 max-w-13 border-r border-nrl-border bg-nrl-panel px-1 py-1">
-                          <div className="mx-auto grid h-9 w-9 place-items-center">
-                            <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} />
+                      <tr key={row.name} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
+                        <td className="sticky left-0 z-[3] w-24 min-w-24 max-w-24 border-r border-nrl-border/70 bg-nrl-panel px-2 py-1">
+                          <div className="flex h-[3.25rem] items-center gap-2">
+                            <div className="w-5 text-center text-xs font-black text-nrl-muted/70">
+                              {index + 1}
+                            </div>
+                            <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} priority={index < 24} />
                           </div>
                         </td>
-                      <td className="sticky left-[3.25rem] z-[1] w-44 min-w-44 max-w-44 border-r border-nrl-border bg-nrl-panel px-2 py-1 text-xs font-semibold text-nrl-text">
-                        <span className="block min-w-0 truncate" title={row.name}>{row.name}</span>
+                      <td className="w-56 min-w-56 max-w-56 bg-nrl-panel px-3 py-1 text-sm font-black text-nrl-text">
+                        <Link
+                          href={`/dashboard/players/${playerSlug(row.name)}`}
+                          className="block min-w-0 truncate transition-colors hover:text-nrl-accent"
+                          title={row.name}
+                        >
+                          {row.name}
+                        </Link>
                       </td>
-                      <td className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-muted">
+                      <td className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted">
                         {row.team ?? "-"}
                       </td>
-                      <td className="w-[88px] min-w-[88px] max-w-[88px] border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-muted">
+                      <td className="w-[96px] min-w-[96px] max-w-[96px] px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted">
                         {row.position ?? "-"}
                       </td>
-                      <td className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-text">
+                      <td className="px-3 py-2 text-center text-xs font-black whitespace-nowrap text-nrl-text">
                         {row.games}
                       </td>
                       {PLAYER_STATS_TABLE_COLUMNS.map((stat) => (
                         <td
                           key={`${row.name}-${stat}`}
-                          className="border-r border-nrl-border px-3 py-2 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0"
+                          className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted last:border-r-0"
                         >
                           {formatTableNumber(
                             statsTableValueMode === "Total" ? row.totals[stat] ?? null : row.averages[stat] ?? null

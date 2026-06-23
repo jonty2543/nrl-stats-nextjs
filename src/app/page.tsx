@@ -119,7 +119,7 @@ export default function Home() {
                 </span>
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-6 text-white/62 sm:text-base sm:leading-7">
-                Short Side brings trade ratings, team-list insights, best bets, tryscorer markets, archetypes, articles, and stats into one NRL analytics hub.
+                Short Side combines the tools every fantasy player and bettor needs to see the game from a data driven perspective.
               </p>
 
               <div className="relative mt-6 flex items-end justify-center lg:hidden">
@@ -127,12 +127,12 @@ export default function Home() {
                   <Image
                     src="/nrl_players-removebg-preview.png"
                     alt="NRL players"
-                    width={720}
-                    height={720}
-                  priority
-                  className="relative z-10 translate-x-2 h-[104%] w-auto max-w-[126%] object-contain object-bottom"
-                  style={heroPlayerImageMaskStyle(true)}
-                />
+                    width={666}
+                    height={375}
+                    priority
+                    className="relative z-10 h-auto w-[126%] max-w-none translate-x-2 object-contain object-bottom"
+                    style={heroPlayerImageMaskStyle(true)}
+                  />
                 </div>
               </div>
             </div>
@@ -142,10 +142,10 @@ export default function Home() {
                 <Image
                   src="/nrl_players-removebg-preview.png"
                   alt="NRL players"
-                  width={720}
-                  height={720}
+                  width={666}
+                  height={375}
                   priority
-                  className="relative z-10 translate-x-4 h-[122%] w-auto max-w-[146%] object-contain object-bottom"
+                  className="relative z-10 h-auto w-[146%] max-w-none translate-x-4 object-contain object-bottom"
                   style={heroPlayerImageMaskStyle()}
                 />
               </div>
@@ -157,55 +157,55 @@ export default function Home() {
         <section className="space-y-6 border-t border-white/8 px-4 py-10 sm:px-6 lg:px-8">
           <div className="px-1 sm:px-2">
             <SectionEyebrow>Built For Weekly Decisions</SectionEyebrow>
-            <h2 className="mt-2 text-2xl font-bold text-white">Explore the full suite</h2>
+            <h2 className="mt-2 text-2xl font-bold text-white">What does Short Side offer?</h2>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             {[
               {
                 eyebrow: "Fantasy",
-                title: "Star-rated trade targets, value tools, and player detail",
-                description: "Use Fantasy to move from star ratings into projection value, breakevens, team-list context, template teams, comments, and the full player game log.",
-                bullets: ["Five-star trade rating system", "Lineup roles and role averages", "Template teams and ownership movers", "Draft / H2H odds tools"],
+                title: "See top movers, player game logs and more",
+                description: "Use Fantasy to see player stats, info and game logs, and upgrade to pro to see projections, breakevens, and our unique Trade Ratings",
+                bullets: ["Five-star trade rating system", "Full game logs and filters", "Projections, breakevens, plots", "Draft / H2H odds tools"],
                 ctaHref: "/dashboard/fantasy",
                 ctaLabel: "Fantasy",
               },
               {
                 eyebrow: "Lineups",
-                title: "Team lists with lane insights, roles, and try scorer prices",
-                description: "Use Lineups after teams are named to check who is actually on field, compare left, middle, and right scoring lanes, review bench context, and scan the best available try scorer odds.",
-                bullets: ["Interactive field view", "Left / middle / right insights", "Scored vs conceded lane chart", "Bench and role context"],
+                title: "Team lists with lane insights, matchup history, and try scorer prices",
+                description: "Use Lineups after teams are named to check who has been named, compare left, middle, and right scoring lanes, and check the AI generated match insights",
+                bullets: ["Interactive field view", "Left / middle / right insights", "Scored vs conceded lane chart", "AI Generated match insights"],
                 ctaHref: "/dashboard/lineups",
                 ctaLabel: "Lineups",
               },
               {
                 eyebrow: "Betting",
-                title: "Best bets, tryscorers, odds comparison, and tracker tools",
-                description: "Use the betting view when you want a clean market snapshot, model-led best bets, tryscorer prices, staking calculators, and a tracker that keeps positions and results in one place.",
-                bullets: ["Today's Best Bets queue", "Tryscorer odds and player form", "Odds comparison for H2H, Line and Total", "Bet tracker summaries"],
+                title: "Best bets, model edge, odds comparison, and tracker tools",
+                description: "Betting uses our Machine Learning models along with market context to find the best bets across H2H, Line, Total and Tryscorer markets",
+                bullets: ["Today's Best Bets", "Tryscorer odds and player form", "Odds comparison across 5 bookmakers", "Personal bet tracker and staking calculator"],
                 ctaHref: "/dashboard/betting",
                 ctaLabel: "Betting",
               },
               {
                 eyebrow: "Articles",
-                title: "Community analysis, match notes, and feature pieces",
-                description: "Use Articles to publish NRL analysis with header images, read approved pieces, and keep submitted drafts in the review workflow.",
-                bullets: ["Public article feed", "Image-led article cards", "Signed-in submissions", "Admin approval workflow"],
+                title: "Explaining the method behind the madness",
+                description: "We use articles to give clarity on our process for fantasy projections and betting models, as well as to provide general insights using data driven analysis",
+                bullets: ["Machine learning walkthroughs", "Public article submission"],
                 ctaHref: "/dashboard/articles",
                 ctaLabel: "Articles",
               },
               {
                 eyebrow: "Stats",
-                title: "Player archetypes, comparison tools, and stat leaders",
+                title: "Player stats, Team stats, Player archetypes",
                 description: "Use the stats section to compare players and teams directly, inspect plot comparisons, profile archetypes, and see stat leaders across seasons.",
                 bullets: ["Player archetype profiles", "Player comparison and filtered charts", "Percentile ranks and recent form", "Season leader cards"],
-                ctaHref: "/dashboard/players",
+                ctaHref: "/dashboard/stats-hub",
                 ctaLabel: "Stats",
               },
               {
                 eyebrow: "NRL AI",
                 title: "A personal AI that knows every NRL stat at your fingertips",
-                description: "Ask NRL AI for rankings, player trends, betting context, and follow-up questions across every major NRL dataset.",
+                description: "Ask NRL AI for rankings, player trends, betting context, and follow-up questions across our vast NRL dataset.",
                 bullets: ["Player and team stat queries", "Fantasy screenshot analysis", "Follow-up questions in context", "Betting market summaries"],
                 ctaHref: "/dashboard/ai",
                 ctaLabel: "NRL AI",

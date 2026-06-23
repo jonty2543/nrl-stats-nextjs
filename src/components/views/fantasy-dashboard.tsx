@@ -6534,20 +6534,19 @@ export function FantasyDashboard({
                           <ImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                         </div>
                         <div className="min-w-0 shrink-0 md:w-64">
-                          <div className="min-w-0">
-                            <div className="truncate text-[13px] font-bold text-nrl-text">{row.player.name}</div>
-                          </div>
-                          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted md:block">
-                            <span>{row.player.positionLabel}</span>
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <div className="min-w-0 truncate text-[13px] font-bold text-nrl-text">{row.player.name}</div>
                             {showAllPlayersCardTags ? (
                               <PlayerContextTags
                                 majorByeRoundTags={row.majorByeRoundTags}
                                 nextMajorByeRound={row.nextMajorByeRound}
                                 playsNextMajorBye={row.playsNextMajorBye}
                                 originChance={row.originChance}
-                                className="md:mt-1"
                               />
                             ) : null}
+                          </div>
+                          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                            <span>{row.player.positionLabel}</span>
                           </div>
                         </div>
                         {!hasLoadedFullAllPlayersRows ? (

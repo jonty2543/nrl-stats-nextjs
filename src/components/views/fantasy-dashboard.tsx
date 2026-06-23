@@ -6038,7 +6038,7 @@ export function FantasyDashboard({
           <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-panel-2 px-3 py-2">
             {hasLoadedFullAllPlayersRows ? (
               <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:gap-1.5">
-                <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:shrink-0">
+                <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:w-auto sm:shrink-0">
                   {showAllPlayersOnly ? (
                     <FantasyBackLink href="/dashboard/fantasy" label="Back to Fantasy Dashboard" />
                   ) : null}
@@ -6066,8 +6066,6 @@ export function FantasyDashboard({
                       <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardStats ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
                     </span>
                   </label>
-                </div>
-                <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:w-auto sm:justify-end sm:gap-1.5">
                   <div className="relative flex items-center gap-0.5">
                     <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
                       <span>Ratings</span>
@@ -6081,7 +6079,7 @@ export function FantasyDashboard({
                         <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersTradeRatings ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
                       </span>
                       {!hasFantasyPlotAccess ? (
-                        <span className="rounded-full border border-nrl-accent/45 bg-nrl-accent/10 px-1.5 py-0.5 text-[7px] font-black tracking-[0.14em] text-white">
+                        <span className="hidden rounded-full border border-nrl-accent/45 bg-nrl-accent/10 px-1.5 py-0.5 text-[7px] font-black tracking-[0.14em] text-white md:inline">
                           Pro
                         </span>
                       ) : null}
@@ -6101,6 +6099,8 @@ export function FantasyDashboard({
                     </button>
                     {showAllPlayersTradeRatingInfo ? <TradeRatingInfoPopover /> : null}
                   </div>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-1.5">
                   <button
                     type="button"
                     onClick={() => setAllPlayersFiltersOpen((open) => !open)}

@@ -8,6 +8,7 @@ const FEEDBACK_DISMISSED_KEY = "nrl-feedback-dismissed-v1";
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const SUBMITTED_COOLDOWN_MS = 90 * 24 * 60 * 60 * 1000;
 const INTEREST_OPTIONS = ["Fantasy", "Draft", "Betting", "Lineups", "Stats"] as const;
+const LOCALHOST_NAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 type FeedbackInterest = (typeof INTEREST_OPTIONS)[number];
 type SubmitState = "idle" | "submitting" | "submitted" | "error";
@@ -20,7 +21,7 @@ function readStoredTime(key: string): number {
 
 function shouldForceFeedbackPrompt(): boolean {
   if (typeof window === "undefined") return false;
-  return window.location.hostname === "localhost" && window.location.search.includes("feedback=1");
+  return LOCALHOST_NAMES.has(window.location.hostname.toLowerCase()) || window.location.search.includes("feedback=1");
 }
 
 export function FeedbackPrompt() {
@@ -110,7 +111,7 @@ export function FeedbackPrompt() {
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
               Feedback
             </div>
-            <h2 id="feedback-prompt-title" className="mt-1 text-base font-bold text-white">Help improve NRL Ratings</h2>
+            <h2 id="feedback-prompt-title" className="mt-1 text-base font-bold text-white">Help improve Short Side</h2>
           </div>
           <button
             type="button"

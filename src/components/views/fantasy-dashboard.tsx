@@ -386,7 +386,6 @@ interface MajorByeRoundTag {
 }
 
 interface FantasyDashboardPersistedState {
-  allPlayersView?: "cards" | "table"
   allPlayersPositionFilter?: string
   allPlayersPositionFilters?: string[]
   allPlayersTagFilters?: string[]
@@ -555,13 +554,13 @@ const ALL_PLAYERS_BASE_COLUMNS: Array<{ key: AllPlayersSortKey; label: string; a
   { key: "projection", label: "Proj", align: "center", proOnly: true },
   { key: "value", label: "Value", align: "center", proOnly: true },
   { key: "tradeRating", label: "Overall", align: "center" },
-  { key: "tradeWeeklyDelta", label: "Pop", align: "center", proOnly: true },
-  { key: "tradeValue", label: "Value", align: "center", proOnly: true },
-  { key: "tradeKeeper", label: "Keeper", align: "center", proOnly: true },
-  { key: "tradeRole", label: "Role", align: "center", proOnly: true },
-  { key: "tradeForm", label: "Form", align: "center", proOnly: true },
-  { key: "tradeBreakeven", label: "BE", align: "center", proOnly: true },
-  { key: "tradeAvailability", label: "Avail", align: "center", proOnly: true },
+  { key: "tradeWeeklyDelta", label: "Popularity Rating", align: "center", proOnly: true },
+  { key: "tradeValue", label: "Value Rating", align: "center", proOnly: true },
+  { key: "tradeKeeper", label: "Keeper Rating", align: "center", proOnly: true },
+  { key: "tradeRole", label: "Role Rating", align: "center", proOnly: true },
+  { key: "tradeForm", label: "Form Rating", align: "center", proOnly: true },
+  { key: "tradeBreakeven", label: "Breakeven Rating", align: "center", proOnly: true },
+  { key: "tradeAvailability", label: "Availability Rating", align: "center", proOnly: true },
   { key: "breakeven", label: "BE", align: "center", proOnly: true },
   { key: "gamesPlayed", label: "Games", align: "center" },
 ]
@@ -577,13 +576,13 @@ const ALL_PLAYERS_MOBILE_SORT_OPTIONS: Array<{ key: AllPlayersSortKey; label: st
   { key: "projection", label: "Proj", proOnly: true },
   { key: "value", label: "Value", proOnly: true },
   { key: "tradeRating", label: "Overall" },
-  { key: "tradeWeeklyDelta", label: "Pop", proOnly: true },
-  { key: "tradeValue", label: "Value", proOnly: true },
-  { key: "tradeKeeper", label: "Keeper", proOnly: true },
-  { key: "tradeRole", label: "Role", proOnly: true },
-  { key: "tradeForm", label: "Form", proOnly: true },
-  { key: "tradeBreakeven", label: "BE", proOnly: true },
-  { key: "tradeAvailability", label: "Availability", proOnly: true },
+  { key: "tradeWeeklyDelta", label: "Popularity Rating", proOnly: true },
+  { key: "tradeValue", label: "Value Rating", proOnly: true },
+  { key: "tradeKeeper", label: "Keeper Rating", proOnly: true },
+  { key: "tradeRole", label: "Role Rating", proOnly: true },
+  { key: "tradeForm", label: "Form Rating", proOnly: true },
+  { key: "tradeBreakeven", label: "Breakeven Rating", proOnly: true },
+  { key: "tradeAvailability", label: "Availability Rating", proOnly: true },
   { key: "breakeven", label: "BE", proOnly: true },
   { key: "gamesPlayed", label: "Games" },
 ]
@@ -594,10 +593,6 @@ function isAllPlayersSortKey(value: unknown): value is AllPlayersSortKey {
 
 function isAllPlayersSortDirection(value: unknown): value is AllPlayersSortDirection {
   return value === "asc" || value === "desc"
-}
-
-function isAllPlayersView(value: unknown): value is "cards" | "table" {
-  return value === "cards" || value === "table"
 }
 
 function isFantasyAnalyticsMetric(value: unknown): value is FantasyAnalyticsMetric {
@@ -689,6 +684,7 @@ function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
     case "projection":
     case "value":
     case "tradeRating":
+      return "w-20 min-w-20 max-w-20"
     case "tradeWeeklyDelta":
     case "tradeValue":
     case "tradeKeeper":
@@ -696,6 +692,7 @@ function getAllPlayersColumnWidthClass(key: AllPlayersSortKey): string {
     case "tradeForm":
     case "tradeBreakeven":
     case "tradeAvailability":
+      return "w-28 min-w-28 max-w-28"
     case "breakeven":
     case "gamesPlayed":
       return "w-14 min-w-14 max-w-14"
@@ -3434,7 +3431,6 @@ export function FantasyDashboard({
     direction: "desc",
   })
   const [allPlayerCardSummaryRows, setAllPlayerCardSummaryRows] = useState<FantasyPlayerCardSummary[]>(precomputedAllPlayersRows)
-  const [allPlayersView, setAllPlayersView] = useState<"cards" | "table">("cards")
   const [allPlayersPositionFilters, setAllPlayersPositionFilters] = useState<string[]>([])
   const [allPlayersTagFilters, setAllPlayersTagFilters] = useState<string[]>([])
   const [allPlayersTeamFilters, setAllPlayersTeamFilters] = useState<string[]>([])
@@ -3492,7 +3488,6 @@ export function FantasyDashboard({
   const hasLoadedFullAllPlayersRows = !precomputedAllPlayersRowsArePreview
   const isAllPlayersPreview = precomputedAllPlayersRowsArePreview
   const hasPrecomputedAllPlayersRows = allPlayerCardSummaryRows.length > 0
-  const effectiveAllPlayersView = hasLoadedFullAllPlayersRows ? allPlayersView : "cards"
   const precomputedAllPlayersRowsByKey = useMemo(() => {
     const map = new Map<string, FantasyPlayerCardSummary>()
     for (const row of allPlayerCardSummaryRows) {
@@ -3536,7 +3531,6 @@ export function FantasyDashboard({
       saved = null
     }
     if (saved) {
-      if (isAllPlayersView(saved.allPlayersView)) setAllPlayersView(saved.allPlayersView)
       if (Array.isArray(saved.allPlayersPositionFilters)) {
         setAllPlayersPositionFilters(saved.allPlayersPositionFilters.filter((position): position is string => typeof position === "string"))
       } else if (typeof saved.allPlayersPositionFilter === "string" && saved.allPlayersPositionFilter !== "All Positions") {
@@ -3586,7 +3580,6 @@ export function FantasyDashboard({
   useEffect(() => {
     if (!showOwnedCards || !dashboardStateHydrated) return
     const state: FantasyDashboardPersistedState = {
-      allPlayersView,
       allPlayersPositionFilters,
       allPlayersTagFilters,
       allPlayersTeamFilters,
@@ -3622,7 +3615,6 @@ export function FantasyDashboard({
     allPlayersSort,
     allPlayersTagFilters,
     allPlayersTeamFilters,
-    allPlayersView,
     dashboardStateHydrated,
     fantasyAnalyticsMetric,
     fantasyAnalyticsPositionFilter,
@@ -4985,7 +4977,10 @@ export function FantasyDashboard({
   }, [allPlayersTeamFilterOptions, allPlayersTeamFilters, dashboardStateHydrated])
 
   const availableAllPlayersMobileSortOptions = useMemo(
-    () => ALL_PLAYERS_MOBILE_SORT_OPTIONS.filter((option) => hasFantasyPlotAccess || !option.proOnly),
+    () => ALL_PLAYERS_MOBILE_SORT_OPTIONS.map((option) => ({
+      ...option,
+      label: !hasFantasyPlotAccess && option.proOnly ? `${option.label} (Locked)` : option.label,
+    })),
     [hasFantasyPlotAccess]
   )
   const allPlayersSortDisplayColumn: AllPlayersSortKey =
@@ -6047,25 +6042,7 @@ export function FantasyDashboard({
                   {showAllPlayersOnly ? (
                     <FantasyBackLink href="/dashboard/fantasy" label="Back to Fantasy Dashboard" />
                   ) : null}
-                  <div className="inline-flex shrink-0 rounded-full border border-nrl-border bg-nrl-panel-2 p-[2px]">
-                    {(["cards", "table"] as const).map((view) => (
-                      <button
-                        key={view}
-                        type="button"
-                        onClick={() => {
-                          setAllPlayersView(view)
-                        }}
-                        className={`rounded-full px-1.5 py-1 text-[8px] font-bold uppercase tracking-wide transition-colors sm:px-2 sm:text-[9px] ${
-                          effectiveAllPlayersView === view
-                            ? "bg-nrl-accent text-[#07131f]"
-                            : "text-nrl-muted hover:text-nrl-text"
-                        }`}
-                      >
-                        {view === "cards" ? "Cards" : "Table"}
-                      </button>
-                    ))}
-                  </div>
-                  <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
+                  <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px] md:hidden">
                     <span>Tags</span>
                     <input
                       type="checkbox"
@@ -6077,7 +6054,7 @@ export function FantasyDashboard({
                       <span className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-transform ${showAllPlayersCardTags ? "translate-x-3 bg-nrl-accent" : "translate-x-0.5 bg-nrl-muted"}`} />
                     </span>
                   </label>
-                  <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px]">
+                  <label className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-nrl-border bg-nrl-panel-2 px-2 text-[8px] font-bold uppercase tracking-wide text-nrl-muted sm:text-[9px] md:hidden">
                     <span>Stats</span>
                     <input
                       type="checkbox"
@@ -6320,7 +6297,7 @@ export function FantasyDashboard({
               </div>
             </div>
           ) : null}
-          <div className={`${hasLoadedFullAllPlayersRows && effectiveAllPlayersView === "cards" ? "block" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2`}>
+          <div className={`${hasLoadedFullAllPlayersRows ? "block md:hidden" : "hidden"} border-b border-nrl-border bg-nrl-panel px-3 py-2`}>
             <div className="mb-2 max-w-2xl">
               <SearchableSelect
                 label=""
@@ -6343,6 +6320,7 @@ export function FantasyDashboard({
                   onChange={(sortKey) => {
                     const option = availableAllPlayersMobileSortOptions.find((item) => item.key === sortKey)
                     if (!option) return
+                    if (!hasFantasyPlotAccess && option.proOnly) return
                     setAllPlayersSort((current) => ({
                       column: option.key,
                       direction: current.column === option.key ? current.direction : "desc",
@@ -6365,7 +6343,7 @@ export function FantasyDashboard({
               </button>
             </div>
           </div>
-          <div className={`${effectiveAllPlayersView === "cards" ? "grid" : "hidden"} grid-cols-1 gap-2 p-2.5`}>
+          <div className={`${hasLoadedFullAllPlayersRows ? "grid md:hidden" : "grid"} grid-cols-1 gap-2 p-2.5`}>
             {sortedAllPlayersTableRows.length === 0 ? (
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
                 {activeAllPlayersFilterCount > 0
@@ -6388,28 +6366,28 @@ export function FantasyDashboard({
                   },
                   {
                     key: "tradeWeeklyDelta",
-                    label: "Popularity",
+                    label: "Popularity Rating",
                     value: formatTradeScore(tradeScore10(row.tradeRating?.weeklyDelta)),
                     tradeScore: tradeScore10(row.tradeRating?.weeklyDelta),
                     locked: true,
                   },
                   {
                     key: "tradeValue",
-                    label: "Value",
+                    label: "Value Rating",
                     value: formatTradeScore(tradeScore10(row.tradeRating?.value)),
                     tradeScore: tradeScore10(row.tradeRating?.value),
                     locked: true,
                   },
                   {
                     key: "tradeKeeper",
-                    label: "Keeper",
+                    label: "Keeper Rating",
                     value: formatTradeScore(tradeScore10(row.tradeRating?.keeperScore)),
                     tradeScore: tradeScore10(row.tradeRating?.keeperScore),
                     locked: true,
                   },
                   {
                     key: "tradeRole",
-                    label: "Role",
+                    label: "Role Rating",
                     value: formatTradeScore(tradeScore10(row.tradeRating?.roleSecurityScore)),
                     tradeScore: tradeScore10(row.tradeRating?.roleSecurityScore),
                     locked: true,
@@ -6417,7 +6395,7 @@ export function FantasyDashboard({
                   },
                   {
                     key: "tradeForm",
-                    label: "Form",
+                    label: "Form Rating",
                     value: formatTradeScore(tradeScore10(row.tradeRating?.form)),
                     tradeScore: tradeScore10(row.tradeRating?.form),
                     locked: true,
@@ -6425,7 +6403,7 @@ export function FantasyDashboard({
                   },
                   {
                     key: "tradeBreakeven",
-                    label: "BE",
+                    label: "Breakeven Rating",
                     value: formatTradeScore(tradeScore10(row.tradeRating?.breakeven)),
                     tradeScore: tradeScore10(row.tradeRating?.breakeven),
                     locked: true,
@@ -6433,7 +6411,7 @@ export function FantasyDashboard({
                   },
                   {
                     key: "tradeAvailability",
-                    label: "Avail",
+                    label: "Availability Rating",
                     value: formatTradeScore(tradeScore10(row.tradeRating?.availability)),
                     tradeScore: tradeScore10(row.tradeRating?.availability),
                     locked: true,
@@ -6522,6 +6500,18 @@ export function FantasyDashboard({
                 const cardStats = hasFantasyPlotAccess
                   ? baseCardStats
                   : [...baseCardStats.filter((stat) => !stat.locked), ...baseCardStats.filter((stat) => stat.locked)]
+                const homePreviewCardStats = [
+                  "weeklyChange",
+                  "price",
+                  "last3",
+                  "projection",
+                  "value",
+                  "breakeven",
+                ]
+                  .map((key) => baseCardStats.find((stat) => stat.key === key))
+                  .filter((stat): stat is (typeof baseCardStats)[number] => Boolean(stat))
+                const displayedCardStats = hasLoadedFullAllPlayersRows ? cardStats : homePreviewCardStats
+                const showCardStatsStrip = showAllPlayersCardStats || !hasLoadedFullAllPlayersRows
                 const selectedCardStat =
                   [...cardStats, ...tradeRatingCardStats].find((stat) => stat.key === allPlayersSortDisplayColumn) ??
                   (allPlayersSortDisplayColumn === "position"
@@ -6539,11 +6529,11 @@ export function FantasyDashboard({
                     style={renderAllPlayersTradeRatings ? ALL_PLAYERS_RATED_CARD_CONTENT_STYLE : ALL_PLAYERS_CARD_CONTENT_STYLE}
 	                  >
 	                    <div className="flex w-full items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-start gap-2.5">
+                      <div className="flex min-w-0 flex-1 items-start gap-2.5">
                         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-[11px] text-nrl-muted">
                           <ImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 shrink-0 md:w-64">
                           <div className="min-w-0">
                             <div className="truncate text-[13px] font-bold text-nrl-text">{row.player.name}</div>
                           </div>
@@ -6560,8 +6550,28 @@ export function FantasyDashboard({
                             ) : null}
                           </div>
                         </div>
+                        {!hasLoadedFullAllPlayersRows ? (
+                          <div className="ml-auto hidden w-full max-w-[620px] min-w-0 grid-cols-6 gap-2 md:grid">
+                            {homePreviewCardStats.map((stat) => (
+                              <div key={`home-inline-${stat.key}`} className="min-w-0">
+                                <div className={`text-[8px] font-semibold uppercase tracking-wide ${stat.key === allPlayersSort.column ? "text-nrl-accent" : "text-nrl-muted"}`}>
+                                  {stat.label}
+                                </div>
+                                {!hasFantasyPlotAccess && stat.locked ? (
+                                  <div className={`mt-0.5 ${FANTASY_LOCKED_VALUE_BOX_CLASS}`}>
+                                    <span className={FANTASY_LOCKED_VALUE_TEXT_CLASS}>{stat.value}</span>
+                                  </div>
+                                ) : (
+                                  <div className={`mt-0.5 text-[12px] font-bold ${stat.valueClassName}`}>
+                                    {stat.value}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-	                      <div className="shrink-0 text-right">
+	                      <div className={`shrink-0 text-right ${hasLoadedFullAllPlayersRows ? "" : "md:hidden"}`}>
                         <div className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
                           {selectedCardStat.label}
                         </div>
@@ -6593,7 +6603,7 @@ export function FantasyDashboard({
                             return (
                               <div
                                 key={stat.key}
-                                className={`inline-flex min-h-10 min-w-24 flex-col items-center justify-center rounded-full border px-2.5 lg:w-full lg:min-w-0 ${getTradeScorePillClass(stat.tradeScore, highlighted)}`}
+                                className={`inline-flex min-h-10 min-w-32 flex-col items-center justify-center rounded-full border px-2.5 lg:w-full lg:min-w-0 ${getTradeScorePillClass(stat.tradeScore, highlighted)}`}
                               >
                                 <span className="text-[7px] font-black uppercase tracking-[0.02em] text-white/45 sm:text-[8px]">
                                   {stat.label}
@@ -6611,7 +6621,7 @@ export function FantasyDashboard({
                         </div>
                       </div>
                     ) : null}
-	                    {showAllPlayersCardStats ? (
+	                    {showCardStatsStrip && hasLoadedFullAllPlayersRows ? (
 	                      <div className={`relative ${renderAllPlayersTradeRatings ? "mt-5" : "mt-3"} overflow-hidden md:min-w-0`}>
                         <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-8 bg-[linear-gradient(90deg,rgba(17,24,50,0),#111832)] md:hidden" />
                         <span className="pointer-events-none absolute right-1.5 top-1/2 z-[2] -translate-y-1/2 text-sm font-black text-nrl-accent/70 drop-shadow-[0_0_8px_rgba(0,245,138,0.22)] md:hidden" aria-hidden="true">
@@ -6619,7 +6629,7 @@ export function FantasyDashboard({
                         </span>
                         <div className="overflow-x-auto pb-0.5 pr-6 [scrollbar-width:none] md:overflow-visible md:pr-0 [&::-webkit-scrollbar]:hidden">
 	                      <div className="flex min-w-max gap-3 md:grid md:w-full md:min-w-0 md:grid-cols-11 md:gap-4">
-                        {cardStats.map((stat) => (
+                        {displayedCardStats.map((stat) => (
                           <div
                             key={stat.key}
 	                            className="min-w-[3.75rem] md:min-w-0"
@@ -6647,7 +6657,7 @@ export function FantasyDashboard({
               })
             )}
           </div>
-          <div className={`${effectiveAllPlayersView === "table" ? "block" : "hidden"} ${showAllPlayersOnly ? "" : "h-[756px]"} overflow-y-auto overflow-x-auto`}>
+          <div className={`${hasLoadedFullAllPlayersRows ? "hidden md:block" : "hidden"} ${showAllPlayersOnly ? "" : "h-[756px]"} overflow-y-auto overflow-x-auto`}>
             <table className="w-full min-w-[1550px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>
@@ -6768,15 +6778,19 @@ export function FantasyDashboard({
                         { key: "tradeForm" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.form)), tradeScore: tradeScore10(row.tradeRating?.form) },
                         { key: "tradeBreakeven" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.breakeven)), tradeScore: tradeScore10(row.tradeRating?.breakeven) },
                         { key: "tradeAvailability" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.availability)), tradeScore: tradeScore10(row.tradeRating?.availability) },
-                      ].map((score) => (
-                        <td key={score.key} className={`w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getTradeScoreColorClass(score.tradeScore)}`}>
-                          <span className={!hasFantasyPlotAccess && score.key !== "tradeRating" ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass(score.key)}`}>
-                            <span className={!hasFantasyPlotAccess && score.key !== "tradeRating" ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
-                            {score.value}
+                      ].map((score) => {
+                        const locked = !hasFantasyPlotAccess && score.key !== "tradeRating"
+                        const widthClass = score.key === "tradeRating" ? "w-20 min-w-20 max-w-20" : "w-28 min-w-28 max-w-28"
+                        return (
+                          <td key={score.key} className={`${widthClass} border-r border-nrl-border px-1.5 py-2 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getTradeScoreColorClass(score.tradeScore)}`}>
+                            <span className={locked ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass(score.key)}`}>
+                              <span className={locked ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
+                              {score.value}
+                              </span>
                             </span>
-                          </span>
-                        </td>
-                      ))}
+                          </td>
+                        )
+                      })}
                       <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-2 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
                         <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : "inline-block"}>
                           <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>

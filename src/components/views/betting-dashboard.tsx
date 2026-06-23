@@ -27,51 +27,6 @@ interface BettingDashboardProps {
   tryscorerLastFiveVsOpponentByMatch?: Record<string, unknown>;
   tryscorerKickoffsByMatch?: Record<string, string>;
   lineupLinksByMatchKey?: Record<string, string>;
-  marginModelArticle?: BettingArticleLink | null;
-  tryscorerArticle?: BettingArticleLink | null;
-}
-
-interface BettingArticleLink {
-  title: string;
-  slug: string;
-  imageUrls: string[];
-}
-
-function BettingArticlePill({ article }: { article: BettingArticleLink }) {
-  return (
-    <Link
-      href={`/dashboard/articles/${article.slug}`}
-      aria-label={`Read ${article.title}`}
-      className="group relative flex min-h-[58px] w-full cursor-pointer overflow-hidden rounded-full border border-[rgba(123,92,255,0.22)] bg-[#20284a]/80 text-white shadow-[0_8px_18px_rgba(8,10,18,0.16)] transition-colors hover:border-emerald-300/40"
-    >
-      <div className={`absolute inset-0 grid ${article.imageUrls.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-        {article.imageUrls.slice(0, 2).map((url, index) => (
-          <div key={`${url}-${index}`} className="min-w-0 overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt=""
-              className="h-full w-full object-cover opacity-45 transition-transform duration-300 group-hover:scale-[1.03]"
-            />
-          </div>
-        ))}
-      </div>
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,19,48,0.92),rgba(14,19,48,0.78),rgba(14,19,48,0.56))]" />
-      <div className="relative flex min-h-[58px] w-full items-center justify-between gap-3 px-4 py-2">
-        <div className="min-w-0">
-          <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-emerald-300">
-            Article
-          </div>
-          <div className="mt-0.5 overflow-hidden text-[10px] font-bold uppercase leading-tight tracking-[0.08em] text-white/85 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-            {article.title}
-          </div>
-        </div>
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/10 bg-nrl-panel-2/60 text-sm text-nrl-text/80">
-          →
-        </span>
-      </div>
-    </Link>
-  );
 }
 
 interface BettingPreferences {
@@ -326,22 +281,18 @@ const BEST_BETS_FEATURED_OVERRIDE = {
 const STAKING_OPTIONS: Array<{
   mode: StakingMode;
   label: string;
-  description: string;
 }> = [
   {
     mode: "percentage",
     label: "Percentage Staking",
-    description: "Bet a % of your bankroll.",
   },
   {
     mode: "targetProfit",
     label: "Target Profit Staking",
-    description: "Bet a certain amount to achieve a target percentage of your bankroll as profit.",
   },
   {
     mode: "kelly",
     label: "Kelly Staking",
-    description: "Bet a percentage of your bankroll based on model edge over bookmaker.",
   },
 ];
 const BOOKIE_LOGO_PATHS: Record<BettingBookie, string> = {
@@ -1937,8 +1888,6 @@ export function BettingDashboard({
   tryscorerLastFiveVsOpponentByMatch = {},
   tryscorerKickoffsByMatch = {},
   lineupLinksByMatchKey = {},
-  marginModelArticle = null,
-  tryscorerArticle = null,
 }: BettingDashboardProps) {
   const { isLoaded, userId } = useAuth();
   const { user } = useUser();
@@ -2799,9 +2748,6 @@ export function BettingDashboard({
   }, [bets]);
   const stakingPreferencesLoading = !isLoaded || !preferencesHydrated;
   const betTrackerLoading = hasPremiumBettingAccess && (!betsHydrated || betsLoading);
-  const bettingArticleLinks = [marginModelArticle, tryscorerArticle].filter(
-    (article): article is BettingArticleLink => article !== null
-  );
 
   return (
     <div className="space-y-6">
@@ -2844,14 +2790,6 @@ export function BettingDashboard({
         isTourActive={activeTourStep?.target === "best-bets"}
       />
 
-      {bettingArticleLinks.length > 0 ? (
-        <div className={bettingArticleLinks.length > 1 ? "grid gap-3 md:grid-cols-2" : ""}>
-          {bettingArticleLinks.map((article) => (
-            <BettingArticlePill key={article.slug} article={article} />
-          ))}
-        </div>
-      ) : null}
-
       <section
         data-betting-tour="staking-calculator"
         className={`scroll-mt-24 rounded-xl border border-nrl-border bg-[#10162f]/96 p-4 sm:p-5 ${
@@ -2881,7 +2819,6 @@ export function BettingDashboard({
                       Premium
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
                 </div>
               );
             }
@@ -2899,7 +2836,6 @@ export function BettingDashboard({
                 <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
                   <span>{option.label}</span>
                 </div>
-                <div className="mt-1 text-[10px] leading-snug text-nrl-muted">{option.description}</div>
               </button>
             );
           })}

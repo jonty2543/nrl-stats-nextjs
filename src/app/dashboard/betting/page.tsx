@@ -2,7 +2,6 @@ import { auth } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 import { BettingDashboard } from "@/components/views/betting-dashboard";
 import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
-import { fetchApprovedArticles } from "@/lib/articles";
 import { fetchBettingOddsSnapshot, fetchBettingOddsSnapshotFromRawTables, fetchBettingPageSummary, fetchPlayerImages } from "@/lib/supabase/queries";
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types";
 import type { BettingSummaryGame } from "@/lib/supabase/queries";
@@ -13,10 +12,6 @@ const SUNDAY_BETTING_RELEASE_UTC_HOUR = 11;
 const LOCALHOST_NAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 function normalisePlayerKey(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function normaliseArticleTitle(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
@@ -289,24 +284,13 @@ function buildLineupLinksByMatchKey(games: BettingSummaryGame[]): Record<string,
 
 export default async function BettingPage() {
   const { userId } = await auth();
-  const [snapshot, canAccessPremium, bettingSummary, approvedArticles, playerImages, localhostRequest] = await Promise.all([
+  const [snapshot, canAccessPremium, bettingSummary, playerImages, localhostRequest] = await Promise.all([
     fetchBettingOddsSnapshot(),
     getServerPremiumAccess(userId),
     fetchBettingPageSummary(),
-    fetchApprovedArticles(),
     fetchPlayerImages(),
     isLocalhostRequest(),
   ]);
-  const marginModelArticle = approvedArticles.find((article) =>
-    normaliseArticleTitle(article.title).includes("margin model")
-  ) ?? null;
-  const tryscorerArticle = approvedArticles.find((article) => {
-    const title = normaliseArticleTitle(article.title);
-    return (
-      article.slug !== marginModelArticle?.slug &&
-      (title.includes("tryscorer") || title.includes("try scorer") || title.includes("try scoring") || title.includes("tryscore"))
-    );
-  }) ?? null;
   const lineupsFilteredSnapshot = filterTryscorersToLineups(
     localhostRequest
       ? await fetchBettingOddsSnapshotFromRawTables().catch((error) => {
@@ -336,24 +320,6 @@ export default async function BettingPage() {
       tryscorerLastFiveVsOpponentByMatch={bettingSummary.tryscorerLastFiveVsOpponentByMatch}
       tryscorerKickoffsByMatch={bettingSummary.tryscorerKickoffsByMatch}
       lineupLinksByMatchKey={buildLineupLinksByMatchKey(bettingSummary.games)}
-      marginModelArticle={
-        marginModelArticle
-          ? {
-              title: marginModelArticle.title,
-              slug: marginModelArticle.slug,
-              imageUrls: marginModelArticle.imageUrls,
-            }
-          : null
-      }
-      tryscorerArticle={
-        tryscorerArticle
-          ? {
-              title: tryscorerArticle.title,
-              slug: tryscorerArticle.slug,
-              imageUrls: tryscorerArticle.imageUrls,
-            }
-          : null
-      }
     />
   );
 }

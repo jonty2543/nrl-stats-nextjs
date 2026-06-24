@@ -36,8 +36,11 @@ export function TabNav() {
   }
 
   return (
-    <div className="-mx-1 mt-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <nav className="inline-flex min-w-max gap-1 rounded-full border border-white/10 bg-[#151c3a]/82 p-1 backdrop-blur">
+    <div className="mt-4 border-t border-white/8 pt-3">
+      <nav
+        aria-label="Stats sections"
+        className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:inline-flex sm:rounded-lg sm:border sm:border-white/10 sm:bg-white/[0.035] sm:p-1 [&::-webkit-scrollbar]:hidden"
+      >
         {tabs.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           return (
@@ -46,10 +49,10 @@ export function TabNav() {
               href={tab.href}
               prefetch
               aria-current={active ? "page" : undefined}
-              className={`cursor-pointer rounded-full px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors sm:px-4 sm:text-xs sm:tracking-[0.18em] ${
+              className={`cursor-pointer whitespace-nowrap rounded-md border px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-colors sm:px-4 sm:text-[11px] ${
                 active
-                  ? "bg-emerald-400/14 text-emerald-300"
-                  : "text-white/48 hover:text-white/80"
+                  ? "border-emerald-300/45 bg-emerald-400 text-[#07111f] shadow-[0_0_24px_rgba(16,185,129,0.22)]"
+                  : "border-white/8 bg-white/[0.025] text-white/48 hover:border-white/16 hover:bg-white/[0.055] hover:text-white/80"
               }`}
             >
               {tab.label}

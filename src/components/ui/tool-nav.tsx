@@ -10,7 +10,7 @@ const tools = [
   { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "Betting", href: "/dashboard/betting" },
   { label: "Lineups", href: "/dashboard/lineups" },
-  { label: "Stats", href: "/dashboard/stats-hub" },
+  { label: "Stats", href: "/dashboard/players" },
   { label: "NRL AI", href: "/dashboard/ai" },
   { label: "Articles", href: "/dashboard/articles" },
   { label: "About", href: "/dashboard/about" },
@@ -73,7 +73,7 @@ export function ToolNav({ className }: ToolNavProps) {
           {tools.map((tool) => {
             const active = tool.href === "/"
               ? pathname === "/"
-              : tool.href === "/dashboard/stats-hub"
+              : tool.href === "/dashboard/players"
                 ? isStatsRoute
                 : pathname === tool.href || pathname.startsWith(`${tool.href}/`);
 

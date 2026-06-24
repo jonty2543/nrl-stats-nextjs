@@ -70,8 +70,14 @@ const DEFAULT_PLAYER_1_CANDIDATES = ["Nathan Cleary"];
 const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
 const DEFAULT_STATS_TABLE_YEAR = "2026";
 const PLAYER_COMPARISON_STATE_STORAGE_KEY = "nrl-stats:player-comparison-state:v1";
+const STATS_TABLE_MIN_GAMES_OPTIONS = ["Any", "2+", "3+", "5+", "10+"] as const;
 
 const PLAYER_STATS_TABLE_COLUMNS = PLAYER_STATS;
+const NON_TOTAL_PLAYER_STATS = new Set<PlayerStatsTableStatKey>(
+  PLAYER_STATS_TABLE_COLUMNS.filter((stat) =>
+    /\b(rate|ratio|efficiency)\b/i.test(stat) || stat.startsWith("Average ")
+  )
+);
 const PLAYER_STATS_TABLE_BASE_COLUMNS: Array<{
   key: PlayerStatsTableSortKey;
   label: string;
@@ -82,6 +88,19 @@ const PLAYER_STATS_TABLE_BASE_COLUMNS: Array<{
   { key: "position", label: "Pos", align: "center" },
   { key: "games", label: "Games", align: "center" },
 ];
+
+function playerStatsTableValue(row: PlayerStatsTableRow, stat: PlayerStatsTableStatKey, mode: PlayerStatsTableValueMode): number | null {
+  if (mode === "Total" && !NON_TOTAL_PLAYER_STATS.has(stat)) {
+    return row.totals[stat] ?? null;
+  }
+  return row.averages[stat] ?? null;
+}
+
+function minGamesValue(option: string): number {
+  if (option === "Any") return 0;
+  const parsed = Number.parseInt(option, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 const MINUTES_FILTER_OPTIONS = [
   "Any",
@@ -102,6 +121,7 @@ interface PersistedPlayerComparisonState {
   statsTableYears: string[];
   statsTablePosition: string;
   statsTableTeam: string;
+  statsTableMinGames: string;
   statsTableSort: {
     column: PlayerStatsTableSortKey;
     direction: PlayerStatsTableSortDirection;
@@ -865,6 +885,7 @@ export function PlayerComparison({
   );
   const [statsTablePosition, setStatsTablePosition] = useState("All Positions");
   const [statsTableTeam, setStatsTableTeam] = useState("All Teams");
+  const [statsTableMinGames, setStatsTableMinGames] = useState("Any");
   const [statsTableSearch, setStatsTableSearch] = useState("");
   const [statsTableFiltersOpen, setStatsTableFiltersOpen] = useState(false);
   const [statsTableSort, setStatsTableSort] = useState<{
@@ -1004,7 +1025,9 @@ export function PlayerComparison({
       byPlayer.set(row.Name, rows);
     }
 
-    return [...byPlayer.entries()].map(([name, rows]) => {
+    const minGames = minGamesValue(statsTableMinGames);
+
+    return [...byPlayer.entries()].filter(([, rows]) => rows.length >= minGames).map(([name, rows]) => {
       const averages: Partial<Record<PlayerStatsTableStatKey, number | null>> = {};
       const totals: Partial<Record<PlayerStatsTableStatKey, number | null>> = {};
       for (const stat of PLAYER_STATS_TABLE_COLUMNS) {
@@ -1024,7 +1047,7 @@ export function PlayerComparison({
         totals,
       };
     });
-  }, [playerImages, statsTablePosition, statsTableSearch, statsTableSourceRows, statsTableTeam]);
+  }, [playerImages, statsTableMinGames, statsTablePosition, statsTableSearch, statsTableSourceRows, statsTableTeam]);
 
   const sortedStatsTableRows = useMemo(() => {
     const getSortValue = (row: PlayerStatsTableRow): number | string | null => {
@@ -1034,7 +1057,7 @@ export function PlayerComparison({
       if (statsTableSort.column === "games") return row.games;
 
       const statKey = statsTableSort.column.slice("stat:".length) as PlayerStatsTableStatKey;
-      return statsTableValueMode === "Total" ? row.totals[statKey] ?? null : row.averages[statKey] ?? null;
+      return playerStatsTableValue(row, statKey, statsTableValueMode);
     };
 
     return [...statsTableRows].sort((a, b) => {
@@ -1099,6 +1122,9 @@ export function PlayerComparison({
       }
       if (typeof saved.statsTablePosition === "string") setStatsTablePosition(saved.statsTablePosition);
       if (typeof saved.statsTableTeam === "string") setStatsTableTeam(saved.statsTableTeam);
+      if (STATS_TABLE_MIN_GAMES_OPTIONS.includes(saved.statsTableMinGames as (typeof STATS_TABLE_MIN_GAMES_OPTIONS)[number])) {
+        setStatsTableMinGames(saved.statsTableMinGames as (typeof STATS_TABLE_MIN_GAMES_OPTIONS)[number]);
+      }
       if (
         typeof sortColumn === "string" &&
         validSortColumns.has(sortColumn) &&
@@ -1216,6 +1242,7 @@ export function PlayerComparison({
       statsTableYears,
       statsTablePosition,
       statsTableTeam,
+      statsTableMinGames,
       statsTableSort,
       statsTableValueMode,
       finalsMode,
@@ -1255,6 +1282,7 @@ export function PlayerComparison({
     selectedYears,
     stat1,
     stat2,
+    statsTableMinGames,
     statsTablePosition,
     statsTableSort,
     statsTableTeam,
@@ -1979,6 +2007,7 @@ export function PlayerComparison({
                 statsTableFiltersOpen ||
                 statsTablePosition !== "All Positions" ||
                 statsTableTeam !== "All Teams" ||
+                statsTableMinGames !== "Any" ||
                 statsTableYears.length !== 1 ||
                 statsTableYears[0] !== DEFAULT_STATS_TABLE_YEAR
                   ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
@@ -1995,7 +2024,7 @@ export function PlayerComparison({
             </button>
           </div>
           {statsTableFiltersOpen ? (
-            <div className="grid gap-3 border-b border-nrl-border bg-nrl-accent/10 px-3 py-3 md:grid-cols-[minmax(220px,320px)_150px_150px]">
+            <div className="grid gap-3 border-b border-nrl-border bg-nrl-accent/10 px-3 py-3 md:grid-cols-[minmax(220px,320px)_150px_150px_130px]">
               <FilterBar
                 years={availableYears}
                 selectedYears={statsTableYears}
@@ -2024,6 +2053,12 @@ export function PlayerComparison({
                 value={statsTableTeam}
                 options={statsTableTeamOptions}
                 onChange={setStatsTableTeam}
+              />
+              <Select
+                label="Min Games"
+                value={statsTableMinGames}
+                options={[...STATS_TABLE_MIN_GAMES_OPTIONS]}
+                onChange={setStatsTableMinGames}
               />
             </div>
           ) : null}
@@ -2122,7 +2157,7 @@ export function PlayerComparison({
                           className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted last:border-r-0"
                         >
                           {formatTableNumber(
-                            statsTableValueMode === "Total" ? row.totals[stat] ?? null : row.averages[stat] ?? null
+                            playerStatsTableValue(row, stat, statsTableValueMode)
                           )}
                         </td>
                       ))}

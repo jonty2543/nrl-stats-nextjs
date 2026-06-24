@@ -165,6 +165,7 @@ export function TeamComparison({
     direction: TeamStatsTableSortDirection;
   }>({ column: "stat:Points", direction: "desc" });
   const [teamStatsTableValueMode, setTeamStatsTableValueMode] = useState<TeamStatsTableValueMode>("Average");
+  const [teamStatsTableFiltersOpen, setTeamStatsTableFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(
     initialData.length === 0 && initialYears.length > 0
   );
@@ -206,6 +207,7 @@ export function TeamComparison({
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minMinutes, setMinMinutes] = useState(0);
   const [minutesMode, setMinutesMode] = useState("All");
+  const [comparisonFiltersOpen, setComparisonFiltersOpen] = useState(false);
 
   const dfYear = useMemo(
     () => filterTeamRowsByYear(allData, selectedYears),
@@ -697,8 +699,45 @@ export function TeamComparison({
     <div className="space-y-4">
       {allData.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
-          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-3 py-2">
-            <div className="grid w-full grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)] items-end gap-2 md:w-auto md:grid-cols-[minmax(220px,320px)_150px_150px]">
+          <div className="flex min-h-[44px] items-center justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-5 py-1.5">
+            <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
+              <PillRadio
+                options={["Average", "Total"]}
+                value={teamStatsTableValueMode}
+                onChange={(value) => setTeamStatsTableValueMode(value as TeamStatsTableValueMode)}
+              />
+              <div className="w-36 shrink-0">
+                <Select
+                  label="Group"
+                  value={teamStatsTableGroupBy}
+                  options={[...TEAM_STATS_TABLE_GROUP_OPTIONS]}
+                  onChange={(value) => setTeamStatsTableGroupBy(value as TeamStatsTableGroupBy)}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTeamStatsTableFiltersOpen((open) => !open)}
+              className={`relative inline-grid h-9 w-9 shrink-0 place-items-center rounded-full border transition-colors ${
+                teamStatsTableFiltersOpen ||
+                teamStatsTableTeam !== "All Teams" ||
+                teamStatsTableYears.length !== initialYears.length ||
+                teamStatsTableYears.some((year, index) => year !== initialYears[index])
+                  ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                  : "border-nrl-border bg-nrl-panel text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+              }`}
+              aria-expanded={teamStatsTableFiltersOpen}
+              aria-label="Filters"
+            >
+              <span className="flex flex-col gap-0.5" aria-hidden="true">
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+              </span>
+            </button>
+          </div>
+          {teamStatsTableFiltersOpen ? (
+            <div className="grid gap-3 border-b border-nrl-border bg-nrl-accent/10 px-3 py-3 md:grid-cols-[minmax(220px,320px)_150px]">
               <FilterBar
                 years={availableYears}
                 selectedYears={teamStatsTableYears}
@@ -722,21 +761,8 @@ export function TeamComparison({
                 options={teamStatsTableTeamOptions}
                 onChange={setTeamStatsTableTeam}
               />
-              <Select
-                label="Group"
-                value={teamStatsTableGroupBy}
-                options={[...TEAM_STATS_TABLE_GROUP_OPTIONS]}
-                onChange={(value) => setTeamStatsTableGroupBy(value as TeamStatsTableGroupBy)}
-              />
             </div>
-            <div className="flex items-end">
-              <PillRadio
-                options={["Average", "Total"]}
-                value={teamStatsTableValueMode}
-                onChange={(value) => setTeamStatsTableValueMode(value as TeamStatsTableValueMode)}
-              />
-            </div>
-          </div>
+          ) : null}
           <div className="h-[396px] overflow-auto pb-3">
             <table className="min-w-[2200px] border-collapse text-left text-xs">
               <thead>
@@ -850,37 +876,67 @@ export function TeamComparison({
           </div>
         </section>
       )}
-      <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Team Comparison</div>
-      <FilterBar
-        years={availableYears}
-        selectedYears={selectedYears}
-        onYearsChange={handleYearsChange}
-        finalsMode={finalsMode}
-        onFinalsModeChange={setFinalsMode}
-        minutesThreshold={minMinutes}
-        onMinutesThresholdChange={setMinMinutes}
-        minutesMode={minutesMode}
-        onMinutesModeChange={setMinutesMode}
-        showPosition={false}
-        showMinutes={false}
-      />
-      <div className="rounded-md border border-nrl-border bg-nrl-panel p-2">
-        <TeamSelectors
-          teamList={teamList}
-          team1={effectiveT1}
-          onTeam1Change={setTeam1}
-          team1Perspective={team1Perspective}
-          onTeam1PerspectiveChange={setTeam1Perspective}
-          team2={team2}
-          onTeam2Change={setTeam2}
-          team2Perspective={team2Perspective}
-          onTeam2PerspectiveChange={setTeam2Perspective}
-          statList={statList}
-          stat1={stat1}
-          onStat1Change={setStat1}
-          stat2={stat2}
-          onStat2Change={setStat2}
-        />
+      <div className="rounded-md border border-nrl-border bg-nrl-panel p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs font-bold uppercase tracking-wide text-nrl-accent">Team Comparison</div>
+          <button
+            type="button"
+            onClick={() => setComparisonFiltersOpen((open) => !open)}
+            className={`relative inline-grid h-9 w-9 shrink-0 place-items-center rounded-full border transition-colors ${
+              comparisonFiltersOpen ||
+              finalsMode !== "Yes" ||
+              minMinutes !== 0 ||
+              minutesMode !== "All" ||
+              selectedYears.length !== initialYears.length ||
+              selectedYears.some((year, index) => year !== initialYears[index])
+                ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+            }`}
+            aria-expanded={comparisonFiltersOpen}
+            aria-label="Filters"
+          >
+            <span className="flex flex-col gap-0.5" aria-hidden="true">
+              <span className="block h-0.5 w-5 rounded-full bg-current" />
+              <span className="block h-0.5 w-5 rounded-full bg-current" />
+              <span className="block h-0.5 w-5 rounded-full bg-current" />
+            </span>
+          </button>
+        </div>
+        {comparisonFiltersOpen ? (
+          <div className="mt-3 border-t border-nrl-border pt-3">
+            <FilterBar
+              years={availableYears}
+              selectedYears={selectedYears}
+              onYearsChange={handleYearsChange}
+              finalsMode={finalsMode}
+              onFinalsModeChange={setFinalsMode}
+              minutesThreshold={minMinutes}
+              onMinutesThresholdChange={setMinMinutes}
+              minutesMode={minutesMode}
+              onMinutesModeChange={setMinutesMode}
+              showPosition={false}
+              showMinutes={false}
+            />
+          </div>
+        ) : null}
+        <div className="mt-3">
+          <TeamSelectors
+            teamList={teamList}
+            team1={effectiveT1}
+            onTeam1Change={setTeam1}
+            team1Perspective={team1Perspective}
+            onTeam1PerspectiveChange={setTeam1Perspective}
+            team2={team2}
+            onTeam2Change={setTeam2}
+            team2Perspective={team2Perspective}
+            onTeam2PerspectiveChange={setTeam2Perspective}
+            statList={statList}
+            stat1={stat1}
+            onStat1Change={setStat1}
+            stat2={stat2}
+            onStat2Change={setStat2}
+          />
+        </div>
       </div>
       {loading && (
         <div className="flex justify-center py-6 md:py-8">

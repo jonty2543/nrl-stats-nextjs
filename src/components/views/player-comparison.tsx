@@ -964,6 +964,7 @@ export function PlayerComparison({
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any");
   const [minutesUnderFilter, setMinutesUnderFilter] = useState<string>("Any");
+  const [analysisFiltersOpen, setAnalysisFiltersOpen] = useState(false);
   const [percentileScope, setPercentileScope] = useState<PercentileScope>("Position");
 
   // Filter pipeline
@@ -2290,10 +2291,37 @@ export function PlayerComparison({
       </div>
       {allData.length > 0 && (
         <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
-            Filters & Analysis
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
+              Filters & Analysis
+            </div>
+            <button
+              type="button"
+              onClick={() => setAnalysisFiltersOpen((open) => !open)}
+              className={`relative inline-grid h-9 w-9 shrink-0 place-items-center rounded-full border transition-colors ${
+                analysisFiltersOpen ||
+                finalsMode !== "Yes" ||
+                minutesOverFilter !== "Any" ||
+                minutesUnderFilter !== "Any" ||
+                player1Position !== "All" ||
+                player2Position !== "All" ||
+                teammate1 !== "None" ||
+                teammate2 !== "None"
+                  ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                  : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+              }`}
+              aria-expanded={analysisFiltersOpen}
+              aria-label="Filters"
+            >
+              <span className="flex flex-col gap-0.5" aria-hidden="true">
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+              </span>
+            </button>
           </div>
 
+          {analysisFiltersOpen ? (
           <div className="mt-4">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
               Analysis Filters
@@ -2415,8 +2443,9 @@ export function PlayerComparison({
               </>
             </div>
           </div>
+          ) : null}
 
-          <div className="mt-6 border-t border-nrl-border pt-4">
+          <div className={`${analysisFiltersOpen ? "mt-6 border-t border-nrl-border pt-4" : "mt-4"}`}>
             <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
@@ -2428,7 +2457,7 @@ export function PlayerComparison({
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-              <div className="rounded-lg border border-nrl-border bg-nrl-panel p-3">
+              <div className="self-start rounded-lg border border-nrl-border bg-nrl-panel p-3">
                 <div className={`grid gap-3 ${hasTwoPlayers ? "md:grid-cols-2 xl:grid-cols-1" : ""}`}>
                   {entities.map((e, i) => {
                     const imageRow = i === 0 ? p1CardImage : p2CardImage;

@@ -867,6 +867,7 @@ function PlayerStatsTableThumbnail({
 export function PlayerComparison({
   initialData,
   playerImages,
+  teamLogos,
   availableYears,
   defaultYears,
   initialCanAccessLoginSeason = false,

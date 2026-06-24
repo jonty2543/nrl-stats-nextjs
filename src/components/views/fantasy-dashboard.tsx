@@ -2289,19 +2289,24 @@ function FantasyAnalyticsScatterPlot({
   }
 
   return (
-    <div className="space-y-2">
-      <label className="flex min-w-0 items-center rounded border border-nrl-border bg-nrl-panel px-2 py-1">
-        <input
-          type="range"
-          min={FANTASY_ANALYTICS_MIN_ZOOM}
-          max={FANTASY_ANALYTICS_MAX_ZOOM}
-          step={FANTASY_ANALYTICS_ZOOM_STEP}
-          value={zoom}
-          onChange={(event) => handleZoomChange(Number(event.currentTarget.value))}
-          className="w-full accent-nrl-accent"
-          aria-label="Priced at plot zoom"
-        />
-      </label>
+    <div className="space-y-3">
+      <div
+        className="grid pb-2 pt-1"
+        style={{ gridTemplateColumns: `${left}fr minmax(0, ${plotWidth}fr) ${right}fr` }}
+      >
+        <label className="col-start-2 flex min-w-0 items-center rounded border border-nrl-border bg-nrl-panel px-3 py-2">
+          <input
+            type="range"
+            min={FANTASY_ANALYTICS_MIN_ZOOM}
+            max={FANTASY_ANALYTICS_MAX_ZOOM}
+            step={FANTASY_ANALYTICS_ZOOM_STEP}
+            value={zoom}
+            onChange={(event) => handleZoomChange(Number(event.currentTarget.value))}
+            className="w-full accent-nrl-accent"
+            aria-label="Priced at plot zoom"
+          />
+        </label>
+      </div>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
@@ -3441,6 +3446,7 @@ export function FantasyDashboard({
   const [allPlayersProjectionRange, setAllPlayersProjectionRange] = useState<NumberRange>(ALL_PLAYERS_SCORE_RANGE)
   const [allPlayersBreakevenRange, setAllPlayersBreakevenRange] = useState<NumberRange>(ALL_PLAYERS_BREAKEVEN_RANGE)
   const [allPlayersFiltersOpen, setAllPlayersFiltersOpen] = useState(false)
+  const [fantasyAnalyticsFiltersOpen, setFantasyAnalyticsFiltersOpen] = useState(false)
   const deferredAllPlayersPriceRange = useDeferredValue(allPlayersPriceRange)
   const deferredAllPlayersOwnershipRange = useDeferredValue(allPlayersOwnershipRange)
   const deferredAllPlayersAverageRange = useDeferredValue(allPlayersAverageRange)
@@ -5005,6 +5011,17 @@ export function FantasyDashboard({
     (isFullNumberRange(allPlayersLast3Range, ALL_PLAYERS_SCORE_RANGE) ? 0 : 1) +
     (hasFantasyPlotAccess && !isFullNumberRange(allPlayersProjectionRange, ALL_PLAYERS_SCORE_RANGE) ? 1 : 0) +
     (hasFantasyPlotAccess && !isFullNumberRange(allPlayersBreakevenRange, ALL_PLAYERS_BREAKEVEN_RANGE) ? 1 : 0)
+  const clearAllPlayersFilters = useCallback(() => {
+    setAllPlayersPositionFilters([])
+    setAllPlayersTagFilters([])
+    setAllPlayersTeamFilters([])
+    setAllPlayersPriceRange(ALL_PLAYERS_PRICE_RANGE)
+    setAllPlayersOwnershipRange(ALL_PLAYERS_OWNERSHIP_RANGE)
+    setAllPlayersAverageRange(ALL_PLAYERS_SCORE_RANGE)
+    setAllPlayersLast3Range(ALL_PLAYERS_SCORE_RANGE)
+    setAllPlayersProjectionRange(ALL_PLAYERS_SCORE_RANGE)
+    setAllPlayersBreakevenRange(ALL_PLAYERS_BREAKEVEN_RANGE)
+  }, [])
 
   const toggleAllPlayersSort = useCallback((column: AllPlayersSortKey, disabled = false) => {
     if (disabled) return
@@ -5864,7 +5881,140 @@ export function FantasyDashboard({
                       </div>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setFantasyAnalyticsFiltersOpen((open) => !open)}
+                    className={`relative inline-grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full border transition-colors ${
+                      fantasyAnalyticsFiltersOpen || activeAllPlayersFilterCount > 0
+                        ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                        : "border-nrl-border bg-nrl-panel text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+                    }`}
+                    aria-expanded={fantasyAnalyticsFiltersOpen}
+                    aria-label="Fantasy analytics filters"
+                  >
+                    <span className="flex flex-col gap-0.5" aria-hidden="true">
+                      <span className="block h-0.5 w-3.5 rounded-full bg-current" />
+                      <span className="block h-0.5 w-3.5 rounded-full bg-current" />
+                      <span className="block h-0.5 w-3.5 rounded-full bg-current" />
+                    </span>
+                    {activeAllPlayersFilterCount > 0 ? (
+                      <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full border border-nrl-panel bg-nrl-accent px-1 text-[8px] font-black text-[#07131f]">
+                        {activeAllPlayersFilterCount}
+                      </span>
+                    ) : null}
+                  </button>
                 </div>
+                {fantasyAnalyticsFiltersOpen ? (
+                  <div className="mb-3 rounded-lg border border-nrl-border bg-nrl-panel px-3 py-3">
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-3 md:grid-cols-3 xl:grid-cols-5">
+                      <div>
+                        <MultiSelect
+                          label="Position"
+                          value={allPlayersPositionFilters}
+                          options={POSITION_TABLES.map((position) => position.label)}
+                          onChange={setAllPlayersPositionFilters}
+                          placeholder="All Positions"
+                        />
+                      </div>
+                      <div>
+                        <MultiSelect
+                          label="Team"
+                          value={allPlayersTeamFilters}
+                          options={allPlayersTeamFilterOptions}
+                          onChange={setAllPlayersTeamFilters}
+                          placeholder="All Teams"
+                        />
+                      </div>
+                      <div>
+                        <MultiSelect
+                          label="Tags"
+                          value={allPlayersTagFilters}
+                          options={allPlayersTagFilterOptions}
+                          onChange={setAllPlayersTagFilters}
+                          placeholder="All Tags"
+                        />
+                      </div>
+                      <div>
+                        <RangeFilter
+                          label="Price"
+                          value={allPlayersPriceRange}
+                          bounds={ALL_PLAYERS_PRICE_RANGE}
+                          step={10000}
+                          formatValue={(value) => `$${Math.round(value / 1000)}k`}
+                          onChange={setAllPlayersPriceRange}
+                        />
+                      </div>
+                      <div>
+                        <RangeFilter
+                          label="Ownership"
+                          value={allPlayersOwnershipRange}
+                          bounds={ALL_PLAYERS_OWNERSHIP_RANGE}
+                          step={1}
+                          formatValue={(value) => `${value}%`}
+                          onChange={setAllPlayersOwnershipRange}
+                        />
+                      </div>
+                      <div>
+                        <RangeFilter
+                          label="Avg"
+                          value={allPlayersAverageRange}
+                          bounds={ALL_PLAYERS_SCORE_RANGE}
+                          step={1}
+                          formatValue={(value) => `${value}`}
+                          onChange={setAllPlayersAverageRange}
+                        />
+                      </div>
+                      <div>
+                        <RangeFilter
+                          label="Last 3"
+                          value={allPlayersLast3Range}
+                          bounds={ALL_PLAYERS_SCORE_RANGE}
+                          step={1}
+                          formatValue={(value) => `${value}`}
+                          onChange={setAllPlayersLast3Range}
+                        />
+                      </div>
+                      {hasFantasyPlotAccess ? (
+                        <>
+                          <div>
+                            <RangeFilter
+                              label="Proj"
+                              value={allPlayersProjectionRange}
+                              bounds={ALL_PLAYERS_SCORE_RANGE}
+                              step={1}
+                              formatValue={(value) => `${value}`}
+                              onChange={setAllPlayersProjectionRange}
+                            />
+                          </div>
+                          <div>
+                            <RangeFilter
+                              label="BE"
+                              value={allPlayersBreakevenRange}
+                              bounds={ALL_PLAYERS_BREAKEVEN_RANGE}
+                              step={1}
+                              formatValue={(value) => `${value}`}
+                              onChange={setAllPlayersBreakevenRange}
+                            />
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                        {pricedAtProjectionPoints.length} plotted
+                      </div>
+                      {activeAllPlayersFilterCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={clearAllPlayersFilters}
+                          className="min-h-[30px] rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 text-[10px] font-bold uppercase tracking-wide text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-accent"
+                        >
+                          Clear {activeAllPlayersFilterCount}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 {pricedAtProjectionPoints.length > 0 ? (
                   <FantasyAnalyticsScatterPlot
                     key={`${allPlayersPositionFilters.join(",") || "all"}-${fantasyAnalyticsMetric}`}
@@ -6275,17 +6425,7 @@ export function FantasyDashboard({
                   {activeAllPlayersFilterCount > 0 ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        setAllPlayersPositionFilters([])
-                        setAllPlayersTagFilters([])
-                        setAllPlayersTeamFilters([])
-                        setAllPlayersPriceRange(ALL_PLAYERS_PRICE_RANGE)
-                        setAllPlayersOwnershipRange(ALL_PLAYERS_OWNERSHIP_RANGE)
-                        setAllPlayersAverageRange(ALL_PLAYERS_SCORE_RANGE)
-                        setAllPlayersLast3Range(ALL_PLAYERS_SCORE_RANGE)
-                        setAllPlayersProjectionRange(ALL_PLAYERS_SCORE_RANGE)
-                        setAllPlayersBreakevenRange(ALL_PLAYERS_BREAKEVEN_RANGE)
-                      }}
+                      onClick={clearAllPlayersFilters}
                       className="min-h-[30px] rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 text-[10px] font-bold uppercase tracking-wide text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-accent"
                     >
                       Clear {activeAllPlayersFilterCount}

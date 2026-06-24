@@ -6098,26 +6098,24 @@ export function FantasyDashboard({
                       i
                     </button>
                     {showAllPlayersTradeRatingInfo ? <TradeRatingInfoPopover /> : null}
+                    <button
+                      type="button"
+                      onClick={() => setAllPlayersFiltersOpen((open) => !open)}
+                      className={`relative inline-grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full border transition-colors ${
+                        allPlayersFiltersOpen || activeAllPlayersFilterCount > 0
+                          ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                          : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
+                      }`}
+                      aria-expanded={allPlayersFiltersOpen}
+                      aria-label="Filters"
+                    >
+                      <span className="flex flex-col gap-0.5" aria-hidden="true">
+                        <span className="block h-0.5 w-3.5 rounded-full bg-current" />
+                        <span className="block h-0.5 w-3.5 rounded-full bg-current" />
+                        <span className="block h-0.5 w-3.5 rounded-full bg-current" />
+                      </span>
+                    </button>
                   </div>
-                </div>
-                <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setAllPlayersFiltersOpen((open) => !open)}
-                    className={`relative inline-grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border transition-colors ${
-                      allPlayersFiltersOpen || activeAllPlayersFilterCount > 0
-                        ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
-                        : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
-                    }`}
-                    aria-expanded={allPlayersFiltersOpen}
-                    aria-label="Filters"
-                  >
-                    <span className="flex flex-col gap-0.5" aria-hidden="true">
-                      <span className="block h-0.5 w-4 rounded-full bg-current" />
-                      <span className="block h-0.5 w-4 rounded-full bg-current" />
-                      <span className="block h-0.5 w-4 rounded-full bg-current" />
-                    </span>
-                  </button>
                 </div>
               </div>
             ) : (
@@ -6536,6 +6534,9 @@ export function FantasyDashboard({
                         <div className="min-w-0 shrink-0 md:w-64">
                           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                             <div className="min-w-0 truncate text-[13px] font-bold text-nrl-text">{row.player.name}</div>
+                          </div>
+                          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                            <span>{row.player.positionLabel}</span>
                             {showAllPlayersCardTags ? (
                               <PlayerContextTags
                                 majorByeRoundTags={row.majorByeRoundTags}
@@ -6544,9 +6545,6 @@ export function FantasyDashboard({
                                 originChance={row.originChance}
                               />
                             ) : null}
-                          </div>
-                          <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
-                            <span>{row.player.positionLabel}</span>
                           </div>
                         </div>
                         {!hasLoadedFullAllPlayersRows ? (

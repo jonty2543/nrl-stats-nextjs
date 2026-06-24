@@ -3108,6 +3108,9 @@ export function BettingDashboard({
                       type="button"
                       onClick={() => {
                         setManualError(null);
+                        setManualBetType("single");
+                        setManualOdds("1.90");
+                        setManualOddsEdited(false);
                         setQuickAddOpen(true);
                       }}
                       className="cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12"
@@ -3264,25 +3267,8 @@ export function BettingDashboard({
               </button>
             </div>
 
-            <div className="mt-4 flex rounded-md border border-white/10 bg-[#0e1530] p-1">
-              {(["single", "multi", "sgm"] as TrackedBetType[]).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => {
-                    setManualBetType(type);
-                    setManualError(null);
-                    setManualOddsEdited(false);
-                    if (type === "single") setManualOdds("1.90");
-                    if (type === "sgm") setManualOdds("");
-                  }}
-                  className={`h-8 flex-1 rounded px-2 text-[10px] font-bold uppercase tracking-[0.12em] ${
-                    manualBetType === type ? "bg-emerald-400/12 text-emerald-300" : "text-nrl-muted"
-                  }`}
-                >
-                  {betTypeLabel(type)}
-                </button>
-              ))}
+            <div className="mt-4 rounded-md border border-white/10 bg-[#0e1530] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+              Single bets only for now
             </div>
 
             {manualBetType === "single" ? (
@@ -3636,10 +3622,14 @@ function BestBetsHero({
   const bestBetSlipEdgePp = bestBetSlip && bestBetSlipImplied != null
     ? (bestBetSlip.bet.modelProbability - bestBetSlipImplied) * 100
     : null;
-  const canConfirmBestBetSlip = bestBetSlip != null
-    && bestBetSlip.odds > 1
-    && Number.isFinite(bestBetSlip.stake)
-    && bestBetSlip.stake > 0;
+  const [bestBetSubmitAttempted, setBestBetSubmitAttempted] = useState(false);
+  const bestBetSlipError = (() => {
+    if (!bestBetSlip) return null;
+    if (!Number.isFinite(bestBetSlip.odds) || bestBetSlip.odds <= 1) return "Odds must be greater than 1.";
+    if (!Number.isFinite(bestBetSlip.stake) || bestBetSlip.stake <= 0) return "Stake must be greater than 0.";
+    return null;
+  })();
+  const canConfirmBestBetSlip = bestBetSlip != null;
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNowMs(Date.now()), 30_000);
@@ -3892,6 +3882,7 @@ function BestBetsHero({
                       onClick={(event) => {
                         event.stopPropagation();
                         const bet = featuredItem as BestBetCandidate;
+                        setBestBetSubmitAttempted(false);
                         setBestBetSlip({
                           bet,
                           odds: bet.odds,
@@ -4095,7 +4086,7 @@ function BestBetsHero({
               </div>
               <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className="mt-0.5 inline-flex items-center gap-1 font-semibold text-emerald-300">
+                <div className={`mt-0.5 inline-flex items-center gap-1 font-semibold ${bestBetSlipEdgePp != null && bestBetSlipEdgePp < 0 ? "text-red-300" : "text-emerald-300"}`}>
                   <span>{bestBetSlipEdgePp == null ? "-" : `${bestBetSlipEdgePp >= 0 ? "+" : ""}${bestBetSlipEdgePp.toFixed(2)}`}</span>
                   {isSuspiciousEdge(bestBetSlipEdgePp) ? <SuspiciousEdgeCaution /> : null}
                 </div>
@@ -4105,6 +4096,12 @@ function BestBetsHero({
             {isSuspiciousEdge(bestBetSlipEdgePp) ? (
               <div className="mt-3">
                 <SuspiciousEdgeNotice />
+              </div>
+            ) : null}
+
+            {bestBetSubmitAttempted && bestBetSlipError ? (
+              <div className="mt-3 rounded-md border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">
+                {bestBetSlipError}
               </div>
             ) : null}
 
@@ -4120,7 +4117,8 @@ function BestBetsHero({
                 type="button"
                 disabled={!canConfirmBestBetSlip}
                 onClick={() => {
-                  if (!bestBetSlip || !canConfirmBestBetSlip) return;
+                  setBestBetSubmitAttempted(true);
+                  if (!bestBetSlip || bestBetSlipError) return;
                   void onAddBet({
                     market: bestBetSlip.bet.market,
                     matchDate: bestBetSlip.bet.date,
@@ -4506,6 +4504,7 @@ function MarketSection({
     return [...sources];
   }, [activeGroups, market, playerImages, playerTeamsByName, tryscorerFormByPlayer, tryscorerValueByGroup]);
   const visibleTryscorerImagesReady = useBatchedImagePreload(visibleTryscorerImageSources);
+  const [mobileSlipSubmitAttempted, setMobileSlipSubmitAttempted] = useState(false);
 
   if (activeGroups.length === 0) {
     return (
@@ -4530,86 +4529,14 @@ function MarketSection({
   const mobileSlipEdgePp = mobileBetSlip?.modelProb != null && mobileSlipImplied != null
     ? (mobileBetSlip.modelProb - mobileSlipImplied) * 100
     : null;
-  const mobileSlipParsedLegs = mobileBetSlip ? parseManualLegs(mobileBetSlip.legs) : [];
   const mobileSlipError = (() => {
     if (!mobileBetSlip) return null;
     if (!Number.isFinite(mobileBetSlip.odds) || mobileBetSlip.odds <= 1) return "Odds must be greater than 1.";
     if (!Number.isFinite(mobileBetSlip.stake) || mobileBetSlip.stake <= 0) return "Stake must be greater than 0.";
-    if (mobileBetSlip.betType === "single") return null;
-    if (mobileSlipParsedLegs.length !== mobileBetSlip.legs.length) {
-      return "Each leg needs a date, match, selection, and odds greater than 1.";
-    }
-    if (mobileSlipParsedLegs.length < 2) {
-      return `${mobileBetSlip.betType === "sgm" ? "SGM" : "Multi"} bets need at least 2 legs.`;
-    }
-    const gameKeys = new Set(mobileSlipParsedLegs.map((leg) => `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}`));
-    if (mobileBetSlip.betType === "multi" && gameKeys.size !== mobileSlipParsedLegs.length) {
-      return "Use SGM for legs from the same game. Multis must use different games.";
-    }
-    if (mobileBetSlip.betType === "sgm" && gameKeys.size !== 1) {
-      return "SGM legs must be from the same game.";
-    }
     return null;
   })();
-  const canConfirmMobileSlip = mobileBetSlip != null && mobileSlipError == null;
+  const canConfirmMobileSlip = mobileBetSlip != null;
   const showGameJumpSidebar = activeGroups.length > 1;
-
-  const buildBlankMobileLeg = (slip: MobileBetSlip, type = slip.betType) => createBetSlipLegDraft({
-    market: slip.market,
-    matchDate: slip.date,
-    matchName: type === "sgm" ? slip.match : "",
-    odds: 1.9,
-  });
-
-  const normalizeMobileSlipOdds = (slip: MobileBetSlip): MobileBetSlip => {
-    if (slip.betType !== "multi") return slip;
-    const odds = combinedMultiOdds(parseManualLegs(slip.legs));
-    return odds == null ? slip : { ...slip, odds };
-  };
-
-  const setMobileBetSlipType = (type: TrackedBetType) => {
-    setMobileBetSlip((current) => {
-      if (!current) return current;
-      let legs = current.legs.length > 0
-        ? current.legs
-        : [createBetSlipLegDraft({
-          market: current.market,
-          matchDate: current.date,
-          matchName: current.match,
-          selection: current.selection,
-          lineValue: current.lineValue,
-          odds: current.odds,
-        })];
-      if (type !== "single") {
-        while (legs.length < 2) legs = [...legs, buildBlankMobileLeg(current, type)];
-      }
-      return normalizeMobileSlipOdds({ ...current, betType: type, legs });
-    });
-  };
-
-  const updateMobileBetSlipLeg = (id: string, updates: Partial<ManualBetLegDraft>) => {
-    setMobileBetSlip((current) => {
-      if (!current) return current;
-      const legs = current.legs.map((leg) => (leg.id === id ? { ...leg, ...updates } : leg));
-      return normalizeMobileSlipOdds({ ...current, legs });
-    });
-  };
-
-  const addMobileBetSlipLeg = () => {
-    setMobileBetSlip((current) => {
-      if (!current) return current;
-      const betType = current.betType === "single" ? "multi" : current.betType;
-      const next = { ...current, betType, legs: [...current.legs, buildBlankMobileLeg(current, betType)] };
-      return normalizeMobileSlipOdds(next);
-    });
-  };
-
-  const removeMobileBetSlipLeg = (id: string) => {
-    setMobileBetSlip((current) => {
-      if (!current || current.betType === "single" || current.legs.length <= 2) return current;
-      return normalizeMobileSlipOdds({ ...current, legs: current.legs.filter((leg) => leg.id !== id) });
-    });
-  };
 
   return (
     <div className="space-y-4">
@@ -4910,6 +4837,7 @@ function MarketSection({
                               onClick={(event) => {
                                 event.stopPropagation();
                                 if (!canOpenMobileBet || oddsValue == null) return;
+                                setMobileSlipSubmitAttempted(false);
                                 setMobileBetSlip({
                                   key: betRowKey,
                                   betType: "single",
@@ -5268,6 +5196,7 @@ function MarketSection({
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     if (!canPlaceBet || oddsValue == null) return;
+                                    setMobileSlipSubmitAttempted(false);
                                     setMobileBetSlip({
                                       key: betRowKey,
                                       betType: "single",
@@ -5342,101 +5271,9 @@ function MarketSection({
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-1 rounded-md border border-white/8 bg-[#0e1530] p-1">
-              {(["single", "multi", "sgm"] as TrackedBetType[]).map((type) => (
-                <button
-                  key={`mobile-slip-${type}`}
-                  type="button"
-                  onClick={() => setMobileBetSlipType(type)}
-                  className={`h-8 cursor-pointer rounded text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
-                    mobileBetSlip.betType === type
-                      ? "bg-emerald-400/15 text-emerald-300"
-                      : "text-nrl-muted hover:bg-white/[0.04] hover:text-nrl-text"
-                  }`}
-                >
-                  {betTypeLabel(type)}
-                </button>
-              ))}
+            <div className="mt-4 rounded-md border border-white/8 bg-[#0e1530] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+              Single bets only for now
             </div>
-
-            {mobileBetSlip.betType !== "single" ? (
-              <div className="mt-4 space-y-2">
-                {mobileBetSlip.legs.map((leg, index) => (
-                  <div key={leg.id} className="rounded-lg border border-white/8 bg-[#0e1530] p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Leg {index + 1}</div>
-                      <button
-                        type="button"
-                        onClick={() => removeMobileBetSlipLeg(leg.id)}
-                        disabled={mobileBetSlip.legs.length <= 2}
-                        className="cursor-pointer rounded border border-white/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <input
-                        type="date"
-                        value={leg.matchDate}
-                        onChange={(event) => updateMobileBetSlipLeg(leg.id, { matchDate: event.target.value })}
-                        className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
-                      />
-                      <select
-                        value={leg.market}
-                        onChange={(event) => updateMobileBetSlipLeg(leg.id, { market: event.target.value as BettingMarket })}
-                        className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40"
-                      >
-                        {MARKET_TABS.map((marketOption) => <option key={marketOption} value={marketOption}>{marketOption}</option>)}
-                      </select>
-                      <input
-                        type="text"
-                        value={leg.matchName}
-                        onChange={(event) => updateMobileBetSlipLeg(leg.id, { matchName: event.target.value })}
-                        placeholder="Match"
-                        className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40 sm:col-span-2"
-                      />
-                      <input
-                        type="text"
-                        value={leg.selection}
-                        onChange={(event) => updateMobileBetSlipLeg(leg.id, { selection: event.target.value })}
-                        placeholder="Selection"
-                        className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
-                      />
-                      <input
-                        type="number"
-                        value={leg.lineValue}
-                        onChange={(event) => updateMobileBetSlipLeg(leg.id, { lineValue: event.target.value })}
-                        placeholder="Line"
-                        className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
-                      />
-                      <input
-                        type="number"
-                        min={1.01}
-                        step={0.01}
-                        value={leg.odds}
-                        onChange={(event) => updateMobileBetSlipLeg(leg.id, { odds: event.target.value })}
-                        placeholder="Leg odds"
-                        className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
-                      />
-                      <input
-                        type="text"
-                        value={leg.bookie}
-                        onChange={(event) => updateMobileBetSlipLeg(leg.id, { bookie: event.target.value })}
-                        placeholder="Bookie optional"
-                        className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
-                      />
-                    </div>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addMobileBetSlipLeg}
-                  className="w-full cursor-pointer rounded-md border border-emerald-300/40 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:bg-emerald-400/12"
-                >
-                  Add Leg
-                </button>
-              </div>
-            ) : null}
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <label className="block">
@@ -5479,7 +5316,7 @@ function MarketSection({
               </div>
               <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className="mt-0.5 inline-flex items-center gap-1 font-semibold text-emerald-300">
+                <div className={`mt-0.5 inline-flex items-center gap-1 font-semibold ${mobileSlipEdgePp != null && mobileSlipEdgePp < 0 ? "text-red-300" : "text-emerald-300"}`}>
                   <span>{mobileSlipEdgePp == null ? "-" : `${mobileSlipEdgePp >= 0 ? "+" : ""}${mobileSlipEdgePp.toFixed(2)}`}</span>
                   {isSuspiciousEdge(mobileSlipEdgePp) ? <SuspiciousEdgeCaution /> : null}
                 </div>
@@ -5492,7 +5329,7 @@ function MarketSection({
               </div>
             ) : null}
 
-            {mobileSlipError ? (
+            {mobileSlipSubmitAttempted && mobileSlipError ? (
               <div className="mt-3 rounded-md border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">
                 {mobileSlipError}
               </div>
@@ -5510,32 +5347,22 @@ function MarketSection({
                 type="button"
                 disabled={!canConfirmMobileSlip}
                 onClick={() => {
-                  if (!mobileBetSlip || !canConfirmMobileSlip) return;
-                  if (mobileBetSlip.betType === "single") {
-                    onOddsOverride(mobileBetSlip.key, mobileBetSlip.odds);
-                    onStakeOverride(mobileBetSlip.key, mobileBetSlip.stake);
-                  }
-                  const firstLeg = mobileSlipParsedLegs[0];
-                  const isMultiLegBet = mobileBetSlip.betType !== "single";
+                  setMobileSlipSubmitAttempted(true);
+                  if (!mobileBetSlip || mobileSlipError) return;
+                  onOddsOverride(mobileBetSlip.key, mobileBetSlip.odds);
+                  onStakeOverride(mobileBetSlip.key, mobileBetSlip.stake);
                   void onAddBet({
-                    betType: mobileBetSlip.betType,
-                    market: isMultiLegBet && firstLeg ? firstLeg.market : mobileBetSlip.market,
-                    matchDate: isMultiLegBet && firstLeg ? firstLeg.matchDate : mobileBetSlip.date,
-                    matchName: isMultiLegBet
-                      ? mobileBetSlip.betType === "multi"
-                        ? "Multiple games"
-                        : firstLeg?.matchName ?? mobileBetSlip.match
-                      : mobileBetSlip.match,
-                    selection: isMultiLegBet
-                      ? `${mobileSlipParsedLegs.length}-leg ${betTypeLabel(mobileBetSlip.betType)}`
-                      : mobileBetSlip.selection,
-                    lineValue: isMultiLegBet ? null : mobileBetSlip.lineValue,
+                    betType: "single",
+                    market: mobileBetSlip.market,
+                    matchDate: mobileBetSlip.date,
+                    matchName: mobileBetSlip.match,
+                    selection: mobileBetSlip.selection,
+                    lineValue: mobileBetSlip.lineValue,
                     odds: mobileBetSlip.odds,
                     stake: mobileBetSlip.stake,
-                    modelProb: isMultiLegBet ? null : mobileBetSlip.modelProb,
+                    modelProb: mobileBetSlip.modelProb,
                     impliedProb: mobileSlipImplied,
-                    edgePp: isMultiLegBet ? null : mobileSlipEdgePp,
-                    legs: isMultiLegBet ? mobileSlipParsedLegs : undefined,
+                    edgePp: mobileSlipEdgePp,
                   });
                   setMobileBetSlip(null);
                 }}

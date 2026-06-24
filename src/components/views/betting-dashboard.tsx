@@ -226,6 +226,7 @@ interface MobileBetSlip {
 const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
 const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
 const DEFAULT_BETTING_MARKET: BettingMarket = "H2H";
+const TOTAL_MODEL_BETA_MARKET: BettingMarket = "Total";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const BETTING_PANEL_HEADER_CLASS = "text-[10px] font-bold uppercase tracking-[0.22em]";
@@ -1255,6 +1256,14 @@ function formatBestBetScore(score: number): string {
 
 function formatBestBetMarketLabel(market: BettingMarket): string {
   return market === "Tryscorer" ? "Tryscorers" : market;
+}
+
+function TotalModelBetaBadge() {
+  return (
+    <span className="rounded-full bg-nrl-accent/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-nrl-accent">
+      Beta
+    </span>
+  );
 }
 
 function createBookieRecord<T>(factory: () => T): Record<BettingBookie, T> {
@@ -3680,7 +3689,10 @@ function BestBetsHero({
                     : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
                 }`}
               >
-                {formatBestBetMarketLabel(market)}
+                <span className="inline-flex items-center gap-1.5">
+                  <span>{formatBestBetMarketLabel(market)}</span>
+                  {market === TOTAL_MODEL_BETA_MARKET ? <TotalModelBetaBadge /> : null}
+                </span>
                 <span className="ml-1 text-nrl-muted">{modelBetCountsByMarket[market]}</span>
               </button>
             );
@@ -4187,6 +4199,7 @@ function MarketTabsRail({
             >
               <span className="inline-flex items-center gap-2">
                 <span>{tab}</span>
+                {tab === TOTAL_MODEL_BETA_MARKET ? <TotalModelBetaBadge /> : null}
               </span>
             </button>
           );

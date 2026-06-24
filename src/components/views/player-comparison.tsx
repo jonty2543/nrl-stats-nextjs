@@ -48,8 +48,10 @@ interface PlayerComparisonProps {
 
 type PlayerStatsTableSortDirection = "asc" | "desc";
 type PlayerStatsTableValueMode = "Average" | "Total";
+type PlayerStatsTableGroupBy = "Player" | "Year + Player" | "Team + Player";
 type PlayerStatsTableStatKey = (typeof PLAYER_STATS)[number];
 type PlayerStatsTableSortKey =
+  | "year"
   | "name"
   | "team"
   | "position"
@@ -57,6 +59,8 @@ type PlayerStatsTableSortKey =
   | `stat:${PlayerStatsTableStatKey}`;
 
 interface PlayerStatsTableRow {
+  key: string;
+  year: string | null;
   name: string;
   team: string | null;
   position: string | null;
@@ -71,6 +75,7 @@ const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
 const DEFAULT_STATS_TABLE_YEAR = "2026";
 const PLAYER_COMPARISON_STATE_STORAGE_KEY = "nrl-stats:player-comparison-state:v1";
 const STATS_TABLE_MIN_GAMES_OPTIONS = ["1+", "5+", "10+", "20+", "50+", "100+"] as const;
+const PLAYER_STATS_TABLE_GROUP_OPTIONS: PlayerStatsTableGroupBy[] = ["Player", "Year + Player", "Team + Player"];
 
 const PLAYER_STATS_TABLE_COLUMNS = PLAYER_STATS;
 const NON_TOTAL_PLAYER_STATS = new Set<PlayerStatsTableStatKey>(
@@ -88,6 +93,11 @@ const PLAYER_STATS_TABLE_BASE_COLUMNS: Array<{
   { key: "position", label: "Pos", align: "center" },
   { key: "games", label: "Games", align: "center" },
 ];
+const PLAYER_STATS_TABLE_YEAR_COLUMN: {
+  key: PlayerStatsTableSortKey;
+  label: string;
+  align?: "left" | "center" | "right";
+} = { key: "year", label: "Year", align: "center" };
 
 function playerStatsTableValue(row: PlayerStatsTableRow, stat: PlayerStatsTableStatKey, mode: PlayerStatsTableValueMode): number | null {
   if (mode === "Total" && !NON_TOTAL_PLAYER_STATS.has(stat)) {
@@ -121,6 +131,7 @@ interface PersistedPlayerComparisonState {
   statsTablePosition: string;
   statsTableTeam: string;
   statsTableMinGames: string;
+  statsTableGroupBy: PlayerStatsTableGroupBy;
   statsTableSort: {
     column: PlayerStatsTableSortKey;
     direction: PlayerStatsTableSortDirection;
@@ -885,6 +896,7 @@ export function PlayerComparison({
   const [statsTablePosition, setStatsTablePosition] = useState("All Positions");
   const [statsTableTeam, setStatsTableTeam] = useState("All Teams");
   const [statsTableMinGames, setStatsTableMinGames] = useState("1+");
+  const [statsTableGroupBy, setStatsTableGroupBy] = useState<PlayerStatsTableGroupBy>("Player");
   const [statsTableSearch, setStatsTableSearch] = useState("");
   const [statsTableFiltersOpen, setStatsTableFiltersOpen] = useState(false);
   const [statsTableSort, setStatsTableSort] = useState<{
@@ -1016,17 +1028,26 @@ export function PlayerComparison({
       if (search && !row.Name.toLowerCase().includes(search)) return false;
       return true;
     });
-    const byPlayer = new Map<string, PlayerStat[]>();
+    const byGroup = new Map<string, PlayerStat[]>();
 
     for (const row of filteredRows) {
-      const rows = byPlayer.get(row.Name) ?? [];
+      const keyParts =
+        statsTableGroupBy === "Year + Player"
+          ? [row.Year, row.Name]
+          : statsTableGroupBy === "Team + Player"
+            ? [row.Team, row.Name]
+            : [row.Name];
+      const key = JSON.stringify(keyParts);
+      const rows = byGroup.get(key) ?? [];
       rows.push(row);
-      byPlayer.set(row.Name, rows);
+      byGroup.set(key, rows);
     }
 
     const minGames = minGamesValue(statsTableMinGames);
 
-    return [...byPlayer.entries()].filter(([, rows]) => rows.length >= minGames).map(([name, rows]) => {
+    return [...byGroup.entries()].filter(([, rows]) => rows.length >= minGames).map(([key, rows]) => {
+      const name = rows[0]?.Name ?? "";
+      const team = primaryTeamForRows(rows);
       const averages: Partial<Record<PlayerStatsTableStatKey, number | null>> = {};
       const totals: Partial<Record<PlayerStatsTableStatKey, number | null>> = {};
       for (const stat of PLAYER_STATS_TABLE_COLUMNS) {
@@ -1037,19 +1058,30 @@ export function PlayerComparison({
       }
 
       return {
+        key,
+        year: statsTableGroupBy === "Year + Player" ? rows[0]?.Year ?? null : null,
         name,
-        team: primaryTeamForRows(rows),
+        team,
         position: primaryPositionForRows(rows),
-        imageRow: resolvePlayerImage(name, primaryTeamForRows(rows), playerImages),
+        imageRow: resolvePlayerImage(name, team, playerImages),
         games: rows.length,
         averages,
         totals,
       };
     });
-  }, [playerImages, statsTableMinGames, statsTablePosition, statsTableSearch, statsTableSourceRows, statsTableTeam]);
+  }, [playerImages, statsTableGroupBy, statsTableMinGames, statsTablePosition, statsTableSearch, statsTableSourceRows, statsTableTeam]);
+
+  const statsTableBaseColumns = useMemo(
+    () =>
+      statsTableGroupBy === "Year + Player"
+        ? [PLAYER_STATS_TABLE_YEAR_COLUMN, ...PLAYER_STATS_TABLE_BASE_COLUMNS]
+        : PLAYER_STATS_TABLE_BASE_COLUMNS,
+    [statsTableGroupBy]
+  );
 
   const sortedStatsTableRows = useMemo(() => {
     const getSortValue = (row: PlayerStatsTableRow): number | string | null => {
+      if (statsTableSort.column === "year") return row.year;
       if (statsTableSort.column === "name") return row.name.toLowerCase();
       if (statsTableSort.column === "team") return row.team?.toLowerCase() ?? null;
       if (statsTableSort.column === "position") return row.position?.toLowerCase() ?? null;
@@ -1069,10 +1101,11 @@ export function PlayerComparison({
       const direction = statsTableSort.direction === "asc" ? 1 : -1;
       if (typeof aValue === "number" && typeof bValue === "number") {
         if (aValue !== bValue) return (aValue - bValue) * direction;
-        return a.name.localeCompare(b.name);
+        return a.name.localeCompare(b.name) || String(a.year ?? "").localeCompare(String(b.year ?? ""));
       }
 
-      return String(aValue).localeCompare(String(bValue), undefined, { numeric: true, sensitivity: "base" }) * direction;
+      const valueComparison = String(aValue).localeCompare(String(bValue), undefined, { numeric: true, sensitivity: "base" }) * direction;
+      return valueComparison || a.name.localeCompare(b.name) || String(a.team ?? "").localeCompare(String(b.team ?? ""));
     });
   }, [statsTableRows, statsTableSort, statsTableValueMode]);
 
@@ -1109,6 +1142,7 @@ export function PlayerComparison({
       const sortColumn = saved.statsTableSort?.column;
       const sortDirection = saved.statsTableSort?.direction;
       const validSortColumns = new Set<string>([
+        PLAYER_STATS_TABLE_YEAR_COLUMN.key,
         ...PLAYER_STATS_TABLE_BASE_COLUMNS.map((column) => column.key),
         ...PLAYER_STATS_TABLE_COLUMNS.map((stat) => `stat:${stat}`),
       ]);
@@ -1123,6 +1157,9 @@ export function PlayerComparison({
       if (typeof saved.statsTableTeam === "string") setStatsTableTeam(saved.statsTableTeam);
       if (STATS_TABLE_MIN_GAMES_OPTIONS.includes(saved.statsTableMinGames as (typeof STATS_TABLE_MIN_GAMES_OPTIONS)[number])) {
         setStatsTableMinGames(saved.statsTableMinGames as (typeof STATS_TABLE_MIN_GAMES_OPTIONS)[number]);
+      }
+      if (PLAYER_STATS_TABLE_GROUP_OPTIONS.includes(saved.statsTableGroupBy as PlayerStatsTableGroupBy)) {
+        setStatsTableGroupBy(saved.statsTableGroupBy as PlayerStatsTableGroupBy);
       }
       if (
         typeof sortColumn === "string" &&
@@ -1197,6 +1234,11 @@ export function PlayerComparison({
   ]);
 
   useEffect(() => {
+    if (statsTableGroupBy === "Year + Player" || statsTableSort.column !== "year") return;
+    setStatsTableSort({ column: "name", direction: "asc" });
+  }, [statsTableGroupBy, statsTableSort.column]);
+
+  useEffect(() => {
     if (!hasRestoredStatsState || !hasLoadedSelectedYears || statList.length === 0) return;
 
     if (!statList.includes(stat1)) {
@@ -1242,6 +1284,7 @@ export function PlayerComparison({
       statsTablePosition,
       statsTableTeam,
       statsTableMinGames,
+      statsTableGroupBy,
       statsTableSort,
       statsTableValueMode,
       finalsMode,
@@ -1282,6 +1325,7 @@ export function PlayerComparison({
     stat1,
     stat2,
     statsTableMinGames,
+    statsTableGroupBy,
     statsTablePosition,
     statsTableSort,
     statsTableTeam,
@@ -1985,12 +2029,20 @@ export function PlayerComparison({
       {allData.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
           <div className="flex min-h-[44px] items-center justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-5 py-1.5">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
               <PillRadio
                 options={["Average", "Total"]}
                 value={statsTableValueMode}
                 onChange={(value) => setStatsTableValueMode(value as PlayerStatsTableValueMode)}
               />
+              <div className="w-36 shrink-0">
+                <Select
+                  label="Group"
+                  value={statsTableGroupBy}
+                  options={[...PLAYER_STATS_TABLE_GROUP_OPTIONS]}
+                  onChange={(value) => setStatsTableGroupBy(value as PlayerStatsTableGroupBy)}
+                />
+              </div>
               <input
                 type="search"
                 value={statsTableSearch}
@@ -2007,6 +2059,7 @@ export function PlayerComparison({
                 statsTablePosition !== "All Positions" ||
                 statsTableTeam !== "All Teams" ||
                 statsTableMinGames !== "1+" ||
+                statsTableGroupBy !== "Player" ||
                 statsTableYears.length !== 1 ||
                 statsTableYears[0] !== DEFAULT_STATS_TABLE_YEAR
                   ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
@@ -2069,12 +2122,12 @@ export function PlayerComparison({
                     aria-label="Player photo"
                     className="sticky left-0 top-0 z-[5] w-24 min-w-24 max-w-24 border-b border-r border-nrl-border/70 bg-nrl-panel px-2 py-2"
                   />
-                  {PLAYER_STATS_TABLE_BASE_COLUMNS.map((column) => {
+                  {statsTableBaseColumns.map((column) => {
                     const active = statsTableSort.column === column.key;
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-nrl-muted last:border-r-0 ${column.key === "name" ? "w-56 min-w-56 max-w-56" : ""} ${column.key === "position" ? "w-[96px] min-w-[96px] max-w-[96px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-nrl-muted last:border-r-0 ${column.key === "year" ? "w-24 min-w-24 max-w-24" : ""} ${column.key === "name" ? "w-56 min-w-56 max-w-56" : ""} ${column.key === "position" ? "w-[96px] min-w-[96px] max-w-[96px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -2114,7 +2167,7 @@ export function PlayerComparison({
                 {sortedStatsTableRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={PLAYER_STATS_TABLE_BASE_COLUMNS.length + PLAYER_STATS_TABLE_COLUMNS.length + 1}
+                      colSpan={statsTableBaseColumns.length + PLAYER_STATS_TABLE_COLUMNS.length + 1}
                       className="px-3 py-6 text-center text-xs text-nrl-muted"
                     >
                       No players match the selected filters.
@@ -2123,7 +2176,7 @@ export function PlayerComparison({
                 ) : (
                   sortedStatsTableRows.map((row, index) => {
                     return (
-                      <tr key={row.name} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
+                      <tr key={row.key} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
                         <td className="sticky left-0 z-[3] w-24 min-w-24 max-w-24 border-r border-nrl-border/70 bg-nrl-panel px-2 py-1">
                           <div className="flex h-[3.25rem] items-center gap-2">
                             <div className="w-5 text-center text-xs font-black text-nrl-muted/70">
@@ -2132,6 +2185,11 @@ export function PlayerComparison({
                             <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} priority={index < 24} />
                           </div>
                         </td>
+                      {statsTableGroupBy === "Year + Player" ? (
+                        <td className="w-24 min-w-24 max-w-24 px-3 py-2 text-center text-xs font-black whitespace-nowrap text-nrl-text">
+                          {row.year ?? "-"}
+                        </td>
+                      ) : null}
                       <td className="w-56 min-w-56 max-w-56 bg-nrl-panel px-3 py-1 text-sm font-black text-nrl-text">
                         <Link
                           href={`/dashboard/players/${playerSlug(row.name)}`}
@@ -2152,7 +2210,7 @@ export function PlayerComparison({
                       </td>
                       {PLAYER_STATS_TABLE_COLUMNS.map((stat) => (
                         <td
-                          key={`${row.name}-${stat}`}
+                          key={`${row.key}-${stat}`}
                           className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted last:border-r-0"
                         >
                           {formatTableNumber(

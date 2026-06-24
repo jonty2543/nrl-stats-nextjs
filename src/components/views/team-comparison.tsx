@@ -34,10 +34,13 @@ interface TeamComparisonProps {
 type TeamPerspective = "For" | "Against";
 type TeamStatsTableSortDirection = "asc" | "desc";
 type TeamStatsTableValueMode = "Average" | "Total";
+type TeamStatsTableGroupBy = "Team" | "Year + Team";
 type TeamStatsTableStatKey = (typeof TEAM_STATS)[number];
-type TeamStatsTableSortKey = "team" | "games" | `stat:${TeamStatsTableStatKey}`;
+type TeamStatsTableSortKey = "year" | "team" | "games" | `stat:${TeamStatsTableStatKey}`;
 
 interface TeamStatsTableRow {
+  key: string;
+  year: string | null;
   team: string;
   logoUrl: string | null;
   games: number;
@@ -46,10 +49,16 @@ interface TeamStatsTableRow {
 }
 
 const TEAM_STATS_TABLE_COLUMNS = TEAM_STATS;
+const TEAM_STATS_TABLE_GROUP_OPTIONS: TeamStatsTableGroupBy[] = ["Team", "Year + Team"];
 const TEAM_STATS_TABLE_BASE_COLUMNS: Array<{ key: TeamStatsTableSortKey; label: string; align?: "left" | "center" | "right" }> = [
   { key: "team", label: "Team", align: "left" },
   { key: "games", label: "Games", align: "center" },
 ];
+const TEAM_STATS_TABLE_YEAR_COLUMN: { key: TeamStatsTableSortKey; label: string; align?: "left" | "center" | "right" } = {
+  key: "year",
+  label: "Year",
+  align: "center",
+};
 
 const DEFAULT_TEAM_1_CANDIDATES = ["Broncos", "Brisbane Broncos"];
 const DEFAULT_TEAM_2_CANDIDATES = ["Storm", "Melbourne Storm"];
@@ -150,6 +159,7 @@ export function TeamComparison({
   const [selectedYears, setSelectedYears] = useState<string[]>(initialYears);
   const [teamStatsTableYears, setTeamStatsTableYears] = useState<string[]>(initialYears);
   const [teamStatsTableTeam, setTeamStatsTableTeam] = useState("All Teams");
+  const [teamStatsTableGroupBy, setTeamStatsTableGroupBy] = useState<TeamStatsTableGroupBy>("Team");
   const [teamStatsTableSort, setTeamStatsTableSort] = useState<{
     column: TeamStatsTableSortKey;
     direction: TeamStatsTableSortDirection;
@@ -246,15 +256,17 @@ export function TeamComparison({
       teamStatsTableTeam === "All Teams"
         ? teamStatsTableSourceRows
         : teamStatsTableSourceRows.filter((row) => row.Team === teamStatsTableTeam);
-    const byTeam = new Map<string, TeamStat[]>();
+    const byGroup = new Map<string, TeamStat[]>();
 
     for (const row of filteredRows) {
-      const rows = byTeam.get(row.Team) ?? [];
+      const key = JSON.stringify(teamStatsTableGroupBy === "Year + Team" ? [row.Year, row.Team] : [row.Team]);
+      const rows = byGroup.get(key) ?? [];
       rows.push(row);
-      byTeam.set(row.Team, rows);
+      byGroup.set(key, rows);
     }
 
-    return [...byTeam.entries()].map(([team, rows]) => {
+    return [...byGroup.entries()].map(([key, rows]) => {
+      const team = rows[0]?.Team ?? "";
       const averages: Partial<Record<TeamStatsTableStatKey, number | null>> = {};
       const totals: Partial<Record<TeamStatsTableStatKey, number | null>> = {};
       for (const stat of TEAM_STATS_TABLE_COLUMNS) {
@@ -265,6 +277,8 @@ export function TeamComparison({
       }
 
       return {
+        key,
+        year: teamStatsTableGroupBy === "Year + Team" ? rows[0]?.Year ?? null : null,
         team,
         logoUrl: resolveTeamLogoUrl(team, teamLogos),
         games: rows.length,
@@ -272,10 +286,19 @@ export function TeamComparison({
         totals,
       };
     });
-  }, [teamLogos, teamStatsTableSourceRows, teamStatsTableTeam]);
+  }, [teamLogos, teamStatsTableGroupBy, teamStatsTableSourceRows, teamStatsTableTeam]);
+
+  const teamStatsTableBaseColumns = useMemo(
+    () =>
+      teamStatsTableGroupBy === "Year + Team"
+        ? [TEAM_STATS_TABLE_YEAR_COLUMN, ...TEAM_STATS_TABLE_BASE_COLUMNS]
+        : TEAM_STATS_TABLE_BASE_COLUMNS,
+    [teamStatsTableGroupBy]
+  );
 
   const sortedTeamStatsTableRows = useMemo(() => {
     const getSortValue = (row: TeamStatsTableRow): number | string | null => {
+      if (teamStatsTableSort.column === "year") return row.year;
       if (teamStatsTableSort.column === "team") return row.team.toLowerCase();
       if (teamStatsTableSort.column === "games") return row.games;
 
@@ -293,10 +316,11 @@ export function TeamComparison({
       const direction = teamStatsTableSort.direction === "asc" ? 1 : -1;
       if (typeof aValue === "number" && typeof bValue === "number") {
         if (aValue !== bValue) return (aValue - bValue) * direction;
-        return a.team.localeCompare(b.team);
+        return a.team.localeCompare(b.team) || String(a.year ?? "").localeCompare(String(b.year ?? ""));
       }
 
-      return String(aValue).localeCompare(String(bValue), undefined, { numeric: true, sensitivity: "base" }) * direction;
+      const valueComparison = String(aValue).localeCompare(String(bValue), undefined, { numeric: true, sensitivity: "base" }) * direction;
+      return valueComparison || a.team.localeCompare(b.team) || String(a.year ?? "").localeCompare(String(b.year ?? ""));
     });
   }, [teamStatsTableRows, teamStatsTableSort, teamStatsTableValueMode]);
 
@@ -370,6 +394,11 @@ export function TeamComparison({
     if (teamStatsTableYears.length > 0 || unlockedYears.length === 0) return;
     setTeamStatsTableYears(unlockedYears.slice(0, 1));
   }, [teamStatsTableYears.length, unlockedYears]);
+
+  useEffect(() => {
+    if (teamStatsTableGroupBy === "Year + Team" || teamStatsTableSort.column !== "year") return;
+    setTeamStatsTableSort({ column: "team", direction: "asc" });
+  }, [teamStatsTableGroupBy, teamStatsTableSort.column]);
 
   useEffect(() => {
     if (hasBootstrappedFetch.current) return;
@@ -669,7 +698,7 @@ export function TeamComparison({
       {allData.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-3 py-2">
-            <div className="grid w-full grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)] items-end gap-2 md:w-auto md:grid-cols-[minmax(220px,320px)_150px]">
+            <div className="grid w-full grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)] items-end gap-2 md:w-auto md:grid-cols-[minmax(220px,320px)_150px_150px]">
               <FilterBar
                 years={availableYears}
                 selectedYears={teamStatsTableYears}
@@ -693,6 +722,12 @@ export function TeamComparison({
                 options={teamStatsTableTeamOptions}
                 onChange={setTeamStatsTableTeam}
               />
+              <Select
+                label="Group"
+                value={teamStatsTableGroupBy}
+                options={[...TEAM_STATS_TABLE_GROUP_OPTIONS]}
+                onChange={(value) => setTeamStatsTableGroupBy(value as TeamStatsTableGroupBy)}
+              />
             </div>
             <div className="flex items-end">
               <PillRadio
@@ -710,12 +745,12 @@ export function TeamComparison({
                     aria-label="Team logo"
                     className="sticky left-0 top-0 z-[5] w-24 min-w-24 max-w-24 border-b border-r border-nrl-border/70 bg-nrl-panel px-2 py-2"
                   />
-                  {TEAM_STATS_TABLE_BASE_COLUMNS.map((column) => {
+                  {teamStatsTableBaseColumns.map((column) => {
                     const active = teamStatsTableSort.column === column.key;
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-nrl-muted last:border-r-0 ${column.key === "team" ? "w-56 min-w-56 max-w-56" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 z-[2] border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-nrl-muted last:border-r-0 ${column.key === "year" ? "w-24 min-w-24 max-w-24" : ""} ${column.key === "team" ? "w-56 min-w-56 max-w-56" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -755,7 +790,7 @@ export function TeamComparison({
                 {sortedTeamStatsTableRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={TEAM_STATS_TABLE_BASE_COLUMNS.length + TEAM_STATS_TABLE_COLUMNS.length + 1}
+                      colSpan={teamStatsTableBaseColumns.length + TEAM_STATS_TABLE_COLUMNS.length + 1}
                       className="px-3 py-6 text-center text-xs text-nrl-muted"
                     >
                       No teams match the selected filters.
@@ -763,7 +798,7 @@ export function TeamComparison({
                   </tr>
                 ) : (
                   sortedTeamStatsTableRows.map((row, index) => (
-                    <tr key={row.team} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
+                    <tr key={row.key} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
                       <td className="sticky left-0 z-[3] w-24 min-w-24 max-w-24 border-r border-nrl-border/70 bg-nrl-panel px-2 py-1">
                         <div className="flex h-[3.25rem] items-center gap-2">
                           <div className="w-5 text-center text-xs font-black text-nrl-muted/70">
@@ -786,6 +821,11 @@ export function TeamComparison({
                           </div>
                         </div>
                       </td>
+                      {teamStatsTableGroupBy === "Year + Team" ? (
+                        <td className="w-24 min-w-24 max-w-24 px-3 py-2 text-center text-xs font-black whitespace-nowrap text-nrl-text">
+                          {row.year ?? "-"}
+                        </td>
+                      ) : null}
                       <td className="w-56 min-w-56 max-w-56 bg-nrl-panel px-3 py-1 text-sm font-black text-nrl-text">
                         <span className="block min-w-0 truncate" title={row.team}>{row.team}</span>
                       </td>
@@ -794,7 +834,7 @@ export function TeamComparison({
                       </td>
                       {TEAM_STATS_TABLE_COLUMNS.map((stat) => (
                         <td
-                          key={`${row.team}-${stat}`}
+                          key={`${row.key}-${stat}`}
                           className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted last:border-r-0"
                         >
                           {formatTableNumber(

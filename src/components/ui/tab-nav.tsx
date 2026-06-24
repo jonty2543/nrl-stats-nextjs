@@ -36,10 +36,10 @@ export function TabNav() {
   }
 
   return (
-    <div className="mt-4 border-t border-white/8 pt-3">
+    <div className="-mx-1 mt-4 flex overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:justify-center sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
       <nav
         aria-label="Stats sections"
-        className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:inline-flex sm:rounded-lg sm:border sm:border-white/10 sm:bg-white/[0.035] sm:p-1 [&::-webkit-scrollbar]:hidden"
+        className="flex min-w-max gap-1 sm:inline-flex sm:rounded-lg sm:border sm:border-white/10 sm:bg-white/[0.035] sm:p-1"
       >
         {tabs.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);

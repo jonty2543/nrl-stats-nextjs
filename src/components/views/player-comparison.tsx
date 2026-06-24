@@ -70,7 +70,7 @@ const DEFAULT_PLAYER_1_CANDIDATES = ["Nathan Cleary"];
 const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
 const DEFAULT_STATS_TABLE_YEAR = "2026";
 const PLAYER_COMPARISON_STATE_STORAGE_KEY = "nrl-stats:player-comparison-state:v1";
-const STATS_TABLE_MIN_GAMES_OPTIONS = ["Any", "2+", "3+", "5+", "10+"] as const;
+const STATS_TABLE_MIN_GAMES_OPTIONS = ["1+", "5+", "10+", "20+", "50+", "100+"] as const;
 
 const PLAYER_STATS_TABLE_COLUMNS = PLAYER_STATS;
 const NON_TOTAL_PLAYER_STATS = new Set<PlayerStatsTableStatKey>(
@@ -97,9 +97,8 @@ function playerStatsTableValue(row: PlayerStatsTableRow, stat: PlayerStatsTableS
 }
 
 function minGamesValue(option: string): number {
-  if (option === "Any") return 0;
   const parsed = Number.parseInt(option, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) ? parsed : 1;
 }
 
 const MINUTES_FILTER_OPTIONS = [
@@ -885,7 +884,7 @@ export function PlayerComparison({
   );
   const [statsTablePosition, setStatsTablePosition] = useState("All Positions");
   const [statsTableTeam, setStatsTableTeam] = useState("All Teams");
-  const [statsTableMinGames, setStatsTableMinGames] = useState("Any");
+  const [statsTableMinGames, setStatsTableMinGames] = useState("1+");
   const [statsTableSearch, setStatsTableSearch] = useState("");
   const [statsTableFiltersOpen, setStatsTableFiltersOpen] = useState(false);
   const [statsTableSort, setStatsTableSort] = useState<{
@@ -2007,7 +2006,7 @@ export function PlayerComparison({
                 statsTableFiltersOpen ||
                 statsTablePosition !== "All Positions" ||
                 statsTableTeam !== "All Teams" ||
-                statsTableMinGames !== "Any" ||
+                statsTableMinGames !== "1+" ||
                 statsTableYears.length !== 1 ||
                 statsTableYears[0] !== DEFAULT_STATS_TABLE_YEAR
                   ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"

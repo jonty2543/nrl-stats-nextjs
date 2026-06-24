@@ -227,6 +227,10 @@ const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
 const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
 const DEFAULT_BETTING_MARKET: BettingMarket = "H2H";
 const TOTAL_MODEL_BETA_MARKET: BettingMarket = "Total";
+const SUSPICIOUS_EDGE_THRESHOLD_PP = 6;
+const SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP = 10;
+const SUSPICIOUS_EDGE_WARNING_COPY =
+  "If the model has an edge > 6% on the market, this may be suspicious and suggest the market knows something the model doesn't";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const BETTING_PANEL_HEADER_CLASS = "text-[10px] font-bold uppercase tracking-[0.22em]";
@@ -1254,6 +1258,10 @@ function formatBestBetScore(score: number): string {
   return `${(clamp(score, 0, 1) * 10).toFixed(1)}/10`;
 }
 
+function isSuspiciousEdge(edgePp: number | null): boolean {
+  return edgePp != null && edgePp > SUSPICIOUS_EDGE_THRESHOLD_PP;
+}
+
 function formatBestBetMarketLabel(market: BettingMarket): string {
   return market === "Tryscorer" ? "Tryscorers" : market;
 }
@@ -1263,6 +1271,27 @@ function TotalModelBetaBadge() {
     <span className="rounded-full bg-nrl-accent/15 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-nrl-accent">
       Beta
     </span>
+  );
+}
+
+function SuspiciousEdgeCaution() {
+  return (
+    <span
+      title={SUSPICIOUS_EDGE_WARNING_COPY}
+      aria-label={SUSPICIOUS_EDGE_WARNING_COPY}
+      className="text-[11px] leading-none"
+    >
+      ⚠️
+    </span>
+  );
+}
+
+function SuspiciousEdgeNotice() {
+  return (
+    <div className="rounded-md border border-orange-300/25 bg-orange-400/10 px-3 py-2 text-xs font-semibold leading-relaxed text-orange-100">
+      <span className="mr-1.5" aria-hidden="true">⚠️</span>
+      {SUSPICIOUS_EDGE_WARNING_COPY}.
+    </div>
   );
 }
 
@@ -1592,7 +1621,11 @@ function calculateBetScore({
     (timingScore * BEST_BETS_CONFIG.weights.timing)
   ) / contextWeight : 0.5;
   const edgeSwing = 0.28 + (contextScore * 0.17);
-  return clamp(0.5 + (edgeScore * edgeSwing), 0, 1);
+  const baseScore = clamp(0.5 + (edgeScore * edgeSwing), 0, 1);
+  if (edgePp <= SUSPICIOUS_EDGE_THRESHOLD_PP) return baseScore;
+
+  const decay = clamp((edgePp - SUSPICIOUS_EDGE_THRESHOLD_PP) / SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP, 0, 0.65);
+  return clamp(baseScore * (1 - decay), 0, 1);
 }
 
 function adjustedKellyProbability({
@@ -3757,8 +3790,9 @@ function BestBetsHero({
                   {isArbitrage ? "return" : "bet score"}
                 </div>
                 {!isArbitrage ? (
-                  <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                  <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
                     Edge <span className="text-nrl-text">+{(featuredItem as BestBetCandidate).edgePp.toFixed(2)}%</span>
+                    {isSuspiciousEdge((featuredItem as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
                   </div>
                 ) : null}
               </div>
@@ -3953,8 +3987,9 @@ function BestBetsHero({
                           {isArbitrage ? "return" : "score"}
                         </div>
                         {!isLocked && !isArbitrage ? (
-                          <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                          <div className="mt-0.5 inline-flex items-center justify-end gap-1 text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
                             Edge +{(item as BestBetCandidate).edgePp.toFixed(2)}%
+                            {isSuspiciousEdge((item as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
                           </div>
                         ) : null}
                       </div>
@@ -4060,11 +4095,18 @@ function BestBetsHero({
               </div>
               <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className="mt-0.5 font-semibold text-emerald-300">
-                  {bestBetSlipEdgePp == null ? "-" : `${bestBetSlipEdgePp >= 0 ? "+" : ""}${bestBetSlipEdgePp.toFixed(2)}`}
+                <div className="mt-0.5 inline-flex items-center gap-1 font-semibold text-emerald-300">
+                  <span>{bestBetSlipEdgePp == null ? "-" : `${bestBetSlipEdgePp >= 0 ? "+" : ""}${bestBetSlipEdgePp.toFixed(2)}`}</span>
+                  {isSuspiciousEdge(bestBetSlipEdgePp) ? <SuspiciousEdgeCaution /> : null}
                 </div>
               </div>
             </div>
+
+            {isSuspiciousEdge(bestBetSlipEdgePp) ? (
+              <div className="mt-3">
+                <SuspiciousEdgeNotice />
+              </div>
+            ) : null}
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
@@ -4689,6 +4731,7 @@ function MarketSection({
                     const edgePp = edgeDecimal == null ? null : edgeDecimal * 100;
                     const hasPositiveEdge = edgeDecimal != null && edgeDecimal > 0;
                     const overEdgeCliff = edgeDecimal != null && edgeDecimal > (maxEdge ?? 0.06);
+                    const suspiciousEdge = isSuspiciousEdge(edgePp);
                     const marketSignals = buildMarketSignals(row, group.marketPctFromBest);
                     const betScore = edgePp == null ? null : calculateBetScore({
                       edgePp,
@@ -4751,9 +4794,7 @@ function MarketSection({
                             : "text-nrl-accent";
                     const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                     const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
-                    const canOpenMobileBet = oddsValue != null
-                      && oddsValue > 1
-                      && (!showModelColumns || modelProbability != null);
+                    const canOpenMobileBet = oddsValue != null && oddsValue > 1;
                     const tryscorerProfile = group.market === "Tryscorer"
                       ? resolveTryscorerProfile({
                           playerName: row.result,
@@ -4832,6 +4873,7 @@ function MarketSection({
                                       <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : "tabular-nums"}>
                                         {formatEdge(edgePp)}
                                       </span>
+                                      {suspiciousEdge ? <SuspiciousEdgeCaution /> : null}
                                     </span>
                                   ) : null}
                                   {showModelColumns ? (
@@ -4986,6 +5028,7 @@ function MarketSection({
                         const edgePp = edgeDecimal == null ? null : edgeDecimal * 100;
                         const hasPositiveEdge = edgeDecimal != null && edgeDecimal > 0;
                         const overEdgeCliff = edgeDecimal != null && edgeDecimal > (maxEdge ?? 0.06);
+                        const suspiciousEdge = isSuspiciousEdge(edgePp);
                         const marketSignals = buildMarketSignals(row, group.marketPctFromBest);
                         const betScore = edgePp == null ? null : calculateBetScore({
                           edgePp,
@@ -5049,13 +5092,7 @@ function MarketSection({
                         const outcomeLabel = row.result;
                         const recommendedStake = Math.max(0, Math.round(scaledStake ?? 0));
                         const stakeValue = stakeOverrides[betRowKey] ?? recommendedStake;
-                        const canPlaceBet = canAccessPremium
-                          && (!showModelColumns || modelProbability != null)
-                          && implied != null
-                          && oddsValue != null
-                          && oddsValue > 1
-                          && Number.isFinite(stakeValue)
-                          && stakeValue > 0;
+                        const canPlaceBet = canAccessPremium && oddsValue != null && oddsValue > 1;
                         const tryscorerProfile = group.market === "Tryscorer"
                           ? resolveTryscorerProfile({
                               playerName: row.result,
@@ -5182,8 +5219,11 @@ function MarketSection({
                                   </span>
                                 </td>
                                 <td className={`py-2 pr-3 ${edgeClass}`}>
-                                  <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}>
-                                    {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}>
+                                      {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
+                                    </span>
+                                    {suspiciousEdge ? <SuspiciousEdgeCaution /> : null}
                                   </span>
                                 </td>
                                 <td className={`py-2 pr-3 font-semibold ${edgeClass}`}>
@@ -5439,11 +5479,18 @@ function MarketSection({
               </div>
               <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className="mt-0.5 font-semibold text-emerald-300">
-                  {mobileSlipEdgePp == null ? "-" : `${mobileSlipEdgePp >= 0 ? "+" : ""}${mobileSlipEdgePp.toFixed(2)}`}
+                <div className="mt-0.5 inline-flex items-center gap-1 font-semibold text-emerald-300">
+                  <span>{mobileSlipEdgePp == null ? "-" : `${mobileSlipEdgePp >= 0 ? "+" : ""}${mobileSlipEdgePp.toFixed(2)}`}</span>
+                  {isSuspiciousEdge(mobileSlipEdgePp) ? <SuspiciousEdgeCaution /> : null}
                 </div>
               </div>
             </div>
+
+            {isSuspiciousEdge(mobileSlipEdgePp) ? (
+              <div className="mt-3">
+                <SuspiciousEdgeNotice />
+              </div>
+            ) : null}
 
             {mobileSlipError ? (
               <div className="mt-3 rounded-md border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">

@@ -1090,13 +1090,7 @@ export function PlayerComparison({
     });
   }, [playerImages, statsTableGroupBy, statsTableMinGames, statsTablePosition, statsTableSearch, statsTableSourceRows, statsTableTeam]);
 
-  const statsTableBaseColumns = useMemo(
-    () =>
-      statsTableGroupBy === "Year + Player"
-        ? [PLAYER_STATS_TABLE_YEAR_COLUMN, ...PLAYER_STATS_TABLE_BASE_COLUMNS]
-        : PLAYER_STATS_TABLE_BASE_COLUMNS,
-    [statsTableGroupBy]
-  );
+  const statsTableBaseColumns = PLAYER_STATS_TABLE_BASE_COLUMNS;
 
   const sortedStatsTableRows = useMemo(() => {
     const getSortValue = (row: PlayerStatsTableRow): number | string | null => {
@@ -2197,6 +2191,7 @@ export function PlayerComparison({
                 ) : (
                   sortedStatsTableRows.map((row, index) => {
                     const pinnedGroupLabel = statsTablePinnedGroupLabel(row, statsTableGroupBy);
+                    const teamLogoUrl = resolveTeamLogoUrl(row.team, teamLogos);
                     return (
                       <tr key={row.key} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
                         <td
@@ -2216,11 +2211,6 @@ export function PlayerComparison({
                             ) : null}
                           </div>
                         </td>
-                      {statsTableGroupBy === "Year + Player" ? (
-                        <td className="w-24 min-w-24 max-w-24 px-3 py-2 text-center text-xs font-black whitespace-nowrap text-nrl-text">
-                          {row.year ?? "-"}
-                        </td>
-                      ) : null}
                       <td className="w-56 min-w-56 max-w-56 bg-nrl-panel px-3 py-1 text-sm font-black text-nrl-text">
                         <Link
                           href={`/dashboard/players/${playerSlug(row.name)}`}
@@ -2231,7 +2221,18 @@ export function PlayerComparison({
                         </Link>
                       </td>
                       <td className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted">
-                        {row.team ?? "-"}
+                        <span className="inline-flex min-w-0 items-center justify-center gap-2">
+                          {teamLogoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={teamLogoUrl}
+                              alt=""
+                              aria-hidden="true"
+                              className="h-5 w-5 shrink-0 object-contain"
+                            />
+                          ) : null}
+                          <span className="truncate">{row.team ?? "-"}</span>
+                        </span>
                       </td>
                       <td className="w-[96px] min-w-[96px] max-w-[96px] px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted">
                         {row.position ?? "-"}

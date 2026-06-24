@@ -48,7 +48,7 @@ interface PlayerComparisonProps {
 
 type PlayerStatsTableSortDirection = "asc" | "desc";
 type PlayerStatsTableValueMode = "Average" | "Total";
-type PlayerStatsTableGroupBy = "Player" | "Year + Player" | "Team + Player";
+type PlayerStatsTableGroupBy = "Player" | "Year + Player" | "Team + Player" | "Position + Player";
 type PlayerStatsTableStatKey = (typeof PLAYER_STATS)[number];
 type PlayerStatsTableSortKey =
   | "year"
@@ -75,7 +75,7 @@ const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
 const DEFAULT_STATS_TABLE_YEAR = "2026";
 const PLAYER_COMPARISON_STATE_STORAGE_KEY = "nrl-stats:player-comparison-state:v1";
 const STATS_TABLE_MIN_GAMES_OPTIONS = ["1+", "5+", "10+", "20+", "50+", "100+"] as const;
-const PLAYER_STATS_TABLE_GROUP_OPTIONS: PlayerStatsTableGroupBy[] = ["Player", "Year + Player", "Team + Player"];
+const PLAYER_STATS_TABLE_GROUP_OPTIONS: PlayerStatsTableGroupBy[] = ["Player", "Year + Player", "Team + Player", "Position + Player"];
 
 const PLAYER_STATS_TABLE_COLUMNS = PLAYER_STATS;
 const NON_TOTAL_PLAYER_STATS = new Set<PlayerStatsTableStatKey>(
@@ -104,6 +104,13 @@ function playerStatsTableValue(row: PlayerStatsTableRow, stat: PlayerStatsTableS
     return row.totals[stat] ?? null;
   }
   return row.averages[stat] ?? null;
+}
+
+function statsTablePinnedGroupLabel(row: PlayerStatsTableRow, groupBy: PlayerStatsTableGroupBy): string | null {
+  if (groupBy === "Year + Player") return row.year ?? "-";
+  if (groupBy === "Team + Player") return row.team ?? "-";
+  if (groupBy === "Position + Player") return row.position ?? "-";
+  return null;
 }
 
 function minGamesValue(option: string): number {
@@ -367,6 +374,16 @@ export function resolvePlayerImage(
   if (candidates.length === 0) return null;
 
   const sorted = [...candidates].sort((a, b) => {
+    if (!teamNorm) {
+      const aImg = Boolean(a.body_image || a.head_image);
+      const bImg = Boolean(b.body_image || b.head_image);
+      if (aImg !== bImg) return aImg ? -1 : 1;
+
+      const aDate = a.last_seen_match_date ?? "";
+      const bDate = b.last_seen_match_date ?? "";
+      if (aDate !== bDate) return bDate.localeCompare(aDate);
+    }
+
     const aTeamMatch = teamNorm && a.team ? normalisePersonName(a.team) === teamNorm : false;
     const bTeamMatch = teamNorm && b.team ? normalisePersonName(b.team) === teamNorm : false;
     if (aTeamMatch !== bTeamMatch) return aTeamMatch ? -1 : 1;
@@ -1036,6 +1053,8 @@ export function PlayerComparison({
           ? [row.Year, row.Name]
           : statsTableGroupBy === "Team + Player"
             ? [row.Team, row.Name]
+            : statsTableGroupBy === "Position + Player"
+              ? [row.Position, row.Name]
             : [row.Name];
       const key = JSON.stringify(keyParts);
       const rows = byGroup.get(key) ?? [];
@@ -1063,7 +1082,7 @@ export function PlayerComparison({
         name,
         team,
         position: primaryPositionForRows(rows),
-        imageRow: resolvePlayerImage(name, team, playerImages),
+        imageRow: resolvePlayerImage(name, null, playerImages),
         games: rows.length,
         averages,
         totals,
@@ -2120,7 +2139,9 @@ export function PlayerComparison({
                 <tr>
                   <th
                     aria-label="Player photo"
-                    className="sticky left-0 top-0 z-[5] w-24 min-w-24 max-w-24 border-b border-r border-nrl-border/70 bg-nrl-panel px-2 py-2"
+                    className={`sticky left-0 top-0 z-[5] border-b border-r border-nrl-border/70 bg-nrl-panel px-2 py-2 ${
+                      statsTableGroupBy === "Player" ? "w-24 min-w-24 max-w-24" : "w-44 min-w-44 max-w-44"
+                    }`}
                   />
                   {statsTableBaseColumns.map((column) => {
                     const active = statsTableSort.column === column.key;
@@ -2175,14 +2196,24 @@ export function PlayerComparison({
                   </tr>
                 ) : (
                   sortedStatsTableRows.map((row, index) => {
+                    const pinnedGroupLabel = statsTablePinnedGroupLabel(row, statsTableGroupBy);
                     return (
                       <tr key={row.key} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
-                        <td className="sticky left-0 z-[3] w-24 min-w-24 max-w-24 border-r border-nrl-border/70 bg-nrl-panel px-2 py-1">
+                        <td
+                          className={`sticky left-0 z-[3] border-r border-nrl-border/70 bg-nrl-panel px-2 py-1 ${
+                            pinnedGroupLabel ? "w-44 min-w-44 max-w-44" : "w-24 min-w-24 max-w-24"
+                          }`}
+                        >
                           <div className="flex h-[3.25rem] items-center gap-2">
                             <div className="w-5 text-center text-xs font-black text-nrl-muted/70">
                               {index + 1}
                             </div>
                             <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} priority={index < 24} />
+                            {pinnedGroupLabel ? (
+                              <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel-2 px-1.5 py-1 text-[10px] font-black uppercase tracking-wide text-nrl-text">
+                                <span className="block max-w-24 truncate">{pinnedGroupLabel}</span>
+                              </div>
+                            ) : null}
                           </div>
                         </td>
                       {statsTableGroupBy === "Year + Player" ? (

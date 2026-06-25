@@ -387,12 +387,12 @@ function buildPlayerImageSources(
     const bTeamMatch = b.team ? normalisePersonName(b.team) === teamNorm : false
     if (aTeamMatch !== bTeamMatch) return aTeamMatch ? -1 : 1
 
-    const aHasBody = Boolean(a.body_image)
-    const bHasBody = Boolean(b.body_image)
+    const aHasBody = Boolean(a.cached_body_image || a.body_image)
+    const bHasBody = Boolean(b.cached_body_image || b.body_image)
     if (aHasBody !== bHasBody) return aHasBody ? -1 : 1
 
-    const aHasImage = Boolean(a.body_image || a.head_image)
-    const bHasImage = Boolean(b.body_image || b.head_image)
+    const aHasImage = Boolean(a.cached_body_image || a.cached_head_image || a.body_image || a.head_image)
+    const bHasImage = Boolean(b.cached_body_image || b.cached_head_image || b.body_image || b.head_image)
     if (aHasImage !== bHasImage) return aHasImage ? -1 : 1
 
     const aDate = a.last_seen_match_date ?? ""
@@ -402,7 +402,7 @@ function buildPlayerImageSources(
 
   const out: string[] = []
   for (const row of sorted) {
-    for (const source of [row.body_image, row.head_image]) {
+    for (const source of [row.cached_body_image, row.cached_head_image, row.body_image, row.head_image]) {
       for (const variant of normaliseRemoteImageCandidates(source)) {
         out.push(variant)
       }

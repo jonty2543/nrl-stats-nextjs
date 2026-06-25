@@ -556,7 +556,7 @@ function imageSourcesForPlayer(
     push(trimmed)
   }
 
-  for (const source of [imageRow?.body_image, imageRow?.head_image]) {
+  for (const source of [imageRow?.cached_body_image, imageRow?.cached_head_image, imageRow?.body_image, imageRow?.head_image]) {
     pushVariants(source)
   }
   return out
@@ -1773,6 +1773,8 @@ function imageSourcesForFantasyPlayer(
 ): string[] {
   const imageRow = resolvePlayerImage(player.name, null, playerImages)
   return [
+    imageRow?.cached_head_image,
+    imageRow?.cached_body_image,
     imageRow?.head_image,
     imageRow?.body_image,
   ].flatMap((value) => {

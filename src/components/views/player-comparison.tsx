@@ -337,7 +337,7 @@ function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[
     return variants;
   };
 
-  for (const source of [imageRow?.body_image, imageRow?.head_image]) {
+  for (const source of [imageRow?.cached_body_image, imageRow?.cached_head_image, imageRow?.body_image, imageRow?.head_image]) {
     if (!source) continue;
     for (const variant of normalizeRemoteAxd(source)) {
       push(variant);
@@ -375,8 +375,8 @@ export function resolvePlayerImage(
 
   const sorted = [...candidates].sort((a, b) => {
     if (!teamNorm) {
-      const aImg = Boolean(a.body_image || a.head_image);
-      const bImg = Boolean(b.body_image || b.head_image);
+      const aImg = Boolean(a.cached_body_image || a.cached_head_image || a.body_image || a.head_image);
+      const bImg = Boolean(b.cached_body_image || b.cached_head_image || b.body_image || b.head_image);
       if (aImg !== bImg) return aImg ? -1 : 1;
 
       const aDate = a.last_seen_match_date ?? "";
@@ -388,12 +388,12 @@ export function resolvePlayerImage(
     const bTeamMatch = teamNorm && b.team ? normalisePersonName(b.team) === teamNorm : false;
     if (aTeamMatch !== bTeamMatch) return aTeamMatch ? -1 : 1;
 
-    const aHasBody = Boolean(a.body_image);
-    const bHasBody = Boolean(b.body_image);
+    const aHasBody = Boolean(a.cached_body_image || a.body_image);
+    const bHasBody = Boolean(b.cached_body_image || b.body_image);
     if (aHasBody !== bHasBody) return aHasBody ? -1 : 1;
 
-    const aImg = Boolean(a.body_image || a.head_image);
-    const bImg = Boolean(b.body_image || b.head_image);
+    const aImg = Boolean(a.cached_body_image || a.cached_head_image || a.body_image || a.head_image);
+    const bImg = Boolean(b.cached_body_image || b.cached_head_image || b.body_image || b.head_image);
     if (aImg !== bImg) return aImg ? -1 : 1;
 
     const aDate = a.last_seen_match_date ?? "";

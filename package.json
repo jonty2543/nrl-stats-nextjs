@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "rebuild:fantasy-card-summary": "node scripts/rebuild-fantasy-player-card-summary.mjs"
+    "rebuild:fantasy-card-summary": "node scripts/rebuild-fantasy-player-card-summary.mjs",
+    "sync:player-images": "node scripts/sync-player-images.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.37.3",
@@ -23,6 +24,7 @@
     "nuqs": "^2.8.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "sharp": "^0.34.5",
     "stripe": "^22.0.1"
   },
   "devDependencies": {

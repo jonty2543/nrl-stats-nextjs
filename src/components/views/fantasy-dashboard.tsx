@@ -1145,7 +1145,7 @@ function formatPrice(value: number | null): string {
 }
 
 function getPlayerThumbnailUrl(imageRow: PlayerImageRecord | null): string | null {
-  const source = imageRow?.head_image ?? imageRow?.body_image
+  const source = imageRow?.cached_head_image ?? imageRow?.cached_body_image ?? imageRow?.head_image ?? imageRow?.body_image
   if (!source) return null
 
   const trimmed = source.trim()
@@ -1174,7 +1174,7 @@ function getPlayerThumbnailSources(imageRow: PlayerImageRecord | null): string[]
   const seen = new Set<string>()
   const sources: string[] = []
 
-  for (const source of [imageRow?.head_image, imageRow?.body_image]) {
+  for (const source of [imageRow?.cached_head_image, imageRow?.cached_body_image, imageRow?.head_image, imageRow?.body_image]) {
     if (!source) continue
     const trimmed = source.trim()
     if (!trimmed || seen.has(trimmed)) continue

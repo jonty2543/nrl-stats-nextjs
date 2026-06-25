@@ -837,7 +837,7 @@ function findLatestPlayerImage(
           rowParts.first[0] === targetParts.first[0]
       );
     })
-    .filter((row) => row.head_image || row.body_image)
+    .filter((row) => row.cached_head_image || row.cached_body_image || row.head_image || row.body_image)
     .sort((left, right) => {
       const leftTeamMatch = teamMatchesHint(left.team, teamHint);
       const rightTeamMatch = teamMatchesHint(right.team, teamHint);
@@ -847,8 +847,8 @@ function findLatestPlayerImage(
       const rightMatchTeam = teamIsInMatch(right.team, match);
       if (leftMatchTeam !== rightMatchTeam) return leftMatchTeam ? -1 : 1;
 
-      const leftHasHead = Boolean(left.head_image);
-      const rightHasHead = Boolean(right.head_image);
+      const leftHasHead = Boolean(left.cached_head_image || left.head_image);
+      const rightHasHead = Boolean(right.cached_head_image || right.head_image);
       if (leftHasHead !== rightHasHead) return leftHasHead ? -1 : 1;
 
       return playerImageSeenMs(right) - playerImageSeenMs(left);
@@ -869,8 +869,8 @@ function mergeTryscorerFormWithLatestImage(
   if (!latestImage) return form;
   return {
     ...form,
-    headImage: latestImage.head_image ?? null,
-    bodyImage: latestImage.body_image ?? null,
+    headImage: latestImage.cached_head_image ?? latestImage.head_image ?? null,
+    bodyImage: latestImage.cached_body_image ?? latestImage.body_image ?? null,
     team: form.team ?? latestImage.team ?? null,
     position: form.position ?? latestImage.position ?? null,
   };
@@ -913,7 +913,14 @@ function resolveTryscorerProfile({
   const teamHint = form?.team ?? playerTeamsByName.get(key) ?? null;
   const imageRow = findLatestPlayerImage(form?.player || playerName, playerImages, teamHint, match);
   const mergedForm = mergeTryscorerFormWithLatestImage(form, playerName, playerImages, teamHint, match);
-  const image = imageRow?.head_image ?? imageRow?.body_image ?? mergedForm?.headImage ?? mergedForm?.bodyImage ?? null;
+  const image =
+    imageRow?.cached_head_image ??
+    imageRow?.cached_body_image ??
+    imageRow?.head_image ??
+    imageRow?.body_image ??
+    mergedForm?.headImage ??
+    mergedForm?.bodyImage ??
+    null;
 
   return {
     form: mergedForm,

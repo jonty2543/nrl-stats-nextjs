@@ -39,7 +39,9 @@ function playerImageSources(insight: StatsHubInsight, playerImages: PlayerImageR
       return (b.last_seen_match_date ?? "").localeCompare(a.last_seen_match_date ?? "");
     });
 
-  return matches.flatMap((row) => [row.body_image, row.head_image]).filter((source): source is string => Boolean(source));
+  return matches
+    .flatMap((row) => [row.cached_body_image, row.cached_head_image, row.body_image, row.head_image])
+    .filter((source): source is string => Boolean(source));
 }
 
 function teamLogoSources(insight: StatsHubInsight, teamLogos: Record<string, string>): string[] {

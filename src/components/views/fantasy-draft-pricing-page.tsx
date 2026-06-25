@@ -284,7 +284,7 @@ function playerImageSources(
     push(trimmed)
   }
 
-  for (const source of [row?.body_image, row?.head_image]) {
+  for (const source of [row?.cached_body_image, row?.cached_head_image, row?.body_image, row?.head_image]) {
     pushVariants(source)
   }
   return out

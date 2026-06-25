@@ -41,6 +41,8 @@ export interface PlayerImageRecord {
   team: string | null;
   number: string | null;
   position: string | null;
+  cached_head_image?: string | null;
+  cached_body_image?: string | null;
   head_image: string | null;
   body_image: string | null;
   last_seen_match_date: string | null;
@@ -3437,6 +3439,8 @@ export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord
       team: typeof row.team === "string" ? row.team : null,
       number: row.number == null ? null : String(row.number),
       position: typeof row.position === "string" ? row.position : null,
+      cached_head_image: typeof row.cached_head_image === "string" ? row.cached_head_image : null,
+      cached_body_image: typeof row.cached_body_image === "string" ? row.cached_body_image : null,
       head_image: typeof row.head_image === "string" ? row.head_image : null,
       body_image: typeof row.body_image === "string" ? row.body_image : null,
       last_seen_match_date: lastSeen,

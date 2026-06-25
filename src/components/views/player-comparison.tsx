@@ -218,7 +218,7 @@ function readPersistedPlayerComparisonState(): Partial<PersistedPlayerComparison
   if (typeof window === "undefined") return null;
 
   try {
-    const raw = window.localStorage.getItem(PLAYER_COMPARISON_STATE_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(PLAYER_COMPARISON_STATE_STORAGE_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!isRecord(parsed) || parsed.version !== 1) return null;
@@ -1322,7 +1322,7 @@ export function PlayerComparison({
     };
 
     try {
-      window.localStorage.setItem(PLAYER_COMPARISON_STATE_STORAGE_KEY, JSON.stringify(state));
+      window.sessionStorage.setItem(PLAYER_COMPARISON_STATE_STORAGE_KEY, JSON.stringify(state));
     } catch {
       // Ignore storage errors such as private browsing quota failures.
     }
@@ -2136,7 +2136,11 @@ export function PlayerComparison({
                   <th
                     aria-label="Player photo"
                     className={`sticky left-0 top-0 z-[5] border-b border-r border-nrl-border/70 bg-nrl-panel px-2 py-2 ${
-                      statsTableGroupBy === "Player" ? "w-24 min-w-24 max-w-24" : "w-44 min-w-44 max-w-44"
+                      statsTableGroupBy === "Player"
+                        ? "w-24 min-w-24 max-w-24"
+                        : statsTableGroupBy === "Team + Player"
+                          ? "w-32 min-w-32 max-w-32"
+                          : "w-44 min-w-44 max-w-44"
                     }`}
                   />
                   {statsTableBaseColumns.map((column) => {
@@ -2194,11 +2198,16 @@ export function PlayerComparison({
                   sortedStatsTableRows.map((row, index) => {
                     const pinnedGroupLabel = statsTablePinnedGroupLabel(row, statsTableGroupBy);
                     const teamLogoUrl = resolveTeamLogoUrl(row.team, teamLogos);
+                    const showTeamGroupLogoOnly = statsTableGroupBy === "Team + Player" && pinnedGroupLabel;
                     return (
                       <tr key={row.key} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
                         <td
                           className={`sticky left-0 z-[3] border-r border-nrl-border/70 bg-nrl-panel px-2 py-1 ${
-                            pinnedGroupLabel ? "w-44 min-w-44 max-w-44" : "w-24 min-w-24 max-w-24"
+                            pinnedGroupLabel
+                              ? showTeamGroupLogoOnly
+                                ? "w-32 min-w-32 max-w-32"
+                                : "w-44 min-w-44 max-w-44"
+                              : "w-24 min-w-24 max-w-24"
                           }`}
                         >
                           <div className="flex h-[3.25rem] items-center gap-2">
@@ -2206,7 +2215,18 @@ export function PlayerComparison({
                               {index + 1}
                             </div>
                             <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} priority={index < 24} />
-                            {pinnedGroupLabel ? (
+                            {showTeamGroupLogoOnly ? (
+                              <div
+                                className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 p-1"
+                                title={pinnedGroupLabel}
+                                aria-label={pinnedGroupLabel}
+                              >
+                                {teamLogoUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={teamLogoUrl} alt="" aria-hidden="true" className="h-full w-full object-contain" />
+                                ) : null}
+                              </div>
+                            ) : pinnedGroupLabel ? (
                               <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel-2 px-1.5 py-1 text-[10px] font-black uppercase tracking-wide text-nrl-text">
                                 <span className="block max-w-24 truncate">{pinnedGroupLabel}</span>
                               </div>

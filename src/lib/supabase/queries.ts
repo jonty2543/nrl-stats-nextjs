@@ -3450,7 +3450,7 @@ export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord
 
 const fetchPlayerImagesCached = unstable_cache(
   async (): Promise<PlayerImageRecord[]> => fetchPlayerImagesFromSupabase(),
-  ["player-images-v2"],
+  ["player-images-v3"],
   { revalidate: 3600 }
 );
 

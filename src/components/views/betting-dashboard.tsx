@@ -4791,7 +4791,7 @@ function MarketSection({
                             <div className="min-w-0 flex-1">
                               <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-y-2 text-xs font-semibold text-nrl-text">
                                 <span className="min-w-0 truncate pr-1">{row.result}</span>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
                                   <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.08em] text-nrl-muted">
                                     Best:
                                     <span className="text-nrl-text tabular-nums">{formatPrice(row.bestPriceComputed)}</span>
@@ -4930,8 +4930,8 @@ function MarketSection({
                         {showModelColumns ? (
                           <>
                             <th className="py-2 pr-3 font-semibold">Model</th>
-                            <th className="py-2 pr-3 font-semibold">Edge</th>
-                            <th className="py-2 pr-3 font-semibold">Score</th>
+                            <th className="py-2 pr-5 font-semibold">Edge</th>
+                            <th className="py-2 pr-5 font-semibold">Score</th>
                           </>
                         ) : null}
                         <th className="py-2 pr-3 font-semibold">Odds</th>
@@ -5153,7 +5153,7 @@ function MarketSection({
                                     {formatPct(modelProbability == null ? null : modelProbability * 100)}
                                   </span>
                                 </td>
-                                <td className={`py-2 pr-3 ${edgeClass}`}>
+                                <td className={`py-2 pr-5 ${edgeClass}`}>
                                   <span className="inline-flex items-center gap-1.5">
                                     <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}>
                                       {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
@@ -5161,7 +5161,7 @@ function MarketSection({
                                     {suspiciousEdge ? <SuspiciousEdgeCaution /> : null}
                                   </span>
                                 </td>
-                                <td className={`py-2 pr-3 font-semibold ${edgeClass}`}>
+                                <td className={`py-2 pr-5 font-semibold ${edgeClass}`}>
                                   <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}>
                                     {betScore == null ? "-" : formatBestBetScore(betScore)}
                                   </span>

@@ -1861,7 +1861,7 @@ function PitchPlayer({
           </div>
         ) : null}
       </div>
-      <div className={`${compact ? "max-w-[3.45rem] text-[9px]" : "text-[11px]"} mx-auto mt-1 truncate font-bold leading-tight text-white drop-shadow`} title={player.player}>
+      <div className={`${compact ? "max-w-[3.45rem] text-[9px]" : "text-[11px]"} mx-auto mt-1 whitespace-normal break-words font-bold leading-tight text-white drop-shadow`} title={player.player}>
         {displayName(player)}
       </div>
       {showPlayerMetric ? (

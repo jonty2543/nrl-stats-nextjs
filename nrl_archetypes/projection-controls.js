@@ -76,10 +76,11 @@
     return nextTrace;
   }
 
-  function getProjectedAxis(label) {
+  function getProjectedAxis(label, titleStandoff) {
     return {
-      title: { text: label, font: { color: "#f8fafc", size: 15 } },
+      title: { text: label, font: { color: "#f8fafc", size: 15 }, standoff: titleStandoff },
       tickfont: { color: "#f8fafc", size: 12 },
+      automargin: true,
       showline: false,
       mirror: false,
       zeroline: true,
@@ -109,9 +110,23 @@
     const layout = {
       ...gd.layout,
       margin: state.droppedDimension
-        ? { ...baseMargin, t: Math.max(baseMargin.t || 0, 82), r: Math.max(baseMargin.r || 0, 64) }
+        ? {
+          ...baseMargin,
+          t: Math.max(baseMargin.t || 0, 154),
+          r: Math.max(baseMargin.r || 0, 64),
+          b: Math.max(baseMargin.b || 0, 340),
+        }
         : { ...baseMargin },
-      legend: { ...(gd.layout.legend || {}) },
+      legend: state.droppedDimension
+        ? {
+          ...(gd.layout.legend || {}),
+          orientation: "h",
+          x: 0.5,
+          xanchor: "center",
+          y: -0.64,
+          yanchor: "top",
+        }
+        : { ...(gd.layout.legend || {}) },
       scene: {
         ...(gd.layout.scene || {}),
         xaxis: { ...((gd.layout.scene || {}).xaxis || {}), title: { text: dimensions[0].label }, showspikes: false },
@@ -120,10 +135,10 @@
         dragmode: "turntable",
       },
       xaxis: state.droppedDimension
-        ? getProjectedAxis(keptDimensions[0].label)
+        ? getProjectedAxis(keptDimensions[0].label, 16)
         : gd.layout.xaxis,
       yaxis: state.droppedDimension
-        ? { ...getProjectedAxis(keptDimensions[1].label), scaleanchor: "x", scaleratio: 1 }
+        ? { ...getProjectedAxis(keptDimensions[1].label, 24), scaleanchor: "x", scaleratio: 1 }
         : gd.layout.yaxis,
       dragmode: state.droppedDimension ? "pan" : gd.layout.dragmode,
     };
@@ -149,12 +164,14 @@
     wrapper.dataset.projectionReady = state.originalData ? "true" : "false";
   }
 
-  function updateButtons(activeButton, dimensionKey) {
+  function updateButtons() {
     document.querySelectorAll(".dimension-toggle-btn").forEach((button) => {
-      const isDropped = button === activeButton && state.droppedDimension === dimensionKey;
-      button.classList.toggle("is-dropped", isDropped);
-      button.setAttribute("aria-pressed", isDropped ? "true" : "false");
-      button.textContent = isDropped ? `Restore ${button.dataset.dimensionLabel}` : `- Drop ${button.dataset.dimensionLabel}`;
+      const isShown = button.dataset.dimensionKey !== state.droppedDimension;
+      button.classList.toggle("is-selected", isShown);
+      button.setAttribute("aria-pressed", isShown ? "true" : "false");
+      button.title = isShown
+        ? `Hide ${button.dataset.dimensionLabel} from the plot`
+        : `Show ${button.dataset.dimensionLabel} in the plot`;
     });
   }
 
@@ -218,23 +235,30 @@
     const controls = document.createElement("div");
     controls.id = "dimension-toggle";
 
+    const label = document.createElement("span");
+    label.className = "dimension-toggle-label";
+    label.textContent = "Show:";
+    controls.appendChild(label);
+
     getDimensions(gd).forEach((dimension) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "dimension-toggle-btn";
+      button.dataset.dimensionKey = dimension.key;
       button.dataset.dimensionLabel = dimension.label;
-      button.textContent = "- Drop " + dimension.label;
-      button.title = "Drop " + dimension.label + " from the plot";
-      button.setAttribute("aria-pressed", "false");
+      button.textContent = dimension.label;
+      button.title = "Hide " + dimension.label + " from the plot";
+      button.setAttribute("aria-pressed", "true");
       button.addEventListener("click", () => {
         state.droppedDimension = state.droppedDimension === dimension.key ? null : dimension.key;
-        updateButtons(button, dimension.key);
+        updateButtons();
         applyProjection();
       });
       controls.appendChild(button);
     });
 
     wrapper.appendChild(controls);
+    updateButtons();
   }
 
   function injectStyles() {
@@ -297,7 +321,7 @@
         display: flex;
         gap: 6px;
         flex-wrap: nowrap;
-        max-width: calc(100% - 90px);
+        max-width: calc(100% - 24px);
         padding: 5px;
         background: rgba(9, 14, 30, 0.76);
         border: 1px solid rgba(148, 163, 184, 0.28);
@@ -305,9 +329,21 @@
         box-shadow: 0 10px 26px rgba(4, 8, 18, 0.28);
         backdrop-filter: blur(10px);
       }
+      .dimension-toggle-label {
+        display: inline-flex;
+        min-height: 26px;
+        align-items: center;
+        padding: 0 5px 0 7px;
+        color: rgba(245, 247, 255, 0.72);
+        font: 800 9px/1.1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
       .dimension-toggle-btn {
         appearance: none;
         min-height: 26px;
+        max-width: 148px;
         border: 1px solid rgba(148, 163, 184, 0.36);
         border-radius: 999px;
         background: rgba(17, 24, 46, 0.94);
@@ -316,24 +352,26 @@
         font: 800 9px/1.1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         letter-spacing: 0.02em;
         padding: 5px 9px;
+        overflow: hidden;
+        text-overflow: ellipsis;
         white-space: nowrap;
         transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
       }
       .dimension-toggle-btn:hover,
       .dimension-toggle-btn:focus-visible {
-        border-color: #C9FF00;
-        background: rgba(201, 255, 0, 0.09);
-        color: #C9FF00;
+        border-color: #00f58a;
+        background: rgba(0, 245, 138, 0.09);
+        color: #00f58a;
         outline: none;
       }
       .dimension-toggle-btn:hover {
         transform: translateY(-1px);
       }
-      .dimension-toggle-btn.is-dropped {
-        background: rgba(201, 255, 0, 0.18);
-        border-color: #C9FF00;
-        color: #C9FF00;
-        box-shadow: inset 0 0 0 1px rgba(201, 255, 0, 0.16);
+      .dimension-toggle-btn.is-selected {
+        background: rgba(0, 245, 138, 0.16);
+        border-color: #00f58a;
+        color: #00f58a;
+        box-shadow: inset 0 0 0 1px rgba(0, 245, 138, 0.16);
       }
       @media (max-width: 768px) {
         #year-toggle {
@@ -348,13 +386,25 @@
         }
         #dimension-toggle {
           top: 52px;
-          left: 6px;
-          max-width: calc(100% - 64px);
+          left: 4px;
+          gap: 3px;
+          width: fit-content;
+          max-width: calc(100% - 58px);
+          padding: 4px 3px;
+        }
+        .dimension-toggle-label {
+          min-height: 28px;
+          padding: 0 1px 0 3px;
+          font-size: 6px;
         }
         .dimension-toggle-btn {
-          flex: 1 1 auto;
+          flex: 0 0 auto;
           min-width: 0;
-          padding: 5px 6px;
+          max-width: none;
+          padding: 5px 7px;
+          overflow: visible;
+          text-overflow: clip;
+          font-size: 7px;
         }
       }
     `;

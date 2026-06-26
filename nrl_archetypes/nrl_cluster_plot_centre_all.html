@@ -5,10 +5,10 @@
                 #plotly-wrapper .updatemenu-button rect.updatemenu-item-bg {
                     rx: 8px !important;
                     ry: 8px !important;
-                    fill: white !important;
+                    fill: rgba(17, 24, 46, 0.96) !important;
                 }
                 #plotly-wrapper .updatemenu-item-text {
-                    fill: #0A1128 !important;
+                    fill: rgba(245, 247, 255, 0.88) !important;
                 }
                 
                 /* Mobile specific adjustments */
@@ -45,20 +45,20 @@
                     const text = parentGroup ? parentGroup.querySelector('.updatemenu-item-text') : null;
 
                     if (parentGroup && parentGroup.classList.contains('active')) {
-                        rect.style.fill = 'white';
-                        rect.style.stroke = '#C9FF00';
+                        rect.style.fill = parentGroup && parentGroup.classList.contains('active') ? 'rgba(0, 245, 138, 0.18)' : 'rgba(17, 24, 46, 0.96)';
+                        rect.style.stroke = '#00f58a';
                         rect.style.strokeWidth = '2px';
                         if (text) {
-                            text.style.fill = 'black';
-                            text.setAttribute('fill', 'black');
+                            text.style.fill = '#00f58a';
+                            text.setAttribute('fill', '#00f58a');
                         }
                     } else {
-                        rect.style.fill = 'white';
-                        rect.style.stroke = '#2A3B6E';
+                        rect.style.fill = parentGroup && parentGroup.classList.contains('active') ? 'rgba(0, 245, 138, 0.18)' : 'rgba(17, 24, 46, 0.96)';
+                        rect.style.stroke = 'rgba(148, 163, 184, 0.36)';
                         rect.style.strokeWidth = '1px';
                         if (text) {
-                            text.style.fill = '#0A1128';
-                            text.setAttribute('fill', '#0A1128');
+                            text.style.fill = 'rgba(245, 247, 255, 0.88)';
+                            text.setAttribute('fill', 'rgba(245, 247, 255, 0.88)');
                         }
                     }
                 });

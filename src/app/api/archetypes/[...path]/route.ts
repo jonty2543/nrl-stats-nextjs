@@ -139,8 +139,12 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
       "</style>",
       `
         body {
-            background-color: #0b1020;
+            background-color: #111733;
             font-family: ${APP_FONT_STACK};
+        }
+
+        html {
+            background-color: #111733;
         }
 
         body *,
@@ -149,8 +153,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
         }
 
         header {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            background: rgba(11, 16, 32, 0.92);
+            display: none;
         }
 
         h1 {
@@ -165,7 +168,9 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
         }
 
         .container {
+            background: transparent;
             max-width: 100%;
+            padding: 1.5rem 0 2rem;
         }
 
         .tab-btn,
@@ -341,6 +346,11 @@ function stylePlotHtml(html: string): string {
     .replaceAll('"gridwidth":2', '"gridwidth":1')
     .replaceAll('"opacity":0.8,"size":5', '"opacity":0.82,"size":3.5')
     .replaceAll("'marker.size': 6", "'marker.size': 4")
+    .replaceAll("rect.style.fill = 'white';", "rect.style.fill = parentGroup && parentGroup.classList.contains('active') ? 'rgba(0, 245, 138, 0.18)' : 'rgba(17, 24, 46, 0.96)';")
+    .replaceAll("text.style.fill = 'black';", "text.style.fill = '#00f58a';")
+    .replaceAll("text.setAttribute('fill', 'black');", "text.setAttribute('fill', '#00f58a');")
+    .replaceAll("text.style.fill = '#0b1020';", "text.style.fill = 'rgba(245, 247, 255, 0.88)';")
+    .replaceAll("text.setAttribute('fill', '#0b1020');", "text.setAttribute('fill', 'rgba(245, 247, 255, 0.88)');")
     .replace(
       /("margin":\{"l":0,"r":0,"b":0,"t":30\},"font":\{"color":)"#0b1020"(\},"paper_bgcolor")/g,
       '$1"#f5f7ff"$2'
@@ -360,6 +370,30 @@ function stylePlotHtml(html: string): string {
                 body *,
                 button {
                     font-family: inherit !important;
+                }
+
+                #plotly-wrapper .updatemenu-button rect.updatemenu-item-bg {
+                    fill: rgba(17, 24, 46, 0.96) !important;
+                    stroke: rgba(148, 163, 184, 0.36) !important;
+                    stroke-width: 1px !important;
+                    rx: 10px !important;
+                    ry: 10px !important;
+                    filter: drop-shadow(0 8px 18px rgba(4, 8, 18, 0.22));
+                }
+
+                #plotly-wrapper .updatemenu-button.active rect.updatemenu-item-bg {
+                    fill: rgba(0, 245, 138, 0.18) !important;
+                    stroke: #00f58a !important;
+                    stroke-width: 2px !important;
+                }
+
+                #plotly-wrapper .updatemenu-item-text {
+                    fill: rgba(245, 247, 255, 0.88) !important;
+                    font-weight: 800 !important;
+                }
+
+                #plotly-wrapper .updatemenu-button.active .updatemenu-item-text {
+                    fill: #00f58a !important;
                 }
 
                 .legend .traces,

@@ -3127,7 +3127,7 @@ function ProjectionBreakevenMetricGrid({
   blurValue?: boolean
 }) {
   return (
-    <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-4 sm:gap-4">
+    <div className="grid w-full grid-cols-[minmax(0,4fr)_minmax(4.5rem,1fr)] gap-2 sm:grid-cols-4 sm:gap-4">
       <div className="rounded-lg border border-nrl-border bg-[#111832] px-2.5 py-3 text-center sm:col-span-3 sm:px-4">
         <div className="grid h-full grid-cols-3 items-center gap-2">
           <div>
@@ -3165,12 +3165,12 @@ function ProjectionBreakevenMetricGrid({
           </div>
         </div>
       </div>
-      <div className="rounded-lg border border-nrl-border bg-[#111832] px-2 py-3 text-center sm:px-2.5">
-        <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
+      <div className="rounded-lg border border-nrl-border bg-[#111832] px-1.5 py-3 text-center sm:px-2.5">
+        <div className="text-[7px] font-semibold uppercase leading-tight tracking-[0.06em] text-nrl-muted sm:text-[9px] sm:tracking-wide">
           Breakeven
         </div>
         <div
-          className={`mt-2 text-[1.6rem] font-bold leading-none tracking-tight text-nrl-text sm:text-[1.85rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
+          className={`mt-2 text-[1.35rem] font-bold leading-none tracking-tight text-nrl-text sm:text-[1.85rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
           aria-hidden={blurValue || undefined}
         >
           {breakeven}

@@ -2,9 +2,10 @@
 
 import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef, type UIEvent } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
+import type { StatsTableApiResponse } from "@/lib/data/stats-table-cache-types";
 import { PLAYER_STATS } from "@/lib/data/constants";
 import { playerSlug } from "@/lib/data/player-slug";
 import {
@@ -73,6 +74,9 @@ interface PlayerStatsTableRow {
 const DEFAULT_PLAYER_1_CANDIDATES = ["Nathan Cleary"];
 const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
 const DEFAULT_STATS_TABLE_YEAR = "2026";
+const STATS_TABLE_CONTAINER_HEIGHT = 396;
+const STATS_TABLE_ROW_HEIGHT = 60;
+const STATS_TABLE_OVERSCAN_ROWS = 8;
 const PLAYER_COMPARISON_STATE_STORAGE_KEY = "nrl-stats:player-comparison-state:v1";
 const STATS_TABLE_MIN_GAMES_OPTIONS = ["1+", "5+", "10+", "20+", "50+", "100+"] as const;
 const PLAYER_STATS_TABLE_GROUP_OPTIONS: PlayerStatsTableGroupBy[] = ["Player", "Year + Player", "Team + Player", "Position + Player"];
@@ -178,12 +182,6 @@ function toFiniteNumber(value: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
-}
-
-function averageNumbers(values: Array<number | null>): number | null {
-  const valid = values.filter((value): value is number => value !== null && Number.isFinite(value));
-  if (valid.length === 0) return null;
-  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }
 
 function formatTableNumber(value: number | null, digits = 1): string {
@@ -907,16 +905,20 @@ export function PlayerComparison({
     () => selectedYears.every((year) => loadedYears.has(year)),
     [loadedYears, selectedYears]
   );
-  const hasLoadedStatsTableYears = useMemo(
-    () => statsTableYears.every((year) => loadedYears.has(year)),
-    [loadedYears, statsTableYears]
-  );
   const [statsTablePosition, setStatsTablePosition] = useState("All Positions");
   const [statsTableTeam, setStatsTableTeam] = useState("All Teams");
   const [statsTableMinGames, setStatsTableMinGames] = useState("1+");
   const [statsTableGroupBy, setStatsTableGroupBy] = useState<PlayerStatsTableGroupBy>("Player");
   const [statsTableSearch, setStatsTableSearch] = useState("");
   const [statsTableFiltersOpen, setStatsTableFiltersOpen] = useState(false);
+  const [statsTableAggregateRows, setStatsTableAggregateRows] = useState<PlayerStatsTableRow[]>([]);
+  const statsTableScrollFrameRef = useRef<number | null>(null);
+  const [statsTableScrollTop, setStatsTableScrollTop] = useState(0);
+  const [statsTableFilterOptions, setStatsTableFilterOptions] = useState({
+    positions: ["All Positions"],
+    teams: ["All Teams"],
+  });
+  const [statsTableRowsLoading, setStatsTableRowsLoading] = useState(false);
   const [statsTableSort, setStatsTableSort] = useState<{
     column: PlayerStatsTableSortKey;
     direction: PlayerStatsTableSortDirection;
@@ -1024,75 +1026,78 @@ export function PlayerComparison({
     [df]
   );
 
-  const statsTableSourceRows = useMemo(
-    () => filterByYear(allData, statsTableYears),
-    [allData, statsTableYears]
-  );
-
-  const statsTablePositionOptions = useMemo(
-    () => ["All Positions", ...Array.from(new Set(statsTableSourceRows.map((row) => row.Position))).filter(Boolean).sort()],
-    [statsTableSourceRows]
-  );
-
-  const statsTableTeamOptions = useMemo(
-    () => ["All Teams", ...Array.from(new Set(statsTableSourceRows.map((row) => row.Team))).filter(Boolean).sort()],
-    [statsTableSourceRows]
-  );
+  const statsTablePositionOptions = statsTableFilterOptions.positions;
+  const statsTableTeamOptions = statsTableFilterOptions.teams;
 
   const statsTableRows = useMemo<PlayerStatsTableRow[]>(() => {
     const search = statsTableSearch.toLowerCase().trim();
-    const filteredRows = statsTableSourceRows.filter((row) => {
-      if (statsTablePosition !== "All Positions" && row.Position !== statsTablePosition) return false;
-      if (statsTableTeam !== "All Teams" && row.Team !== statsTableTeam) return false;
-      if (search && !row.Name.toLowerCase().includes(search)) return false;
-      return true;
+    return statsTableAggregateRows.filter((row) => {
+      if (!search) return true;
+      return row.name.toLowerCase().includes(search);
     });
-    const byGroup = new Map<string, PlayerStat[]>();
-
-    for (const row of filteredRows) {
-      const keyParts =
-        statsTableGroupBy === "Year + Player"
-          ? [row.Year, row.Name]
-          : statsTableGroupBy === "Team + Player"
-            ? [row.Team, row.Name]
-            : statsTableGroupBy === "Position + Player"
-              ? [row.Position, row.Name]
-            : [row.Name];
-      const key = JSON.stringify(keyParts);
-      const rows = byGroup.get(key) ?? [];
-      rows.push(row);
-      byGroup.set(key, rows);
-    }
-
-    const minGames = minGamesValue(statsTableMinGames);
-
-    return [...byGroup.entries()].filter(([, rows]) => rows.length >= minGames).map(([key, rows]) => {
-      const name = rows[0]?.Name ?? "";
-      const team = primaryTeamForRows(rows);
-      const averages: Partial<Record<PlayerStatsTableStatKey, number | null>> = {};
-      const totals: Partial<Record<PlayerStatsTableStatKey, number | null>> = {};
-      for (const stat of PLAYER_STATS_TABLE_COLUMNS) {
-        const values = rows.map((row) => toFiniteNumber(row[stat]));
-        averages[stat] = averageNumbers(values);
-        const validValues = values.filter((value): value is number => value !== null && Number.isFinite(value));
-        totals[stat] = validValues.length > 0 ? validValues.reduce((sum, value) => sum + value, 0) : null;
-      }
-
-      return {
-        key,
-        year: statsTableGroupBy === "Year + Player" ? rows[0]?.Year ?? null : null,
-        name,
-        team,
-        position: primaryPositionForRows(rows),
-        imageRow: resolvePlayerImage(name, null, playerImages),
-        games: rows.length,
-        averages,
-        totals,
-      };
-    });
-  }, [playerImages, statsTableGroupBy, statsTableMinGames, statsTablePosition, statsTableSearch, statsTableSourceRows, statsTableTeam]);
+  }, [statsTableAggregateRows, statsTableSearch]);
 
   const statsTableBaseColumns = PLAYER_STATS_TABLE_BASE_COLUMNS;
+  const resolveStatsTablePlayerImage = useMemo(() => {
+    const imageCache = new Map<string, PlayerImageRecord | null>();
+    return (name: string): PlayerImageRecord | null => {
+      const cacheKey = normalisePersonName(name);
+      if (imageCache.has(cacheKey)) return imageCache.get(cacheKey) ?? null;
+      const imageRow = resolvePlayerImage(name, null, playerImages);
+      imageCache.set(cacheKey, imageRow);
+      return imageRow;
+    };
+  }, [playerImages]);
+
+  useEffect(() => {
+    if (statsTableYears.length === 0) {
+      setStatsTableAggregateRows([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      dataset: "player",
+      years: statsTableYears.join(","),
+      groupBy: statsTableGroupBy,
+      team: statsTableTeam,
+      position: statsTablePosition,
+      minGames: String(minGamesValue(statsTableMinGames)),
+    });
+
+    setStatsTableRowsLoading(true);
+    fetch(`/api/stats-table?${params.toString()}`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to fetch stats table");
+        return (await res.json()) as StatsTableApiResponse<Omit<PlayerStatsTableRow, "imageRow">>;
+      })
+      .then((data) => {
+        setStatsTableFilterOptions(data.filterOptions);
+        setStatsTableAggregateRows(
+          data.rows.map((row) => ({
+            ...row,
+            imageRow: resolveStatsTablePlayerImage(row.name),
+          }))
+        );
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.error("Failed to load player stats table rows:", error);
+        setStatsTableAggregateRows([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setStatsTableRowsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [
+    resolveStatsTablePlayerImage,
+    statsTableGroupBy,
+    statsTableMinGames,
+    statsTablePosition,
+    statsTableTeam,
+    statsTableYears,
+  ]);
 
   const sortedStatsTableRows = useMemo(() => {
     const getSortValue = (row: PlayerStatsTableRow): number | string | null => {
@@ -1123,6 +1128,41 @@ export function PlayerComparison({
       return valueComparison || a.name.localeCompare(b.name) || String(a.team ?? "").localeCompare(String(b.team ?? ""));
     });
   }, [statsTableRows, statsTableSort, statsTableValueMode]);
+
+  const statsTableColumnCount = statsTableBaseColumns.length + PLAYER_STATS_TABLE_COLUMNS.length + 1;
+  const visibleStatsTableRange = useMemo(() => {
+    const visibleCount = Math.ceil(STATS_TABLE_CONTAINER_HEIGHT / STATS_TABLE_ROW_HEIGHT) + STATS_TABLE_OVERSCAN_ROWS * 2;
+    const maxStart = Math.max(0, sortedStatsTableRows.length - visibleCount);
+    const start = Math.min(
+      maxStart,
+      Math.max(0, Math.floor(statsTableScrollTop / STATS_TABLE_ROW_HEIGHT) - STATS_TABLE_OVERSCAN_ROWS)
+    );
+    const end = Math.min(sortedStatsTableRows.length, start + visibleCount);
+    return {
+      start,
+      end,
+      topHeight: start * STATS_TABLE_ROW_HEIGHT,
+      bottomHeight: Math.max(0, (sortedStatsTableRows.length - end) * STATS_TABLE_ROW_HEIGHT),
+    };
+  }, [sortedStatsTableRows.length, statsTableScrollTop]);
+  const visibleStatsTableRows = sortedStatsTableRows.slice(visibleStatsTableRange.start, visibleStatsTableRange.end);
+
+  useEffect(() => {
+    return () => {
+      if (statsTableScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(statsTableScrollFrameRef.current);
+      }
+    };
+  }, []);
+
+  const handleStatsTableScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    const nextScrollTop = event.currentTarget.scrollTop;
+    if (statsTableScrollFrameRef.current !== null) return;
+    statsTableScrollFrameRef.current = window.requestAnimationFrame(() => {
+      statsTableScrollFrameRef.current = null;
+      setStatsTableScrollTop(nextScrollTop);
+    });
+  }, []);
 
   const toggleStatsTableSort = useCallback((column: PlayerStatsTableSortKey) => {
     setStatsTableSort((current) => ({
@@ -1231,7 +1271,7 @@ export function PlayerComparison({
   ]);
 
   useEffect(() => {
-    if (!hasRestoredStatsState || !hasLoadedStatsTableYears) return;
+    if (!hasRestoredStatsState || statsTableRowsLoading) return;
 
     if (statsTablePosition !== "All Positions" && !statsTablePositionOptions.includes(statsTablePosition)) {
       setStatsTablePosition("All Positions");
@@ -1240,8 +1280,8 @@ export function PlayerComparison({
       setStatsTableTeam("All Teams");
     }
   }, [
-    hasLoadedStatsTableYears,
     hasRestoredStatsState,
+    statsTableRowsLoading,
     statsTablePosition,
     statsTablePositionOptions,
     statsTableTeam,
@@ -1366,11 +1406,11 @@ export function PlayerComparison({
   }, [statsTableYears.length, unlockedYears]);
 
   useEffect(() => {
-    const neededYears = [...new Set([...selectedYears, ...statsTableYears])];
+    const neededYears = [...new Set(selectedYears)];
     const missingSelectedYears = neededYears.filter((year) => !loadedYears.has(year));
     if (missingSelectedYears.length === 0) return;
     void loadYears(missingSelectedYears);
-  }, [loadYears, loadedYears, selectedYears, statsTableYears]);
+  }, [loadYears, loadedYears, selectedYears]);
 
   useEffect(() => {
     const validYears = selectedYears.filter((year) => unlockedYears.includes(year));
@@ -2129,7 +2169,7 @@ export function PlayerComparison({
               />
             </div>
           ) : null}
-          <div className="h-[396px] overflow-auto pb-3">
+          <div className="h-[396px] overflow-auto pb-3" onScroll={handleStatsTableScroll}>
             <table className="min-w-[2600px] border-collapse text-left text-xs">
               <thead>
                 <tr>
@@ -2188,18 +2228,25 @@ export function PlayerComparison({
                 {sortedStatsTableRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={statsTableBaseColumns.length + PLAYER_STATS_TABLE_COLUMNS.length + 1}
+                      colSpan={statsTableColumnCount}
                       className="px-3 py-6 text-center text-xs text-nrl-muted"
                     >
-                      No players match the selected filters.
+                      {statsTableRowsLoading ? "Loading table rows..." : "No players match the selected filters."}
                     </td>
                   </tr>
                 ) : (
-                  sortedStatsTableRows.map((row, index) => {
-                    const pinnedGroupLabel = statsTablePinnedGroupLabel(row, statsTableGroupBy);
-                    const teamLogoUrl = resolveTeamLogoUrl(row.team, teamLogos);
-                    const showTeamGroupLogoOnly = statsTableGroupBy === "Team + Player" && pinnedGroupLabel;
-                    return (
+                  <>
+                    {visibleStatsTableRange.topHeight > 0 ? (
+                      <tr aria-hidden="true">
+                        <td colSpan={statsTableColumnCount} style={{ height: visibleStatsTableRange.topHeight, padding: 0 }} />
+                      </tr>
+                    ) : null}
+                    {visibleStatsTableRows.map((row, visibleIndex) => {
+                      const index = visibleStatsTableRange.start + visibleIndex;
+                      const pinnedGroupLabel = statsTablePinnedGroupLabel(row, statsTableGroupBy);
+                      const teamLogoUrl = resolveTeamLogoUrl(row.team, teamLogos);
+                      const showTeamGroupLogoOnly = statsTableGroupBy === "Team + Player" && pinnedGroupLabel;
+                      return (
                       <tr key={row.key} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
                         <td
                           className={`sticky left-0 z-[3] border-r border-nrl-border/70 bg-nrl-panel px-2 py-1 ${
@@ -2233,7 +2280,7 @@ export function PlayerComparison({
                             ) : null}
                           </div>
                         </td>
-                      <td className="w-56 min-w-56 max-w-56 bg-nrl-panel px-3 py-1 text-sm font-black text-nrl-text">
+                        <td className="w-56 min-w-56 max-w-56 bg-nrl-panel px-3 py-1 text-sm font-black text-nrl-text">
                         <Link
                           href={`/dashboard/players/${playerSlug(row.name)}`}
                           className="block min-w-0 truncate transition-colors hover:text-nrl-accent"
@@ -2272,9 +2319,15 @@ export function PlayerComparison({
                           )}
                         </td>
                       ))}
-                    </tr>
-                    );
-                  })
+                      </tr>
+                      );
+                    })}
+                    {visibleStatsTableRange.bottomHeight > 0 ? (
+                      <tr aria-hidden="true">
+                        <td colSpan={statsTableColumnCount} style={{ height: visibleStatsTableRange.bottomHeight, padding: 0 }} />
+                      </tr>
+                    ) : null}
+                  </>
                 )}
               </tbody>
             </table>
@@ -2343,127 +2396,127 @@ export function PlayerComparison({
           </div>
 
           {analysisFiltersOpen ? (
-          <div className="mt-4">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
-              Analysis Filters
-            </div>
-            <FilterBar
-              years={availableYears}
-              selectedYears={selectedYears}
-              onYearsChange={handleYearsChange}
-              finalsMode={finalsMode}
-              onFinalsModeChange={setFinalsMode}
-              minutesThreshold={0}
-              onMinutesThresholdChange={() => {}}
-              minutesMode="All"
-              onMinutesModeChange={() => {}}
-              showPosition={false}
-              showMinutes={false}
-              showPresets={false}
-              embedded
-              showYear
-              showFinals
-              mobileColumns={2}
-            />
+            <div className="mt-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-muted">
+                Analysis Filters
+              </div>
+              <FilterBar
+                years={availableYears}
+                selectedYears={selectedYears}
+                onYearsChange={handleYearsChange}
+                finalsMode={finalsMode}
+                onFinalsModeChange={setFinalsMode}
+                minutesThreshold={0}
+                onMinutesThresholdChange={() => {}}
+                minutesMode="All"
+                onMinutesModeChange={() => {}}
+                showPosition={false}
+                showMinutes={false}
+                showPresets={false}
+                embedded
+                showYear
+                showFinals
+                mobileColumns={2}
+              />
 
-            <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3">
-              <Select
-                label="Minutes Over"
-                value={minutesOverFilter}
-                options={[...MINUTES_FILTER_OPTIONS]}
-                onChange={setMinutesOverFilter}
-              />
-              <Select
-                label="Minutes Under"
-                value={minutesUnderFilter}
-                options={[...MINUTES_FILTER_OPTIONS]}
-                onChange={setMinutesUnderFilter}
-              />
-              <>
+              <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3">
                 <Select
-                  label="Player 1 Position"
-                  value={player1Position}
-                  options={["All", ...positions]}
-                  onChange={setPlayer1Position}
+                  label="Minutes Over"
+                  value={minutesOverFilter}
+                  options={[...MINUTES_FILTER_OPTIONS]}
+                  onChange={setMinutesOverFilter}
                 />
-                <SearchableSelect
-                  label="Player 1 Teammate"
-                  value={teammate1}
-                  options={["None", ...tm1Options]}
-                  onChange={handleTeammate1Change}
-                  disabled={player1 === "None"}
+                <Select
+                  label="Minutes Under"
+                  value={minutesUnderFilter}
+                  options={[...MINUTES_FILTER_OPTIONS]}
+                  onChange={setMinutesUnderFilter}
                 />
-                {teammate1 !== "None" ? (
-                  <div className="pb-0.5">
-                    <div className="flex flex-col gap-0.5">
-                      <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
-                        With / Without
-                      </div>
-                      <div className="min-h-[30px] flex items-center -mt-0.5 lg:-mt-1">
-                        <PillRadio
-                          options={["Both", "With", "Without"]}
-                          value={teammateMode1[0].toUpperCase() + teammateMode1.slice(1)}
-                          onChange={(value) => setTeammateMode1(value.toLowerCase() as typeof teammateMode1)}
-                          disabled={player1 === "None"}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                {teammate1 !== "None" ? (
+                <>
                   <Select
-                    label="Player 1 Tm Position"
-                    value={teammate1Position}
+                    label="Player 1 Position"
+                    value={player1Position}
                     options={["All", ...positions]}
-                    onChange={setTeammate1Position}
+                    onChange={setPlayer1Position}
+                  />
+                  <SearchableSelect
+                    label="Player 1 Teammate"
+                    value={teammate1}
+                    options={["None", ...tm1Options]}
+                    onChange={handleTeammate1Change}
                     disabled={player1 === "None"}
                   />
-                ) : null}
-              </>
-
-              <>
-                <Select
-                  label="Player 2 Position"
-                  value={player2Position}
-                  options={["All", ...positions]}
-                  onChange={setPlayer2Position}
-                />
-                <SearchableSelect
-                  label="Player 2 Teammate"
-                  value={teammate2}
-                  options={["None", ...tm2Options]}
-                  onChange={handleTeammate2Change}
-                  disabled={player2 === "None"}
-                />
-                {teammate2 !== "None" ? (
-                  <div className="pb-0.5">
-                    <div className="flex flex-col gap-0.5">
-                      <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
-                        With / Without
-                      </div>
-                      <div className="min-h-[30px] flex items-center -mt-0.5 lg:-mt-1">
-                        <PillRadio
-                          options={["Both", "With", "Without"]}
-                          value={teammateMode2[0].toUpperCase() + teammateMode2.slice(1)}
-                          onChange={(value) => setTeammateMode2(value.toLowerCase() as typeof teammateMode2)}
-                          disabled={player2 === "None"}
-                        />
+                  {teammate1 !== "None" ? (
+                    <div className="pb-0.5">
+                      <div className="flex flex-col gap-0.5">
+                        <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
+                          With / Without
+                        </div>
+                        <div className="min-h-[30px] flex items-center -mt-0.5 lg:-mt-1">
+                          <PillRadio
+                            options={["Both", "With", "Without"]}
+                            value={teammateMode1[0].toUpperCase() + teammateMode1.slice(1)}
+                            onChange={(value) => setTeammateMode1(value.toLowerCase() as typeof teammateMode1)}
+                            disabled={player1 === "None"}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ) : null}
-                {teammate2 !== "None" ? (
+                  ) : null}
+                  {teammate1 !== "None" ? (
+                    <Select
+                      label="Player 1 Tm Position"
+                      value={teammate1Position}
+                      options={["All", ...positions]}
+                      onChange={setTeammate1Position}
+                      disabled={player1 === "None"}
+                    />
+                  ) : null}
+                </>
+
+                <>
                   <Select
-                    label="Player 2 Tm Position"
-                    value={teammate2Position}
+                    label="Player 2 Position"
+                    value={player2Position}
                     options={["All", ...positions]}
-                    onChange={setTeammate2Position}
+                    onChange={setPlayer2Position}
+                  />
+                  <SearchableSelect
+                    label="Player 2 Teammate"
+                    value={teammate2}
+                    options={["None", ...tm2Options]}
+                    onChange={handleTeammate2Change}
                     disabled={player2 === "None"}
                   />
-                ) : null}
-              </>
+                  {teammate2 !== "None" ? (
+                    <div className="pb-0.5">
+                      <div className="flex flex-col gap-0.5">
+                        <div aria-hidden="true" className="invisible text-[8px] font-semibold uppercase tracking-wide">
+                          With / Without
+                        </div>
+                        <div className="min-h-[30px] flex items-center -mt-0.5 lg:-mt-1">
+                          <PillRadio
+                            options={["Both", "With", "Without"]}
+                            value={teammateMode2[0].toUpperCase() + teammateMode2.slice(1)}
+                            onChange={(value) => setTeammateMode2(value.toLowerCase() as typeof teammateMode2)}
+                            disabled={player2 === "None"}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  {teammate2 !== "None" ? (
+                    <Select
+                      label="Player 2 Tm Position"
+                      value={teammate2Position}
+                      options={["All", ...positions]}
+                      onChange={setTeammate2Position}
+                      disabled={player2 === "None"}
+                    />
+                  ) : null}
+                </>
+              </div>
             </div>
-          </div>
           ) : null}
 
           <div className={`${analysisFiltersOpen ? "mt-6 border-t border-nrl-border pt-4" : "mt-4"}`}>

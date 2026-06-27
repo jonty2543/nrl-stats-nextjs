@@ -408,6 +408,9 @@ function formatGameClock(seconds: number | null | undefined): string | null {
 function formatMatchState(value: string | null | undefined): string {
   const spaced = String(value ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").trim()
   if (!spaced) return "Live"
+  const normalized = spaced.toLowerCase()
+  if (normalized === "full time" || normalized === "fulltime") return "FT"
+  if (normalized === "half time" || normalized === "halftime") return "HT"
   if (spaced.toLowerCase() === "second half") return "2nd half"
   if (spaced.toLowerCase() === "first half") return "1st half"
   return spaced
@@ -702,10 +705,6 @@ function formatMatchDateHeader(dateKey: string): string {
   }).format(date)
 }
 
-function formatCardDate(match: LineupMatch): string {
-  return formatMatchDateHeader(matchDateKey(match)).toUpperCase()
-}
-
 function formatKickoffTime(value: string | null): string {
   if (!value) return "TBC"
   const date = new Date(value)
@@ -879,9 +878,9 @@ function LiveScoreHeader({
   const showLiveBadge = isMatchLive(liveMatch)
   const matchStateLabel = state
     ? isStaleUnfinishedMatch(liveMatch)
-      ? "Full time"
+      ? "FT"
       : formatMatchState(state.matchState)
-    : "Full time"
+    : "FT"
 
   const hasScore = score.homeScore != null || score.awayScore != null
 
@@ -2772,13 +2771,8 @@ function LineupCard({
           />
         ) : null}
         <div className="relative z-[1] pb-2 text-center">
-          {showLiveCardHeader ? null : (
-            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white sm:text-xs sm:tracking-[0.28em]">
-              {detailMatch.round} · {formatCardDate(detailMatch)}
-            </div>
-          )}
           {detailMatch.venue || weatherForecast ? (
-            <div className={`mx-auto flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px] ${showLiveCardHeader ? "mt-0" : "mt-1"}`}>
+            <div className="mx-auto flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px]">
               {detailMatch.venue ? <span className="min-w-0 truncate">{detailMatch.venue}</span> : null}
               {weatherForecast ? (
                 <span className="flex-none text-xs leading-none sm:text-sm" aria-hidden="true">

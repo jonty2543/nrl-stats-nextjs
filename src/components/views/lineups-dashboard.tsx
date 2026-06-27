@@ -411,8 +411,8 @@ function formatMatchState(value: string | null | undefined): string {
   const normalized = spaced.toLowerCase()
   if (normalized === "full time" || normalized === "fulltime") return "FT"
   if (normalized === "half time" || normalized === "halftime") return "HT"
-  if (spaced.toLowerCase() === "second half") return "2nd half"
-  if (spaced.toLowerCase() === "first half") return "1st half"
+  if (normalized === "second half") return "2nd"
+  if (normalized === "first half") return "1st"
   return spaced
 }
 

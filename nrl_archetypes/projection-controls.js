@@ -3,7 +3,9 @@
     activeYearIndex: 0,
     droppedDimension: null,
     originalData: null,
+    playerSearch: "",
   };
+  const PLAYER_SEARCH_TRACE_NAME = "Player search highlight";
 
   function getGraph() {
     return document.querySelector(".plotly-graph-div");
@@ -11,6 +13,26 @@
 
   function readArray(value) {
     if (!value) return [];
+    if (typeof value === "object" && typeof value.bdata === "string" && typeof value.dtype === "string") {
+      const binary = window.atob(value.bdata);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+
+      const constructors = {
+        f8: Float64Array,
+        f4: Float32Array,
+        i1: Int8Array,
+        i2: Int16Array,
+        i4: Int32Array,
+        u1: Uint8Array,
+        u2: Uint16Array,
+        u4: Uint32Array,
+      };
+      const TypedArray = constructors[value.dtype];
+      return TypedArray ? Array.from(new TypedArray(bytes.buffer)) : [];
+    }
     if (ArrayBuffer.isView(value)) return Array.from(value);
     return Array.isArray(value) ? value.slice() : value;
   }
@@ -40,9 +62,140 @@
       x: readArray(trace.x),
       y: readArray(trace.y),
       z: readArray(trace.z),
+      hovertext: readArray(trace.hovertext),
+      markerSize: trace.marker && trace.marker.size ? readArray(trace.marker.size) : null,
+      markerLineColor: trace.marker && trace.marker.line ? readArray(trace.marker.line.color) : null,
+      markerLineWidth: trace.marker && trace.marker.line ? readArray(trace.marker.line.width) : null,
     }));
 
     return true;
+  }
+
+  function playerNameFromHover(value) {
+    return String(value || "").replace(/\s+\(\d{4}\)\s*$/, "").trim();
+  }
+
+  function getBaseTraces(gd) {
+    return state.originalData ? gd.data.slice(0, state.originalData.length) : gd.data;
+  }
+
+  function getPlayerSearchMatches(gd, query) {
+    const normalizedQuery = query.toLowerCase().trim();
+    if (!normalizedQuery || !state.originalData) return [];
+
+    const matches = [];
+    getBaseTraces(gd).forEach((trace, traceIndex) => {
+      const source = state.originalData[traceIndex];
+      if (!source) return;
+
+      source.hovertext.forEach((label, pointIndex) => {
+        const playerName = playerNameFromHover(label);
+        const searchable = `${playerName} ${label}`.toLowerCase();
+        if (!searchable.includes(normalizedQuery)) return;
+        matches.push({ traceIndex, pointIndex, playerName, label });
+      });
+    });
+    return matches;
+  }
+
+  function updatePlayerSearchStatus(matchCount) {
+    const status = document.getElementById("player-search-status");
+    if (!status) return;
+
+    if (!state.playerSearch.trim()) {
+      status.textContent = "";
+      return;
+    }
+
+    status.textContent = matchCount === 1 ? "1 match" : `${matchCount} matches`;
+  }
+
+  function highlightedValue(values, pointIndex) {
+    const value = values[pointIndex];
+    return typeof value === "number" && Number.isFinite(value) ? value : value;
+  }
+
+  function buildPlayerSearchTrace(matches) {
+    const dimensions = getDimensions(getGraph());
+    const keptDimensions = dimensions.filter((dimension) => dimension.key !== state.droppedDimension);
+    const isProjection = Boolean(state.droppedDimension);
+    const trace = {
+      name: PLAYER_SEARCH_TRACE_NAME,
+      type: isProjection ? "scatter" : "scatter3d",
+      mode: "markers",
+      hoverinfo: "text",
+      hovertext: matches.map((match) => match.label),
+      text: [],
+      textposition: isProjection ? "top center" : "top center",
+      textfont: {
+        color: "#f8fafc",
+        size: isProjection ? 13 : 12,
+        family: "Segoe UI, Tahoma, Geneva, Verdana, sans-serif",
+      },
+      showlegend: false,
+      marker: {
+        color: "rgba(183, 255, 0, 0)",
+        size: isProjection ? 10 : 8,
+        opacity: 1,
+        line: { color: "#b7ff00", width: 2 },
+      },
+    };
+
+    trace.x = matches.map((match) => {
+      const source = state.originalData[match.traceIndex];
+      return highlightedValue(source[isProjection ? keptDimensions[0].axis : "x"], match.pointIndex);
+    });
+    trace.y = matches.map((match) => {
+      const source = state.originalData[match.traceIndex];
+      return highlightedValue(source[isProjection ? keptDimensions[1].axis : "y"], match.pointIndex);
+    });
+    if (!isProjection) {
+      trace.z = matches.map((match) => highlightedValue(state.originalData[match.traceIndex].z, match.pointIndex));
+    }
+
+    return trace;
+  }
+
+  function buildPlayerSearchAnnotations() {
+    return [];
+  }
+
+  function getPlayerSearchLayout(gd, matches) {
+    const layout = {
+      ...gd.layout,
+      scene: { ...(gd.layout.scene || {}) },
+    };
+    const annotations = matches.length ? buildPlayerSearchAnnotations() : [];
+
+    if (state.droppedDimension) {
+      layout.annotations = annotations;
+      layout.scene.annotations = [];
+    } else {
+      layout.annotations = [];
+      layout.scene.annotations = annotations;
+    }
+
+    return layout;
+  }
+
+  function applyPlayerSearchHighlight() {
+    const gd = getGraph();
+    if (!gd || !window.Plotly || !ensureOriginalData(gd)) return;
+
+    const query = state.playerSearch.toLowerCase().trim();
+    const matches = query ? getPlayerSearchMatches(gd, query) : [];
+    updatePlayerSearchStatus(matches.length);
+
+    const data = getBaseTraces(gd).map((trace) => ({ ...trace }));
+    if (query && matches.length > 0) {
+      data.push(buildPlayerSearchTrace(matches));
+    }
+
+    Plotly.react(gd, data, getPlayerSearchLayout(gd, matches), {
+      responsive: true,
+      scrollZoom: true,
+      displaylogo: false,
+    });
   }
 
   function getProjectionTrace(trace, index, keptDimensions) {
@@ -101,7 +254,7 @@
 
     const dimensions = getDimensions(gd);
     const keptDimensions = dimensions.filter((dimension) => dimension.key !== state.droppedDimension);
-    const data = gd.data.map((trace, index) => (
+    const data = getBaseTraces(gd).map((trace, index) => (
       state.droppedDimension
         ? getProjectionTrace(trace, index, keptDimensions)
         : getRestoredTrace(trace, index)
@@ -150,9 +303,26 @@
     }).then(() => {
       updateProjectionAttributes();
       renderYearControls();
+      applyPlayerSearchHighlight();
       if (typeof window.applyButtonStyles === "function") window.applyButtonStyles();
       if (typeof window.adjustPlotlyForMobile === "function") window.adjustPlotlyForMobile();
     });
+  }
+
+  function getControlBar(wrapper) {
+    let controlBar = wrapper.querySelector("#archetype-controls");
+    if (controlBar) return controlBar;
+
+    controlBar = document.createElement("div");
+    controlBar.id = "archetype-controls";
+    wrapper.insertBefore(controlBar, wrapper.firstChild);
+    return controlBar;
+  }
+
+  function resizeGraph() {
+    const gd = getGraph();
+    if (!gd || !window.Plotly || !window.Plotly.Plots) return;
+    window.requestAnimationFrame(() => window.Plotly.Plots.resize(gd));
   }
 
   function updateProjectionAttributes() {
@@ -193,6 +363,7 @@
     const args = yearButton.args || [];
     Plotly.update(gd, args[0] || {}, args[1] || {}).then(() => {
       if (state.droppedDimension) applyProjection();
+      applyPlayerSearchHighlight();
     });
   }
 
@@ -217,8 +388,72 @@
       controls.appendChild(button);
     });
 
-    wrapper.appendChild(controls);
+    getControlBar(wrapper).appendChild(controls);
     updateYearButtons();
+  }
+
+  function getPlayerSearchOptions(gd) {
+    if (!ensureOriginalData(gd)) return [];
+
+    const players = new Set();
+    state.originalData.forEach((traceData) => {
+      traceData.hovertext.forEach((label) => {
+        const playerName = playerNameFromHover(label);
+        if (playerName) players.add(playerName);
+      });
+    });
+
+    return Array.from(players).sort((a, b) => a.localeCompare(b));
+  }
+
+  function renderPlayerSearch() {
+    const wrapper = document.getElementById("plotly-wrapper");
+    const gd = getGraph();
+    if (!wrapper || !gd || wrapper.querySelector("#player-search")) return;
+
+    const controls = document.createElement("div");
+    controls.id = "player-search";
+
+    const input = document.createElement("input");
+    input.type = "search";
+    input.id = "player-search-input";
+    input.setAttribute("list", "player-search-options");
+    input.placeholder = "Search player";
+    input.autocomplete = "off";
+    input.value = state.playerSearch;
+    input.addEventListener("input", () => {
+      state.playerSearch = input.value;
+      applyPlayerSearchHighlight();
+    });
+
+    const dataList = document.createElement("datalist");
+    dataList.id = "player-search-options";
+    getPlayerSearchOptions(gd).forEach((player) => {
+      const option = document.createElement("option");
+      option.value = player;
+      dataList.appendChild(option);
+    });
+
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.className = "player-search-clear";
+    clearButton.textContent = "Clear";
+    clearButton.addEventListener("click", () => {
+      state.playerSearch = "";
+      input.value = "";
+      applyPlayerSearchHighlight();
+      input.focus();
+    });
+
+    const status = document.createElement("span");
+    status.id = "player-search-status";
+
+    controls.appendChild(input);
+    controls.appendChild(dataList);
+    controls.appendChild(clearButton);
+    controls.appendChild(status);
+    getControlBar(wrapper).appendChild(controls);
+    applyPlayerSearchHighlight();
   }
 
   function renderControls() {
@@ -229,8 +464,14 @@
     if (!ensureOriginalData(gd)) return;
     updateProjectionAttributes();
     renderYearControls();
+    renderPlayerSearch();
 
-    if (wrapper.querySelector("#dimension-toggle")) return;
+    const existingDimensionToggle = wrapper.querySelector("#dimension-toggle");
+    if (existingDimensionToggle && !existingDimensionToggle.querySelector(".dimension-toggle-label")) {
+      existingDimensionToggle.remove();
+    } else if (existingDimensionToggle) {
+      return;
+    }
 
     const controls = document.createElement("div");
     controls.id = "dimension-toggle";
@@ -257,8 +498,9 @@
       controls.appendChild(button);
     });
 
-    wrapper.appendChild(controls);
+    getControlBar(wrapper).appendChild(controls);
     updateButtons();
+    resizeGraph();
   }
 
   function injectStyles() {
@@ -268,24 +510,41 @@
     style.id = "projection-control-styles";
     style.textContent = `
       body { margin: 0; }
-      #plotly-wrapper { position: relative; }
+      #plotly-wrapper {
+        position: relative;
+        min-height: 0;
+      }
+      #plotly-wrapper .plotly-graph-div {
+        height: 100% !important;
+        min-height: 0;
+        padding-top: 112px;
+        box-sizing: border-box;
+      }
+      #archetype-controls {
+        position: absolute;
+        top: 8px;
+        left: 10px;
+        right: 10px;
+        z-index: 30;
+        display: grid;
+        grid-template-columns: minmax(0, max-content);
+        align-items: start;
+        justify-items: start;
+        gap: 6px;
+        pointer-events: none;
+      }
       #plotly-wrapper .updatemenu-container {
         display: none !important;
       }
       #year-toggle {
-        position: absolute;
-        top: 10px;
-        left: 50%;
-        z-index: 22;
         display: flex;
-        max-width: calc(100% - 80px);
+        max-width: 100%;
         overflow: hidden;
         border: 1px solid rgba(148, 163, 184, 0.34);
         border-radius: 999px;
         background: rgba(9, 14, 30, 0.78);
         box-shadow: 0 10px 26px rgba(4, 8, 18, 0.28);
-        transform: translateX(-50%);
-        backdrop-filter: blur(10px);
+        pointer-events: auto;
       }
       .year-toggle-btn {
         appearance: none;
@@ -314,20 +573,76 @@
         color: #00f58a;
       }
       #dimension-toggle {
-        position: absolute;
-        top: 58px;
-        left: 10px;
-        z-index: 20;
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
         display: flex;
         gap: 6px;
         flex-wrap: nowrap;
-        max-width: calc(100% - 24px);
+        max-width: 100%;
         padding: 5px;
         background: rgba(9, 14, 30, 0.76);
         border: 1px solid rgba(148, 163, 184, 0.28);
         border-radius: 999px;
         box-shadow: 0 10px 26px rgba(4, 8, 18, 0.28);
-        backdrop-filter: blur(10px);
+        pointer-events: auto;
+      }
+      #player-search {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        padding: 5px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 999px;
+        background: rgba(9, 14, 30, 0.76);
+        box-shadow: 0 10px 26px rgba(4, 8, 18, 0.28);
+        pointer-events: auto;
+      }
+      #player-search-input {
+        appearance: none;
+        width: 210px;
+        min-height: 26px;
+        border: 1px solid rgba(148, 163, 184, 0.36);
+        border-radius: 999px;
+        background: rgba(17, 24, 46, 0.94);
+        color: #f8fafc;
+        font: 800 10px/1.1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        outline: none;
+        padding: 5px 11px;
+      }
+      #player-search-input::placeholder {
+        color: rgba(245, 247, 255, 0.5);
+      }
+      #player-search-input:hover,
+      #player-search-input:focus {
+        border-color: #00f58a;
+      }
+      .player-search-clear {
+        appearance: none;
+        min-height: 26px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 999px;
+        background: rgba(17, 24, 46, 0.94);
+        color: rgba(245, 247, 255, 0.72);
+        cursor: pointer;
+        font: 800 8px/1.1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        letter-spacing: 0.08em;
+        padding: 5px 8px;
+        text-transform: uppercase;
+      }
+      .player-search-clear:hover,
+      .player-search-clear:focus-visible {
+        border-color: #00f58a;
+        color: #00f58a;
+        outline: none;
+      }
+      #player-search-status {
+        min-width: 52px;
+        color: rgba(245, 247, 255, 0.62);
+        font: 800 8px/1.1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        text-transform: uppercase;
+        white-space: nowrap;
       }
       .dimension-toggle-label {
         display: inline-flex;
@@ -374,10 +689,17 @@
         box-shadow: inset 0 0 0 1px rgba(0, 245, 138, 0.16);
       }
       @media (max-width: 768px) {
+        #plotly-wrapper .plotly-graph-div {
+          padding-top: 108px;
+        }
+        #archetype-controls {
+          gap: 5px;
+          top: 6px;
+          left: 4px;
+          right: 58px;
+        }
         #year-toggle {
-          left: 6px;
-          max-width: calc(100% - 12px);
-          transform: none;
+          max-width: 100%;
         }
         .year-toggle-btn {
           min-height: 32px;
@@ -385,11 +707,9 @@
           font-size: 11px;
         }
         #dimension-toggle {
-          top: 52px;
-          left: 4px;
           gap: 3px;
           width: fit-content;
-          max-width: calc(100% - 58px);
+          max-width: 100%;
           padding: 4px 3px;
         }
         .dimension-toggle-label {
@@ -404,6 +724,25 @@
           padding: 5px 7px;
           overflow: visible;
           text-overflow: clip;
+          font-size: 7px;
+        }
+        #player-search {
+          max-width: 100%;
+          margin-left: 0;
+          padding: 4px;
+        }
+        #player-search-input {
+          width: 150px;
+          min-height: 28px;
+          font-size: 8px;
+        }
+        .player-search-clear {
+          min-height: 28px;
+          font-size: 7px;
+          padding: 5px 7px;
+        }
+        #player-search-status {
+          min-width: 42px;
           font-size: 7px;
         }
       }

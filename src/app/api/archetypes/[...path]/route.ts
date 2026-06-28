@@ -331,7 +331,13 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
 }
 
 function stylePlotHtml(html: string): string {
-  return html
+  const controlsVersion = Date.now();
+  const controlsScript = `<script src="projection-controls.js?v=${controlsVersion}"></script>`;
+  const htmlWithControls = html.includes("projection-controls.js")
+    ? html.replaceAll(/src="projection-controls\.js(?:\?v=\d+)?"/g, `src="projection-controls.js?v=${controlsVersion}"`)
+    : html.replace("</body>", `${controlsScript}</body>`);
+
+  return htmlWithControls
     .replaceAll("#C9FF00", "#00f58a")
     .replaceAll("#c9ff00", "#00f58a")
     .replaceAll("#0A1128", "#0b1020")

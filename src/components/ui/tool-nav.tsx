@@ -27,7 +27,6 @@ export function ToolNav({ className }: ToolNavProps) {
 
   const isStatsRoute =
     pathname === "/dashboard" ||
-    pathname.startsWith("/dashboard/stats-hub") ||
     pathname.startsWith("/dashboard/players") ||
     pathname.startsWith("/dashboard/teams") ||
     pathname.startsWith("/dashboard/archetypes") ||

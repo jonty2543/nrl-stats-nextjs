@@ -7,7 +7,6 @@ import { usePathname, useRouter } from "next/navigation";
 const tabs = [
   { label: "Players", href: "/dashboard/players" },
   { label: "Teams", href: "/dashboard/teams" },
-  { label: "Stats Hub", href: "/dashboard/stats-hub" },
   { label: "Archetypes", href: "/dashboard/archetypes" },
   { label: "Leaders", href: "/dashboard/leaders" },
 ];
@@ -18,7 +17,6 @@ export function TabNav() {
 
   const inStatsSection =
     pathname === "/dashboard" ||
-    pathname.startsWith("/dashboard/stats-hub") ||
     pathname.startsWith("/dashboard/players") ||
     pathname.startsWith("/dashboard/teams") ||
     pathname.startsWith("/dashboard/archetypes") ||

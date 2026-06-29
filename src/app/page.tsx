@@ -199,7 +199,7 @@ export default function Home() {
                 title: "Player stats, Team stats, Player archetypes",
                 description: "Use the stats section to compare players and teams directly, inspect plot comparisons, profile archetypes, and see stat leaders across seasons.",
                 bullets: ["Player archetype profiles", "Player comparison and filtered charts", "Percentile ranks and recent form", "Season leader cards"],
-                ctaHref: "/dashboard/stats-hub",
+                ctaHref: "/dashboard/players",
                 ctaLabel: "Stats",
               },
               {

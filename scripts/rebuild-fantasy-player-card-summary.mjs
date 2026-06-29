@@ -777,16 +777,33 @@ async function fetchOwnershipBaseline(supabase) {
 }
 
 async function fetchOriginChanceNames(supabase) {
+  const lineupCutoffUtc = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("origin_lineups")
     .select("player, match_date")
-    .order("match_date", { ascending: false })
+    .gte("match_date", lineupCutoffUtc)
+    .order("match_date", { ascending: true })
     .limit(1000);
-  if (error) return new Set();
-  const latestMatchDate = (data ?? []).map((row) => row.match_date).find(Boolean) ?? null;
+  if (!error) {
+    const nextMatchDate = (data ?? []).map((row) => row.match_date).find(Boolean) ?? null;
+    const names = new Set(
+      (data ?? [])
+        .filter((row) => !nextMatchDate || row.match_date === nextMatchDate)
+        .map((row) => normaliseProjectionPlayerName(row.player))
+        .filter(Boolean)
+    );
+    if (names.size > 0) return names;
+  }
+
+  const { data: chanceData, error: chanceError } = await supabase
+    .from("origin_chances")
+    .select("player")
+    .order("player", { ascending: true })
+    .limit(1000);
+  if (chanceError) return new Set();
+
   return new Set(
-    (data ?? [])
-      .filter((row) => !latestMatchDate || row.match_date === latestMatchDate)
+    (chanceData ?? [])
       .map((row) => normaliseProjectionPlayerName(row.player))
       .filter(Boolean)
   );

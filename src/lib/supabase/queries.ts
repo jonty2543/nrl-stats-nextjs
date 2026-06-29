@@ -2725,23 +2725,24 @@ export async function fetchRelevantCasualtyWardOutCandidates(): Promise<Casualty
 
 export async function fetchOriginChances(): Promise<OriginChanceRecord[]> {
   const supabase = createServerSupabaseClient("nrl");
+  const lineupCutoffUtc = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("origin_lineups")
     .select("player, match_date, created_at, scraped_at")
-    .order("match_date", { ascending: false })
+    .gte("match_date", lineupCutoffUtc)
+    .order("match_date", { ascending: true })
     .order("player", { ascending: true })
     .limit(1000);
 
   if (error) {
-    console.warn("Unable to fetch Origin lineup rows; using empty set.", error);
-    return [];
+    console.warn("Unable to fetch upcoming Origin lineup rows; falling back to Origin chances.", error);
   }
 
   const rows = (data ?? []) as Record<string, unknown>[];
   const latestMatchDate = rows.map((row) => toNullableString(row.match_date)).find(Boolean) ?? null;
   const seenPlayers = new Set<string>();
 
-  return rows.flatMap((row) => {
+  const lineupRecords = rows.flatMap((row) => {
     if (latestMatchDate && toNullableString(row.match_date) !== latestMatchDate) return [];
 
     const player = toNullableString(row.player);
@@ -2755,6 +2756,35 @@ export async function fetchOriginChances(): Promise<OriginChanceRecord[]> {
       player,
       createdAt: toNullableString(row.created_at),
       updatedAt: toNullableString(row.scraped_at),
+    }];
+  });
+
+  if (lineupRecords.length > 0) return lineupRecords;
+
+  const { data: chanceData, error: chanceError } = await supabase
+    .from("origin_chances")
+    .select("player, created_at, updated_at")
+    .order("player", { ascending: true })
+    .limit(1000);
+
+  if (chanceError) {
+    console.warn("Unable to fetch Origin chances; using empty set.", chanceError);
+    return [];
+  }
+
+  const seenChancePlayers = new Set<string>();
+  return ((chanceData ?? []) as Record<string, unknown>[]).flatMap((row) => {
+    const player = toNullableString(row.player);
+    if (!player) return [];
+
+    const playerKey = normaliseLookupKey(player);
+    if (!playerKey || seenChancePlayers.has(playerKey)) return [];
+    seenChancePlayers.add(playerKey);
+
+    return [{
+      player,
+      createdAt: toNullableString(row.created_at),
+      updatedAt: toNullableString(row.updated_at),
     }];
   });
 }

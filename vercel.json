@@ -5,6 +5,10 @@
       "schedule": "0 14 * * *"
     },
     {
+      "path": "/api/admin/rebuild-public-stats-tables",
+      "schedule": "30 14 * * *"
+    },
+    {
       "path": "/api/admin/capture-fantasy-ownership-snapshot",
       "schedule": "0 0 * * 1"
     }

@@ -460,16 +460,23 @@ export async function writeStatsTableCache(payload: StatsTableCacheFile): Promis
   storagePrefix: string | null;
 }> {
   const cachePath = getCachePath();
-  await mkdir(path.dirname(cachePath), { recursive: true });
-  await writeFile(cachePath, `${JSON.stringify(payload)}\n`, "utf8");
+  const storageBucket = getStorageBucket();
   try {
+    await mkdir(path.dirname(cachePath), { recursive: true });
+    await writeFile(cachePath, `${JSON.stringify(payload)}\n`, "utf8");
     const fileStats = await stat(cachePath);
     localMemo = { mtimeMs: fileStats.mtimeMs, payload };
-  } catch {
+  } catch (error) {
     localMemo = null;
+    if (!storageBucket) {
+      throw error;
+    }
+    console.warn(
+      `Unable to write local stats table cache at ${cachePath}; continuing with Supabase Storage cache.`,
+      error
+    );
   }
 
-  const storageBucket = getStorageBucket();
   if (storageBucket) {
     await uploadStorageObject(
       getStoragePath(),

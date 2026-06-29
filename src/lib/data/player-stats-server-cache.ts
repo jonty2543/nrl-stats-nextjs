@@ -365,7 +365,7 @@ export async function writePlayerStatsServerCache(rows: PlayerStat[]): Promise<{
   storageChunkCount?: number;
 }> {
   const cachePath = getCachePath();
-  await mkdir(path.dirname(cachePath), { recursive: true });
+  const storageBucket = getStorageBucket();
 
   const payload: PlayerStatsServerCacheFile = {
     version: 1,
@@ -374,18 +374,25 @@ export async function writePlayerStatsServerCache(rows: PlayerStat[]): Promise<{
     rows,
   };
 
-  await writeFile(cachePath, `${JSON.stringify(payload)}\n`, "utf8");
   try {
+    await mkdir(path.dirname(cachePath), { recursive: true });
+    await writeFile(cachePath, `${JSON.stringify(payload)}\n`, "utf8");
     const fileStats = await stat(cachePath);
     localServerCacheMemo = {
       mtimeMs: fileStats.mtimeMs,
       payload,
     };
-  } catch {
+  } catch (error) {
     localServerCacheMemo = null;
+    if (!storageBucket) {
+      throw error;
+    }
+    console.warn(
+      `Unable to write local player stats cache at ${cachePath}; continuing with Supabase Storage cache.`,
+      error
+    );
   }
 
-  const storageBucket = getStorageBucket();
   let storageChunkCount = 0;
   if (storageBucket) {
     const rowsByYear = new Map<string, PlayerStat[]>();

@@ -5,9 +5,9 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 const tabs = [
+  { label: "Archetypes", href: "/dashboard/archetypes" },
   { label: "Players", href: "/dashboard/players" },
   { label: "Teams", href: "/dashboard/teams" },
-  { label: "Archetypes", href: "/dashboard/archetypes" },
   { label: "Leaders", href: "/dashboard/leaders" },
 ];
 

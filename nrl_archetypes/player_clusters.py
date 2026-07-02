@@ -104,9 +104,9 @@ POSITION_CONFIGS = [
     ),
     PositionConfig(
         name='Winger',
-        features1=['tackle_breaks_per_80', 'offloads_per_80'],
+        features1=['tackle_breaks_per_80', 'offloads_per_80', 'post_contact_metres_per_80'],
         features2=['tries_per_80','line_breaks_per_80'],
-        features3=['all_run_metres_per_80'],
+        features3=['all_run_metres_per_80', 'all_runs_per_80'],
         pc_names=['Strength In Contact', 'Try Scoring', 'Workrate'],
         n_clusters=3,
         labels=['Support Winger', 'Finisher Winger', 'Workhorse Winger'],
@@ -120,9 +120,9 @@ POSITION_CONFIGS = [
     ),
     PositionConfig(
         name='Centre',
-        features1=['passes_per_80', 'pass_run_ratio'],
+        features1=['passes_per_80', 'pass_run_ratio', 'line_break_assists_per_80', 'try_assists_per_80'],
         features2=['tries_per_80','line_breaks_per_80'],
-        features3=['all_run_metres_per_80', 'tackle_breaks_per_80', 'hit_ups_per_80'],
+        features3=['all_run_metres_per_80', 'tackle_breaks_per_80', 'all_runs_per_80'],
         pc_names=['Passing', 'Try Scoring', 'Workrate'],
         n_clusters=4,
         labels=['Link Centre', 'Workhorse Centre', 'Support Centre', 'Strike Centre'],
@@ -154,7 +154,7 @@ POSITION_CONFIGS = [
     PositionConfig(
         name='Hooker',
         features1=['all_run_metres', 'tackle_breaks', 'line_breaks'],
-        features2=['try_assists', 'line_break_assists'],
+        features2=['try_assists', 'line_break_assists', 'forty_twenty', 'forced_drop_outs'],
         features3=['passes_to_run_ratio'],
         pc_names=['Ball Running', 'Creativity', 'Pass - Run Ratio'],
         n_clusters=4,

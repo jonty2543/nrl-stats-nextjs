@@ -945,6 +945,7 @@ export function PlayerComparison({
   const [statsTableAggregateRows, setStatsTableAggregateRows] = useState<PlayerStatsTableRow[]>(
     () => (initialStatsTable?.rows ?? []).map((row) => ({ ...row, imageRow: null }))
   );
+  const statsTableContainerRef = useRef<HTMLDivElement | null>(null);
   const statsTableScrollFrameRef = useRef<number | null>(null);
   const [statsTableScrollTop, setStatsTableScrollTop] = useState(0);
   const [statsTableFilterOptions, setStatsTableFilterOptions] = useState({
@@ -1192,6 +1193,27 @@ export function PlayerComparison({
     };
   }, [sortedStatsTableRows.length, statsTableScrollTop]);
   const visibleStatsTableRows = sortedStatsTableRows.slice(visibleStatsTableRange.start, visibleStatsTableRange.end);
+
+  useEffect(() => {
+    if (statsTableScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(statsTableScrollFrameRef.current);
+      statsTableScrollFrameRef.current = null;
+    }
+    if (statsTableContainerRef.current) {
+      statsTableContainerRef.current.scrollTop = 0;
+    }
+    setStatsTableScrollTop(0);
+  }, [
+    statsTableAggregateRows,
+    statsTableGroupBy,
+    statsTableMinGames,
+    statsTablePosition,
+    statsTableSearch,
+    statsTableSort,
+    statsTableTeam,
+    statsTableValueMode,
+    statsTableYears,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -2215,7 +2237,7 @@ export function PlayerComparison({
               />
             </div>
           ) : null}
-          <div className="h-[396px] overflow-auto pb-3" onScroll={handleStatsTableScroll}>
+          <div ref={statsTableContainerRef} className="h-[396px] overflow-auto pb-3" onScroll={handleStatsTableScroll}>
             <table className="min-w-[2600px] border-collapse text-left text-xs">
               <thead>
                 <tr>

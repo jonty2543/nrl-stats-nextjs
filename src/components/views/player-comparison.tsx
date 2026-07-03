@@ -2,7 +2,7 @@
 
 import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
-import { useMemo, useState, useCallback, useEffect, useRef, type UIEvent } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import type { PlayerStatsTableAggregateRow, StatsTableApiResponse } from "@/lib/data/stats-table-cache-types";
@@ -76,9 +76,6 @@ interface PlayerStatsTableRow {
 const DEFAULT_PLAYER_1_CANDIDATES = ["Nathan Cleary"];
 const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
 const DEFAULT_STATS_TABLE_YEAR = "2026";
-const STATS_TABLE_CONTAINER_HEIGHT = 396;
-const STATS_TABLE_ROW_HEIGHT = 80;
-const STATS_TABLE_OVERSCAN_ROWS = 8;
 const PLAYER_COMPARISON_STATE_STORAGE_KEY = "nrl-stats:player-comparison-state:v1";
 const STATS_TABLE_MIN_GAMES_OPTIONS = ["1+", "5+", "10+", "20+", "50+", "100+"] as const;
 const PLAYER_STATS_TABLE_GROUP_OPTIONS: PlayerStatsTableGroupBy[] = ["Player", "Year + Player", "Team + Player", "Position + Player"];
@@ -945,9 +942,6 @@ export function PlayerComparison({
   const [statsTableAggregateRows, setStatsTableAggregateRows] = useState<PlayerStatsTableRow[]>(
     () => (initialStatsTable?.rows ?? []).map((row) => ({ ...row, imageRow: null }))
   );
-  const statsTableContainerRef = useRef<HTMLDivElement | null>(null);
-  const statsTableScrollFrameRef = useRef<number | null>(null);
-  const [statsTableScrollTop, setStatsTableScrollTop] = useState(0);
   const [statsTableFilterOptions, setStatsTableFilterOptions] = useState({
     positions: initialStatsTable?.filterOptions.positions ?? ["All Positions"],
     teams: initialStatsTable?.filterOptions.teams ?? ["All Teams"],
@@ -1177,60 +1171,6 @@ export function PlayerComparison({
   }, [statsTableRows, statsTableSort, statsTableValueMode]);
 
   const statsTableColumnCount = statsTableBaseColumns.length + PLAYER_STATS_TABLE_COLUMNS.length + 1;
-  const visibleStatsTableRange = useMemo(() => {
-    const visibleCount = Math.ceil(STATS_TABLE_CONTAINER_HEIGHT / STATS_TABLE_ROW_HEIGHT) + STATS_TABLE_OVERSCAN_ROWS * 2;
-    const maxStart = Math.max(0, sortedStatsTableRows.length - visibleCount);
-    const start = Math.min(
-      maxStart,
-      Math.max(0, Math.floor(statsTableScrollTop / STATS_TABLE_ROW_HEIGHT) - STATS_TABLE_OVERSCAN_ROWS)
-    );
-    const end = Math.min(sortedStatsTableRows.length, start + visibleCount);
-    return {
-      start,
-      end,
-      topHeight: start * STATS_TABLE_ROW_HEIGHT,
-      bottomHeight: Math.max(0, (sortedStatsTableRows.length - end) * STATS_TABLE_ROW_HEIGHT),
-    };
-  }, [sortedStatsTableRows.length, statsTableScrollTop]);
-  const visibleStatsTableRows = sortedStatsTableRows.slice(visibleStatsTableRange.start, visibleStatsTableRange.end);
-
-  useEffect(() => {
-    if (statsTableScrollFrameRef.current !== null) {
-      window.cancelAnimationFrame(statsTableScrollFrameRef.current);
-      statsTableScrollFrameRef.current = null;
-    }
-    if (statsTableContainerRef.current) {
-      statsTableContainerRef.current.scrollTop = 0;
-    }
-    setStatsTableScrollTop(0);
-  }, [
-    statsTableAggregateRows,
-    statsTableGroupBy,
-    statsTableMinGames,
-    statsTablePosition,
-    statsTableSearch,
-    statsTableSort,
-    statsTableTeam,
-    statsTableValueMode,
-    statsTableYears,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      if (statsTableScrollFrameRef.current !== null) {
-        window.cancelAnimationFrame(statsTableScrollFrameRef.current);
-      }
-    };
-  }, []);
-
-  const handleStatsTableScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
-    const nextScrollTop = event.currentTarget.scrollTop;
-    if (statsTableScrollFrameRef.current !== null) return;
-    statsTableScrollFrameRef.current = window.requestAnimationFrame(() => {
-      statsTableScrollFrameRef.current = null;
-      setStatsTableScrollTop(nextScrollTop);
-    });
-  }, []);
 
   const toggleStatsTableSort = useCallback((column: PlayerStatsTableSortKey) => {
     setStatsTableSort((current) => ({
@@ -2237,7 +2177,7 @@ export function PlayerComparison({
               />
             </div>
           ) : null}
-          <div ref={statsTableContainerRef} className="h-[396px] overflow-auto pb-3" onScroll={handleStatsTableScroll}>
+          <div className="h-[396px] overflow-auto pb-3">
             <table className="min-w-[2600px] border-collapse text-left text-xs">
               <thead>
                 <tr>
@@ -2304,13 +2244,7 @@ export function PlayerComparison({
                   </tr>
                 ) : (
                   <>
-                    {visibleStatsTableRange.topHeight > 0 ? (
-                      <tr aria-hidden="true">
-                        <td colSpan={statsTableColumnCount} style={{ height: visibleStatsTableRange.topHeight, padding: 0 }} />
-                      </tr>
-                    ) : null}
-                    {visibleStatsTableRows.map((row, visibleIndex) => {
-                      const index = visibleStatsTableRange.start + visibleIndex;
+                    {sortedStatsTableRows.map((row, index) => {
                       const pinnedGroupLabel = statsTablePinnedGroupLabel(row, statsTableGroupBy);
                       const teamLogoUrl = resolveTeamLogoUrl(row.team, teamLogos);
                       const showTeamGroupLogoOnly = statsTableGroupBy === "Team + Player" && pinnedGroupLabel;
@@ -2393,11 +2327,6 @@ export function PlayerComparison({
                       </tr>
                       );
                     })}
-                    {visibleStatsTableRange.bottomHeight > 0 ? (
-                      <tr aria-hidden="true">
-                        <td colSpan={statsTableColumnCount} style={{ height: visibleStatsTableRange.bottomHeight, padding: 0 }} />
-                      </tr>
-                    ) : null}
                   </>
                 )}
               </tbody>

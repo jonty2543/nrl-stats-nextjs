@@ -1,35 +1,36 @@
 const clusterData = {
     "All": {
         "Fullback": {
+            "stat_mode": "production",
             "archetypes": [
                 {
                     "id": 0,
                     "name": "Ball Running Fullback",
-                    "count": 11,
+                    "count": 20,
                     "description": "Fullbacks who are quick and able to break the defensive line, and opt for game breaking runs over tough carries."
                 },
                 {
                     "id": 1,
                     "name": "Balanced Fullback",
-                    "count": 11,
+                    "count": 10,
                     "description": "These well rounded fullbacks balance workrate, playmaking and elusiveness making them the complete package."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Fullback",
-                    "count": 27,
+                    "count": 17,
                     "description": "High-effort players who are always around the ball. They rack up high run metres and support plays."
                 },
                 {
                     "id": 3,
                     "name": "Playmaker Fullback",
-                    "count": 14,
+                    "count": 17,
                     "description": "These playmakers save their energy for the big moments, with reduced workrates but high involvement in tries and try assists."
                 },
                 {
                     "id": 4,
                     "name": "Support Fullback",
-                    "count": 24,
+                    "count": 23,
                     "description": "Players who are less involved in attack, but may specialise in defense or defusing kicks."
                 }
             ],
@@ -54,13 +55,14 @@ const clusterData = {
                     "name": "Workrate",
                     "features": [
                         "all_run_metres_per_80",
-                        "hit_ups_per_80",
-                        "post_contact_metres_per_80"
+                        "post_contact_metres_per_80",
+                        "all_runs_per_80"
                     ]
                 }
             }
         },
         "Winger": {
+            "stat_mode": "production",
             "archetypes": [
                 {
                     "id": 0,
@@ -107,6 +109,7 @@ const clusterData = {
             }
         },
         "Centre": {
+            "stat_mode": "production",
             "archetypes": [
                 {
                     "id": 0,
@@ -161,6 +164,7 @@ const clusterData = {
             }
         },
         "Half": {
+            "stat_mode": "production",
             "archetypes": [
                 {
                     "id": 0,
@@ -211,6 +215,7 @@ const clusterData = {
             }
         },
         "Hooker": {
+            "stat_mode": "production",
             "archetypes": [
                 {
                     "id": 0,
@@ -264,6 +269,7 @@ const clusterData = {
             }
         },
         "Edge": {
+            "stat_mode": "production",
             "archetypes": [
                 {
                     "id": 0,
@@ -317,6 +323,7 @@ const clusterData = {
             }
         },
         "Middle": {
+            "stat_mode": "production",
             "archetypes": [
                 {
                     "id": 0,

@@ -11,6 +11,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 import os
+from pathlib import Path
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 
@@ -88,7 +89,7 @@ POSITION_CONFIGS = [
         name='Fullback',
         features1=['line_break_assists_per_80', 'try_assists_per_80', 'passes_per_80'],
         features2=['line_breaks_per_80', 'tries_per_80', 'tackle_breaks_per_80'],
-        features3=['all_run_metres_per_80', 'hit_ups_per_80', 'post_contact_metres_per_80'],
+        features3=['all_run_metres_per_80', 'post_contact_metres_per_80', 'all_runs_per_80'],
         pc_names=['Playmaking', 'Evasiveness', 'Workrate'],
         n_clusters=5,
         labels=['Ball Running Fullback', 'Balanced Fullback', 'Workhorse Fullback', 'Playmaker Fullback', 'Support Fullback'],
@@ -207,6 +208,7 @@ POSITION_CONFIGS = [
 
 BASE_PLAYER_COLUMNS = {
     'player',
+    'team',
     'match_date',
     'mins_played',
     'number',
@@ -215,13 +217,41 @@ BASE_PLAYER_COLUMNS = {
     'tackle_efficiency',
 }
 
+RATIO_FEATURES = {'pass_run_ratio', 'passes_to_run_ratio', 'tackle_efficiency'}
+
 
 def _base_stat_name(feature):
     if feature.endswith('_per_80'):
         return feature[:-7]
+    if feature.endswith('_team_share'):
+        return feature[:-11]
     if feature == 'pass_run_ratio':
         return 'passes_to_run_ratio'
     return feature
+
+
+def _team_share_feature_name(feature):
+    if feature in RATIO_FEATURES:
+        return feature
+    return f"{_base_stat_name(feature)}_team_share"
+
+
+def build_team_share_configs(configs):
+    share_configs = []
+    for config in configs:
+        share_configs.append(PositionConfig(
+            name=config.name,
+            features1=[_team_share_feature_name(feature) for feature in config.features1],
+            features2=[_team_share_feature_name(feature) for feature in config.features2],
+            features3=[_team_share_feature_name(feature) for feature in config.features3],
+            pc_names=config.pc_names,
+            n_clusters=config.n_clusters,
+            labels=config.labels,
+            descriptions=config.descriptions,
+            min_games=config.min_games,
+            profiles=config.profiles,
+        ))
+    return share_configs
 
 
 def _player_stat_columns(configs):
@@ -234,6 +264,18 @@ def _player_stat_columns(configs):
 
 def fetch_player_stats_for_years(years, configs, batch=500):
     columns = _player_stat_columns(configs)
+    cache_dir = os.getenv("ARCHETYPE_PLAYER_STATS_CACHE_DIR")
+    if cache_dir:
+        frames = []
+        for cache_file in sorted(Path(cache_dir).glob("player_stats_*.json")):
+            with cache_file.open() as f:
+                data = json.load(f)
+            if data:
+                frames.append(pd.DataFrame(data))
+        if not frames:
+            return pd.DataFrame(columns=columns)
+        return pd.concat(frames, ignore_index=True)
+
     select_cols = ','.join(columns)
     frames = []
 
@@ -268,9 +310,8 @@ def fetch_player_stats_for_years(years, configs, batch=500):
     return pd.concat(frames, ignore_index=True)
 
 
-def load_and_process_data():
-    print("Fetching player stats...")
-    player_data = fetch_player_stats_for_years(YEARS_TO_PROCESS, POSITION_CONFIGS)
+def load_and_process_data(configs, player_data, stat_mode='production'):
+    print(f"Processing {stat_mode.replace('_', ' ')} player stats...")
     
     # Filter for relevant years
     start_date = f"{min(YEARS_TO_PROCESS)}-01-01"
@@ -284,6 +325,22 @@ def load_and_process_data():
     
     # Extract year
     player_df['year'] = pd.to_datetime(player_df['match_date']).dt.year
+
+    # Map positions
+    player_df['position'] = player_df['number'].apply(f.map_position)
+
+    if stat_mode == 'team_share':
+        required_stats = sorted({
+            _base_stat_name(feature)
+            for config in POSITION_CONFIGS
+            for feature in config.features1 + config.features2 + config.features3
+            if _team_share_feature_name(feature) != feature
+        })
+        group_keys = ['match_date', 'team']
+        team_totals = player_df.groupby(group_keys, dropna=False)[required_stats].transform('sum')
+        for stat in required_stats:
+            denominator = team_totals[stat].replace(0, np.nan)
+            player_df[f'{stat}_team_share'] = (player_df[stat] / denominator * 100).fillna(0)
     
     # Calculate per_80 stats
     num_cols = player_df.select_dtypes('number').columns
@@ -292,9 +349,6 @@ def load_and_process_data():
             player_df[f'{col}_per_80'] = player_df[col] * (80 / player_df['mins_played'])
             
     per_80_cols = [c for c in player_df.columns if c.endswith('_per_80')]
-    
-    # Map positions
-    player_df['position'] = player_df['number'].apply(f.map_position)
     
     # Other features
     player_df['metres_per_run'] = player_df['all_run_metres'] / player_df['all_runs']
@@ -520,7 +574,7 @@ def upsert_player_archetypes(records):
         )
     print(f"Upserted {len(records)} rows to nrl.{ARCHETYPE_TABLE}.")
 
-def generate_outputs(training_agg, models, configs):
+def generate_outputs(training_agg, models, configs, plot_suffix=""):
     full_cluster_data_export = {}
     player_archetype_records = []
     
@@ -607,6 +661,7 @@ def generate_outputs(training_agg, models, configs):
             export_name = export_position_name(config)
             
             position_data = {
+                "stat_mode": "team_share" if plot_suffix else "production",
                 "archetypes": [],
                 "pc_axes": {
                     "pc1": {"name": config.pc_names[0], "features": config.features1},
@@ -754,7 +809,8 @@ def generate_outputs(training_agg, models, configs):
                 font=dict(color="#0A1128")
             )
             
-            filename = f"nrl_cluster_plot_{export_name.lower().replace(' ', '_')}_{str(year).lower()}.html"
+            suffix = f"_{plot_suffix}" if plot_suffix else ""
+            filename = f"nrl_cluster_plot_{export_name.lower().replace(' ', '_')}{suffix}_{str(year).lower()}.html"
             
             # Inject custom CSS and JS to fix Plotly button styling, add mobile responsiveness,
             # and allow projecting the 3D archetype space onto any 2D plane.
@@ -1138,8 +1194,8 @@ def generate_outputs(training_agg, models, configs):
                                '</div>' + 
                                html_content[body_end:])
             
-            with open(filename, 'w') as f:
-                f.write(html_content)
+            with open(filename, 'w') as output_file:
+                output_file.write(html_content)
             print(f"  Saved plot {filename}")
             
         full_cluster_data_export[str(year)] = cluster_data_export
@@ -1150,7 +1206,9 @@ def generate_outputs(training_agg, models, configs):
 
 if __name__ == "__main__":
     # 1. Load Data
-    training_agg = load_and_process_data()
+    print("Fetching player stats...")
+    player_data = fetch_player_stats_for_years(YEARS_TO_PROCESS, POSITION_CONFIGS)
+    training_agg = load_and_process_data(POSITION_CONFIGS, player_data, stat_mode='production')
     
     # 2. Train Models (Global)
     models = train_models(training_agg, POSITION_CONFIGS)
@@ -1159,13 +1217,35 @@ if __name__ == "__main__":
     full_data, player_archetype_records = generate_outputs(training_agg, models, POSITION_CONFIGS)
     
     # 4. Save JSON
-    with open('nrl_cluster_data.json', 'w') as f:
-        json.dump(full_data, f, indent=4)
+    with open('nrl_cluster_data.json', 'w') as output_file:
+        json.dump(full_data, output_file, indent=4)
     print("\nExported cluster data to nrl_cluster_data.json")
 
-    with open('nrl_cluster_data.js', 'w') as f:
-        f.write(f"const clusterData = {json.dumps(full_data, indent=4)};")
+    with open('nrl_cluster_data.js', 'w') as output_file:
+        output_file.write(f"const clusterData = {json.dumps(full_data, indent=4)};")
     print("Exported cluster data to nrl_cluster_data.js")
 
     # 5. Upsert player-level archetype outputs
-    upsert_player_archetypes(player_archetype_records)
+    if os.getenv("SKIP_ARCHETYPE_UPSERT") == "1":
+        print("Skipped player archetype upsert.")
+    else:
+        upsert_player_archetypes(player_archetype_records)
+
+    # 6. Generate alternate team-share archetype view
+    team_share_configs = build_team_share_configs(POSITION_CONFIGS)
+    team_share_training_agg = load_and_process_data(team_share_configs, player_data, stat_mode='team_share')
+    team_share_models = train_models(team_share_training_agg, team_share_configs)
+    team_share_data, _ = generate_outputs(
+        team_share_training_agg,
+        team_share_models,
+        team_share_configs,
+        plot_suffix="team_share",
+    )
+
+    with open('nrl_cluster_data_team_share.json', 'w') as output_file:
+        json.dump(team_share_data, output_file, indent=4)
+    print("\nExported team-share cluster data to nrl_cluster_data_team_share.json")
+
+    with open('nrl_cluster_data_team_share.js', 'w') as output_file:
+        output_file.write(f"const clusterDataTeamShare = {json.dumps(team_share_data, indent=4)};")
+    print("Exported team-share cluster data to nrl_cluster_data_team_share.js")

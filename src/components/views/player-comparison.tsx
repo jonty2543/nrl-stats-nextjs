@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMemo, useState, useCallback, useEffect, useRef, type UIEvent } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
-import type { StatsTableApiResponse } from "@/lib/data/stats-table-cache-types";
+import type { PlayerStatsTableAggregateRow, StatsTableApiResponse } from "@/lib/data/stats-table-cache-types";
 import { PLAYER_STATS } from "@/lib/data/constants";
 import { playerSlug } from "@/lib/data/player-slug";
 import {
@@ -39,6 +39,8 @@ import { isAccessibleSeason } from "@/lib/access/season-access";
 
 interface PlayerComparisonProps {
   initialData: PlayerStat[];
+  initialStatsTable?: StatsTableApiResponse<PlayerStatsTableAggregateRow>;
+  initialStatsTableQueryKey?: string;
   playerImages: PlayerImageRecord[];
   teamLogos: Record<string, string>;
   availableYears: string[];
@@ -120,6 +122,29 @@ function statsTablePinnedGroupLabel(row: PlayerStatsTableRow, groupBy: PlayerSta
 function minGamesValue(option: string): number {
   const parsed = Number.parseInt(option, 10);
   return Number.isFinite(parsed) ? parsed : 1;
+}
+
+function statsTableQueryKey({
+  years,
+  groupBy,
+  team,
+  position,
+  minGames,
+}: {
+  years: string[];
+  groupBy: PlayerStatsTableGroupBy;
+  team: string;
+  position: string;
+  minGames: string;
+}): string {
+  return new URLSearchParams({
+    dataset: "player",
+    years: years.join(","),
+    groupBy,
+    team,
+    position,
+    minGames: String(minGamesValue(minGames)),
+  }).toString();
 }
 
 const MINUTES_FILTER_OPTIONS = [
@@ -864,6 +889,8 @@ function PlayerStatsTableThumbnail({
 
 export function PlayerComparison({
   initialData,
+  initialStatsTable,
+  initialStatsTableQueryKey,
   playerImages,
   teamLogos,
   availableYears,
@@ -911,12 +938,14 @@ export function PlayerComparison({
   const [statsTableGroupBy, setStatsTableGroupBy] = useState<PlayerStatsTableGroupBy>("Player");
   const [statsTableSearch, setStatsTableSearch] = useState("");
   const [statsTableFiltersOpen, setStatsTableFiltersOpen] = useState(false);
-  const [statsTableAggregateRows, setStatsTableAggregateRows] = useState<PlayerStatsTableRow[]>([]);
+  const [statsTableAggregateRows, setStatsTableAggregateRows] = useState<PlayerStatsTableRow[]>(
+    () => (initialStatsTable?.rows ?? []).map((row) => ({ ...row, imageRow: null }))
+  );
   const statsTableScrollFrameRef = useRef<number | null>(null);
   const [statsTableScrollTop, setStatsTableScrollTop] = useState(0);
   const [statsTableFilterOptions, setStatsTableFilterOptions] = useState({
-    positions: ["All Positions"],
-    teams: ["All Teams"],
+    positions: initialStatsTable?.filterOptions.positions ?? ["All Positions"],
+    teams: initialStatsTable?.filterOptions.teams ?? ["All Teams"],
   });
   const [statsTableRowsLoading, setStatsTableRowsLoading] = useState(false);
   const [statsTableSort, setStatsTableSort] = useState<{
@@ -1055,18 +1084,29 @@ export function PlayerComparison({
       return;
     }
 
-    const controller = new AbortController();
-    const params = new URLSearchParams({
-      dataset: "player",
-      years: statsTableYears.join(","),
+    const queryKey = statsTableQueryKey({
+      years: statsTableYears,
       groupBy: statsTableGroupBy,
       team: statsTableTeam,
       position: statsTablePosition,
-      minGames: String(minGamesValue(statsTableMinGames)),
+      minGames: statsTableMinGames,
     });
 
+    if (initialStatsTable && queryKey === initialStatsTableQueryKey) {
+      setStatsTableRowsLoading(false);
+      setStatsTableFilterOptions(initialStatsTable.filterOptions);
+      setStatsTableAggregateRows(
+        initialStatsTable.rows.map((row) => ({
+          ...row,
+          imageRow: resolveStatsTablePlayerImage(row.name),
+        }))
+      );
+      return;
+    }
+
+    const controller = new AbortController();
     setStatsTableRowsLoading(true);
-    fetch(`/api/stats-table?${params.toString()}`, { signal: controller.signal })
+    fetch(`/api/stats-table?${queryKey}`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error("Failed to fetch stats table");
         return (await res.json()) as StatsTableApiResponse<Omit<PlayerStatsTableRow, "imageRow">>;
@@ -1091,6 +1131,8 @@ export function PlayerComparison({
 
     return () => controller.abort();
   }, [
+    initialStatsTable,
+    initialStatsTableQueryKey,
     resolveStatsTablePlayerImage,
     statsTableGroupBy,
     statsTableMinGames,

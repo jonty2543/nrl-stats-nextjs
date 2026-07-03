@@ -353,7 +353,8 @@ def load_and_process_data(configs, player_data, stat_mode='production'):
     # Other features
     player_df['metres_per_run'] = player_df['all_run_metres'] / player_df['all_runs']
     
-    # Aggregate per player per year
+    # Aggregate per player, year and position so each archetype only reflects
+    # games actually played at that mapped position.
     # We need to support both 'per_80' (mean of per_80) and 'raw' (mean of per match)
     # The original code used 'player_agg' (per_80) and 'player_agg_unadjusted' (raw + per_80)
     # We will create one super-aggregated dataframe with ALL columns
@@ -361,7 +362,6 @@ def load_and_process_data(configs, player_data, stat_mode='production'):
     agg_dict = {
         'games': ('match_date', 'nunique'),
         'total_minutes': ('mins_played', 'sum'),
-        'position': ('position', lambda s: s.mode().iloc[0] if not s.mode().empty else s.iloc[0]),
         'pass_run_ratio': ('passes_to_run_ratio', 'mean'),
         'tackle_efficiency': ('tackle_efficiency', 'mean'),
     }
@@ -377,12 +377,9 @@ def load_and_process_data(configs, player_data, stat_mode='production'):
         
     training_agg = (
         player_df
-        .groupby(['player', 'year'], as_index=False) # Group by Player AND Year
+        .groupby(['player', 'year', 'position'], as_index=False)
         .agg(**agg_dict)
     )
-    
-    # Fix position if it was lost or weird (it's aggregated by mode)
-    # Also we need to filter by position later, so ensure it's there.
     
     return training_agg
 

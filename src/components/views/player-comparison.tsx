@@ -77,7 +77,7 @@ const DEFAULT_PLAYER_1_CANDIDATES = ["Nathan Cleary"];
 const DEFAULT_PLAYER_2_CANDIDATES = ["Nicholas Hynes", "Nicho Hynes"];
 const DEFAULT_STATS_TABLE_YEAR = "2026";
 const STATS_TABLE_CONTAINER_HEIGHT = 396;
-const STATS_TABLE_ROW_HEIGHT = 60;
+const STATS_TABLE_ROW_HEIGHT = 80;
 const STATS_TABLE_OVERSCAN_ROWS = 8;
 const PLAYER_COMPARISON_STATE_STORAGE_KEY = "nrl-stats:player-comparison-state:v1";
 const STATS_TABLE_MIN_GAMES_OPTIONS = ["1+", "5+", "10+", "20+", "50+", "100+"] as const;
@@ -315,6 +315,10 @@ function playerImageInitials(name: string): string {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("") || "?";
+}
+
+function playerLastName(name: string): string {
+  return parsePersonName(name).last || name;
 }
 
 function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[] {
@@ -857,8 +861,8 @@ function PlayerStatsTableThumbnail({
   const imageUrl = imageCandidates[imageIndex] ?? null;
 
   return (
-    <div className="flex flex-col items-center gap-0.5">
-      <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
+    <div className="flex flex-col items-center gap-1">
+      <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[11px] font-black text-nrl-text">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -880,8 +884,8 @@ function PlayerStatsTableThumbnail({
           <span aria-label={`${name} player image`}>{playerImageInitials(name)}</span>
         )}
       </div>
-      <div className="text-[7px] font-black uppercase leading-none tracking-wide text-nrl-muted">
-        {playerImageInitials(name)}
+      <div className="max-w-16 truncate text-[9px] font-black uppercase leading-none tracking-wide text-nrl-text">
+        {playerLastName(name)}
       </div>
     </div>
   );
@@ -2219,10 +2223,10 @@ export function PlayerComparison({
                     aria-label="Player photo"
                     className={`sticky left-0 top-0 z-[5] border-b border-r border-nrl-border/70 bg-nrl-panel px-2 py-2 ${
                       statsTableGroupBy === "Player"
-                        ? "w-24 min-w-24 max-w-24"
+                        ? "w-32 min-w-32 max-w-32"
                         : statsTableGroupBy === "Team + Player"
-                          ? "w-32 min-w-32 max-w-32"
-                          : "w-44 min-w-44 max-w-44"
+                          ? "w-40 min-w-40 max-w-40"
+                          : "w-48 min-w-48 max-w-48"
                     }`}
                   />
                   {statsTableBaseColumns.map((column) => {
@@ -2230,7 +2234,7 @@ export function PlayerComparison({
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 z-[2] border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-nrl-muted last:border-r-0 ${column.key === "year" ? "w-24 min-w-24 max-w-24" : ""} ${column.key === "name" ? "w-56 min-w-56 max-w-56" : ""} ${column.key === "position" ? "w-[96px] min-w-[96px] max-w-[96px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] last:border-r-0 ${active ? "right-0 z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)]" : "z-[2] text-nrl-text"} ${column.key === "year" ? "w-24 min-w-24 max-w-24" : ""} ${column.key === "name" ? "w-56 min-w-56 max-w-56" : ""} ${column.key === "position" ? "w-[96px] min-w-[96px] max-w-[96px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -2250,7 +2254,7 @@ export function PlayerComparison({
                     return (
                       <th
                         key={stat}
-                        className="sticky top-0 z-[2] border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-center text-[9px] font-black uppercase tracking-[0.18em] text-nrl-muted last:border-r-0"
+                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-3 py-2 text-center text-[10px] font-black uppercase tracking-[0.18em] last:border-r-0 ${active ? "right-0 z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)]" : "z-[2] text-nrl-text"}`}
                       >
                         <button
                           type="button"
@@ -2289,18 +2293,18 @@ export function PlayerComparison({
                       const teamLogoUrl = resolveTeamLogoUrl(row.team, teamLogos);
                       const showTeamGroupLogoOnly = statsTableGroupBy === "Team + Player" && pinnedGroupLabel;
                       return (
-                      <tr key={row.key} className="h-[3.75rem] border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
+                      <tr key={row.key} className="h-20 border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60">
                         <td
                           className={`sticky left-0 z-[3] border-r border-nrl-border/70 bg-nrl-panel px-2 py-1 ${
                             pinnedGroupLabel
                               ? showTeamGroupLogoOnly
-                                ? "w-32 min-w-32 max-w-32"
-                                : "w-44 min-w-44 max-w-44"
-                              : "w-24 min-w-24 max-w-24"
+                                ? "w-40 min-w-40 max-w-40"
+                                : "w-48 min-w-48 max-w-48"
+                              : "w-32 min-w-32 max-w-32"
                           }`}
                         >
-                          <div className="flex h-[3.25rem] items-center gap-2">
-                            <div className="w-5 text-center text-xs font-black text-nrl-muted/70">
+                          <div className="flex h-[4.75rem] items-center gap-2">
+                            <div className="w-6 text-center text-sm font-black text-nrl-text">
                               {index + 1}
                             </div>
                             <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} priority={index < 24} />
@@ -2316,13 +2320,13 @@ export function PlayerComparison({
                                 ) : null}
                               </div>
                             ) : pinnedGroupLabel ? (
-                              <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel-2 px-1.5 py-1 text-[10px] font-black uppercase tracking-wide text-nrl-text">
+                              <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel-2 px-1.5 py-1 text-xs font-black uppercase tracking-wide text-nrl-text">
                                 <span className="block max-w-24 truncate">{pinnedGroupLabel}</span>
                               </div>
                             ) : null}
                           </div>
                         </td>
-                        <td className="w-56 min-w-56 max-w-56 bg-nrl-panel px-3 py-1 text-sm font-black text-nrl-text">
+                        <td className={`w-56 min-w-56 max-w-56 px-3 py-2 text-base font-black ${statsTableSort.column === "name" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "bg-nrl-panel text-nrl-text"}`}>
                         <Link
                           href={`/dashboard/players/${playerSlug(row.name)}`}
                           className="block min-w-0 truncate transition-colors hover:text-nrl-accent"
@@ -2331,7 +2335,7 @@ export function PlayerComparison({
                           {row.name}
                         </Link>
                       </td>
-                      <td className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted">
+                      <td className={`px-3 py-2 text-center text-sm font-bold whitespace-nowrap ${statsTableSort.column === "team" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
                         <span className="inline-flex min-w-0 items-center justify-center gap-2">
                           {teamLogoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -2345,22 +2349,25 @@ export function PlayerComparison({
                           <span className="truncate">{row.team ?? "-"}</span>
                         </span>
                       </td>
-                      <td className="w-[96px] min-w-[96px] max-w-[96px] px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted">
+                      <td className={`w-[96px] min-w-[96px] max-w-[96px] px-3 py-2 text-center text-sm font-bold whitespace-nowrap ${statsTableSort.column === "position" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
                         {row.position ?? "-"}
                       </td>
-                      <td className="px-3 py-2 text-center text-xs font-black whitespace-nowrap text-nrl-text">
+                      <td className={`px-3 py-2 text-center text-sm font-black whitespace-nowrap ${statsTableSort.column === "games" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
                         {row.games}
                       </td>
-                      {PLAYER_STATS_TABLE_COLUMNS.map((stat) => (
-                        <td
-                          key={`${row.key}-${stat}`}
-                          className="px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-nrl-muted last:border-r-0"
-                        >
-                          {formatTableNumber(
-                            playerStatsTableValue(row, stat, statsTableValueMode)
-                          )}
-                        </td>
-                      ))}
+                      {PLAYER_STATS_TABLE_COLUMNS.map((stat) => {
+                        const active = statsTableSort.column === `stat:${stat}`;
+                        return (
+                          <td
+                            key={`${row.key}-${stat}`}
+                            className={`px-3 py-2 text-center text-sm font-bold whitespace-nowrap last:border-r-0 ${active ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}
+                          >
+                            {formatTableNumber(
+                              playerStatsTableValue(row, stat, statsTableValueMode)
+                            )}
+                          </td>
+                        );
+                      })}
                       </tr>
                       );
                     })}

@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
         minGames: parseMinGames(searchParams.get("minGames")),
       };
       let result = selectPlayerStatsTableRows(cache, params);
-      let responseSource = source;
+      let responseSource: "cache" | "fallback" = source;
 
       if (cacheCoversRequest && result.rows.length === 0) {
         const freshCache = buildStatsTableCache(await fetchPlayerStats(allowedYears), []);
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
         team: searchParams.get("team") ?? undefined,
       };
       let result = selectTeamStatsTableRows(cache, params);
-      let responseSource = source;
+      let responseSource: "cache" | "fallback" = source;
 
       if (cacheCoversRequest && result.rows.length === 0) {
         const freshCache = buildStatsTableCache([], await fetchTeamStats(allowedYears));

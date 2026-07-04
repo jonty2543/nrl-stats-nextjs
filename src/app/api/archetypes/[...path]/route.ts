@@ -175,23 +175,35 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
             padding: 1.5rem 0 2rem;
         }
 
+        .mode-toggle {
+            gap: 1rem;
+        }
+
+        .mode-btn,
         .tab-btn,
         .year-btn {
             border-radius: 999px;
             letter-spacing: 0.14em;
         }
 
+        .mode-btn,
         .tab-btn {
             padding: 0.5rem 0.9rem;
             font-size: 0.78rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            background-color: transparent;
         }
 
+        .mode-btn.active,
         .tab-btn.active,
         .year-btn.active {
             background-color: rgba(0, 245, 138, 0.14);
             color: #00f58a;
+            border-color: #00f58a;
         }
 
+        .mode-btn:hover,
         .tab-btn:hover,
         .year-btn:hover {
             background-color: rgba(0, 245, 138, 0.08);
@@ -202,6 +214,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
                 gap: 0.55rem;
             }
 
+            .mode-btn,
             .tab-btn {
                 padding: 0.42rem 0.72rem;
                 font-size: 0.68rem;

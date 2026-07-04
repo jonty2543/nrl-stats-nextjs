@@ -2296,7 +2296,7 @@ export function PlayerComparison({
                           {row.name}
                         </Link>
                       </td>
-                      <td className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "team" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-nrl-text"}`}>
+                      <td className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "team" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}>
                         <span className="inline-flex min-w-0 items-center justify-center gap-2">
                           {teamLogoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -2310,10 +2310,10 @@ export function PlayerComparison({
                           <span className="truncate">{row.team ?? "-"}</span>
                         </span>
                       </td>
-                      <td className={`w-28 min-w-28 max-w-28 px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem] sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "position" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-nrl-text"}`}>
+                      <td className={`w-28 min-w-28 max-w-28 px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem] sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "position" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}>
                         {row.position ?? "-"}
                       </td>
-                      <td className={`w-16 min-w-16 max-w-16 px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:w-[5rem] sm:min-w-[5rem] sm:max-w-[5rem] sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "games" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-nrl-text"}`}>
+                      <td className={`w-16 min-w-16 max-w-16 px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:w-[5rem] sm:min-w-[5rem] sm:max-w-[5rem] sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "games" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}>
                         {row.games}
                       </td>
                       {PLAYER_STATS_TABLE_COLUMNS.map((stat) => {
@@ -2321,7 +2321,7 @@ export function PlayerComparison({
                         return (
                           <td
                             key={`${row.key}-${stat}`}
-                            className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap last:border-r-0 sm:px-2.5 sm:text-[13px] ${active ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-nrl-text"}`}
+                            className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap last:border-r-0 sm:px-2.5 sm:text-[13px] ${active ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}
                           >
                             {formatTableNumber(
                               playerStatsTableValue(row, stat, statsTableValueMode)

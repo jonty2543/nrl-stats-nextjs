@@ -873,14 +873,14 @@ export function TeamComparison({
                         </div>
                       </td>
                       {teamStatsTableGroupBy === "Year + Team" ? (
-                        <td className={`w-20 min-w-20 max-w-20 px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem] sm:px-2.5 sm:text-[13px] ${teamStatsTableSort.column === "year" ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "text-nrl-text"}`}>
+                        <td className={`w-20 min-w-20 max-w-20 px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem] sm:px-2.5 sm:text-[13px] ${teamStatsTableSort.column === "year" ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "text-[#cfd6e8]"}`}>
                           {row.year ?? "-"}
                         </td>
                       ) : null}
                       <td className={`w-44 min-w-44 max-w-44 px-2 py-1.5 text-sm font-black sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem] sm:px-2.5 ${teamStatsTableSort.column === "team" ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "bg-nrl-panel text-nrl-text"}`}>
                         <span className="block min-w-0 truncate" title={row.team}>{row.team}</span>
                       </td>
-                      <td className={`px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:px-2.5 sm:text-[13px] ${teamStatsTableSort.column === "games" ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "text-nrl-text"}`}>
+                      <td className={`px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:px-2.5 sm:text-[13px] ${teamStatsTableSort.column === "games" ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "text-[#cfd6e8]"}`}>
                         {row.games}
                       </td>
                       {TEAM_STATS_TABLE_COLUMNS.map((stat) => {
@@ -888,7 +888,7 @@ export function TeamComparison({
                         return (
                           <td
                             key={`${row.key}-${stat}`}
-                            className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap last:border-r-0 sm:px-2.5 sm:text-[13px] ${active ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "text-nrl-text"}`}
+                            className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap last:border-r-0 sm:px-2.5 sm:text-[13px] ${active ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "text-[#cfd6e8]"}`}
                           >
                             {formatTableNumber(
                               teamStatsTableValueMode === "Total" ? row.totals[stat] ?? null : row.averages[stat] ?? null

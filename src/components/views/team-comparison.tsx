@@ -196,14 +196,39 @@ export function TeamComparison({
     }
   }, [allData.length, unlockedYears]);
 
+  const loadTeamYears = useCallback(async (years: string[]) => {
+    const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    if (validYears.length === 0) return;
+
+    const loadedYears = new Set(allData.map((row) => String(row.Year ?? "")));
+    const missingYears = validYears.filter((year) => !loadedYears.has(year));
+    if (missingYears.length === 0) return;
+
+    setLoading(allData.length === 0);
+    try {
+      const res = await fetch(`/api/team-stats?years=${missingYears.join(",")}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as TeamStat[];
+      const fetchedYears = new Set(missingYears);
+      setAllData((prev) => [
+        ...prev.filter((row) => !fetchedYears.has(String(row.Year ?? ""))),
+        ...data,
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }, [allData, ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
+
   const handleYearsChange = useCallback(async (years: string[]) => {
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    await loadTeamYears(validYears);
     setSelectedYears(validYears);
-  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
+  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears, loadTeamYears]);
   const handleTeamStatsTableYearsChange = useCallback(async (years: string[]) => {
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
+    await loadTeamYears(validYears);
     setTeamStatsTableYears(validYears);
-  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
+  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears, loadTeamYears]);
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minMinutes, setMinMinutes] = useState(0);
   const [minutesMode, setMinutesMode] = useState("All");

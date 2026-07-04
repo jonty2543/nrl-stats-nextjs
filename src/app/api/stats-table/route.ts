@@ -80,16 +80,25 @@ export async function GET(request: NextRequest) {
     if (dataset === "player") {
       const groupByParam = searchParams.get("groupBy") as PlayerStatsTableGroupBy | null;
       const groupBy = groupByParam && PLAYER_GROUPS.includes(groupByParam) ? groupByParam : "Player";
-      const result = selectPlayerStatsTableRows(cache, {
+      const params = {
         years: allowedYears,
         groupBy,
         team: searchParams.get("team") ?? undefined,
         position: searchParams.get("position") ?? undefined,
         minGames: parseMinGames(searchParams.get("minGames")),
-      });
+      };
+      let result = selectPlayerStatsTableRows(cache, params);
+      let responseSource = source;
+
+      if (cacheCoversRequest && result.rows.length === 0) {
+        const freshCache = buildStatsTableCache(await fetchPlayerStats(allowedYears), []);
+        result = selectPlayerStatsTableRows(freshCache, params);
+        responseSource = "fallback";
+      }
+
       const response = NextResponse.json({
         ...result,
-        source,
+        source: responseSource,
       } satisfies StatsTableApiResponse<PlayerStatsTableAggregateRow>);
       response.headers.set("x-stats-table-ms", String(Math.round(performance.now() - startedAt)));
       return response;
@@ -98,14 +107,23 @@ export async function GET(request: NextRequest) {
     if (dataset === "team") {
       const groupByParam = searchParams.get("groupBy") as TeamStatsTableGroupBy | null;
       const groupBy = groupByParam && TEAM_GROUPS.includes(groupByParam) ? groupByParam : "Team";
-      const result = selectTeamStatsTableRows(cache, {
+      const params = {
         years: allowedYears,
         groupBy,
         team: searchParams.get("team") ?? undefined,
-      });
+      };
+      let result = selectTeamStatsTableRows(cache, params);
+      let responseSource = source;
+
+      if (cacheCoversRequest && result.rows.length === 0) {
+        const freshCache = buildStatsTableCache([], await fetchTeamStats(allowedYears));
+        result = selectTeamStatsTableRows(freshCache, params);
+        responseSource = "fallback";
+      }
+
       const response = NextResponse.json({
         ...result,
-        source,
+        source: responseSource,
       } satisfies StatsTableApiResponse<TeamStatsTableAggregateRow>);
       response.headers.set("x-stats-table-ms", String(Math.round(performance.now() - startedAt)));
       return response;

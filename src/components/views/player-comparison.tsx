@@ -2177,9 +2177,9 @@ export function PlayerComparison({
             </div>
           ) : null}
           <div className="relative h-[396px] overflow-auto pb-3">
-            {(statsTableRowsLoading || sortedStatsTableRows.length === 0) ? (
+            {!statsTableRowsLoading && sortedStatsTableRows.length === 0 ? (
               <div className="pointer-events-none absolute left-0 right-0 top-12 z-[7] flex h-24 items-center justify-center px-4 text-center text-sm font-black text-nrl-accent sm:top-14">
-                {statsTableRowsLoading ? "Loading table rows..." : "No players match the selected filters."}
+                No players match the selected filters.
               </div>
             ) : null}
             <table className="min-w-[2200px] border-collapse text-left text-xs sm:min-w-[2400px]">

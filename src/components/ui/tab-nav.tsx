@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const tabs = [
   { label: "Archetypes", href: "/dashboard/archetypes" },
+  { label: "Rankings", href: "/dashboard/rankings" },
   { label: "Players", href: "/dashboard/players" },
   { label: "Teams", href: "/dashboard/teams" },
   { label: "Leaders", href: "/dashboard/leaders" },
@@ -17,6 +18,7 @@ export function TabNav() {
 
   const inStatsSection =
     pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/rankings") ||
     pathname.startsWith("/dashboard/players") ||
     pathname.startsWith("/dashboard/teams") ||
     pathname.startsWith("/dashboard/archetypes") ||
@@ -37,7 +39,7 @@ export function TabNav() {
     <div className="-mx-1 mt-4 flex overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:justify-center sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
       <nav
         aria-label="Stats sections"
-        className="flex min-w-max gap-1 sm:inline-flex sm:rounded-lg sm:border sm:border-white/10 sm:bg-white/[0.035] sm:p-1"
+        className="flex min-w-max gap-2 sm:inline-flex"
       >
         {tabs.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
@@ -47,10 +49,10 @@ export function TabNav() {
               href={tab.href}
               prefetch
               aria-current={active ? "page" : undefined}
-              className={`cursor-pointer whitespace-nowrap rounded-md border px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-colors sm:px-4 sm:text-[11px] ${
+              className={`cursor-pointer whitespace-nowrap rounded border px-3.5 py-2.5 text-xs font-extrabold leading-none transition-colors ${
                 active
-                  ? "border-emerald-300/45 bg-emerald-400 text-[#07111f] shadow-[0_0_24px_rgba(16,185,129,0.22)]"
-                  : "border-white/8 bg-white/[0.025] text-white/48 hover:border-white/16 hover:bg-white/[0.055] hover:text-white/80"
+                  ? "border-[#10f08b] bg-[#10f08b] text-[#06121f]"
+                  : "border-[#323a5c] bg-[#111733] text-white/90 hover:border-[#465077] hover:bg-[#151c3d] hover:text-white"
               }`}
             >
               {tab.label}

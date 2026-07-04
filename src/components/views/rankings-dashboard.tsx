@@ -442,8 +442,8 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
         </div>
 
         <div className="mt-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="grid min-w-max grid-cols-[180px_180px_100px_112px] items-end gap-2 sm:grid-cols-[220px_220px_112px_120px]">
-            <label className="block">
+          <div className="flex min-w-max flex-wrap items-end gap-2 lg:flex-nowrap">
+            <label className="block w-[180px] sm:w-[220px]">
               <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                 Stat
               </span>
@@ -460,7 +460,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               </select>
             </label>
 
-            <label className="block">
+            <label className="block w-[180px] sm:w-[220px]">
               <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                 Per Stat
               </span>
@@ -477,7 +477,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               </select>
             </label>
 
-            <label className="block">
+            <label className="block w-[100px] sm:w-28">
               <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                 Min Games
               </span>
@@ -491,7 +491,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               />
             </label>
 
-            <label className="block">
+            <label className="block w-28 sm:w-[120px]">
               <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                 Min Minutes
               </span>
@@ -504,12 +504,8 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                 className="h-10 w-full rounded border border-[#323a5c] bg-[#111733] px-3 text-xs font-bold text-white outline-none transition-colors hover:border-[#465077]"
               />
             </label>
-          </div>
-        </div>
 
-        <div className="mt-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex min-w-max items-center gap-2">
-            <div className="flex rounded border border-[#323a5c] bg-[#111733] p-1">
+            <div className="flex h-10 rounded border border-[#323a5c] bg-[#111733] p-1">
               {(["average", "total"] as const).map((option) => (
                 <button
                   key={option}
@@ -524,7 +520,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               ))}
             </div>
 
-            <div className="flex rounded border border-[#323a5c] bg-[#111733] p-1">
+            <div className="flex h-10 rounded border border-[#323a5c] bg-[#111733] p-1">
               {(["players", "teams"] as const).map((option) => (
                 <button
                   key={option}

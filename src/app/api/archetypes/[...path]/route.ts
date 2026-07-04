@@ -138,13 +138,15 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
     .replace(
       "</style>",
       `
+        html,
         body {
-            background-color: #111733;
+            background: transparent;
             font-family: ${APP_FONT_STACK};
         }
 
-        html {
-            background-color: #111733;
+        body::before,
+        body::after {
+            display: none !important;
         }
 
         body *,

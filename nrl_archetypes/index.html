@@ -266,6 +266,142 @@
             border-radius: 50%;
         }
 
+        .rankings-card {
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .rankings-header {
+            width: 100%;
+            appearance: none;
+            border: none;
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--lime);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1.5rem;
+            font-size: 0.9rem;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-align: left;
+            text-transform: uppercase;
+        }
+
+        .rankings-header:hover {
+            background: rgba(201, 255, 0, 0.08);
+        }
+
+        .rankings-icon {
+            transition: transform 0.2s ease;
+        }
+
+        .rankings-card.active .rankings-icon {
+            transform: rotate(180deg);
+        }
+
+        .rankings-content {
+            display: none;
+            padding: 1rem 1.5rem 1.5rem;
+        }
+
+        .rankings-card.active .rankings-content {
+            display: block;
+        }
+
+        .rankings-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .rankings-label {
+            color: #8A9bb8;
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .rankings-year-select {
+            appearance: none;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            background: var(--gray);
+            color: var(--white);
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 800;
+            padding: 0.45rem 1.8rem 0.45rem 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .ranking-dimension {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 0.9rem;
+            margin-top: 0.9rem;
+        }
+
+        .ranking-dimension:first-child {
+            border-top: none;
+            margin-top: 0;
+            padding-top: 0;
+        }
+
+        .ranking-title {
+            color: var(--lime);
+            font-size: 0.95rem;
+            font-weight: 800;
+            margin-bottom: 0.55rem;
+        }
+
+        .ranking-list {
+            list-style: none;
+            display: grid;
+            gap: 0.45rem;
+        }
+
+        .ranking-row {
+            display: grid;
+            grid-template-columns: 1.35rem minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 0.6rem;
+            color: #d0d0d0;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .ranking-rank,
+        .ranking-score {
+            color: #8A9bb8;
+            font-size: 0.72rem;
+            font-weight: 800;
+        }
+
+        .ranking-player {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ranking-year {
+            color: #8A9bb8;
+            font-size: 0.68rem;
+            font-weight: 800;
+        }
+
+        .rankings-empty {
+            color: #8A9bb8;
+            font-size: 0.8rem;
+            font-weight: 700;
+            line-height: 1.45;
+        }
+
         /* ML Explanation Dropdown */
         .ml-explanation {
             background-color: var(--card-bg);
@@ -489,6 +625,11 @@
         let currentPosition = null;
         let currentYear = 'All';
         let currentMode = 'production';
+        let rankingsOpen = false;
+        let rankingsYear = 'All';
+        let rankingsRequestId = 0;
+        const rankingsCache = {};
+        const rankingYearOptions = ['All', '2023', '2024', '2025', '2026'];
 
         function getActiveClusterData() {
             return currentMode === 'teamShare' && typeof clusterDataTeamShare !== 'undefined' ? clusterDataTeamShare : clusterData;
@@ -537,6 +678,7 @@
             if (mode === 'teamShare' && (typeof clusterDataTeamShare === 'undefined' || !clusterDataTeamShare[currentYear])) return;
             if (currentMode === mode) return;
             currentMode = mode;
+            rankingsRequestId++;
 
             modeToggle.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.mode === mode);
@@ -556,6 +698,7 @@
             }
             if (currentPosition === position) return;
             currentPosition = position;
+            rankingsRequestId++;
 
             // Update Tabs
             document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -591,6 +734,8 @@
             const modeDescription = currentMode === 'teamShare'
                 ? 'Team Share mode uses each player game stat as a percentage of their team total for that same game, then averages those shares by player-season.'
                 : 'Production mode uses the player production stats directly.';
+
+            renderRankingsCard(position, data);
 
             contextCard.innerHTML = `
                 <div class="archetype-header">
@@ -640,6 +785,220 @@
                 `;
                 archetypeList.appendChild(card);
             });
+        }
+
+        function renderRankingsCard(position, data) {
+            const card = document.createElement('div');
+            card.className = `archetype-card rankings-card${rankingsOpen ? ' active' : ''}`;
+            card.innerHTML = `
+                <button class="rankings-header" type="button" aria-expanded="${rankingsOpen}">
+                    <span>Show Rankings</span>
+                    <span class="rankings-icon">⌄</span>
+                </button>
+                <div class="rankings-content">
+                    <div class="rankings-controls">
+                        <div class="rankings-label">Year</div>
+                        <select class="rankings-year-select" aria-label="Rankings year">
+                            ${rankingYearOptions.map(year => `<option value="${year}"${year === rankingsYear ? ' selected' : ''}>${year}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="rankings-body" id="rankingsBody">
+                        <div class="rankings-empty">Loading rankings...</div>
+                    </div>
+                </div>
+            `;
+            archetypeList.appendChild(card);
+
+            card.querySelector('.rankings-header').onclick = () => {
+                rankingsOpen = !rankingsOpen;
+                renderArchetypes(position);
+            };
+
+            card.querySelector('.rankings-year-select').onchange = (event) => {
+                rankingsYear = event.target.value;
+                renderArchetypes(position);
+            };
+
+            if (rankingsOpen) {
+                void renderDimensionRankings(position, data);
+            }
+        }
+
+        async function renderDimensionRankings(position, data) {
+            const body = document.getElementById('rankingsBody');
+            if (!body) return;
+
+            const requestId = ++rankingsRequestId;
+            body.innerHTML = '<div class="rankings-empty">Loading rankings...</div>';
+
+            try {
+                const rows = await loadRankings(position);
+                if (requestId !== rankingsRequestId) return;
+
+                const filteredRows = rows.filter(row => rankingsYear === 'All' || row.year === rankingsYear);
+                if (!filteredRows.length) {
+                    body.innerHTML = '<div class="rankings-empty">No rankings available for this year.</div>';
+                    return;
+                }
+
+                const dimensions = [
+                    { key: 'x', label: data.pc_axes.pc1.name },
+                    { key: 'y', label: data.pc_axes.pc2.name },
+                    { key: 'z', label: data.pc_axes.pc3.name },
+                ];
+
+                body.innerHTML = dimensions.map(dimension => {
+                    const topRows = [...filteredRows]
+                        .filter(row => Number.isFinite(row[dimension.key]))
+                        .sort((a, b) => b[dimension.key] - a[dimension.key])
+                        .slice(0, 5);
+
+                    if (!topRows.length) {
+                        return `
+                            <div class="ranking-dimension">
+                                <div class="ranking-title">${escapeHtml(dimension.label)}</div>
+                                <div class="rankings-empty">No scores available.</div>
+                            </div>
+                        `;
+                    }
+
+                    return `
+                        <div class="ranking-dimension">
+                            <div class="ranking-title">${escapeHtml(dimension.label)}</div>
+                            <ol class="ranking-list">
+                                ${topRows.map((row, index) => `
+                                    <li class="ranking-row">
+                                        <span class="ranking-rank">${index + 1}</span>
+                                        <span class="ranking-player" title="${escapeHtml(row.player)}">
+                                            ${escapeHtml(row.player)}
+                                            ${rankingsYear === 'All' ? `<span class="ranking-year"> ${escapeHtml(row.year)}</span>` : ''}
+                                        </span>
+                                        <span class="ranking-score">${row[dimension.key].toFixed(2)}</span>
+                                    </li>
+                                `).join('')}
+                            </ol>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Failed to render rankings:', error);
+                if (requestId === rankingsRequestId) {
+                    body.innerHTML = '<div class="rankings-empty">Rankings could not be loaded.</div>';
+                }
+            }
+        }
+
+        async function loadRankings(position) {
+            const cacheKey = `${currentMode}:${position}`;
+            if (rankingsCache[cacheKey]) return rankingsCache[cacheKey];
+
+            const plotFile = `nrl_cluster_plot_${position.toLowerCase().replace(' ', '_')}${getPlotSuffix()}_all.html`;
+            const response = await fetch(plotFile);
+            if (!response.ok) throw new Error(`Failed to fetch ${plotFile}`);
+
+            const html = await response.text();
+            const traces = extractPlotTraces(html);
+            const rows = [];
+
+            traces.forEach(trace => {
+                const x = decodePlotlyArray(trace.x);
+                const y = decodePlotlyArray(trace.y);
+                const z = decodePlotlyArray(trace.z);
+                const hovertext = Array.isArray(trace.hovertext) ? trace.hovertext : [];
+
+                hovertext.forEach((label, index) => {
+                    const parsed = parsePlayerYear(label);
+                    if (!parsed) return;
+                    rows.push({
+                        player: parsed.player,
+                        year: parsed.year,
+                        archetype: trace.name || '',
+                        x: x[index],
+                        y: y[index],
+                        z: z[index],
+                    });
+                });
+            });
+
+            rankingsCache[cacheKey] = rows;
+            return rows;
+        }
+
+        function extractPlotTraces(html) {
+            const marker = 'Plotly.newPlot';
+            const plotStart = html.indexOf(marker);
+            if (plotStart === -1) return [];
+
+            const dataStart = html.indexOf('[', plotStart);
+            if (dataStart === -1) return [];
+
+            let depth = 0;
+            let inString = false;
+            let escaping = false;
+
+            for (let i = dataStart; i < html.length; i++) {
+                const char = html[i];
+                if (inString) {
+                    if (escaping) {
+                        escaping = false;
+                    } else if (char === '\\') {
+                        escaping = true;
+                    } else if (char === '"') {
+                        inString = false;
+                    }
+                    continue;
+                }
+
+                if (char === '"') {
+                    inString = true;
+                } else if (char === '[') {
+                    depth++;
+                } else if (char === ']') {
+                    depth--;
+                    if (depth === 0) {
+                        return JSON.parse(html.slice(dataStart, i + 1));
+                    }
+                }
+            }
+
+            return [];
+        }
+
+        function decodePlotlyArray(value) {
+            if (Array.isArray(value)) return value.map(Number);
+            if (!value || typeof value !== 'object' || !value.bdata) return [];
+
+            const binary = atob(value.bdata);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+
+            const view = new DataView(bytes.buffer);
+            const output = [];
+
+            if (value.dtype === 'f8') {
+                for (let i = 0; i < bytes.length; i += 8) output.push(view.getFloat64(i, true));
+            } else if (value.dtype === 'f4') {
+                for (let i = 0; i < bytes.length; i += 4) output.push(view.getFloat32(i, true));
+            }
+
+            return output;
+        }
+
+        function parsePlayerYear(label) {
+            const match = String(label).match(/^(.*)\s+\((\d{4})\)$/);
+            if (!match) return null;
+            return { player: match[1], year: match[2] };
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         function generateDescription(name, axes) {

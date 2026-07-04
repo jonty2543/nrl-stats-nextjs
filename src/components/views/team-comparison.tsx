@@ -799,14 +799,14 @@ export function TeamComparison({
                 <tr>
                   <th
                     aria-label="Team logo"
-                    className="sticky left-0 top-0 z-[5] w-24 min-w-24 max-w-24 border-b border-r border-nrl-border/70 bg-nrl-panel px-1.5 py-1.5 sm:w-28 sm:min-w-28 sm:max-w-28 sm:px-2 sm:py-2"
+                    className="sticky left-0 top-0 z-[5] w-28 min-w-28 max-w-28 border-b border-r border-nrl-border/70 bg-nrl-panel px-1.5 py-1.5 sm:px-2 sm:py-2"
                   />
                   {teamStatsTableBaseColumns.map((column) => {
                     const active = teamStatsTableSort.column === column.key;
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-2.5 sm:tracking-[0.16em] ${active ? "right-0 z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)]" : "z-[2] text-nrl-text"} ${column.key === "year" ? "w-20 min-w-20 max-w-20 sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem]" : ""} ${column.key === "team" ? "w-44 min-w-44 max-w-44 sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-2.5 sm:tracking-[0.16em] ${active ? "z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)] sm:right-0" : "z-[2] text-nrl-text"} ${column.key === "year" ? "w-20 min-w-20 max-w-20 sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem]" : ""} ${column.key === "team" ? "w-44 min-w-44 max-w-44 sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -826,7 +826,7 @@ export function TeamComparison({
                     return (
                       <th
                         key={stat}
-                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-2.5 sm:tracking-[0.16em] ${active ? "right-0 z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)]" : "z-[2] text-nrl-text"}`}
+                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-2.5 sm:tracking-[0.16em] ${active ? "z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)] sm:right-0" : "z-[2] text-nrl-text"}`}
                       >
                         <button
                           type="button"
@@ -850,7 +850,7 @@ export function TeamComparison({
                 ) : (
                   sortedTeamStatsTableRows.map((row, index) => (
                     <tr key={row.key} className="h-16 border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60 sm:h-[4.5rem]">
-                      <td className="sticky left-0 z-[3] w-24 min-w-24 max-w-24 border-r border-nrl-border/70 bg-nrl-panel px-1.5 py-1 sm:w-28 sm:min-w-28 sm:max-w-28 sm:px-2">
+                      <td className="sticky left-0 z-[3] w-28 min-w-28 max-w-28 border-r border-nrl-border/70 bg-nrl-panel px-1.5 py-1 sm:px-2">
                         <div className="flex h-[3.75rem] items-center gap-1.5 sm:h-[4.25rem]">
                           <div className="w-5 text-center text-xs font-black text-nrl-text sm:w-6 sm:text-sm">
                             {index + 1}
@@ -873,14 +873,14 @@ export function TeamComparison({
                         </div>
                       </td>
                       {teamStatsTableGroupBy === "Year + Team" ? (
-                        <td className={`w-20 min-w-20 max-w-20 px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem] sm:px-2.5 sm:text-[13px] ${teamStatsTableSort.column === "year" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
+                        <td className={`w-20 min-w-20 max-w-20 px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem] sm:px-2.5 sm:text-[13px] ${teamStatsTableSort.column === "year" ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "text-nrl-text"}`}>
                           {row.year ?? "-"}
                         </td>
                       ) : null}
-                      <td className={`w-44 min-w-44 max-w-44 px-2 py-1.5 text-sm font-black sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem] sm:px-2.5 ${teamStatsTableSort.column === "team" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "bg-nrl-panel text-nrl-text"}`}>
+                      <td className={`w-44 min-w-44 max-w-44 px-2 py-1.5 text-sm font-black sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem] sm:px-2.5 ${teamStatsTableSort.column === "team" ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "bg-nrl-panel text-nrl-text"}`}>
                         <span className="block min-w-0 truncate" title={row.team}>{row.team}</span>
                       </td>
-                      <td className={`px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:px-2.5 sm:text-[13px] ${teamStatsTableSort.column === "games" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
+                      <td className={`px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:px-2.5 sm:text-[13px] ${teamStatsTableSort.column === "games" ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "text-nrl-text"}`}>
                         {row.games}
                       </td>
                       {TEAM_STATS_TABLE_COLUMNS.map((stat) => {
@@ -888,7 +888,7 @@ export function TeamComparison({
                         return (
                           <td
                             key={`${row.key}-${stat}`}
-                            className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap last:border-r-0 sm:px-2.5 sm:text-[13px] ${active ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}
+                            className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap last:border-r-0 sm:px-2.5 sm:text-[13px] ${active ? "z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] sm:sticky sm:right-0" : "text-nrl-text"}`}
                           >
                             {formatTableNumber(
                               teamStatsTableValueMode === "Total" ? row.totals[stat] ?? null : row.averages[stat] ?? null

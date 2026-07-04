@@ -858,7 +858,7 @@ function PlayerStatsTableThumbnail({
   const imageUrl = imageCandidates[imageIndex] ?? null;
 
   return (
-    <div className="flex flex-col items-center gap-0.5 sm:gap-1">
+    <div className="flex w-20 flex-col items-center gap-0.5 sm:w-16 sm:gap-1">
       <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] font-black text-nrl-text sm:h-10 sm:w-10">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -881,7 +881,7 @@ function PlayerStatsTableThumbnail({
           <span aria-label={`${name} player image`}>{playerImageInitials(name)}</span>
         )}
       </div>
-      <div className="max-w-12 truncate text-[8px] font-black uppercase leading-none tracking-wide text-nrl-text sm:max-w-14">
+      <div className="w-full truncate text-center text-[7px] font-black uppercase leading-none tracking-[0.08em] text-nrl-text sm:text-[8px]">
         {playerLastName(name)}
       </div>
     </div>

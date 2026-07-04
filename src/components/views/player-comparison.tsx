@@ -859,7 +859,7 @@ function PlayerStatsTableThumbnail({
 
   return (
     <div className="flex flex-col items-center gap-0.5 sm:gap-1">
-      <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] font-black text-nrl-text sm:h-12 sm:w-12 sm:text-[11px]">
+      <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] font-black text-nrl-text sm:h-10 sm:w-10">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -881,7 +881,7 @@ function PlayerStatsTableThumbnail({
           <span aria-label={`${name} player image`}>{playerImageInitials(name)}</span>
         )}
       </div>
-      <div className="max-w-12 truncate text-[8px] font-black uppercase leading-none tracking-wide text-nrl-text sm:max-w-16 sm:text-[9px]">
+      <div className="max-w-12 truncate text-[8px] font-black uppercase leading-none tracking-wide text-nrl-text sm:max-w-14">
         {playerLastName(name)}
       </div>
     </div>
@@ -1122,7 +1122,6 @@ export function PlayerComparison({
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         console.error("Failed to load player stats table rows:", error);
-        setStatsTableAggregateRows([]);
       })
       .finally(() => {
         if (!controller.signal.aborted) setStatsTableRowsLoading(false);
@@ -2177,18 +2176,23 @@ export function PlayerComparison({
               />
             </div>
           ) : null}
-          <div className="h-[396px] overflow-auto pb-3">
-            <table className="min-w-[2200px] border-collapse text-left text-xs sm:min-w-[2600px]">
+          <div className="relative h-[396px] overflow-auto pb-3">
+            {(statsTableRowsLoading || sortedStatsTableRows.length === 0) ? (
+              <div className="pointer-events-none absolute left-0 right-0 top-12 z-[7] flex h-24 items-center justify-center px-4 text-center text-sm font-black text-nrl-accent sm:top-14">
+                {statsTableRowsLoading ? "Loading table rows..." : "No players match the selected filters."}
+              </div>
+            ) : null}
+            <table className="min-w-[2200px] border-collapse text-left text-xs sm:min-w-[2400px]">
               <thead>
                 <tr>
                   <th
                     aria-label="Player photo"
                     className={`sticky left-0 top-0 z-[5] border-b border-r border-nrl-border/70 bg-nrl-panel px-1.5 py-1.5 sm:px-2 sm:py-2 ${
                       statsTableGroupBy === "Player"
-                        ? "w-24 min-w-24 max-w-24 sm:w-32 sm:min-w-32 sm:max-w-32"
+                        ? "w-24 min-w-24 max-w-24 sm:w-28 sm:min-w-28 sm:max-w-28"
                         : statsTableGroupBy === "Team + Player"
-                          ? "w-32 min-w-32 max-w-32 sm:w-40 sm:min-w-40 sm:max-w-40"
-                          : "w-40 min-w-40 max-w-40 sm:w-48 sm:min-w-48 sm:max-w-48"
+                          ? "w-32 min-w-32 max-w-32 sm:w-36 sm:min-w-36 sm:max-w-36"
+                          : "w-40 min-w-40 max-w-40 sm:w-44 sm:min-w-44 sm:max-w-44"
                     }`}
                   />
                   {statsTableBaseColumns.map((column) => {
@@ -2196,7 +2200,7 @@ export function PlayerComparison({
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-3 sm:py-2 sm:text-[10px] sm:tracking-[0.18em] ${active ? "right-0 z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)]" : "z-[2] text-nrl-text"} ${column.key === "year" ? "w-20 min-w-20 max-w-20 sm:w-24 sm:min-w-24 sm:max-w-24" : ""} ${column.key === "name" ? "w-44 min-w-44 max-w-44 sm:w-56 sm:min-w-56 sm:max-w-56" : ""} ${column.key === "position" ? "w-20 min-w-20 max-w-20 sm:w-[96px] sm:min-w-[96px] sm:max-w-[96px]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-2.5 sm:text-[9px] sm:tracking-[0.16em] ${active ? "right-0 z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)]" : "z-[2] text-nrl-text"} ${column.key === "year" ? "w-20 min-w-20 max-w-20 sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem]" : ""} ${column.key === "name" ? "w-44 min-w-44 max-w-44 sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem]" : ""} ${column.key === "position" ? "w-20 min-w-20 max-w-20 sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -2216,7 +2220,7 @@ export function PlayerComparison({
                     return (
                       <th
                         key={stat}
-                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-3 sm:py-2 sm:text-[10px] sm:tracking-[0.18em] ${active ? "right-0 z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)]" : "z-[2] text-nrl-text"}`}
+                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-2.5 sm:text-[9px] sm:tracking-[0.16em] ${active ? "right-0 z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)]" : "z-[2] text-nrl-text"}`}
                       >
                         <button
                           type="button"
@@ -2235,12 +2239,7 @@ export function PlayerComparison({
               <tbody>
                 {sortedStatsTableRows.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={statsTableColumnCount}
-                      className="px-3 py-6 text-center text-xs text-nrl-muted"
-                    >
-                      {statsTableRowsLoading ? "Loading table rows..." : "No players match the selected filters."}
-                    </td>
+                    <td colSpan={statsTableColumnCount} className="h-24 px-3 py-6" />
                   </tr>
                 ) : (
                   <>
@@ -2249,17 +2248,17 @@ export function PlayerComparison({
                       const teamLogoUrl = resolveTeamLogoUrl(row.team, teamLogos);
                       const showTeamGroupLogoOnly = statsTableGroupBy === "Team + Player" && pinnedGroupLabel;
                       return (
-                      <tr key={row.key} className="h-16 border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60 sm:h-20">
+                      <tr key={row.key} className="h-16 border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60 sm:h-[4.5rem]">
                         <td
                           className={`sticky left-0 z-[3] border-r border-nrl-border/70 bg-nrl-panel px-1.5 py-1 sm:px-2 ${
                             pinnedGroupLabel
                               ? showTeamGroupLogoOnly
-                                ? "w-32 min-w-32 max-w-32 sm:w-40 sm:min-w-40 sm:max-w-40"
-                                : "w-40 min-w-40 max-w-40 sm:w-48 sm:min-w-48 sm:max-w-48"
-                              : "w-24 min-w-24 max-w-24 sm:w-32 sm:min-w-32 sm:max-w-32"
+                                ? "w-32 min-w-32 max-w-32 sm:w-36 sm:min-w-36 sm:max-w-36"
+                                : "w-40 min-w-40 max-w-40 sm:w-44 sm:min-w-44 sm:max-w-44"
+                              : "w-24 min-w-24 max-w-24 sm:w-28 sm:min-w-28 sm:max-w-28"
                           }`}
                         >
-                          <div className="flex h-[3.75rem] items-center gap-1.5 sm:h-[4.75rem] sm:gap-2">
+                          <div className="flex h-[3.75rem] items-center gap-1.5 sm:h-[4.25rem]">
                             <div className="w-5 text-center text-xs font-black text-nrl-text sm:w-6 sm:text-sm">
                               {index + 1}
                             </div>
@@ -2277,12 +2276,12 @@ export function PlayerComparison({
                               </div>
                             ) : pinnedGroupLabel ? (
                               <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel-2 px-1.5 py-1 text-[10px] font-black uppercase tracking-wide text-nrl-text sm:text-xs">
-                                <span className="block max-w-20 truncate sm:max-w-24">{pinnedGroupLabel}</span>
+                                <span className="block max-w-20 truncate">{pinnedGroupLabel}</span>
                               </div>
                             ) : null}
                           </div>
                         </td>
-                        <td className={`w-44 min-w-44 max-w-44 px-2 py-1.5 text-sm font-black sm:w-56 sm:min-w-56 sm:max-w-56 sm:px-3 sm:py-2 sm:text-base ${statsTableSort.column === "name" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "bg-nrl-panel text-nrl-text"}`}>
+                        <td className={`w-44 min-w-44 max-w-44 px-2 py-1.5 text-sm font-black sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem] sm:px-2.5 sm:text-sm ${statsTableSort.column === "name" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "bg-nrl-panel text-nrl-text"}`}>
                         <Link
                           href={`/dashboard/players/${playerSlug(row.name)}`}
                           className="block min-w-0 truncate transition-colors hover:text-nrl-accent"
@@ -2291,7 +2290,7 @@ export function PlayerComparison({
                           {row.name}
                         </Link>
                       </td>
-                      <td className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:px-3 sm:py-2 sm:text-sm ${statsTableSort.column === "team" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
+                      <td className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "team" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
                         <span className="inline-flex min-w-0 items-center justify-center gap-2">
                           {teamLogoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -2305,10 +2304,10 @@ export function PlayerComparison({
                           <span className="truncate">{row.team ?? "-"}</span>
                         </span>
                       </td>
-                      <td className={`w-20 min-w-20 max-w-20 px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:w-[96px] sm:min-w-[96px] sm:max-w-[96px] sm:px-3 sm:py-2 sm:text-sm ${statsTableSort.column === "position" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
+                      <td className={`w-20 min-w-20 max-w-20 px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem] sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "position" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
                         {row.position ?? "-"}
                       </td>
-                      <td className={`px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:px-3 sm:py-2 sm:text-sm ${statsTableSort.column === "games" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
+                      <td className={`px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "games" ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}>
                         {row.games}
                       </td>
                       {PLAYER_STATS_TABLE_COLUMNS.map((stat) => {
@@ -2316,7 +2315,7 @@ export function PlayerComparison({
                         return (
                           <td
                             key={`${row.key}-${stat}`}
-                            className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap last:border-r-0 sm:px-3 sm:py-2 sm:text-sm ${active ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}
+                            className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap last:border-r-0 sm:px-2.5 sm:text-[13px] ${active ? "sticky right-0 z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)]" : "text-nrl-text"}`}
                           >
                             {formatTableNumber(
                               playerStatsTableValue(row, stat, statsTableValueMode)

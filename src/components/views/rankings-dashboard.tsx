@@ -37,7 +37,13 @@ interface RankingEntry {
 const POSITION_ORDER = ["Fullback", "Winger", "Centre", "Half", "Edge", "Middle", "Hooker"]
 const POSITION_FILTERS = ["All Positions", ...POSITION_ORDER]
 
-const STAT_OPTIONS: StatOption[] = [
+const RANKING_EXCLUDED_STAT_KEYS = new Set([
+  "Average Play The Ball Speed",
+  "Passes To Run Ratio",
+  "Tackle Efficiency",
+])
+
+const RAW_STAT_OPTIONS: StatOption[] = [
   { key: "Mins Played", label: "Minutes" },
   { key: "Points", label: "Points" },
   { key: "Tries", label: "Tries" },
@@ -92,8 +98,10 @@ const STAT_OPTIONS: StatOption[] = [
   { key: "Send Offs", label: "Send Offs" },
 ]
 
+const STAT_OPTIONS = RAW_STAT_OPTIONS.filter((option) => !RANKING_EXCLUDED_STAT_KEYS.has(option.key))
+
 const TEAM_STAT_OPTIONS = STAT_OPTIONS.filter(
-  (option) => !["Mins Played", "Fantasy", "Average Play The Ball Speed", "Passes To Run Ratio", "Tackle Efficiency"].includes(option.key)
+  (option) => !["Mins Played", "Fantasy"].includes(option.key)
 )
 
 function normalisePersonName(value: string): string {
@@ -442,8 +450,8 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
         </div>
 
         <div className="mt-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex min-w-max flex-wrap items-end gap-2 lg:flex-nowrap">
-            <label className="block w-[180px] sm:w-[220px]">
+          <div className="grid min-w-max grid-cols-[180px_180px_100px_112px] items-end gap-2 sm:grid-cols-[220px_220px_112px_120px]">
+            <label className="block">
               <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                 Stat
               </span>
@@ -460,7 +468,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               </select>
             </label>
 
-            <label className="block w-[180px] sm:w-[220px]">
+            <label className="block">
               <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                 Per Stat
               </span>
@@ -477,7 +485,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               </select>
             </label>
 
-            <label className="block w-[100px] sm:w-28">
+            <label className="block">
               <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                 Min Games
               </span>
@@ -491,7 +499,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               />
             </label>
 
-            <label className="block w-28 sm:w-[120px]">
+            <label className="block">
               <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                 Min Minutes
               </span>
@@ -504,8 +512,12 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                 className="h-10 w-full rounded border border-[#323a5c] bg-[#111733] px-3 text-xs font-bold text-white outline-none transition-colors hover:border-[#465077]"
               />
             </label>
+          </div>
+        </div>
 
-            <div className="flex h-10 rounded border border-[#323a5c] bg-[#111733] p-1">
+        <div className="mt-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex min-w-max items-center gap-2">
+            <div className="flex rounded border border-[#323a5c] bg-[#111733] p-1">
               {(["average", "total"] as const).map((option) => (
                 <button
                   key={option}
@@ -520,7 +532,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               ))}
             </div>
 
-            <div className="flex h-10 rounded border border-[#323a5c] bg-[#111733] p-1">
+            <div className="flex rounded border border-[#323a5c] bg-[#111733] p-1">
               {(["players", "teams"] as const).map((option) => (
                 <button
                   key={option}
@@ -662,13 +674,13 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                 {playerRankings.map((entry, index) => (
                   <tr key={entry.name} className="border-b border-nrl-border/70 last:border-b-0">
                     <td className="px-4 py-2 text-xs font-black text-nrl-muted">{index + 1}</td>
-                    <td className="px-2 py-2">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded border border-nrl-border bg-nrl-panel-2">
+                    <td className="px-2 pb-0 pt-2">
+                      <div className="flex min-w-0 items-end gap-3">
+                        <div className="grid h-12 w-11 shrink-0 place-items-end overflow-hidden">
                           <ImageWithFallback
                             sources={entry.imageSources}
                             alt={entry.name}
-                            className="h-full w-full object-cover object-top"
+                            className="h-full w-full object-cover object-bottom"
                           />
                         </div>
                         <div className="min-w-0">

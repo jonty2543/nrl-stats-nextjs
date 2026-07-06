@@ -80,6 +80,8 @@ Rules:
 - For NRL Fantasy position filters, use fantasy slots rather than historical positions: hooker -> HOK, prop/middle/lock -> MID, second row/2RF/edge -> EDG, halfback/five-eighth/halves -> HLF, centre -> CTR, fullback/winger -> WFB.
 - For fantasy value questions under a price cap, use get_fantasy_snapshot with sortBy="avg_points_desc" and requireOwnershipRise=false.
 - For fantasy buy, trade, or ownership-momentum questions, use get_fantasy_snapshot with sortBy="ownership_delta_desc" and requireOwnershipRise=true.
+- For broad NRL Fantasy trade-in questions, follow the My Team trade-advice style: use clean sections, rank real trade-in candidates by positive ownership movement, role security, value, and bye coverage, and do not output raw market dumps.
+- Do not recommend players with flat or negative ownership movement as fantasy buys unless the user explicitly asks for a value watchlist and you clearly frame them as watchlist options, not trade recommendations.
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
 - For fantasy trade advice from screenshots, also use draw/upcoming fixture context where available so the answer accounts for who each player/team faces next and whether they are home or away.
 - In NRL Fantasy major bye rounds 13, 16, and 19, only the starting 13 scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
@@ -152,6 +154,8 @@ Rules:
 - For NRL Fantasy position filters, use fantasy slots rather than historical positions: hooker -> HOK, prop/middle/lock -> MID, second row/2RF/edge -> EDG, halfback/five-eighth/halves -> HLF, centre -> CTR, fullback/winger -> WFB.
 - For fantasy value questions under a price cap, use get_fantasy_snapshot with sortBy="avg_points_desc" and requireOwnershipRise=false.
 - For fantasy buy, trade, or ownership-momentum questions, use get_fantasy_snapshot with sortBy="ownership_delta_desc" and requireOwnershipRise=true.
+- For broad NRL Fantasy trade-in questions, follow the My Team trade-advice style: use clean sections, rank real trade-in candidates by positive ownership movement, role security, value, and bye coverage, and do not output raw market dumps.
+- Do not recommend players with flat or negative ownership movement as fantasy buys unless the user explicitly asks for a value watchlist and you clearly frame them as watchlist options, not trade recommendations.
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
 - For fantasy trade advice from screenshots, also use draw/upcoming fixture context where available so the answer accounts for who each player/team faces next and whether they are home or away.
 - In NRL Fantasy major bye rounds 13, 16, and 19, only the starting 13 scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
@@ -3936,15 +3940,17 @@ async function tryRunDirectFantasyBuyChat(
   }
 
   const requestedRound = parseRequestedRound(userMessage);
+  const hasProjectionAccess = hasAiProDataAccess(access.plan);
   const { result, activity } = await runToolForLocalFallback(
     "get_fantasy_snapshot",
     {
       round: requestedRound,
       positions: null,
       priceMax: null,
-      requireOwnershipRise: false,
+      sortBy: "ownership_delta_desc",
+      requireOwnershipRise: true,
       excludeLocked: true,
-      limit: 5,
+      limit: 20,
     },
     access
   );
@@ -3959,41 +3965,97 @@ async function tryRunDirectFantasyBuyChat(
   const players = Array.isArray(result.data.players)
     ? result.data.players.filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null)
     : [];
+  const tradeInCandidates = players
+    .filter(hasPositiveOwnershipDelta)
+    .filter((entry) => (typeof entry.namedToPlay === "boolean" ? entry.namedToPlay : true))
+    .map((entry) => ({
+      entry,
+      score: scoreFallbackTradeInCandidate(entry, hasProjectionAccess, false),
+    }))
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 5);
   const roundLabel =
     typeof result.data.requestedRound === "number"
       ? result.data.requestedRound
       : players.find((entry) => typeof entry.round === "number")?.round ?? null;
 
-  if (players.length === 0) {
+  if (tradeInCandidates.length === 0) {
     return buildAiResult(
       warnings[0] ??
         (requestedRound != null
-          ? `I couldn't find enough fantasy snapshot data to rank buys for Round ${requestedRound}.`
-          : "I couldn't find enough fantasy snapshot data to rank buys right now."),
+          ? `I couldn't find clear rising fantasy trade-in targets for Round ${requestedRound} right now. I would avoid forcing a buy without your squad, bank, and trade count.`
+          : "I couldn't find clear rising fantasy trade-in targets right now. I would avoid forcing a buy without your squad, bank, and trade count."),
       [activity],
       "direct-tools"
     );
   }
 
-  const lines = players.map((entry, index) => {
+  const lines = tradeInCandidates.map(({ entry, score }, index) => {
+    const name = typeof entry.name === "string" ? entry.name : "Unknown";
     const position = typeof entry.position === "string" ? entry.position : "N/A";
     const price = typeof entry.price === "number" ? formatFantasyPrice(entry.price) : "-";
-    const ownershipDelta =
-      typeof entry.ownershipDelta === "number"
-        ? `, ownership delta ${entry.ownershipDelta > 0 ? "+" : ""}${entry.ownershipDelta.toFixed(1)}%`
-        : "";
-    const projection =
-      typeof entry.projection === "number" ? `, proj ${entry.projection}` : "";
-    const breakEven =
-      typeof entry.breakEven === "number" ? `, BE ${entry.breakEven}` : "";
-    const ownedBy =
-      typeof entry.ownedBy === "number" ? `, owned ${entry.ownedBy.toFixed(1)}%` : "";
+    const ownershipDelta = getFantasyNumber(entry, "ownershipDelta");
+    const pricedAt = getFantasyNumber(entry, "pricedAt");
+    const avgPoints = getFantasyNumber(entry, "avgPoints");
+    const last3Avg = getFantasyNumber(entry, "last3Avg");
+    const projection = getFantasyNumber(entry, "projection");
+    const projectionVsPricedAt = getFantasyNumber(entry, "projectionVsPricedAt");
+    const breakEven = getFantasyNumber(entry, "breakEven");
+    const nextMajorByeRound = getFantasyNumber(entry, "nextMajorByeRound");
+    const playsNextMajorByeRound =
+      typeof entry.playsNextMajorByeRound === "boolean" ? entry.playsNextMajorByeRound : null;
+    const byeDetail =
+      nextMajorByeRound != null && playsNextMajorByeRound !== null
+        ? `Rd${nextMajorByeRound} ${playsNextMajorByeRound ? "plays" : "misses"}`
+        : "major bye unknown";
+    const titleProjection = hasProjectionAccess && projection != null ? `, proj ${projection.toFixed(1)}` : "";
+    const details = hasProjectionAccess
+      ? [
+        `Ownership change: ${formatFallbackSignedNumber(ownershipDelta)}%`,
+        `BE ${breakEven ?? "unknown"}`,
+        `priced at ${formatFallbackFantasyNumber(pricedAt, 0)}`,
+        `L3 ${formatFallbackFantasyNumber(last3Avg)}`,
+        `value ${formatFallbackSignedNumber(projectionVsPricedAt)}`,
+        byeDetail,
+      ].join(", ")
+      : [
+        `Ownership change: ${formatFallbackSignedNumber(ownershipDelta)}%`,
+        `priced at ${formatFallbackFantasyNumber(pricedAt, 0)}`,
+        `avg ${formatFallbackFantasyNumber(avgPoints)}`,
+        `L3 ${formatFallbackFantasyNumber(last3Avg)}`,
+        byeDetail,
+      ].join(", ");
+    const reasons = [
+      last3Avg != null && pricedAt != null && last3Avg > pricedAt
+        ? "recent form is ahead of his price"
+        : null,
+      hasProjectionAccess && projectionVsPricedAt != null && projectionVsPricedAt > 0
+        ? "he projects above what he is priced at"
+        : null,
+      hasProjectionAccess && breakEven != null && pricedAt != null && breakEven < pricedAt
+        ? "the breakeven is friendly"
+        : null,
+      playsNextMajorByeRound === true ? "he helps the next major bye" : null,
+    ].filter((reason): reason is string => reason !== null);
+    const reason =
+      reasons.length > 0
+        ? formatFallbackReasonList(reasons)
+        : "he is one of the clearer rising targets in the current player pool";
 
-    return `${index + 1}. ${String(entry.name ?? "Unknown")} (${position}) - price ${price}${ownedBy}${ownershipDelta}${projection}${breakEven}`;
+    return `${index + 1}. ${name} (${position}, ${price}${titleProjection}, ${formatFallbackRating(score)}/10)\n${details}.\nReason: ${reason}.`;
   });
 
+  const proNote = hasProjectionAccess
+    ? ""
+    : "Sign up to Pro to access projections and breakevens. Below is based on ownership movement, price, L3/form and bye coverage.\n\n";
+  const recommendedMoves = [
+    "Recommended Moves",
+    "Use this as a target list rather than a forced trade plan because I do not have your squad, bank, or trade count here.",
+    "Do not trade in a player you already own, and check the position/cash fit before locking the move.",
+  ].join("\n");
+
   return buildAiResult(
-    `Best fantasy buys${roundLabel != null ? ` for Round ${roundLabel}` : ""}:\n${lines.join("\n")}${warnings.length > 0 ? `\n\nNotes:\n- ${warnings.join("\n- ")}` : ""}`,
+    `${proNote}Top 5 Trade Ins${roundLabel != null ? ` for Round ${roundLabel}` : ""}\n${lines.join("\n\n")}\n\n${recommendedMoves}${warnings.length > 0 ? `\n\nNotes:\n- ${warnings.join("\n- ")}` : ""}`,
     [activity],
     "direct-tools"
   );

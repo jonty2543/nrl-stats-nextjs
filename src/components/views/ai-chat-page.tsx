@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
@@ -92,10 +92,6 @@ async function parseAiChatResponse(response: Response): Promise<AiChatApiRespons
 
 function formatPlanLabel(plan: AiPlan): string {
   return plan.charAt(0).toUpperCase() + plan.slice(1);
-}
-
-function formatLimit(limit: number | null, periodLabel: string): string {
-  return limit == null ? "Unlimited" : `${limit} messages / ${periodLabel}`;
 }
 
 function formatRemainingChats(remaining: number | null, periodLabel: string): string {
@@ -528,17 +524,6 @@ export function AiChatPage({
   tools,
 }: AiChatPageProps) {
   const { isLoaded: isAuthLoaded, userId } = useAuth();
-  const { user } = useUser();
-  const profileImageUrl = user?.imageUrl ?? null;
-  const profileInitials =
-    [user?.firstName, user?.lastName]
-      .map((name) => name?.trim()[0])
-      .filter(Boolean)
-      .join("")
-      .toUpperCase() ||
-    user?.fullName?.trim().slice(0, 2).toUpperCase() ||
-    user?.primaryEmailAddress?.emailAddress.trim().slice(0, 2).toUpperCase() ||
-    "SS";
   const [message, setMessage] = useState("");
   const [pendingDirectTool, setPendingDirectTool] = useState<DirectToolRequest | null>(null);
   const [messages, setMessages] = useState<AiPersistedMessage[]>(initialMessages);
@@ -546,7 +531,6 @@ export function AiChatPage({
   const [usedInPeriod, setUsedInPeriod] = useState(chatsUsed);
   const [remainingInPeriod, setRemainingInPeriod] = useState<number | null>(chatsRemaining);
   const [isUsageTrackingAvailable, setIsUsageTrackingAvailable] = useState(usageTrackingAvailable);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingPrompt, setLoadingPrompt] = useState<string | null>(null);
   const [loadingRunnerImageSrc, setLoadingRunnerImageSrc] = useState(RUNNER_LOADING_IMAGES[0]);
@@ -570,7 +554,6 @@ export function AiChatPage({
     setError(null);
     setPendingImages([]);
     setIsUploadMenuOpen(false);
-    setIsSidebarOpen(false);
   }, [initialMessages, initialThreadId]);
 
   useEffect(() => {
@@ -862,93 +845,10 @@ export function AiChatPage({
   return (
     <div className="relative left-1/2 -mb-[5.25rem] -mt-2 h-[calc(100dvh-2.75rem)] min-h-[30rem] w-screen -translate-x-1/2 overflow-hidden border-t border-nrl-border sm:-mb-[5.5rem] sm:-mt-3 lg:-mb-24 lg:-mt-4">
       <div className="mx-auto flex h-full w-[calc(100%_-_2rem)] max-w-[76rem] overflow-hidden sm:w-[calc(100%_-_3rem)] lg:w-[calc(100%_-_4rem)]">
-      {isSidebarOpen ? (
-        <button
-          type="button"
-          aria-label="Close saved chats"
-          onClick={() => setIsSidebarOpen(false)}
-          className="fixed inset-x-0 bottom-0 top-[7.25rem] z-30 bg-black/45 lg:hidden"
-        />
-      ) : null}
-
-      <aside
-        className={`absolute inset-y-0 left-0 z-40 flex w-[18rem] max-w-[88vw] -translate-x-full flex-col border-r border-nrl-border bg-nrl-panel transition-transform duration-200 lg:static lg:z-auto lg:max-w-none lg:translate-x-0 ${
-          isSidebarOpen ? "translate-x-0 shadow-2xl shadow-black/40" : ""
-        }`}
-      >
-        <div className="flex h-14 items-center justify-between px-4">
-          <div className="text-sm">
-            <NrlAiTitle />
-          </div>
-          <button
-            type="button"
-            aria-label="Close saved chats"
-            onClick={() => setIsSidebarOpen(false)}
-            className="grid h-9 w-9 place-items-center rounded-full text-lg text-nrl-muted transition-colors hover:bg-nrl-panel-2 hover:text-nrl-text lg:hidden"
-          >
-            x
-          </button>
-        </div>
-
-        <div className="px-3">
-          <Link
-            href="/dashboard/ai?new=1"
-            onClick={() => setIsSidebarOpen(false)}
-            className="flex items-center gap-3 rounded-xl bg-nrl-panel-2 px-3 py-3 text-sm font-semibold text-nrl-text transition-colors hover:bg-nrl-border/45"
-          >
-            <span className="text-lg leading-none">+</span>
-            New chat
-          </Link>
-        </div>
-
-        <div className="flex-1" />
-
-        <div className="border-t border-nrl-border px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-nrl-accent bg-cover bg-center text-xs font-bold text-nrl-bg"
-              style={profileImageUrl ? { backgroundImage: `url("${profileImageUrl}")` } : undefined}
-              aria-label="User profile photo"
-            >
-              {!profileImageUrl ? profileInitials : null}
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-nrl-text">{formatPlanLabel(plan)}</div>
-              <div className="truncate text-xs text-nrl-muted">{formatLimit(chatLimit, chatQuotaPeriodLabel)}</div>
-            </div>
-          </div>
-          {isUsageTrackingAvailable ? (
-            <div className="mt-3 text-xs text-nrl-muted">
-              {usedInPeriod} message{usedInPeriod === 1 ? "" : "s"} used,{" "}
-              {formatRemainingChats(remainingInPeriod, chatQuotaPeriodLabel)}
-            </div>
-          ) : (
-            <div className="mt-3 text-xs text-amber-300">Usage tracking unavailable</div>
-          )}
-        </div>
-      </aside>
-
       <section className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-nrl-border px-4 backdrop-blur sm:px-5">
-          <div
-            className={`flex items-center gap-3 transition-transform duration-200 lg:translate-x-0 ${
-              isSidebarOpen ? "translate-x-[18rem]" : ""
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setIsSidebarOpen(true)}
-              className={`grid h-9 w-9 place-items-center rounded-full text-xl text-nrl-muted transition-colors hover:bg-nrl-panel hover:text-nrl-text lg:hidden ${
-                isSidebarOpen ? "pointer-events-none opacity-0" : ""
-              }`}
-              aria-label="Open chats"
-              aria-hidden={isSidebarOpen}
-            >
-              =
-            </button>
-            <div className={`text-lg lg:block ${isSidebarOpen ? "hidden" : ""}`}>
-              <NrlAiTitle />
-            </div>
+          <div className="text-lg">
+            <NrlAiTitle />
           </div>
           <div className="hidden text-xs text-nrl-muted sm:block">
             {formatRemainingChats(remainingInPeriod, chatQuotaPeriodLabel)}

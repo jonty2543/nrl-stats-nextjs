@@ -843,7 +843,7 @@ export function AiChatPage({
   };
 
   return (
-    <div className="relative left-1/2 -mb-[5.25rem] -mt-2 h-[calc(100dvh-2.75rem)] min-h-[30rem] w-screen -translate-x-1/2 overflow-hidden border-t border-nrl-border sm:-mb-[5.5rem] sm:-mt-3 lg:-mb-24 lg:-mt-4">
+    <div className="relative left-1/2 -mb-[5.25rem] -ml-[50vw] -mt-2 h-[calc(100dvh-2.75rem)] min-h-[30rem] w-screen overflow-hidden border-t border-nrl-border sm:-mb-[5.5rem] sm:-mt-3 lg:-mb-24 lg:-mt-4">
       <div className="mx-auto flex h-full w-[calc(100%_-_2rem)] max-w-[76rem] overflow-hidden sm:w-[calc(100%_-_3rem)] lg:w-[calc(100%_-_4rem)]">
       <section className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="relative z-20 flex h-14 shrink-0 items-center justify-between border-b border-nrl-border px-4 backdrop-blur sm:px-5">

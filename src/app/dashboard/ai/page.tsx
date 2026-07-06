@@ -3,42 +3,22 @@ import { AiChatPage } from "@/components/views/ai-chat-page";
 import { getServerAiAccess } from "@/lib/ai/access";
 import {
   getAiUsageForUser,
-  loadAiThreadForUser,
-  loadAiThreadListForUser,
-  loadLatestAiThreadForUser,
-  sanitizeAiMessagesForAccess,
 } from "@/lib/ai/persistence";
 import { AI_TOOL_DEFINITIONS } from "@/lib/ai/tools";
 import { fetchFantasyCoachPlayersSnapshot, getFantasyCoachRoundMetrics } from "@/lib/fantasy/nrl";
 
 export const dynamic = "force-dynamic";
 
-interface AiPageProps {
-  searchParams: Promise<{
-    thread?: string;
-    new?: string;
-  }>;
-}
-
-export default async function AiPage({ searchParams }: AiPageProps) {
+export default async function AiPage() {
   const { userId } = await auth();
   const access = await getServerAiAccess(userId);
-  const params = await searchParams;
-  const requestedThreadId = typeof params.thread === "string" ? params.thread : null;
-  const startNewThread = params.new === "1";
-  const [threadList, usage, thread, fantasyCoachPlayers] = await Promise.all([
-    loadAiThreadListForUser(userId, { includeMyTeamThreads: false }),
+  const [usage, fantasyCoachPlayers] = await Promise.all([
     getAiUsageForUser(
       userId,
       access.chatLimit,
       access.chatQuotaPeriodDays,
       access.chatQuotaPeriodLabel
     ),
-    startNewThread
-      ? Promise.resolve(null)
-      : requestedThreadId
-      ? loadAiThreadForUser(userId, requestedThreadId)
-      : loadLatestAiThreadForUser(userId, { includeMyTeamThreads: false }),
     fetchFantasyCoachPlayersSnapshot(),
   ]);
   const nextUpcomingRound = fantasyCoachPlayers
@@ -54,9 +34,8 @@ export default async function AiPage({ searchParams }: AiPageProps) {
       chatsUsed={usage.usedInPeriod}
       chatsRemaining={usage.remainingInPeriod}
       usageTrackingAvailable={usage.trackingAvailable}
-      initialMessages={sanitizeAiMessagesForAccess(thread?.messages ?? [], access.plan)}
-      initialThreadId={thread?.threadId ?? null}
-      initialThreads={threadList}
+      initialMessages={[]}
+      initialThreadId={null}
       nextUpcomingRound={nextUpcomingRound}
       tools={AI_TOOL_DEFINITIONS}
     />

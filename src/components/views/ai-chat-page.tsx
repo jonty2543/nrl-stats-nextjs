@@ -3,14 +3,11 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { AiPlan } from "@/lib/ai/access";
-import type { AiPersistedMessage, AiThreadListItem } from "@/lib/ai/persistence";
+import type { AiPersistedMessage } from "@/lib/ai/persistence";
 import type { AiToolDefinition } from "@/lib/ai/tools/types";
 import { AiLineChart } from "@/components/charts/ai-line-chart";
-
-const MY_TEAM_AI_THREAD_TITLE = "My Team NRL AI";
 
 interface AiChatPageProps {
   plan: AiPlan;
@@ -21,7 +18,6 @@ interface AiChatPageProps {
   usageTrackingAvailable: boolean;
   initialMessages: AiPersistedMessage[];
   initialThreadId: string | null;
-  initialThreads: AiThreadListItem[];
   nextUpcomingRound: number | null;
   tools: AiToolDefinition[];
 }
@@ -112,17 +108,6 @@ function formatQuotaReachedMessage(plan: AiPlan, limit: number | null, periodLab
   const limitText = limit == null ? "your AI message limit" : `${limit} message${limit === 1 ? "" : "s"}`;
   const periodText = periodLabel === "day" ? "today" : `this ${periodLabel}`;
   return `${planLabel} limit reached: ${limitText} ${periodText}.`;
-}
-
-function formatThreadTime(timestamp: string): string {
-  if (!timestamp) return "";
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return new Intl.DateTimeFormat("en-AU", {
-    month: "short",
-    day: "numeric",
-  }).format(date);
 }
 
 function buildLocalMessage(
@@ -539,11 +524,9 @@ export function AiChatPage({
   usageTrackingAvailable,
   initialMessages,
   initialThreadId,
-  initialThreads,
   nextUpcomingRound,
   tools,
 }: AiChatPageProps) {
-  const router = useRouter();
   const { isLoaded: isAuthLoaded, userId } = useAuth();
   const { user } = useUser();
   const profileImageUrl = user?.imageUrl ?? null;
@@ -560,7 +543,6 @@ export function AiChatPage({
   const [pendingDirectTool, setPendingDirectTool] = useState<DirectToolRequest | null>(null);
   const [messages, setMessages] = useState<AiPersistedMessage[]>(initialMessages);
   const [threadId, setThreadId] = useState<string | null>(initialThreadId);
-  const [threads, setThreads] = useState<AiThreadListItem[]>(initialThreads);
   const [usedInPeriod, setUsedInPeriod] = useState(chatsUsed);
   const [remainingInPeriod, setRemainingInPeriod] = useState<number | null>(chatsRemaining);
   const [isUsageTrackingAvailable, setIsUsageTrackingAvailable] = useState(usageTrackingAvailable);
@@ -572,7 +554,6 @@ export function AiChatPage({
   const [error, setError] = useState<string | null>(null);
   const [pendingImages, setPendingImages] = useState<PendingImageAttachment[]>([]);
   const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
-  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const bettingFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -591,10 +572,6 @@ export function AiChatPage({
     setIsUploadMenuOpen(false);
     setIsSidebarOpen(false);
   }, [initialMessages, initialThreadId]);
-
-  useEffect(() => {
-    setThreads(initialThreads);
-  }, [initialThreads]);
 
   useEffect(() => {
     setUsedInPeriod(chatsUsed);
@@ -796,22 +773,6 @@ export function AiChatPage({
 
       const nextThreadId = payload.threadId ?? threadId;
       setThreadId(nextThreadId);
-      setThreads((current) => {
-        if (!nextThreadId) return current;
-
-        const fallbackTitle = trimmed.length <= 80 ? trimmed : `${trimmed.slice(0, 79)}…`;
-        const nextTitle = payload.threadTitle?.trim() || fallbackTitle;
-        if (nextTitle === MY_TEAM_AI_THREAD_TITLE) {
-          return current.filter((entry) => entry.threadId !== nextThreadId);
-        }
-        const nextEntry = {
-          threadId: nextThreadId,
-          title: nextTitle,
-          lastMessageAt: new Date().toISOString(),
-        };
-
-        return [nextEntry, ...current.filter((entry) => entry.threadId !== nextThreadId)].slice(0, 20);
-      });
       setMessages((current) => [
         ...current.map((entry) =>
           entry.id === localUserMessage.id ? { ...entry, threadId: nextThreadId ?? entry.threadId } : entry
@@ -863,35 +824,6 @@ export function AiChatPage({
     }
 
     void submitPrompt(nextMessage);
-  };
-
-  const handleDeleteThread = async (deletedThreadId: string) => {
-    if (deletingThreadId || !window.confirm("Delete this chat?")) return;
-
-    setDeletingThreadId(deletedThreadId);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/ai/threads/${deletedThreadId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error || "Unable to delete chat.");
-      }
-
-      setThreads((current) => current.filter((thread) => thread.threadId !== deletedThreadId));
-      if (deletedThreadId === threadId) {
-        setThreadId(null);
-        setMessages([]);
-        router.replace("/dashboard/ai?new=1");
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to delete chat.");
-    } finally {
-      setDeletingThreadId(null);
-    }
   };
 
   void tools;
@@ -969,51 +901,7 @@ export function AiChatPage({
           </Link>
         </div>
 
-        <div className="mt-3 flex-1 overflow-y-auto px-3 pb-4">
-          <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-nrl-muted">
-            Recent
-          </div>
-          {threads.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-nrl-border px-3 py-4 text-xs leading-5 text-nrl-muted">
-              Saved chats will appear here.
-            </div>
-          ) : (
-            threads.map((thread) => {
-              const isActive = thread.threadId === threadId;
-              return (
-                <div
-                  key={thread.threadId}
-                  className={`group flex items-center gap-1 rounded-xl transition-colors ${
-                    isActive
-                      ? "bg-nrl-accent/10 text-nrl-text"
-                      : "text-nrl-muted hover:bg-nrl-panel-2 hover:text-nrl-text"
-                  }`}
-                >
-                  <Link
-                    href={`/dashboard/ai?thread=${thread.threadId}`}
-                    onClick={() => setIsSidebarOpen(false)}
-                    className="min-w-0 flex-1 px-3 py-3"
-                  >
-                    <div className="truncate text-sm font-medium text-nrl-text">
-                      {thread.title || "Untitled conversation"}
-                    </div>
-                    <div className="mt-1 text-[11px] text-nrl-muted">{formatThreadTime(thread.lastMessageAt)}</div>
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteThread(thread.threadId)}
-                    disabled={deletingThreadId === thread.threadId}
-                    className="mr-2 grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-semibold text-nrl-muted opacity-100 transition-colors hover:bg-red-500/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                    aria-label={`Delete ${thread.title || "untitled conversation"}`}
-                    title="Delete chat"
-                  >
-                    x
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
+        <div className="flex-1" />
 
         <div className="border-t border-nrl-border px-4 py-4">
           <div className="flex items-center gap-3">

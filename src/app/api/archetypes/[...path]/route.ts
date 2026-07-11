@@ -1,7 +1,6 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
-import { fetchApprovedArticleLinks } from "@/lib/articles";
 
 export const dynamic = "force-dynamic";
 
@@ -32,45 +31,12 @@ function escapeAttribute(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-function normaliseTitle(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-async function getArchetypesArticleLink(): Promise<ArchetypesArticleLink> {
-  try {
-    const articles = await fetchApprovedArticleLinks();
-    const expectedTitle = normaliseTitle(ARCHETYPES_ARTICLE_TITLE);
-    const article =
-      articles.find((item) => item.slug === ARCHETYPES_ARTICLE_SLUG) ??
-      articles.find((item) => normaliseTitle(item.title) === expectedTitle) ??
-      articles.find((item) => {
-        const title = normaliseTitle(item.title);
-        return title.includes("archetype") && title.includes("position");
-      });
-
-    if (!article) {
-      return {
-        href: ARTICLES_PATH,
-        imageUrls: [],
-        title: ARCHETYPES_ARTICLE_TITLE,
-      };
-    }
-
-    return {
-      href: `${ARTICLES_PATH}/${article.slug}`,
-      imageUrls: article.imageUrls.slice(0, 2),
-      title: article.title,
-    };
-  } catch {
-    return {
-      href: ARTICLES_PATH,
-      imageUrls: [],
-      title: ARCHETYPES_ARTICLE_TITLE,
-    };
-  }
+function getArchetypesArticleLink(): ArchetypesArticleLink {
+  return {
+    href: `${ARTICLES_PATH}/${ARCHETYPES_ARTICLE_SLUG}`,
+    imageUrls: [],
+    title: ARCHETYPES_ARTICLE_TITLE,
+  };
 }
 
 function buildArchetypesArticleLink(articleLink: ArchetypesArticleLink): string {
@@ -140,13 +106,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
       `
         html,
         body {
-            background-color: #111733;
-            background-image:
-                radial-gradient(circle at top left, rgba(92, 108, 220, 0.18), transparent 36%),
-                radial-gradient(circle at 72% 18%, rgba(70, 92, 180, 0.08), transparent 28%),
-                radial-gradient(circle at bottom right, rgba(58, 84, 176, 0.16), transparent 34%),
-                linear-gradient(180deg, #111733 0%, #10162f 48%, #0f142b 100%);
-            background-attachment: fixed;
+            background: #111733;
             font-family: ${APP_FONT_STACK};
         }
 
@@ -231,6 +191,19 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
         .archetype-card,
         .ml-explanation {
             box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+        }
+
+        .plot-container {
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .plot-container iframe {
+            display: block;
+            background: #111733;
+            color-scheme: dark;
         }
 
         .description,
@@ -365,7 +338,7 @@ function stylePlotHtml(html: string): string {
     .replaceAll("#151E3F", "#161c32")
     .replaceAll("#1E2742", "#1e2542")
     .replaceAll("#2A3B6E", "#2a3356")
-    .replaceAll("#f0f0f0", "#161c32")
+    .replaceAll("#f0f0f0", "#111733")
     .replaceAll("#E5ECF6", "#1e2542")
     .replaceAll("#2a3f5f", "#f5f7ff")
     .replaceAll('"gridcolor":"white"', '"gridcolor":"rgba(245,247,255,0.14)"')
@@ -389,9 +362,16 @@ function stylePlotHtml(html: string): string {
     .replace(
       "</style>",
       `
-                body {
-                    background: #161c32;
+                html,
+                body,
+                #plotly-wrapper {
+                    background: #111733;
                     font-family: ${APP_FONT_STACK};
+                }
+
+                html,
+                body {
+                    min-height: 100%;
                 }
 
                 body *,
@@ -450,7 +430,7 @@ export async function GET(_request: Request, context: ArchetypesRouteContext) {
     const extension = path.extname(filePath);
     const contentType = CONTENT_TYPES[extension] ?? "application/octet-stream";
     const file = await readFile(filePath);
-    const articleLink = path.basename(filePath) === "index.html" ? await getArchetypesArticleLink() : undefined;
+    const articleLink = path.basename(filePath) === "index.html" ? getArchetypesArticleLink() : undefined;
     const body = extension === ".html" ? styleHtml(filePath, file.toString("utf8"), articleLink) : file;
 
     return new NextResponse(body, {

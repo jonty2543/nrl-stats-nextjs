@@ -6,7 +6,8 @@ export default function ArchetypesPage() {
       <iframe
         src="/api/archetypes/index.html"
         title="NRL player archetypes"
-        className="block h-[calc(100vh-14.5rem)] min-h-[720px] w-full bg-transparent"
+        className="block h-[calc(100vh-14.5rem)] min-h-[720px] w-full border-0 bg-[#111733]"
+        style={{ colorScheme: "dark" }}
       />
     </section>
   );

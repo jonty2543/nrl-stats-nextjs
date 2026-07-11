@@ -204,6 +204,11 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
             display: block;
             background: #111733;
             color-scheme: dark;
+            opacity: 0;
+        }
+
+        .plot-container iframe.is-loaded {
+            opacity: 1;
         }
 
         .description,
@@ -320,7 +325,14 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
             font-size: 0.9rem;
             line-height: 1;
         }
-    </style>`
+    </style>
+    <script>
+        document.addEventListener("load", function (event) {
+            if (event.target instanceof HTMLIFrameElement && event.target.closest(".plot-container")) {
+                event.target.classList.add("is-loaded");
+            }
+        }, true);
+    </script>`
     );
 }
 

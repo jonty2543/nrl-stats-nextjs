@@ -578,21 +578,30 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
         <section className="rounded-lg border border-nrl-border bg-nrl-panel">
           <div className="flex items-center justify-between gap-3 border-b border-nrl-border px-4 py-3">
             <h2 className="text-xs font-black uppercase tracking-[0.14em] text-nrl-accent">Teams</h2>
-            <div className="text-[10px] font-bold text-nrl-muted">{teamRankings.length} teams</div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse text-left">
+            <table className="w-full min-w-[320px] border-collapse text-left sm:min-w-[420px]">
               <thead className="sticky top-0 z-10 bg-[#111733]">
                 <tr className="border-b border-nrl-border text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                   <th className="w-12 px-4 py-2">#</th>
                   <th className="px-2 py-2">Team</th>
+                  <th className="w-24 px-2 py-2 text-right sm:hidden" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
+                    <button
+                      type="button"
+                      onClick={toggleValueSortDirection}
+                      className="ml-auto flex flex-col items-end gap-0.5 text-right font-black uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:text-white"
+                    >
+                      <span>{valueHeading}</span>
+                      <span className="text-[8px]">{valueSortDirection}</span>
+                    </button>
+                  </th>
                   <th className="w-16 px-2 py-2 text-right">Games</th>
-                  <th className="w-20 px-2 py-2 text-right">{statInitials(effectiveStatKey, activeStatOptions)}</th>
+                  <th className="hidden w-20 px-2 py-2 text-right sm:table-cell">{statInitials(effectiveStatKey, activeStatOptions)}</th>
                   {effectivePerStatKey ? (
-                    <th className="w-20 px-2 py-2 text-right">{statInitials(effectivePerStatKey, activeStatOptions)}</th>
+                    <th className="hidden w-20 px-2 py-2 text-right sm:table-cell">{statInitials(effectivePerStatKey, activeStatOptions)}</th>
                   ) : null}
-                  <th className="w-28 px-4 py-2 text-right" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
+                  <th className="hidden w-28 px-4 py-2 text-right sm:table-cell" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
                     <button
                       type="button"
                       onClick={toggleValueSortDirection}
@@ -620,16 +629,19 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                         <div className="truncate text-xs font-black text-nrl-text">{entry.name}</div>
                       </div>
                     </td>
+                    <td className="px-2 py-2 text-right text-sm font-black text-nrl-text sm:hidden">
+                      {formatRankingValue(entry.value, Boolean(effectivePerStatKey))}
+                    </td>
                     <td className="px-2 py-2 text-right text-xs font-bold text-nrl-muted">{entry.games}</td>
-                    <td className="px-2 py-2 text-right text-xs font-bold text-nrl-muted">
+                    <td className="hidden px-2 py-2 text-right text-xs font-bold text-nrl-muted sm:table-cell">
                       {formatCountValue(entry.statValue)}
                     </td>
                     {effectivePerStatKey ? (
-                      <td className="px-2 py-2 text-right text-xs font-bold text-nrl-muted">
+                      <td className="hidden px-2 py-2 text-right text-xs font-bold text-nrl-muted sm:table-cell">
                         {formatCountValue(entry.perStatValue ?? 0)}
                       </td>
                     ) : null}
-                    <td className="px-4 py-2 text-right text-sm font-black text-nrl-text">
+                    <td className="hidden px-4 py-2 text-right text-sm font-black text-nrl-text sm:table-cell">
                       {formatRankingValue(entry.value, Boolean(effectivePerStatKey))}
                     </td>
                   </tr>
@@ -644,21 +656,30 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             <h2 className="text-xs font-black uppercase tracking-[0.14em] text-nrl-accent">
               {positionFilter === "All Positions" ? "Players" : positionFilter}
             </h2>
-            <div className="text-[10px] font-bold text-nrl-muted">{playerRankings.length} players</div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse text-left">
+            <table className="w-full min-w-[320px] border-collapse text-left sm:min-w-[420px]">
               <thead className="sticky top-0 z-10 bg-[#111733]">
                 <tr className="border-b border-nrl-border text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
                   <th className="w-12 px-4 py-2">#</th>
                   <th className="px-2 py-2">Player</th>
+                  <th className="w-24 px-2 py-2 text-right sm:hidden" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
+                    <button
+                      type="button"
+                      onClick={toggleValueSortDirection}
+                      className="ml-auto flex flex-col items-end gap-0.5 text-right font-black uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:text-white"
+                    >
+                      <span>{valueHeading}</span>
+                      <span className="text-[8px]">{valueSortDirection}</span>
+                    </button>
+                  </th>
                   <th className="w-16 px-2 py-2 text-right">Games</th>
-                  <th className="w-20 px-2 py-2 text-right">{statInitials(effectiveStatKey, activeStatOptions)}</th>
+                  <th className="hidden w-20 px-2 py-2 text-right sm:table-cell">{statInitials(effectiveStatKey, activeStatOptions)}</th>
                   {effectivePerStatKey ? (
-                    <th className="w-20 px-2 py-2 text-right">{statInitials(effectivePerStatKey, activeStatOptions)}</th>
+                    <th className="hidden w-20 px-2 py-2 text-right sm:table-cell">{statInitials(effectivePerStatKey, activeStatOptions)}</th>
                   ) : null}
-                  <th className="w-28 px-4 py-2 text-right" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
+                  <th className="hidden w-28 px-4 py-2 text-right sm:table-cell" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
                     <button
                       type="button"
                       onClick={toggleValueSortDirection}
@@ -696,16 +717,19 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                         </div>
                       </div>
                     </td>
+                    <td className="px-2 py-2 text-right text-sm font-black text-nrl-text sm:hidden">
+                      {formatRankingValue(entry.value, Boolean(effectivePerStatKey))}
+                    </td>
                     <td className="px-2 py-2 text-right text-xs font-bold text-nrl-muted">{entry.games}</td>
-                    <td className="px-2 py-2 text-right text-xs font-bold text-nrl-muted">
+                    <td className="hidden px-2 py-2 text-right text-xs font-bold text-nrl-muted sm:table-cell">
                       {formatCountValue(entry.statValue)}
                     </td>
                     {effectivePerStatKey ? (
-                      <td className="px-2 py-2 text-right text-xs font-bold text-nrl-muted">
+                      <td className="hidden px-2 py-2 text-right text-xs font-bold text-nrl-muted sm:table-cell">
                         {formatCountValue(entry.perStatValue ?? 0)}
                       </td>
                     ) : null}
-                    <td className="px-4 py-2 text-right text-sm font-black text-nrl-text">
+                    <td className="hidden px-4 py-2 text-right text-sm font-black text-nrl-text sm:table-cell">
                       {formatRankingValue(entry.value, Boolean(effectivePerStatKey))}
                     </td>
                   </tr>

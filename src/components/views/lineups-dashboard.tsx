@@ -2171,6 +2171,278 @@ function NotableOuts({
   )
 }
 
+type TeamFormSummary = {
+  wins: number
+  losses: number
+  draws: number
+  pointsFor: number | null
+  pointsAgainst: number | null
+  winRate: number | null
+  lastFive: string
+  streak: string
+  homeAwayRecord: string
+  closeWins: number
+  closeGames: number
+}
+
+type MatchDriver = {
+  label: string
+  homeAdvantage: number
+}
+
+function teamDisplayName(team: LineupTeam | null, fallback: string): string {
+  return team?.team || team?.teamName || fallback
+}
+
+function resultScoreForTeam(result: LineupRecentResult, team: string): { for: number; against: number; side: "home" | "away" } | null {
+  const side = resultSideForTeam(result, team)
+  if (!side) return null
+  return side === "home"
+    ? { for: result.homeScore, against: result.awayScore, side }
+    : { for: result.awayScore, against: result.homeScore, side }
+}
+
+function buildTeamFormSummary(team: string, results: LineupRecentResult[], currentSide: "home" | "away"): TeamFormSummary {
+  const scored = results
+    .map((result) => ({ result, score: resultScoreForTeam(result, team) }))
+    .filter((entry): entry is { result: LineupRecentResult; score: NonNullable<ReturnType<typeof resultScoreForTeam>> } => entry.score != null)
+  const wins = scored.filter((entry) => entry.score.for > entry.score.against).length
+  const losses = scored.filter((entry) => entry.score.for < entry.score.against).length
+  const draws = scored.length - wins - losses
+  const pointsFor = scored.length > 0 ? scored.reduce((total, entry) => total + entry.score.for, 0) / scored.length : null
+  const pointsAgainst = scored.length > 0 ? scored.reduce((total, entry) => total + entry.score.against, 0) / scored.length : null
+  const outcomes = scored.slice(0, 5).map((entry) => entry.score.for > entry.score.against ? "W" : entry.score.for < entry.score.against ? "L" : "D")
+  const first = outcomes[0] ?? ""
+  const streakLength = first ? outcomes.findIndex((outcome) => outcome !== first) : -1
+  const sideRows = scored.filter((entry) => entry.score.side === currentSide)
+  const sideWins = sideRows.filter((entry) => entry.score.for > entry.score.against).length
+  const sideLosses = sideRows.filter((entry) => entry.score.for < entry.score.against).length
+  const closeRows = scored.filter((entry) => Math.abs(entry.score.for - entry.score.against) <= 6)
+  const closeWins = closeRows.filter((entry) => entry.score.for > entry.score.against).length
+
+  return {
+    wins,
+    losses,
+    draws,
+    pointsFor,
+    pointsAgainst,
+    winRate: scored.length > 0 ? wins / scored.length : null,
+    lastFive: outcomes.length > 0 ? outcomes.join("-") : "-",
+    streak: first ? `${streakLength === -1 ? outcomes.length : streakLength}${first}` : "-",
+    homeAwayRecord: sideRows.length > 0 ? `${sideWins}-${sideLosses}` : "-",
+    closeWins,
+    closeGames: closeRows.length,
+  }
+}
+
+function projectionTotalForTeam(team: LineupTeam | null): number | null {
+  const projections = (team?.players ?? [])
+    .filter((player) => player.isOnField)
+    .map((player) => player.fantasyProjection)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+  return projections.length >= 8 ? projections.reduce((total, value) => total + value, 0) : null
+}
+
+function clampDriver(value: number): number {
+  return Math.max(-1, Math.min(1, value))
+}
+
+function buildMatchDrivers(match: LineupMatch, homeSummary: TeamFormSummary, awaySummary: TeamFormSummary): MatchDriver[] {
+  const homeProjection = projectionTotalForTeam(match.homeTeam)
+  const awayProjection = projectionTotalForTeam(match.awayTeam)
+  const drivers: MatchDriver[] = []
+
+  if (homeProjection != null && awayProjection != null) {
+    drivers.push({ label: "Overall rating", homeAdvantage: clampDriver((homeProjection - awayProjection) / 80) })
+    drivers.push({ label: "Team lists", homeAdvantage: clampDriver((homeProjection - awayProjection) / 60) })
+  }
+
+  if (homeSummary.pointsFor != null && awaySummary.pointsFor != null && homeSummary.pointsAgainst != null && awaySummary.pointsAgainst != null) {
+    const homeAttackDefence = homeSummary.pointsFor - homeSummary.pointsAgainst
+    const awayAttackDefence = awaySummary.pointsFor - awaySummary.pointsAgainst
+    drivers.push({ label: "Attack vs defence", homeAdvantage: clampDriver((homeAttackDefence - awayAttackDefence) / 28) })
+  }
+
+  if (homeSummary.winRate != null && awaySummary.winRate != null) {
+    drivers.push({ label: "Recent form", homeAdvantage: clampDriver(homeSummary.winRate - awaySummary.winRate) })
+  }
+
+  drivers.push({ label: "Home ground", homeAdvantage: 0.28 })
+  return drivers.filter((driver, index, list) => list.findIndex((item) => item.label === driver.label) === index)
+}
+
+function insightText(insight: MatchupInsight): string {
+  return `${insight.title} ${insight.description}`.toLowerCase()
+}
+
+function buildSmartTags({
+  insights,
+  weatherForecast,
+  homeOuts,
+  awayOuts,
+  homeSummary,
+  awaySummary,
+}: {
+  insights: MatchupInsight[]
+  weatherForecast: LineupWeatherForecast | null
+  homeOuts: LineupCasualtyOut[]
+  awayOuts: LineupCasualtyOut[]
+  homeSummary: TeamFormSummary
+  awaySummary: TeamFormSummary
+}): string[] {
+  const tags = new Set<string>()
+  const weather = weatherForecast?.condition.toLowerCase() ?? ""
+  if (weather.includes("rain") || weather.includes("drizzle") || weather.includes("storm")) tags.add("Wet Track")
+  if (homeOuts.length + awayOuts.length > 0) tags.add("Late Mail")
+  for (const insight of insights) {
+    const text = insightText(insight)
+    if (insight.category === "Betting") tags.add("Market Value")
+    if (text.includes("try")) tags.add("Try Edge")
+    if (text.includes("first-half") || text.includes("first half") || text.includes("early") || text.includes("fast")) tags.add("Fast Starter")
+    if (text.includes("close") || text.includes("tight") || text.includes("six or less") || text.includes("one-score")) tags.add("Clutch")
+  }
+  if (homeSummary.closeGames >= 2 || awaySummary.closeGames >= 2) tags.add("Clutch")
+  return [...tags].slice(0, 5)
+}
+
+function SmartTagList({ tags }: { tags: string[] }) {
+  if (tags.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {tags.map((tag) => (
+        <span key={tag} className="rounded-md border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-200">
+          {tag}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function DriverBar({ driver }: { driver: MatchDriver }) {
+  const width = Math.abs(driver.homeAdvantage) * 50
+  const left = driver.homeAdvantage >= 0 ? 50 - width : 50
+
+  return (
+    <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
+      <div className="truncate text-xs font-semibold text-nrl-text">{driver.label}</div>
+      <div className="relative h-3 rounded-full bg-white/8">
+        <div className="absolute left-1/2 top-0 h-full w-px bg-white/20" />
+        <div
+          className={`absolute top-0 h-full rounded-full ${driver.homeAdvantage >= 0 ? "bg-nrl-accent" : "bg-sky-400"}`}
+          style={{ left: `${left}%`, width: `${Math.max(4, width)}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function MatchReadPanel({
+  match,
+  insights,
+  weatherForecast,
+  smartTags,
+  homeSummary,
+  awaySummary,
+}: {
+  match: LineupMatch
+  insights: MatchupInsight[]
+  weatherForecast: LineupWeatherForecast | null
+  smartTags: string[]
+  homeSummary: TeamFormSummary
+  awaySummary: TeamFormSummary
+}) {
+  const homeName = teamDisplayName(match.homeTeam, "Home")
+  const awayName = teamDisplayName(match.awayTeam, "Away")
+  const homeProjection = projectionTotalForTeam(match.homeTeam)
+  const awayProjection = projectionTotalForTeam(match.awayTeam)
+  const projectedLeader = homeProjection != null && awayProjection != null
+    ? homeProjection >= awayProjection ? homeName : awayName
+    : (homeSummary.winRate ?? 0) >= (awaySummary.winRate ?? 0) ? homeName : awayName
+  const lead = insights[0]
+  const support = insights[1]
+  const weather = weatherForecast ? ` Conditions: ${weatherForecast.condition}.` : ""
+  const read = lead
+    ? `${projectedLeader} shape as the side with the stronger read. ${lead.description}${support ? ` ${support.description}` : ""}${weather}`
+    : `${homeName} and ${awayName} profile as a tighter read from the available data.${weather}`
+
+  return (
+    <section className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/75 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-nrl-accent">Match Read</div>
+        <SmartTagList tags={smartTags} />
+      </div>
+      <p className="text-sm leading-relaxed text-nrl-text">{read}</p>
+      <p className="text-[11px] leading-relaxed text-nrl-muted">Statistical estimates for information only, not betting advice. Gamble responsibly.</p>
+    </section>
+  )
+}
+
+function DrivingPickPanel({
+  match,
+  drivers,
+}: {
+  match: LineupMatch
+  drivers: MatchDriver[]
+}) {
+  if (drivers.length === 0) return null
+  return (
+    <section className="rounded-lg border border-nrl-border bg-nrl-panel/75 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.18em] text-nrl-muted">
+          What&apos;s Driving The Pick
+        </div>
+        <div className="flex min-w-0 items-center gap-2 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
+          <span className="truncate text-nrl-accent">{teamDisplayName(match.homeTeam, "Home")}</span>
+          <span>vs</span>
+          <span className="truncate text-sky-300">{teamDisplayName(match.awayTeam, "Away")}</span>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {drivers.map((driver) => <DriverBar key={driver.label} driver={driver} />)}
+      </div>
+    </section>
+  )
+}
+
+function SeasonFormGuide({
+  match,
+  homeSummary,
+  awaySummary,
+}: {
+  match: LineupMatch
+  homeSummary: TeamFormSummary
+  awaySummary: TeamFormSummary
+}) {
+  const rows = [
+    ["Win-loss", `${homeSummary.wins}-${homeSummary.losses}${homeSummary.draws ? `-${homeSummary.draws}` : ""}`, `${awaySummary.wins}-${awaySummary.losses}${awaySummary.draws ? `-${awaySummary.draws}` : ""}`],
+    ["Pts for / game", formatStatValue(homeSummary.pointsFor, 1), formatStatValue(awaySummary.pointsFor, 1)],
+    ["Pts against / game", formatStatValue(homeSummary.pointsAgainst, 1), formatStatValue(awaySummary.pointsAgainst, 1)],
+    ["Last 5", homeSummary.lastFive, awaySummary.lastFive],
+    ["Streak", homeSummary.streak, awaySummary.streak],
+    ["Home / away", homeSummary.homeAwayRecord, awaySummary.homeAwayRecord],
+  ]
+
+  return (
+    <section className="rounded-lg border border-nrl-border bg-nrl-panel/75 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
+      <div className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-nrl-muted">Season Form Guide</div>
+      <div className="mb-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center text-sm font-black text-nrl-text">
+        <span className="truncate">{teamDisplayName(match.homeTeam, "Home")}</span>
+        <span className="text-xs text-nrl-muted">vs</span>
+        <span className="truncate">{teamDisplayName(match.awayTeam, "Away")}</span>
+      </div>
+      <div className="divide-y divide-white/8">
+        {rows.map(([label, home, away]) => (
+          <div key={label} className="grid grid-cols-[1fr_7.5rem_1fr] items-center gap-2 py-2 text-center text-xs">
+            <span className="font-black text-nrl-text">{home}</span>
+            <span className="text-[10px] font-black uppercase tracking-wide text-nrl-muted">{label}</span>
+            <span className="font-black text-nrl-text">{away}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function formatTryChartPct(value: number): string {
   return `${Math.round(Math.max(0, value) * 100)}%`
 }
@@ -2715,6 +2987,27 @@ function LineupCard({
         playerAverages,
         playerTryHistory,
       })
+  const homeSummary = buildTeamFormSummary(
+    teamDisplayName(detailMatch.homeTeam, "Home"),
+    detailMatch.homeRecentResults ?? [],
+    "home"
+  )
+  const awaySummary = buildTeamFormSummary(
+    teamDisplayName(detailMatch.awayTeam, "Away"),
+    detailMatch.awayRecentResults ?? [],
+    "away"
+  )
+  const homeOuts = getTeamOuts(homeTeamForDisplay, casualtyWardOuts)
+  const awayOuts = getTeamOuts(awayTeamForDisplay, casualtyWardOuts)
+  const smartTags = buildSmartTags({
+    insights,
+    weatherForecast,
+    homeOuts,
+    awayOuts,
+    homeSummary,
+    awaySummary,
+  })
+  const matchDrivers = buildMatchDrivers(detailMatch, homeSummary, awaySummary)
 
   useEffect(() => {
     if (window.location.hash !== `#${anchorId}`) return
@@ -2853,16 +3146,30 @@ function LineupCard({
         ) : null}
 
         {activeDetailView === "stats" ? (
-          <MatchStatsPanel match={detailMatch} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />
+          <div className="space-y-3">
+            <MatchStatsPanel match={detailMatch} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />
+            <SeasonFormGuide match={detailMatch} homeSummary={homeSummary} awaySummary={awaySummary} />
+          </div>
         ) : activeDetailView === "insights" ? (
-          <MatchupInsightsPanel
-            insights={insights}
-            homeTeam={detailMatch.homeTeam}
-            awayTeam={detailMatch.awayTeam}
-            homeTryChart={homeTryChart}
-            awayTryChart={awayTryChart}
-            teamLogos={teamLogos}
-          />
+          <div className="space-y-3">
+            <MatchReadPanel
+              match={detailMatch}
+              insights={insights}
+              weatherForecast={weatherForecast}
+              smartTags={smartTags}
+              homeSummary={homeSummary}
+              awaySummary={awaySummary}
+            />
+            <DrivingPickPanel match={detailMatch} drivers={matchDrivers} />
+            <MatchupInsightsPanel
+              insights={insights}
+              homeTeam={detailMatch.homeTeam}
+              awayTeam={detailMatch.awayTeam}
+              homeTryChart={homeTryChart}
+              awayTryChart={awayTryChart}
+              teamLogos={teamLogos}
+            />
+          </div>
         ) : hasLineupData ? (
           <>
             <Pitch

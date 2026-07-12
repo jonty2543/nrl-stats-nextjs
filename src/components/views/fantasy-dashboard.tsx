@@ -370,7 +370,7 @@ const FANTASY_TOUR_STEPS: Array<{
   },
   {
     target: "draft-h2h",
-    title: "Draft / H2H Pdds",
+    title: "Draft / H2H Odds",
     body: "Use the draft and H2H tool to upload a screenshot of your matchup and get odds and estimated scores for the matchup using our projections.",
   },
   {

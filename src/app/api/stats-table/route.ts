@@ -25,6 +25,13 @@ export const dynamic = "force-dynamic";
 const PLAYER_GROUPS: PlayerStatsTableGroupBy[] = ["Player", "Year + Player", "Team + Player", "Position + Player"];
 const TEAM_GROUPS: TeamStatsTableGroupBy[] = ["Team", "Year + Team"];
 
+function currentBrisbaneYear(): string {
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+  }).format(new Date());
+}
+
 function parseYears(value: string | null): string[] {
   return value
     ? value
@@ -55,6 +62,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const dataset = searchParams.get("dataset");
     const allowedYears = await allowedYearsForRequest(request);
+    const includesLiveSeason = allowedYears.includes(currentBrisbaneYear());
 
     if (allowedYears.length === 0) {
       return NextResponse.json({
@@ -65,7 +73,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const cached = await readStatsTableCache();
+    const cached = includesLiveSeason ? null : await readStatsTableCache();
     const cacheCoversRequest = cached
       ? allowedYears.every((year) => cached.years.includes(year))
       : false;

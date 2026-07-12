@@ -282,6 +282,15 @@ function buildLineupLinksByMatchKey(games: BettingSummaryGame[]): Record<string,
   );
 }
 
+function buildTeamFormByMatchKey(games: BettingSummaryGame[]): Record<string, string[]> {
+  return Object.fromEntries(
+    games.flatMap((game) => [
+      [`${game.matchDate}|${game.matchKey}|${normaliseTeamKey(game.homeTeam)}`, game.homeLastFive],
+      [`${game.matchDate}|${game.matchKey}|${normaliseTeamKey(game.awayTeam)}`, game.awayLastFive],
+    ]).filter((entry): entry is [string, string[]] => entry[1].length > 0)
+  );
+}
+
 export default async function BettingPage() {
   const { userId } = await auth();
   const [snapshot, canAccessPremium, bettingSummary, playerImages, localhostRequest] = await Promise.all([
@@ -320,6 +329,7 @@ export default async function BettingPage() {
       tryscorerLastFiveVsOpponentByMatch={bettingSummary.tryscorerLastFiveVsOpponentByMatch}
       tryscorerKickoffsByMatch={bettingSummary.tryscorerKickoffsByMatch}
       lineupLinksByMatchKey={buildLineupLinksByMatchKey(bettingSummary.games)}
+      teamFormByMatchKey={{ ...bettingSummary.teamLastFiveByMatch, ...buildTeamFormByMatchKey(bettingSummary.games) }}
     />
   );
 }

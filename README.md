@@ -48,6 +48,10 @@ What the app does with Stripe:
 - Stripe webhooks update Clerk metadata for the user.
 - Pro access is granted from Clerk metadata, with the old user allowlist still working as a fallback.
 
+## Summary Jobs
+
+- `scripts/rebuild-fantasy-player-card-summary.mjs` updates `summary.betting_page_summary.games` with `homeTeamLastFive` / `awayTeamLastFive` and `team_last_five_by_match` for betting L5 form pills.
+
 Before testing locally:
 
 1. Create a recurring test-mode Price in Stripe and copy its `price_...` ID into `STRIPE_PRICE_ID_PRO_MONTHLY`.

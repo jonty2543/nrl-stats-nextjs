@@ -31,10 +31,23 @@ import {
 
 const PAGE_SIZE = 1000;
 const DAILY_REVALIDATE_SECONDS = 86400;
+const LIVE_SEASON_STATS_REVALIDATE_SECONDS = 300;
 const DIRECT_PLAYER_STATS_TIMEOUT_MS = 2000;
 const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
+
+function currentBrisbaneYear(): string {
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+  }).format(new Date());
+}
+
+function includesCurrentBrisbaneYear(years?: string[]): boolean {
+  const currentYear = currentBrisbaneYear();
+  return !years || years.length === 0 || years.includes(currentYear);
+}
 
 export interface PlayerImageRecord {
   player: string;
@@ -62,6 +75,8 @@ export interface BettingSummaryGame {
   matchKey: string;
   homeLogoUrl: string | null;
   awayLogoUrl: string | null;
+  homeLastFive: string[];
+  awayLastFive: string[];
 }
 
 export interface BettingTryscorerFormSummary {
@@ -88,6 +103,7 @@ export interface BettingPageSummary {
   tryscorerLastFiveVsOpponentByMatch: Record<string, unknown>;
   tryscorerKickoffsByMatch: Record<string, string>;
   lineupPlayersByMatch: Record<string, unknown>;
+  teamLastFiveByMatch: Record<string, string[]>;
   updatedAt: string | null;
 }
 
@@ -793,6 +809,7 @@ interface PredictionModelRow extends Record<string, unknown> {
   team?: unknown;
   win_prob?: unknown;
   pred_margin?: unknown;
+  pred_margin_model?: unknown;
   pred_margin_pre_manual?: unknown;
   pred_total?: unknown;
   updated_at?: unknown;
@@ -961,7 +978,7 @@ function buildOverrideLookup(rows: MarginOverrideRow[]): Map<string, number> {
 function inferPredictionSigma(rows: PredictionModelRow[]): number {
   const sigmaValues: number[] = [];
   for (const raw of rows) {
-    const predMargin = toNullableFinite(raw.pred_margin);
+    const predMargin = toNullableFinite(raw.pred_margin_model ?? raw.pred_margin);
     const winProb = toNullableProbability(raw.win_prob);
     if (predMargin == null || winProb == null || Math.abs(predMargin) < 0.25) continue;
     const z = normalInvProbability(winProb);
@@ -997,6 +1014,10 @@ function effectivePredictionMargin(raw: PredictionModelRow, overrides: Map<strin
   return preManual + signedOverride;
 }
 
+function modelPredictionMargin(raw: PredictionModelRow, overrides: Map<string, number>): number | null {
+  return toNullableFinite(raw.pred_margin_model) ?? effectivePredictionMargin(raw, overrides);
+}
+
 function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginOverrideRow[] = []): PredictionLookupMaps {
   const byDateTeam = new Map<string, PredictionLookupEntry>();
   const byDateMatchTeam = new Map<string, PredictionLookupEntry>();
@@ -1009,7 +1030,7 @@ function buildPredictionLookup(rows: PredictionModelRow[], overrideRows: MarginO
     const teamKey = teamJoinKey(raw.team);
     if (!date || !teamKey) continue;
 
-    const predMargin = effectivePredictionMargin(raw, overrides);
+    const predMargin = modelPredictionMargin(raw, overrides);
     const entry: PredictionLookupEntry = {
       winProb: predMargin == null ? toNullableProbability(raw.win_prob) : normalCdf(predMargin / marginSigma),
       predMargin,
@@ -1672,17 +1693,22 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
   const normalizedYears = (years ?? []).filter(Boolean).sort();
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
+  const hasLiveSeason = includesCurrentBrisbaneYear(normalizedArg);
   const serverCache =
-    process.env.NODE_ENV !== "production"
-      ? await readPlayerStatsServerCache(normalizedArg)
+    process.env.NODE_ENV !== "production" || hasLiveSeason
+      ? null
       : await unstable_cache(
           async () => readPlayerStatsServerCache(normalizedArg),
           ["player-stats-server-cache-v1", key],
           { revalidate: DAILY_REVALIDATE_SECONDS }
         )();
+  const localServerCache =
+    process.env.NODE_ENV !== "production"
+      ? await readPlayerStatsServerCache(normalizedArg)
+      : null;
 
-  if (serverCache) {
-    return filterPlayerStatsRowsByYears(serverCache.rows, normalizedArg);
+  if (localServerCache || serverCache) {
+    return filterPlayerStatsRowsByYears((localServerCache ?? serverCache)?.rows ?? [], normalizedArg);
   }
 
   if (process.env.NODE_ENV !== "production") {
@@ -1692,7 +1718,7 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
   const fetchCached = unstable_cache(
     async () => fetchPlayerStatsFromSupabase(normalizedArg),
     ["player-stats-v1", key],
-    { revalidate: DAILY_REVALIDATE_SECONDS }
+    { revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS }
   );
 
   return fetchCached();
@@ -1849,6 +1875,7 @@ export async function fetchTeamStats(years?: string[]): Promise<TeamStat[]> {
   const normalizedYears = (years ?? []).filter(Boolean).sort()
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all"
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined
+  const hasLiveSeason = includesCurrentBrisbaneYear(normalizedArg)
 
   if (process.env.NODE_ENV !== "production") {
     return fetchTeamStatsFromSupabase(normalizedArg)
@@ -1857,7 +1884,7 @@ export async function fetchTeamStats(years?: string[]): Promise<TeamStat[]> {
   const fetchCached = unstable_cache(
     async () => fetchTeamStatsFromSupabase(normalizedArg),
     ["team-stats-v2", key],
-    { revalidate: DAILY_REVALIDATE_SECONDS }
+    { revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS }
   )
 
   return fetchCached()
@@ -2168,7 +2195,7 @@ async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Pro
   const supabase = createServerSupabaseClient("nrl");
   const allRows: PredictionModelRow[] = [];
   let start = 0;
-  let select = "url,match_date,match,team,win_prob,pred_margin,pred_margin_pre_manual,pred_total,updated_at";
+  let select = "url,match_date,match,team,win_prob,pred_margin,pred_margin_model,pred_margin_pre_manual,pred_total,updated_at";
 
   while (true) {
     const end = start + PAGE_SIZE - 1;
@@ -2187,8 +2214,14 @@ async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Pro
         allRows.length = 0;
         continue;
       }
+      if (select.includes("pred_margin_model") && (message.includes("pred_margin_model") || message.includes("column") || message.includes("schema cache"))) {
+        select = select.replace(",pred_margin_model", "");
+        start = 0;
+        allRows.length = 0;
+        continue;
+      }
       if (select.includes("pred_margin_pre_manual") && (message.includes("pred_margin_pre_manual") || message.includes("column") || message.includes("schema cache"))) {
-        select = "url,match_date,match,team,win_prob,pred_margin,updated_at";
+        select = select.replace(",pred_margin_pre_manual", "");
         start = 0;
         allRows.length = 0;
         continue;
@@ -2366,6 +2399,12 @@ function mapBettingSummaryGame(raw: unknown): BettingSummaryGame | null {
   const match = typeof row.match === "string" ? row.match : "";
   const matchKey = typeof row.matchKey === "string" ? row.matchKey : "";
   if (!matchDate || !match || !matchKey) return null;
+  const formValues = (value: unknown): string[] => Array.isArray(value)
+    ? value
+      .map((item) => String(item ?? "").trim().toUpperCase())
+      .filter((item) => item === "W" || item === "L" || item === "D")
+      .slice(0, 5)
+    : [];
 
   return {
     round: typeof row.round === "number" && Number.isFinite(row.round) ? row.round : null,
@@ -2381,6 +2420,8 @@ function mapBettingSummaryGame(raw: unknown): BettingSummaryGame | null {
     matchKey,
     homeLogoUrl: typeof row.homeLogoUrl === "string" ? row.homeLogoUrl : null,
     awayLogoUrl: typeof row.awayLogoUrl === "string" ? row.awayLogoUrl : null,
+    homeLastFive: formValues(row.homeLastFive ?? row.home_last_five ?? row.homeTeamLastFive ?? row.home_team_last_five ?? row.homeForm ?? row.home_form),
+    awayLastFive: formValues(row.awayLastFive ?? row.away_last_five ?? row.awayTeamLastFive ?? row.away_team_last_five ?? row.awayForm ?? row.away_form),
   };
 }
 
@@ -2428,6 +2469,7 @@ function emptyBettingPageSummary(): BettingPageSummary {
     tryscorerLastFiveVsOpponentByMatch: {},
     tryscorerKickoffsByMatch: {},
     lineupPlayersByMatch: {},
+    teamLastFiveByMatch: {},
     updatedAt: null,
   };
 }
@@ -2436,7 +2478,7 @@ export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPage
   const supabase = createServerSupabaseClient("summary");
   const { data, error } = await supabase
     .from("betting_page_summary")
-    .select("id,year,games,team_logos,player_teams_by_name,tryscorer_form_by_player,tryscorer_last_five_vs_opponent_by_match,tryscorer_kickoffs_by_match,lineup_players_by_match,updated_at")
+    .select("id,year,games,team_logos,player_teams_by_name,tryscorer_form_by_player,tryscorer_last_five_vs_opponent_by_match,tryscorer_kickoffs_by_match,lineup_players_by_match,team_last_five_by_match,updated_at")
     .eq("id", "current")
     .maybeSingle();
 
@@ -2471,6 +2513,17 @@ export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPage
     tryscorerLastFiveVsOpponentByMatch: asRecord(row.tryscorer_last_five_vs_opponent_by_match),
     tryscorerKickoffsByMatch: asStringRecord(row.tryscorer_kickoffs_by_match),
     lineupPlayersByMatch: asRecord(row.lineup_players_by_match),
+    teamLastFiveByMatch: Object.fromEntries(
+      Object.entries(asRecord(row.team_last_five_by_match)).flatMap(([key, value]) => {
+        const form = Array.isArray(value)
+          ? value
+            .map((item) => String(item ?? "").trim().toUpperCase())
+            .filter((item) => item === "W" || item === "L" || item === "D")
+            .slice(0, 5)
+          : [];
+        return form.length > 0 ? [[key, form] as const] : [];
+      })
+    ),
     updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
   };
 }

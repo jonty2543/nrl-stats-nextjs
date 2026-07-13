@@ -2484,11 +2484,13 @@ export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPage
   const supabase = createServerSupabaseClient("summary");
   const selectWithTeamForm = "id,year,games,team_logos,player_teams_by_name,tryscorer_form_by_player,tryscorer_last_five_vs_opponent_by_match,tryscorer_kickoffs_by_match,lineup_players_by_match,team_last_five_by_match,updated_at";
   const selectWithoutTeamForm = "id,year,games,team_logos,player_teams_by_name,tryscorer_form_by_player,tryscorer_last_five_vs_opponent_by_match,tryscorer_kickoffs_by_match,lineup_players_by_match,updated_at";
-  let { data, error } = await supabase
+  const primary = await supabase
     .from("betting_page_summary")
     .select(selectWithTeamForm)
     .eq("id", "current")
     .maybeSingle();
+  let data = primary.data as Record<string, unknown> | null;
+  let error = primary.error;
 
   if (error && isMissingTeamLastFiveColumnError(error)) {
     const fallback = await supabase
@@ -2496,14 +2498,14 @@ export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPage
       .select(selectWithoutTeamForm)
       .eq("id", "current")
       .maybeSingle();
-    data = fallback.data;
+    data = fallback.data as Record<string, unknown> | null;
     error = fallback.error;
   }
 
   if (error) throw new Error(`Supabase fetch summary.betting_page_summary: ${error.message}`);
   if (!data) return emptyBettingPageSummary();
 
-  const row = data as Record<string, unknown>;
+  const row = data;
   const tryscorerFormByPlayer = Object.fromEntries(
     Object.entries(asRecord(row.tryscorer_form_by_player)).flatMap(([key, value]) => {
       const mapped = mapBettingTryscorerForm(value);

@@ -3939,13 +3939,13 @@ function BestBetsHero({
                     </div>
                   </>
                 ) : (
-                  <div className="inline-flex items-center justify-end gap-3 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
+                  <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
                     <BetScoreStars
                       score={(featuredItem as BestBetCandidate).score}
                       blurred={false}
                       className="text-2xl sm:text-3xl"
                     />
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                    <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
                       Edge <span className="text-nrl-text">+{(featuredItem as BestBetCandidate).edgePp.toFixed(2)}%</span>
                       {isSuspiciousEdge((featuredItem as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
                     </span>
@@ -4963,13 +4963,13 @@ function MarketSection({
                             })],
                           });
                         }}
-                        className={`shrink-0 rounded-md border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] ${
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border text-lg font-black leading-none ${
                           canOpenMobileBet
                             ? "cursor-pointer border-nrl-accent/55 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/18"
                             : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
                         }`}
                       >
-                        Add
+                        +
                       </button>
                     ) : null;
 
@@ -5015,16 +5015,13 @@ function MarketSection({
                                     {showModelColumns ? (
                                       <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-nrl-muted">
                                         Edge:
+                                        {blurPremiumColumns ? (
+                                          <span aria-hidden="true" className="text-[9px] opacity-55 grayscale">🔒</span>
+                                        ) : null}
                                         <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : "tabular-nums"}>
                                           {formatEdge(edgePp)}
                                         </span>
                                         {suspiciousEdge ? <SuspiciousEdgeCaution /> : null}
-                                      </span>
-                                    ) : null}
-                                    {showModelColumns ? (
-                                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-nrl-muted">
-                                        Rating:
-                                        <BetScoreStars score={betScore} blurred={blurPremiumColumns} />
                                       </span>
                                     ) : null}
                                   </div>
@@ -5039,6 +5036,14 @@ function MarketSection({
                                         <TeamLastFivePills values={teamLastFive} />
                                       )}
                                     </div>
+                                    {showModelColumns ? (
+                                      <div className="flex shrink-0 items-center gap-1">
+                                        {blurPremiumColumns ? (
+                                          <span aria-hidden="true" className="text-[9px] opacity-55 grayscale">🔒</span>
+                                        ) : null}
+                                        <BetScoreStars score={betScore} blurred={blurPremiumColumns} className="text-base" />
+                                      </div>
+                                    ) : null}
                                     {mobileBetAction}
                                   </div>
                                 </div>

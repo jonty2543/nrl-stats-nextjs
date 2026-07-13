@@ -6324,6 +6324,11 @@ export function FantasyDashboard({
             activeTourStep?.target === "player-list" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""
           }`}
         >
+          {lineupsProjections?.source !== "lineups" ? (
+            <div className="border-b border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
+              Note: ratings and projections are less accurate before team lists are announced.
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-nrl-border bg-nrl-panel-2 px-3 py-2">
             {hasLoadedFullAllPlayersRows ? (
               <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:gap-1.5">

@@ -5025,7 +5025,7 @@ function MarketSection({
                                       </span>
                                     ) : null}
                                   </div>
-                                  <div className="flex min-w-0 items-center justify-start gap-3">
+                                  <div className="flex min-w-0 items-center justify-start gap-5">
                                     <div className="min-w-0">
                                       {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
                                         <div className="flex min-w-0 items-center gap-2">

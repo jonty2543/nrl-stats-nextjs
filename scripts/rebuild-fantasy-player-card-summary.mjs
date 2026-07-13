@@ -1373,6 +1373,12 @@ function buildBettingPageSummaryRow({ year, matches, recentResults, teamLogos })
   };
 }
 
+function isMissingTeamLastFiveColumnError(error) {
+  const message = String(error?.message ?? "").toLowerCase();
+  return message.includes("team_last_five_by_match") &&
+    (message.includes("schema cache") || message.includes("column"));
+}
+
 function getTodayInBrisbane() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Australia/Brisbane",
@@ -1658,7 +1664,17 @@ async function main() {
     const { error } = await supabaseSummary
       .from("betting_page_summary")
       .upsert(bettingPageSummaryRow, { onConflict: "id" });
-    if (error) throw new Error(`Upsert betting_page_summary failed: ${error.message}`);
+    if (error && isMissingTeamLastFiveColumnError(error)) {
+      const fallbackRow = { ...bettingPageSummaryRow };
+      delete fallbackRow.team_last_five_by_match;
+      const { error: fallbackError } = await supabaseSummary
+        .from("betting_page_summary")
+        .upsert(fallbackRow, { onConflict: "id" });
+      if (fallbackError) throw new Error(`Upsert betting_page_summary failed: ${fallbackError.message}`);
+      console.warn("summary.betting_page_summary.team_last_five_by_match is missing; embedded game L5 form was still written.");
+    } else if (error) {
+      throw new Error(`Upsert betting_page_summary failed: ${error.message}`);
+    }
   }
 
   console.log(`Rebuilt summary.fantasy_player_card_summary with ${cardRows.length} rows.`);

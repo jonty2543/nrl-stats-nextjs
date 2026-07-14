@@ -5044,7 +5044,15 @@ function MarketSection({
                                         {blurPremiumColumns ? (
                                           <span aria-hidden="true" className="text-[9px] opacity-55 grayscale">🔒</span>
                                         ) : null}
-                                        <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : "tabular-nums"}>
+                                        <span
+                                          className={`tabular-nums ${
+                                            edgePp == null
+                                              ? "text-nrl-muted"
+                                              : edgePp < 0
+                                                ? "text-red-400"
+                                                : "text-nrl-accent"
+                                          } ${blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}`}
+                                        >
                                           {formatEdge(edgePp)}
                                         </span>
                                         {suspiciousEdge ? <SuspiciousEdgeCaution /> : null}

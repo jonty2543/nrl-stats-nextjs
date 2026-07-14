@@ -230,6 +230,10 @@ const DEFAULT_BETTING_MARKET: BettingMarket = "H2H";
 const TOTAL_MODEL_BETA_MARKET: BettingMarket = "Total";
 const SUSPICIOUS_EDGE_THRESHOLD_PP = 6;
 const SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP = 10;
+const BET_SCORE_ZERO_EDGE = 0.3;
+const BET_SCORE_POSITIVE_EDGE_RANGE = 0.58;
+const BET_SCORE_EDGE_CURVE_STEEPNESS_PP = 2.2;
+const BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP = 3.4;
 const SUSPICIOUS_EDGE_WARNING_COPY =
   "If the model has an edge > 6% on the market, this may be suspicious and suggest the market knows something the model doesn't";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
@@ -1284,8 +1288,8 @@ function betScoreStarColor(rating: number): string {
     return `hsl(${Math.round(28 + progress * 22)} 90% 62%)`;
   }
   const progress = clamp(rating - 2, 0, 1);
-  const saturation = Math.round(58 + progress * 34);
-  const lightness = Math.round(68 - progress * 18);
+  const saturation = Math.round(36 + progress * 56);
+  const lightness = Math.round(44 + progress * 8);
   return `hsl(148 ${saturation}% ${lightness}%)`;
 }
 
@@ -1763,7 +1767,6 @@ function calculateBetScore({
   efficiencyScore: number;
   disagreementScore: number;
 }): number {
-  const edgeScore = clamp(edgePp / 12, -1, 1);
   const timingScore = eventProximityScore(eventDate, todayIso);
   const contextWeight =
     BEST_BETS_CONFIG.weights.liquidity +
@@ -1776,8 +1779,16 @@ function calculateBetScore({
     (disagreementScore * BEST_BETS_CONFIG.weights.disagreement) +
     (timingScore * BEST_BETS_CONFIG.weights.timing)
   ) / contextWeight : 0.5;
-  const edgeSwing = 0.28 + (contextScore * 0.17);
-  const baseScore = clamp(0.5 + (edgeScore * edgeSwing), 0, 1);
+  const edgeCurve = 1 / (1 + Math.exp(-edgePp / (
+    edgePp < 0 ? BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP : BET_SCORE_EDGE_CURVE_STEEPNESS_PP
+  )));
+  const edgeScore = edgePp < 0
+    ? BET_SCORE_ZERO_EDGE * (edgeCurve / 0.5)
+    : BET_SCORE_ZERO_EDGE + (((edgeCurve - 0.5) / 0.5) * BET_SCORE_POSITIVE_EDGE_RANGE);
+  const contextAdjustment = (contextScore - 0.5) * 0.08;
+  const baseScore = edgePp <= 0
+    ? clamp(edgeScore + Math.min(contextAdjustment, 0), 0, BET_SCORE_ZERO_EDGE)
+    : clamp(edgeScore + contextAdjustment, BET_SCORE_ZERO_EDGE, 1);
   if (edgePp <= SUSPICIOUS_EDGE_THRESHOLD_PP) return baseScore;
 
   const decay = clamp((edgePp - SUSPICIOUS_EDGE_THRESHOLD_PP) / SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP, 0, 0.65);
@@ -3618,6 +3629,9 @@ export function BettingDashboard({
         }`}
       >
         <MarketTabsRail selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
+        <div className="rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
+          Note: edge and ratings are more accurate once team lists have been announced.
+        </div>
         <section className="min-w-0">
           <MarketSection
             groups={selectedMarketGroups}
@@ -4147,20 +4161,18 @@ function BestBetsHero({
                             </div>
                           </>
                         ) : (
-                          <div className="inline-flex justify-end rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5">
+                          <div className="inline-flex flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1">
                             <BetScoreStars
                               score={(item as BestBetCandidate).score}
                               blurred={false}
                               className="text-sm"
                             />
+                            <span className="inline-flex items-center justify-center gap-1 text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                              Edge +{(item as BestBetCandidate).edgePp.toFixed(2)}%
+                              {isSuspiciousEdge((item as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
+                            </span>
                           </div>
                         )}
-                        {!isLocked && !isArbitrage ? (
-                          <div className="mt-0.5 inline-flex items-center justify-end gap-1 rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
-                            Edge +{(item as BestBetCandidate).edgePp.toFixed(2)}%
-                            {isSuspiciousEdge((item as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                   );
@@ -4963,7 +4975,7 @@ function MarketSection({
                             })],
                           });
                         }}
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border text-lg font-black leading-none ${
+                        className={`ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-base font-black leading-none ${
                           canOpenMobileBet
                             ? "cursor-pointer border-nrl-accent/55 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/18"
                             : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
@@ -5025,7 +5037,7 @@ function MarketSection({
                                       </span>
                                     ) : null}
                                   </div>
-                                  <div className="flex min-w-0 items-center justify-start gap-5">
+                                  <div className="flex min-w-0 items-center justify-start gap-7">
                                     <div className="min-w-0">
                                       {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
                                         <div className="flex min-w-0 items-center gap-2">

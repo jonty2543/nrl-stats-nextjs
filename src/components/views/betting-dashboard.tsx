@@ -1266,10 +1266,6 @@ function formatEventCountdown(
   return `${days}d til event`;
 }
 
-function formatBestBetScore(score: number): string {
-  return `${(clamp(score, 0, 1) * 10).toFixed(1)}/10`;
-}
-
 function betScoreStarValue(scoreOutOfTen: number): number {
   if (scoreOutOfTen >= 8) return 3;
   if (scoreOutOfTen >= 6) return 2.5 + ((scoreOutOfTen - 6) / 2) * 0.5;
@@ -5122,7 +5118,7 @@ function MarketSection({
                           <>
                             <th className="py-2 pr-3 font-semibold">Model</th>
                             <th className="py-2 pr-5 font-semibold">Edge</th>
-                            <th className="py-2 pr-5 font-semibold">Score</th>
+                            <th className="py-2 pr-5 font-semibold">Rating</th>
                           </>
                         ) : null}
                         <th className="py-2 pr-3 font-semibold">Odds</th>
@@ -5352,10 +5348,12 @@ function MarketSection({
                                     {suspiciousEdge ? <SuspiciousEdgeCaution /> : null}
                                   </span>
                                 </td>
-                                <td className={`py-2 pr-5 font-semibold ${edgeClass}`}>
-                                  <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}>
-                                    {betScore == null ? "-" : formatBestBetScore(betScore)}
-                                  </span>
+                                <td className="py-2 pr-5">
+                                  {betScore == null ? (
+                                    <span className="text-nrl-muted">-</span>
+                                  ) : (
+                                    <BetScoreStars score={betScore} blurred={blurPremiumColumns} className="text-sm" />
+                                  )}
                                 </td>
                               </>
                             ) : null}

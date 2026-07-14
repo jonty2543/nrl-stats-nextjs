@@ -316,6 +316,7 @@ const BOOKIE_LOGO_PATHS: Record<BettingBookie, string> = {
 function normaliseLookupKey(value: string | null | undefined): string {
   return String(value ?? "")
     .toLowerCase()
+    .replace(/['\u2018\u2019`]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
@@ -959,6 +960,22 @@ function TryFormDots({ values }: { values: number[] }) {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+function TryOpponentForm({ opponent, values }: { opponent: string | null; values: number[] }) {
+  if (!opponent) return null;
+  return (
+    <div>
+      <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Vs {shortTeamName(opponent)}</div>
+      {values.length > 0 ? (
+        <TryFormDots values={values} />
+      ) : (
+        <span className="inline-flex h-5 items-center rounded-full border border-white/10 bg-white/[0.04] px-2 text-[9px] font-black uppercase tracking-[0.08em] text-nrl-muted">
+          Unavailable
+        </span>
+      )}
     </div>
   );
 }
@@ -2137,7 +2154,8 @@ export function BettingDashboard({
   const playerTeamsByName = useMemo(() => {
     const out = new Map<string, string>();
     for (const [key, team] of Object.entries(playerTeamsByNameProp)) {
-      if (key && team) out.set(key, team);
+      const normalisedKey = normaliseLookupKey(key);
+      if (normalisedKey && team) out.set(normalisedKey, team);
     }
     for (const row of playerImages) {
       const key = normaliseLookupKey(row.player);
@@ -5055,12 +5073,9 @@ function MarketSection({
                                     {mobileBetAction}
                                   </div>
                                 </div>
-                                {group.market === "Tryscorer" && tryscorerOpponent && opponentLastFive.length > 0 ? (
+                                {group.market === "Tryscorer" && tryscorerOpponent ? (
                                   <div className="grid grid-cols-[minmax(7.75rem,1fr)] gap-2 pt-1">
-                                    <div>
-                                      <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Vs {shortTeamName(tryscorerOpponent)}</div>
-                                      <TryFormDots values={opponentLastFive} />
-                                    </div>
+                                    <TryOpponentForm opponent={tryscorerOpponent} values={opponentLastFive} />
                                   </div>
                                 ) : null}
                               </div>
@@ -5103,11 +5118,11 @@ function MarketSection({
                   <table className={`${group.market === "Tryscorer" ? "w-auto min-w-max lg:w-full lg:min-w-[1100px]" : "w-full min-w-[1000px]"} border-collapse text-xs`}>
                     <thead>
                       <tr className="border-b border-nrl-border text-left text-nrl-muted">
-                        <th className={`${group.market === "Tryscorer" ? "whitespace-nowrap pr-6 lg:w-[330px]" : "pr-3"} py-2 font-semibold`}>Outcome</th>
-                        {visibleBookieColumns.map((bookie, bookieIndex) => (
+                        <th className={`${group.market === "Tryscorer" ? "whitespace-nowrap pr-3 lg:w-[245px]" : "pr-3"} py-2 font-semibold`}>Outcome</th>
+                        {visibleBookieColumns.map((bookie) => (
                           <th
                             key={`${group.key}-head-${bookie}`}
-                            className={`py-2 pr-3 font-semibold ${group.market === "Tryscorer" && bookieIndex === 0 ? "pl-5" : ""}`}
+                            className="py-2 pr-3 font-semibold"
                           >
                             <BookieLogo bookie={bookie} />
                           </th>
@@ -5274,18 +5289,13 @@ function MarketSection({
                                         <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Last 5</div>
                                         <TryFormDots values={tryscorerForm.lastFive} />
                                       </div>
-                                      {tryscorerOpponent && opponentLastFive.length > 0 ? (
-                                        <div>
-                                          <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Vs {shortTeamName(tryscorerOpponent)}</div>
-                                          <TryFormDots values={opponentLastFive} />
-                                        </div>
-                                      ) : null}
+                                      <TryOpponentForm opponent={tryscorerOpponent} values={opponentLastFive} />
                                     </div>
                                   ) : null}
                                 </span>
                               </span>
                             </td>
-                            {visibleBookieColumns.map((bookie, bookieIndex) => {
+                            {visibleBookieColumns.map((bookie) => {
                               const offer = row.bookieOffers[bookie];
                               const isBest = offer != null
                                 && row.bestBookiesComputed.includes(bookie)
@@ -5294,7 +5304,7 @@ function MarketSection({
                               return (
                                 <td
                                   key={`${group.key}-${row.result}-${bookie}`}
-                                  className={`py-2 pr-3 ${group.market === "Tryscorer" && bookieIndex === 0 ? "pl-5" : ""} ${isBest ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
+                                  className={`py-2 pr-3 ${isBest ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
                                 >
                                   {offer == null ? "-" : (
                                     <div className="leading-tight">

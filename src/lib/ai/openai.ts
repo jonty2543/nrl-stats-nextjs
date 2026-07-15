@@ -714,7 +714,6 @@ function formatFantasyPlayerTagContext({
   buySnapshotResult,
   valueSnapshotResult,
   relevantOutCandidates,
-  originChances,
   currentRound,
   includeProTags,
 }: {
@@ -722,7 +721,6 @@ function formatFantasyPlayerTagContext({
   buySnapshotResult: AiToolExecutionResult;
   valueSnapshotResult: AiToolExecutionResult;
   relevantOutCandidates: RelevantCasualtyWardRecord[];
-  originChances: OriginChanceRecord[];
   currentRound: number | null;
   includeProTags: boolean;
 }): string {
@@ -733,9 +731,6 @@ function formatFantasyPlayerTagContext({
   ]);
   if (players.length === 0) return "";
 
-  const originPlayers = includeProTags
-    ? originChances.map((row) => row.player).filter(Boolean)
-    : [];
   const relevantOuts = includeProTags
     ? relevantOutCandidates.filter((row) =>
       (row.averageFantasy ?? 0) >= 30 &&
@@ -760,10 +755,6 @@ function formatFantasyPlayerTagContext({
       tags.push(`${playsNextMajorByeRound ? "✓" : "✕"} Rd${nextMajorByeRound}`);
     }
 
-    if (originPlayers.some((originName) => fantasyNamesMatch(originName, name))) {
-      tags.push("Origin");
-    }
-
     const relevantOut = relevantOuts.find((row) =>
       !fantasyNamesMatch(row.player, name) &&
       fantasyTeamsMatch(row.team, team) &&
@@ -783,10 +774,10 @@ function formatFantasyPlayerTagContext({
 
   return [
     "Player tag context, using the same tag types shown on the fantasy dashboard and player pages:",
-    "Tag meanings: ✕ Rd13/16/19 is a negative major-bye availability tag, ✓ Rd13/16/19 is useful bye coverage, Origin is an availability risk, and Relevant out names a same-team/same-position player whose return date may affect role security.",
+    "Tag meanings: ✕ Rd13/16/19 is a negative major-bye availability tag, ✓ Rd13/16/19 is useful bye coverage, and Relevant out names a same-team/same-position player whose return date may affect role security.",
     includeProTags
-      ? "When a suggested player has Origin or Relevant out, mention that tag's implication briefly in the player's reason. Treat Relevant out as secondary and not automatically negative."
-      : "Free-user tag context only includes major-bye availability. Do not mention Origin or Relevant out without Pro data access.",
+      ? "When a suggested player has Relevant out, mention that tag's implication briefly in the player's reason. Treat Relevant out as secondary and not automatically negative."
+      : "Free-user tag context only includes major-bye availability. Do not mention Relevant out without Pro data access.",
     lines.map((line, index) => `${index + 1}. ${line}`).join("\n"),
   ].join("\n");
 }
@@ -5159,7 +5150,6 @@ export async function runAiModelChat(
       buySnapshotResult,
       valueSnapshotResult,
       relevantOutCandidates,
-      originChances,
       currentRound: currentFantasyRound,
       includeProTags: hasProjectionAccess,
     });
@@ -5250,7 +5240,7 @@ export async function runAiModelChat(
       "- Do not invent trade-in names outside the snapshots. If fewer than five eligible non-owned trade-ins remain after excluding visible squad players, list fewer than five.",
       "- Include ownership delta only when it appears in the real fantasy snapshot above.",
       "- Include next major bye availability for every buy/sell when it appears in the real fantasy snapshot above.",
-      "- Use Player tag context for any suggested buy/sell when a tag is supplied: mention a next-major-bye miss or useful bye coverage, mention Origin as an availability risk, and mention Relevant out with the return timing as a secondary role-security note.",
+      "- Use Player tag context for any suggested buy/sell when a tag is supplied: mention a next-major-bye miss or useful bye coverage, and mention Relevant out with the return timing as a secondary role-security note.",
       "- Do not mention buying again, buying back, or re-buying an already owned player.",
       "- In Recommended Moves, treat keeping the user's remaining bank below about 100k as a real constraint when the visible bank and player prices make that possible.",
       "- Do not recommend only an expensive sell to a much cheaper trade-in if that leaves hundreds of thousands unused. If a cheap replacement is the best value, pair it with a second move that upgrades a cheap owned player to a more expensive target using the freed salary. If you cannot identify a good second upgrade, prefer a one-trade move from the expensive sell to a more expensive trade-in that keeps bank under about 100k.",

@@ -554,6 +554,47 @@ async function fetchPlayerStatsRowsForPlayerFromSupabase(
   return allRows;
 }
 
+async function fetchPlayerStatsRowsForPlayerSurnameFromSupabase(
+  surname: string,
+  years?: string[]
+): Promise<Record<string, unknown>[]> {
+  const trimmedSurname = surname.trim();
+  if (!trimmedSurname) return [];
+
+  const supabase = createServerSupabaseClient();
+  const allRows: Record<string, unknown>[] = [];
+  let start = 0;
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    let query = supabase
+      .from("player_stats")
+      .select("*")
+      .ilike("player", `% ${trimmedSurname}`);
+
+    if (years && years.length > 0) {
+      const sorted = [...years].sort();
+      const minYear = parseInt(sorted[0], 10);
+      const maxYear = parseInt(sorted[sorted.length - 1], 10);
+      query = query
+        .gte("match_date", `${minYear}-01-01`)
+        .lt("match_date", `${maxYear + 1}-01-01`);
+    }
+
+    const { data, error } = await query.range(start, end);
+
+    if (error) throw new Error(`Supabase fetch player_stats for surname ${trimmedSurname}: ${error.message}`);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    if (rows.length === 0) break;
+    allRows.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
+
 async function fetchTeammateLookupRowsFromSupabaseRaw(
   years?: string[]
 ): Promise<Record<string, unknown>[]> {
@@ -628,35 +669,56 @@ function parseNameForMatch(value: string): { first: string; last: string } {
   };
 }
 
-function findLocalPlayerMatchForFantasyName(
+function findLocalPlayerAliasesForFantasyName(
   fantasyName: string,
   localNames: string[]
-): string | null {
-  if (!fantasyName || localNames.length === 0) return null;
+): string[] {
+  if (!fantasyName || localNames.length === 0) return [];
 
+  const aliases = new Set<string>();
   const exactMap = new Map(localNames.map((name) => [normaliseNameForMatch(name), name]));
   const exact = exactMap.get(normaliseNameForMatch(fantasyName));
-  if (exact) return exact;
+  if (exact) aliases.add(exact);
 
   const target = parseNameForMatch(fantasyName);
+  if (!target.first || !target.last) return Array.from(aliases);
+
   const candidates = localNames.filter((name) => {
     const parsed = parseNameForMatch(name);
     return parsed.last && parsed.last === target.last;
   });
-
-  const initialMatches = candidates.filter((name) => {
-    const parsed = parseNameForMatch(name);
-    return parsed.first[0] && parsed.first[0] === target.first[0];
-  });
-  if (initialMatches.length === 1) return initialMatches[0];
-
   const prefixMatches = candidates.filter((name) => {
     const parsed = parseNameForMatch(name);
     return parsed.first.startsWith(target.first) || target.first.startsWith(parsed.first);
   });
-  if (prefixMatches.length === 1) return prefixMatches[0];
+  for (const name of prefixMatches) aliases.add(name);
 
-  return null;
+  if (aliases.size === 0) {
+    const initialMatches = candidates.filter((name) => {
+      const parsed = parseNameForMatch(name);
+      return parsed.first[0] && parsed.first[0] === target.first[0];
+    });
+    if (initialMatches.length === 1) aliases.add(initialMatches[0]);
+  }
+
+  return Array.from(aliases);
+}
+
+function dedupePlayerStatRows(rows: PlayerStat[]): PlayerStat[] {
+  const seen = new Set<string>();
+  const deduped: PlayerStat[] = [];
+  for (const row of rows) {
+    const key = [
+      normaliseNameForMatch(row.Name ?? ""),
+      row.Year ?? "",
+      row.Round ?? "",
+      row.match_date ?? "",
+    ].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+  return deduped;
 }
 
 // ---------------------------------------------------------------------------
@@ -1958,16 +2020,26 @@ async function fetchFantasyPlayerStatsDirectFromSupabase(
   years?: string[]
 ): Promise<PlayerStat[]> {
   const exactRows = await fetchPlayerStatsForLocalNameAllYearsFromSupabase(fantasyName, years);
-  if (exactRows.length > 0) return exactRows;
+  const target = parseNameForMatch(fantasyName);
+  if (!target.last) return exactRows;
 
-  const teammateRows = await fetchTeammateLookupRowsFromSupabase(years);
-  if (teammateRows.length === 0) return [];
+  const [rawAliasCandidates, rawMatches] = await Promise.all([
+    fetchPlayerStatsRowsForPlayerSurnameFromSupabase(target.last, years),
+    fetchAllRows<Record<string, unknown>>("matches", {
+      years,
+      columns: "match_date,team,opponent_team,is_home",
+    }),
+  ]);
+  const aliasCandidateRows = buildPlayerStatsRows(rawAliasCandidates, rawMatches);
+  const localNames = Array.from(new Set(aliasCandidateRows.map((row) => row.Name))).sort();
+  const matchedLocalNames = findLocalPlayerAliasesForFantasyName(fantasyName, localNames);
+  if (matchedLocalNames.length === 0) return exactRows;
+  const matchedNameKeys = new Set(matchedLocalNames.map(normaliseNameForMatch));
 
-  const localNames = Array.from(new Set(teammateRows.map((row) => row.Name))).sort();
-  const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
-  if (!matchedLocalName) return [];
-
-  return fetchPlayerStatsForLocalNameAllYearsFromSupabase(matchedLocalName, years);
+  return dedupePlayerStatRows([
+    ...exactRows,
+    ...aliasCandidateRows.filter((row) => matchedNameKeys.has(normaliseNameForMatch(row.Name))),
+  ]);
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -2008,20 +2080,23 @@ export async function fetchFantasyPlayerStatsForYears(
       if (allRows.length === 0) return [];
 
       const localNames = Array.from(new Set(allRows.map((row) => row.Name))).sort();
-      const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
-      if (!matchedLocalName) return [];
-      const matchedNameKey = normaliseNameForMatch(matchedLocalName);
+      const matchedLocalNames = findLocalPlayerAliasesForFantasyName(fantasyName, localNames);
+      if (matchedLocalNames.length === 0) return [];
+      const matchedNameKeys = new Set(matchedLocalNames.map(normaliseNameForMatch));
 
-      return allRows.filter((row) => normaliseNameForMatch(row.Name) === matchedNameKey);
+      return dedupePlayerStatRows(allRows.filter((row) => matchedNameKeys.has(normaliseNameForMatch(row.Name))));
     }
 
     const teammateRows = await fetchTeammateLookupRows(normalizedYears);
     if (teammateRows.length === 0) return [];
     const localNames = Array.from(new Set(teammateRows.map((row) => row.Name))).sort();
-    const matchedLocalName = findLocalPlayerMatchForFantasyName(fantasyName, localNames);
-    if (!matchedLocalName) return [];
+    const matchedLocalNames = findLocalPlayerAliasesForFantasyName(fantasyName, localNames);
+    if (matchedLocalNames.length === 0) return [];
 
-    return fetchPlayerStatsForLocalNameAllYearsFromSupabase(matchedLocalName, normalizedYears);
+    const matchedRows = await Promise.all(
+      matchedLocalNames.map((localName) => fetchPlayerStatsForLocalNameAllYearsFromSupabase(localName, normalizedYears))
+    );
+    return dedupePlayerStatRows(matchedRows.flat());
   } catch (error) {
     console.warn("Unable to fetch fantasy player stats; returning empty set.", error);
     return [];

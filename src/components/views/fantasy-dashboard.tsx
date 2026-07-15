@@ -566,8 +566,8 @@ const ALL_PLAYERS_BASE_COLUMNS: Array<{ key: AllPlayersSortKey; label: string; a
 
 const ALL_PLAYERS_MOBILE_SORT_OPTIONS: Array<{ key: AllPlayersSortKey; label: string; proOnly?: boolean }> = [
   { key: "weeklyChange", label: "Weekly" },
-  { key: "ownPercent", label: "Own %" },
   { key: "price", label: "Price" },
+  { key: "ownPercent", label: "Own %" },
   { key: "pricedAt", label: "Priced At" },
   { key: "avg2026", label: "2026 Avg" },
   { key: "last3", label: "Last 3" },
@@ -6704,17 +6704,17 @@ export function FantasyDashboard({
                     locked: true,
                   },
                   {
-                    key: "ownPercent",
-                    label: "Own",
-                    value: formatPercent(row.player.ownedBy),
-                    valueClassName: "text-nrl-accent",
-                    locked: false,
-                  },
-                  {
                     key: "price",
                     label: "Price",
                     value: formatPrice(row.player.cost),
                     valueClassName: "text-nrl-text",
+                    locked: false,
+                  },
+                  {
+                    key: "ownPercent",
+                    label: "Own",
+                    value: formatPercent(row.player.ownedBy),
+                    valueClassName: "text-nrl-accent",
                     locked: false,
                   },
                   {

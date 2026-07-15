@@ -537,6 +537,11 @@ const GAME_LOG_COLLAPSED_MAX_HEIGHT_PX = 260
 const GAME_LOG_COLLAPSED_BASE_UPSIDE_MAX_HEIGHT_PX = 356
 const ALL_PLAYERS_STATS_YEAR = "2026"
 const ALL_PLAYERS_PREVIEW_LIMIT = 20
+const ALL_PLAYERS_INITIAL_PREVIEW_LIMIT = 6
+const ALL_PLAYERS_VIRTUALIZE_THRESHOLD = 80
+const ALL_PLAYERS_MOBILE_CARD_ESTIMATED_HEIGHT_PX = 118
+const ALL_PLAYERS_MOBILE_CARD_STATS_ESTIMATED_HEIGHT_PX = 156
+const ALL_PLAYERS_TABLE_ROW_HEIGHT_PX = 56
 
 const ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS = new Set<AllPlayersSortKey>()
 
@@ -1077,18 +1082,33 @@ function parseName(value: string): { first: string; last: string } {
   }
 }
 
-function findLocalPlayerMatch(fantasyName: string, localNames: string[]): string | null {
-  if (!fantasyName || localNames.length === 0) return null
+interface LocalPlayerNameIndex {
+  exact: Map<string, string>
+  byLast: Map<string, string[]>
+}
 
-  const exactMap = new Map(localNames.map((name) => [normaliseName(name), name]))
-  const exact = exactMap.get(normaliseName(fantasyName))
+function buildLocalPlayerNameIndex(localNames: string[]): LocalPlayerNameIndex {
+  const exact = new Map<string, string>()
+  const byLast = new Map<string, string[]>()
+  for (const name of localNames) {
+    exact.set(normaliseName(name), name)
+    const parsed = parseName(name)
+    if (!parsed.last) continue
+    const names = byLast.get(parsed.last) ?? []
+    names.push(name)
+    byLast.set(parsed.last, names)
+  }
+  return { exact, byLast }
+}
+
+function findLocalPlayerMatchFromIndex(fantasyName: string, nameIndex: LocalPlayerNameIndex): string | null {
+  if (!fantasyName) return null
+
+  const exact = nameIndex.exact.get(normaliseName(fantasyName))
   if (exact) return exact
 
   const target = parseName(fantasyName)
-  const candidates = localNames.filter((name) => {
-    const parsed = parseName(name)
-    return parsed.last && parsed.last === target.last
-  })
+  const candidates = target.last ? nameIndex.byLast.get(target.last) ?? [] : []
 
   const initialMatches = candidates.filter((name) => {
     const parsed = parseName(name)
@@ -1103,6 +1123,60 @@ function findLocalPlayerMatch(fantasyName: string, localNames: string[]): string
   if (prefixMatches.length === 1) return prefixMatches[0]
 
   return null
+}
+
+function useVirtualRows(count: number, estimatedRowHeight: number, overscan: number, enabled: boolean) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [viewportHeight, setViewportHeight] = useState(0)
+  const [scrollTop, setScrollTop] = useState(0)
+
+  const onScroll = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+    setScrollTop(container.scrollTop)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!enabled) return
+    const container = containerRef.current
+    if (!container) return
+
+    const updateViewportHeight = () => setViewportHeight(container.clientHeight)
+    updateViewportHeight()
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateViewportHeight)
+      return () => window.removeEventListener("resize", updateViewportHeight)
+    }
+
+    const observer = new ResizeObserver(updateViewportHeight)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [enabled])
+
+  const startIndex = enabled
+    ? Math.max(0, Math.floor(scrollTop / estimatedRowHeight) - overscan)
+    : 0
+  const visibleCount = enabled
+    ? Math.ceil(viewportHeight / estimatedRowHeight) + overscan * 2
+    : count
+  const endIndex = Math.min(count, startIndex + visibleCount)
+  const items = useMemo(
+    () =>
+      Array.from({ length: Math.max(0, endIndex - startIndex) }, (_, offset) => ({
+        index: startIndex + offset,
+      })),
+    [endIndex, startIndex]
+  )
+
+  return {
+    containerRef,
+    enabled,
+    items,
+    onScroll,
+    paddingBottom: enabled ? Math.max(0, count - endIndex) * estimatedRowHeight : 0,
+    paddingTop: enabled ? startIndex * estimatedRowHeight : 0,
+  }
 }
 
 function buildInitialSurnamePlayerNameMap(playerNames: string[]): Map<string, string> {
@@ -3484,6 +3558,7 @@ export function FantasyDashboard({
   const hasLoadedFullAllPlayersRows = !precomputedAllPlayersRowsArePreview
   const isAllPlayersPreview = precomputedAllPlayersRowsArePreview
   const hasPrecomputedAllPlayersRows = allPlayerCardSummaryRows.length > 0
+  const [hasExpandedAllPlayersPreviewRows, setHasExpandedAllPlayersPreviewRows] = useState(!precomputedAllPlayersRowsArePreview)
   const precomputedAllPlayersRowsByKey = useMemo(() => {
     const map = new Map<string, FantasyPlayerCardSummary>()
     for (const row of allPlayerCardSummaryRows) {
@@ -3498,6 +3573,26 @@ export function FantasyDashboard({
   useEffect(() => {
     setAllPlayerCardSummaryRows(precomputedAllPlayersRows)
   }, [precomputedAllPlayersRows])
+  useEffect(() => {
+    if (!precomputedAllPlayersRowsArePreview) {
+      setHasExpandedAllPlayersPreviewRows(true)
+      return
+    }
+
+    setHasExpandedAllPlayersPreviewRows(false)
+    const expandRows = () => setHasExpandedAllPlayersPreviewRows(true)
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
+      cancelIdleCallback?: (handle: number) => void
+    }
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      const idleId = idleWindow.requestIdleCallback(expandRows, { timeout: 900 })
+      return () => idleWindow.cancelIdleCallback?.(idleId)
+    }
+
+    const timeoutId = globalThis.setTimeout(expandRows, 450)
+    return () => globalThis.clearTimeout(timeoutId)
+  }, [precomputedAllPlayersRowsArePreview, precomputedAllPlayersRows.length])
   const { isLoaded: isUserLoaded, user } = useUser()
   const hasLoginAccess = canAccessLoginSeason || Boolean(userId)
   const hasFantasyPlotAccess = canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata)
@@ -3952,13 +4047,14 @@ export function FantasyDashboard({
     () => Array.from(new Set([...allData, ...teammateLookupRows].map((row) => row.Name))).sort(),
     [allData, teammateLookupRows]
   )
+  const allLocalNameIndex = useMemo(() => buildLocalPlayerNameIndex(allLocalNames), [allLocalNames])
 
   const matchedLocalName = useMemo(
     () =>
       selectedFantasyPlayer
-        ? findLocalPlayerMatch(selectedFantasyPlayer.name, allLocalNames)
+        ? findLocalPlayerMatchFromIndex(selectedFantasyPlayer.name, allLocalNameIndex)
         : null,
-    [selectedFantasyPlayer, allLocalNames]
+    [selectedFantasyPlayer, allLocalNameIndex]
   )
 
   const playerRowsForYear = useMemo(() => {
@@ -4382,6 +4478,18 @@ export function FantasyDashboard({
     }
     return map
   }, [fantasyPlayers, ownershipBaselineByPlayerId])
+  const fantasyPlayerById = useMemo(
+    () => new Map(fantasyPlayers.map((player) => [player.id, player])),
+    [fantasyPlayers]
+  )
+  const fantasyPlayerByNormalisedName = useMemo(
+    () => new Map(fantasyPlayers.map((player) => [normaliseName(player.name), player])),
+    [fantasyPlayers]
+  )
+  const fantasyCoachPlayerById = useMemo(
+    () => new Map(fantasyCoachPlayers.map((player) => [player.id, player])),
+    [fantasyCoachPlayers]
+  )
 
   const originChancePlayerNames = useMemo(
     () => new Set(originChances.map((row) => normaliseProjectionPlayerName(row.player)).filter(Boolean)),
@@ -4407,8 +4515,85 @@ export function FantasyDashboard({
   }, [casualtyWardRows, relevantOutCandidates, relevantOuts])
 
  const rawAllPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
+    if (hasPrecomputedAllPlayersRows) {
+      return allPlayerCardSummaryRows.map((summary, index) => {
+        const existingPlayer =
+          (summary.playerId != null ? fantasyPlayerById.get(summary.playerId) : undefined) ??
+          fantasyPlayerByNormalisedName.get(normaliseName(summary.player))
+        const nameParts = summary.player.split(" ").filter(Boolean)
+        const positionLabel = existingPlayer?.positionLabel || summary.position || "POS"
+        const positionLabels = existingPlayer?.positionLabels.length
+          ? existingPlayer.positionLabels
+          : summary.position
+            ? [summary.position]
+            : []
+        const player: FantasyPlayerSnapshot = {
+          id: existingPlayer?.id ?? summary.playerId ?? -(index + 1),
+          firstName: existingPlayer?.firstName ?? nameParts[0] ?? summary.player,
+          lastName: existingPlayer?.lastName ?? nameParts[nameParts.length - 1] ?? summary.player,
+          name: existingPlayer?.name ?? summary.player,
+          squadId: existingPlayer?.squadId ?? null,
+          cost: summary.price ?? existingPlayer?.cost ?? null,
+          status: existingPlayer?.status ?? null,
+          positions: existingPlayer?.positions ?? [],
+          positionLabels,
+          positionLabel,
+          ownedBy: summary.ownedBy ?? existingPlayer?.ownedBy ?? null,
+          selections: existingPlayer?.selections ?? null,
+          avgPoints: summary.avg2026 ?? existingPlayer?.avgPoints ?? null,
+          projectedAvg: summary.projection ?? existingPlayer?.projectedAvg ?? null,
+          gamesPlayed: summary.gamesPlayed ?? existingPlayer?.gamesPlayed ?? null,
+          totalPoints: existingPlayer?.totalPoints ?? null,
+          tog: existingPlayer?.tog ?? null,
+          be: summary.breakeven ?? existingPlayer?.be ?? null,
+          pricedAt: summary.pricedAt ?? existingPlayer?.pricedAt ?? null,
+          isBye: existingPlayer?.isBye ?? false,
+          locked: existingPlayer?.locked ?? false,
+          priceHistory: existingPlayer?.priceHistory ?? {},
+          scoreHistory: existingPlayer?.scoreHistory ?? {},
+        }
+        const teamHint = summary.team ?? null
+        const imageRow =
+          resolvePlayerImage(summary.localName ?? summary.player, teamHint, playerImages) ??
+          resolvePlayerImage(summary.player, teamHint, playerImages)
+        const nextMajorByeRound = summary.nextMajorByeRound ?? getNextMajorByeRound(lineupsProjections?.round ?? null)
+        const majorByeRoundTags = MAJOR_BYE_ROUNDS
+          .filter((round) => nextMajorByeRound != null && round >= nextMajorByeRound)
+          .map((round) => ({
+            round,
+            plays: round === nextMajorByeRound
+              ? summary.playsNextMajorBye ?? teamPlaysInRound(draw2026Data, round, teamHint)
+              : teamPlaysInRound(draw2026Data, round, teamHint),
+          }))
+
+        return {
+          player,
+          localName: summary.localName,
+          imageRow,
+          avg2026: summary.avg2026 ?? player.avgPoints,
+          last3: summary.last3,
+          ppm: summary.ppm,
+          weeklyChange: summary.weeklyChange ?? (player.id > 0 ? ownershipDeltaByPlayerId.get(player.id) ?? null : null),
+          playerCasualtyWard: casualtyWardRowsByPlayerName.get(normaliseProjectionPlayerName(player.name)) ?? null,
+          pricedAt: summary.pricedAt ?? player.pricedAt,
+          projection: normaliseFantasyProjection(summary.projection),
+          value: summary.value,
+          tradeRating: null,
+          breakeven: summary.breakeven ?? player.be,
+          relevantOuts: [],
+          majorByeRoundTags,
+          nextMajorByeRound,
+          playsNextMajorBye: summary.playsNextMajorBye ?? teamPlaysInRound(draw2026Data, nextMajorByeRound, teamHint),
+          originChance: Boolean(summary.originChance),
+          gamesPlayed: Math.trunc(summary.gamesPlayed ?? player.gamesPlayed ?? 0),
+          team: teamHint ?? imageRow?.team ?? null,
+        }
+      })
+    }
+
     const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
     const localNames = Array.from(new Set(rows2026.map(playerStatName).filter(Boolean))).sort()
+    const localNameIndex = buildLocalPlayerNameIndex(localNames)
     const rowsByName = new Map<string, PlayerStat[]>()
     for (const row of rows2026) {
       const name = playerStatName(row)
@@ -4434,7 +4619,7 @@ export function FantasyDashboard({
         precomputedAllPlayersRowsByKey.get(`id:${originPlayer.id}`) ??
         precomputedAllPlayersRowsByKey.get(`name:${normaliseName(originPlayer.name)}`) ??
         null
-      const originLocalName = precomputedOriginRow?.localName ?? findLocalPlayerMatch(originPlayer.name, localNames)
+      const originLocalName = precomputedOriginRow?.localName ?? findLocalPlayerMatchFromIndex(originPlayer.name, localNameIndex)
       const originRows = originLocalName ? rowsByName.get(originLocalName) ?? [] : []
       const originTeamHint = precomputedOriginRow?.team ?? (originRows.length > 0 ? primaryTeamForRows(originRows) : null)
       const originImageRow =
@@ -4480,16 +4665,16 @@ export function FantasyDashboard({
         }
         : player
       const precomputedLocalNameMatches = precomputedRow?.localName
-        ? findLocalPlayerMatch(player.name, [precomputedRow.localName]) === precomputedRow.localName
+        ? findLocalPlayerMatchFromIndex(player.name, buildLocalPlayerNameIndex([precomputedRow.localName])) === precomputedRow.localName
         : false
       const precomputedStatsRow = precomputedLocalNameMatches ? precomputedRow : null
-      const localName = precomputedStatsRow?.localName ?? findLocalPlayerMatch(player.name, localNames)
+      const localName = precomputedStatsRow?.localName ?? findLocalPlayerMatchFromIndex(player.name, localNameIndex)
       const playerRows = localName ? rowsByName.get(localName) ?? [] : []
       const fantasyScores = playerRows.map((row) => playerStatMetricValue(row, "Fantasy", "total_points"))
       const minutes = playerRows.map((row) => playerStatMetricValue(row, "Mins Played", "mins_played"))
       const totalFantasy = fantasyScores.reduce<number>((sum, value) => sum + (value ?? 0), 0)
       const totalMinutes = minutes.reduce<number>((sum, value) => sum + (value ?? 0), 0)
-      const coachPlayer = fantasyCoachPlayers.find((entry) => entry.id === player.id)
+      const coachPlayer = fantasyCoachPlayerById.get(player.id)
       const coachMetrics = getFantasyCoachRoundMetrics(coachPlayer)
       const ownershipDelta = ownershipDeltaByPlayerId.get(player.id) ?? null
       const playerCasualtyWard = casualtyWardRowsByPlayerName.get(normaliseProjectionPlayerName(player.name)) ?? null
@@ -4611,9 +4796,17 @@ export function FantasyDashboard({
         team: projectionTeam ?? imageRow?.team ?? teamHint,
       }
     })
-  }, [allPlayersStatsSourceData, casualtyWardPlayerNames, casualtyWardRowsByPlayerName, draw2026Data, fantasyCoachPlayers, fantasyPlayers, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
+  }, [allPlayerCardSummaryRows, allPlayersStatsSourceData, casualtyWardPlayerNames, casualtyWardRowsByPlayerName, draw2026Data, fantasyCoachPlayerById, fantasyPlayerById, fantasyPlayerByNormalisedName, fantasyPlayers, hasPrecomputedAllPlayersRows, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
 
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
+    if (
+      !hasLoadedFullAllPlayersRows &&
+      !showAllPlayersTradeRatings &&
+      rawAllPlayersTableRows.length > ALL_PLAYERS_PREVIEW_LIMIT
+    ) {
+      return rawAllPlayersTableRows
+    }
+
     const currentRound = lineupsProjections?.round ?? selectedFantasyCoachRound ?? 1
 
     return rawAllPlayersTableRows.map((row) => ({
@@ -4636,7 +4829,7 @@ export function FantasyDashboard({
         currentRound,
       }),
     }))
-  }, [draw2026Data, lineupsProjections?.round, rawAllPlayersTableRows, selectedFantasyCoachRound])
+  }, [draw2026Data, hasLoadedFullAllPlayersRows, lineupsProjections?.round, rawAllPlayersTableRows, selectedFantasyCoachRound, showAllPlayersTradeRatings])
 
   const selectedAllPlayersTableRow = useMemo(
     () => selectedFantasyPlayer
@@ -4646,9 +4839,11 @@ export function FantasyDashboard({
   )
   const selectedDisplayFantasyPlayer = selectedAllPlayersTableRow?.player ?? selectedFantasyPlayer
 
+  const shouldBuildFantasyAnalyticsData = showFantasyAnalytics || showFantasyAnalyticsOnly
   const fantasyAnalyticsPoints = useMemo<FantasyAnalyticsPoint[]>(
-    () =>
-      allPlayersTableRows.map((row) => ({
+    () => {
+      if (!shouldBuildFantasyAnalyticsData) return []
+      return allPlayersTableRows.map((row) => ({
         name: row.player.name,
         position: row.player.positionLabel,
         positionLabels: row.player.positionLabels,
@@ -4662,8 +4857,9 @@ export function FantasyDashboard({
         last3: row.last3,
         breakeven: row.breakeven,
         projection: row.projection,
-      })),
-    [allPlayersTableRows]
+      }))
+    },
+    [allPlayersTableRows, shouldBuildFantasyAnalyticsData]
   )
 
   const pricedAtProjectionPoints = useMemo(
@@ -4712,6 +4908,8 @@ export function FantasyDashboard({
     [selectedGlobalStatVsFantasyLabel]
   )
   const globalStatVsFantasyPoints = useMemo<GlobalStatVsFantasyPoint[]>(() => {
+    if (!shouldBuildFantasyAnalyticsData) return []
+
     const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
     const rowsByName = new Map<string, PlayerStat[]>()
 
@@ -4753,7 +4951,7 @@ export function FantasyDashboard({
         fantasyAvg: row.avg2026,
       }]
     })
-  }, [allPlayersStatsSourceData, allPlayersTableRows, selectedGlobalStatVsFantasyOption.key, selectedGlobalStatVsFantasyOption.rawKey])
+  }, [allPlayersStatsSourceData, allPlayersTableRows, selectedGlobalStatVsFantasyOption.key, selectedGlobalStatVsFantasyOption.rawKey, shouldBuildFantasyAnalyticsData])
   const filteredGlobalStatVsFantasyPoints = useMemo(
     () =>
       globalStatVsFantasyPoints.filter(
@@ -4801,6 +4999,8 @@ export function FantasyDashboard({
   )
 
   const fantasyTemplateRows = useMemo<Array<{ label: string; slots: FantasyTemplateSlot[] }>>(() => {
+    if (!shouldBuildFantasyAnalyticsData) return []
+
     const usedPlayerIds = new Set<number>()
     const rankedRows = [...allPlayersTableRows].sort((a, b) => {
       const aValue = fantasyTemplateMode === "ownership" ? a.player.ownedBy : a.weeklyChange
@@ -4823,7 +5023,7 @@ export function FantasyDashboard({
         return { slot, row: selectedRow }
       }),
     }))
-  }, [allPlayersTableRows, fantasyTemplateMode])
+  }, [allPlayersTableRows, fantasyTemplateMode, shouldBuildFantasyAnalyticsData])
 
   const sortedAllPlayersTableRows = useMemo(() => {
     let filteredRows =
@@ -4918,6 +5118,29 @@ export function FantasyDashboard({
     hasFantasyPlotAccess,
     hasLoadedFullAllPlayersRows,
   ])
+  const visibleAllPlayersCardRows = useMemo(
+    () =>
+      isAllPlayersPreview && !hasExpandedAllPlayersPreviewRows
+        ? sortedAllPlayersTableRows.slice(0, ALL_PLAYERS_INITIAL_PREVIEW_LIMIT)
+        : sortedAllPlayersTableRows,
+    [hasExpandedAllPlayersPreviewRows, isAllPlayersPreview, sortedAllPlayersTableRows]
+  )
+  const shouldVirtualizeAllPlayersRows =
+    hasLoadedFullAllPlayersRows && sortedAllPlayersTableRows.length > ALL_PLAYERS_VIRTUALIZE_THRESHOLD
+  const mobileAllPlayersVirtualRows = useVirtualRows(
+    visibleAllPlayersCardRows.length,
+    renderAllPlayersTradeRatings || showAllPlayersCardStats
+      ? ALL_PLAYERS_MOBILE_CARD_STATS_ESTIMATED_HEIGHT_PX
+      : ALL_PLAYERS_MOBILE_CARD_ESTIMATED_HEIGHT_PX,
+    6,
+    shouldVirtualizeAllPlayersRows
+  )
+  const desktopAllPlayersVirtualRows = useVirtualRows(
+    sortedAllPlayersTableRows.length,
+    ALL_PLAYERS_TABLE_ROW_HEIGHT_PX,
+    10,
+    shouldVirtualizeAllPlayersRows
+  )
 
   const fantasyMarketWatch = useMemo(() => {
     const candidates = allPlayersTableRows.filter(
@@ -6599,17 +6822,27 @@ export function FantasyDashboard({
               </button>
             </div>
           </div>
-          <div className={`${hasLoadedFullAllPlayersRows ? "grid md:hidden" : "grid"} grid-cols-1 gap-2 p-2.5`}>
+          <div
+            ref={mobileAllPlayersVirtualRows.containerRef}
+            onScroll={mobileAllPlayersVirtualRows.onScroll}
+            className={`${hasLoadedFullAllPlayersRows ? "grid max-h-[calc(100vh-13rem)] overflow-y-auto md:hidden" : "grid"} grid-cols-1 gap-2 p-2.5`}
+          >
             {sortedAllPlayersTableRows.length === 0 ? (
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
                 {activeAllPlayersFilterCount > 0
                   ? "No players match the current filters."
                   : isAllPlayersPreview
-                    ? "No weekly ownership movers available."
-                    : `No ${ALL_PLAYERS_STATS_YEAR} player stats available.`}
+                  ? "No weekly ownership movers available."
+                  : `No ${ALL_PLAYERS_STATS_YEAR} player stats available.`}
               </div>
             ) : (
-              sortedAllPlayersTableRows.map((row) => {
+              <>
+              {mobileAllPlayersVirtualRows.paddingTop > 0 ? (
+                <div style={{ height: mobileAllPlayersVirtualRows.paddingTop }} />
+              ) : null}
+              {mobileAllPlayersVirtualRows.items.map(({ index }) => {
+                const row = visibleAllPlayersCardRows[index]
+                if (!row) return null
                 const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
                 const tradeRatingCardStats = [
                   {
@@ -6908,10 +7141,18 @@ export function FantasyDashboard({
 	                    ) : null}
                   </button>
                 )
-              })
+              })}
+              {mobileAllPlayersVirtualRows.paddingBottom > 0 ? (
+                <div style={{ height: mobileAllPlayersVirtualRows.paddingBottom }} />
+              ) : null}
+              </>
             )}
           </div>
-          <div className={`${hasLoadedFullAllPlayersRows ? "hidden md:block" : "hidden"} ${showAllPlayersOnly ? "" : "h-[756px]"} overflow-y-auto overflow-x-auto`}>
+          <div
+            ref={desktopAllPlayersVirtualRows.containerRef}
+            onScroll={desktopAllPlayersVirtualRows.onScroll}
+            className={`${hasLoadedFullAllPlayersRows ? "hidden md:block" : "hidden"} ${showAllPlayersOnly ? "h-[calc(100vh-13rem)] min-h-[520px]" : "h-[756px]"} overflow-y-auto overflow-x-auto`}
+          >
             <table className="w-full min-w-[1550px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>
@@ -6955,7 +7196,15 @@ export function FantasyDashboard({
                     </td>
                   </tr>
                 ) : (
-                  sortedAllPlayersTableRows.map((row) => {
+                  <>
+                  {desktopAllPlayersVirtualRows.paddingTop > 0 ? (
+                    <tr aria-hidden="true">
+                      <td colSpan={ALL_PLAYERS_BASE_COLUMNS.length + 1} style={{ height: desktopAllPlayersVirtualRows.paddingTop, padding: 0 }} />
+                    </tr>
+                  ) : null}
+                  {desktopAllPlayersVirtualRows.items.map(({ index }) => {
+                    const row = sortedAllPlayersTableRows[index]
+                    if (!row) return null
                     const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
                     return (
                       <tr
@@ -7057,7 +7306,13 @@ export function FantasyDashboard({
                       </td>
                     </tr>
                     )
-                  })
+                  })}
+                  {desktopAllPlayersVirtualRows.paddingBottom > 0 ? (
+                    <tr aria-hidden="true">
+                      <td colSpan={ALL_PLAYERS_BASE_COLUMNS.length + 1} style={{ height: desktopAllPlayersVirtualRows.paddingBottom, padding: 0 }} />
+                    </tr>
+                  ) : null}
+                  </>
                 )}
               </tbody>
             </table>

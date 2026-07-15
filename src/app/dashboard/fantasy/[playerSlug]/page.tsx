@@ -16,7 +16,7 @@ import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchAvailableYears,
   fetchCasualtyWardForPlayer,
-  fetchFantasyPlayerCardSummaries,
+  fetchFantasyPlayerCardSummaryForPlayer,
   fetchFantasyPlayerStatsForYears,
   fetchOriginChances,
   fetchPlayerImages,
@@ -92,7 +92,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, projectionSigmas, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot, originChances, precomputedAllPlayersRows] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, projectionSigmas, availableYears, draw2026Data, playerImages, teamLogos, ownershipBaselineSnapshot, originChances] = await Promise.all([
     fetchFantasyPlayersSnapshot(),
     fetchFantasyCoachPlayersSnapshot(),
     withPlayerPageContextTimeout("lineup projections", fetchLineupsProjectionsByPlayerId(), emptyLineupsProjectionSnapshot(), PLAYER_PAGE_LINEUPS_TIMEOUT_MS),
@@ -103,7 +103,6 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
     withPlayerPageContextTimeout("team logos", fetchTeamLogos(), {}),
     withPlayerPageContextTimeout("ownership baseline", fetchLatestFantasyOwnershipBaselineSnapshot(), null),
     withPlayerPageContextTimeout("Origin lineups", fetchOriginChances(), []),
-    withPlayerPageContextTimeout("fantasy player card summaries", fetchFantasyPlayerCardSummaries(), []),
   ])
 
   const selectedPlayer = fantasyPlayers.find(
@@ -113,10 +112,6 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
   if (!selectedPlayer) {
     notFound()
   }
-  const selectedPrecomputedRow = precomputedAllPlayersRows.find((row) =>
-    row.playerId === selectedPlayer.id || fantasyPlayerSlug(row.player) === decodeURIComponent(playerSlug)
-  ) ?? null
-
   const initialYears = defaultRecentYears(availableYears)
   const preferredPlayerStatsYears = ["2026", "2025"].filter((year) => initialYears.includes(year))
   const initialPlayerStatsYears = preferredPlayerStatsYears.length > 0
@@ -130,7 +125,7 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
     lineupsProjections.source === "lineups" &&
     Boolean(selectedLineupRole?.isOnField && selectedLineupRole.team && selectedLineupRole.position)
 
-  const [initialPlayerStats, casualtyWardRows, rawRelevantOuts, relevantOutCandidates] = await Promise.all([
+  const [initialPlayerStats, casualtyWardRows, rawRelevantOuts, relevantOutCandidates, selectedPrecomputedRow] = await Promise.all([
     fetchFantasyPlayerStatsForYears(selectedPlayer.name, initialPlayerStatsYears),
     withPlayerPageContextTimeout("casualty ward", fetchCasualtyWardForPlayer(selectedPlayer.name), []),
     shouldFetchRelevantOuts
@@ -145,6 +140,14 @@ export default async function FantasyPlayerPage({ params, searchParams }: Fantas
       )
       : Promise.resolve([]),
     withPlayerPageContextTimeout("relevant casualty candidates", fetchRelevantCasualtyWardOutCandidates(), []),
+    withPlayerPageContextTimeout(
+      "fantasy player card summary",
+      fetchFantasyPlayerCardSummaryForPlayer({
+        playerId: selectedPlayer.id,
+        playerName: selectedPlayer.name,
+      }),
+      null
+    ),
   ])
   const relevantOuts = rawRelevantOuts.filter(
     (row) => !lineupsProjections.roleByPlayerName.has(normaliseLineupPlayerName(row.player))

@@ -3593,6 +3593,42 @@ export async function fetchFantasyPlayerCardSummaries(): Promise<FantasyPlayerCa
   }
 }
 
+export async function fetchFantasyPlayerCardSummaryForPlayer({
+  playerId,
+  playerName,
+}: {
+  playerId: number | null | undefined
+  playerName: string
+}): Promise<FantasyPlayerCardSummary | null> {
+  try {
+    const supabase = createServerSupabaseClient("summary");
+    let query = supabase
+      .from("fantasy_player_card_summary")
+      .select("*")
+      .limit(1);
+
+    if (playerId != null && Number.isFinite(playerId)) {
+      query = query.eq("player_id", playerId);
+    } else {
+      query = query.eq("player", playerName);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      const message = error.message.toLowerCase();
+      if (message.includes("relation") || message.includes("schema cache") || message.includes("could not find")) {
+        return null;
+      }
+      throw new Error(`Supabase fetch summary.fantasy_player_card_summary player: ${error.message}`);
+    }
+
+    return data?.[0] ? mapFantasyPlayerCardSummary(data[0] as Record<string, unknown>) : null;
+  } catch (error) {
+    console.warn("Unable to fetch fantasy player card summary; using selected player fallback.", error);
+    return null;
+  }
+}
+
 export async function fetchTopWeeklyFantasyPlayerCardSummaries(): Promise<FantasyPlayerCardSummary[]> {
   try {
     if (process.env.NODE_ENV !== "production") {

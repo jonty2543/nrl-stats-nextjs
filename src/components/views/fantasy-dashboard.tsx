@@ -337,6 +337,7 @@ const ALL_PLAYERS_BREAKEVEN_RANGE: NumberRange = { min: -20, max: 140 }
 const FANTASY_DASHBOARD_STATE_STORAGE_KEY = "fantasy-dashboard-ui-state-v1"
 const FANTASY_DASHBOARD_STATE_TTL_MS = 30 * 60 * 1000
 const FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX = "fantasy-card-tags-visible"
+const FANTASY_CARD_STATS_STORAGE_KEY_PREFIX = "fantasy-card-stats-visible"
 const FANTASY_TRADE_RATINGS_LEGACY_STORAGE_KEY_PREFIX = "fantasy-trade-ratings-visible"
 const FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX = "fantasy-trade-ratings-visible:v2"
 const PRO_PRICE_LABEL = "$5/month"
@@ -539,8 +540,6 @@ const ALL_PLAYERS_STATS_YEAR = "2026"
 const ALL_PLAYERS_PREVIEW_LIMIT = 20
 const ALL_PLAYERS_INITIAL_PREVIEW_LIMIT = 6
 const ALL_PLAYERS_VIRTUALIZE_THRESHOLD = 80
-const ALL_PLAYERS_MOBILE_CARD_ESTIMATED_HEIGHT_PX = 118
-const ALL_PLAYERS_MOBILE_CARD_STATS_ESTIMATED_HEIGHT_PX = 156
 const ALL_PLAYERS_TABLE_ROW_HEIGHT_PX = 56
 
 const ALL_PLAYERS_MOBILE_HIDDEN_COLUMNS = new Set<AllPlayersSortKey>()
@@ -1907,14 +1906,6 @@ function formatTradeScore(value: number | null | undefined): string {
 }
 
 const LOW_WEIGHT_TRADE_RATING_MAX_STARS = 3
-const ALL_PLAYERS_CARD_CONTENT_STYLE = {
-  contentVisibility: "auto",
-  containIntrinsicSize: "120px",
-} satisfies CSSProperties
-const ALL_PLAYERS_RATED_CARD_CONTENT_STYLE = {
-  contentVisibility: "auto",
-  containIntrinsicSize: "180px",
-} satisfies CSSProperties
 
 function TradeStars({
   value,
@@ -3722,6 +3713,7 @@ export function FantasyDashboard({
       cardTagsPreferenceUserIdRef.current = null
       tradeRatingsPreferenceUserIdRef.current = null
       setShowAllPlayersCardTags(false)
+      setShowAllPlayersCardStats(false)
       setShowAllPlayersTradeRatings(false)
       setCardTagsPreferenceHydrated(true)
       return
@@ -3729,9 +3721,11 @@ export function FantasyDashboard({
 
     try {
       const savedTags = window.localStorage.getItem(`${FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX}:${userId}`)
+      const savedStats = window.localStorage.getItem(`${FANTASY_CARD_STATS_STORAGE_KEY_PREFIX}:${userId}`)
       const savedRatings = window.localStorage.getItem(`${FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX}:${userId}`)
       const legacySavedRatings = window.localStorage.getItem(`${FANTASY_TRADE_RATINGS_LEGACY_STORAGE_KEY_PREFIX}:${userId}`)
       setShowAllPlayersCardTags(savedTags === "true")
+      setShowAllPlayersCardStats(savedStats === "true")
       setShowAllPlayersTradeRatings(
         savedRatings === null
           ? legacySavedRatings === "false" ? false : defaultTradeRatingsVisible
@@ -3739,6 +3733,7 @@ export function FantasyDashboard({
       )
     } catch {
       setShowAllPlayersCardTags(false)
+      setShowAllPlayersCardStats(false)
       setShowAllPlayersTradeRatings(defaultTradeRatingsVisible)
     } finally {
       cardTagsPreferenceUserIdRef.current = userId
@@ -3752,11 +3747,12 @@ export function FantasyDashboard({
     if (cardTagsPreferenceUserIdRef.current !== userId || tradeRatingsPreferenceUserIdRef.current !== userId) return
     try {
       window.localStorage.setItem(`${FANTASY_CARD_TAGS_STORAGE_KEY_PREFIX}:${userId}`, String(showAllPlayersCardTags))
+      window.localStorage.setItem(`${FANTASY_CARD_STATS_STORAGE_KEY_PREFIX}:${userId}`, String(showAllPlayersCardStats))
       window.localStorage.setItem(`${FANTASY_TRADE_RATINGS_STORAGE_KEY_PREFIX}:${userId}`, String(showAllPlayersTradeRatings))
     } catch {
       // Ignore preference storage failures.
     }
-  }, [cardTagsPreferenceHydrated, isAuthLoaded, isUserLoaded, showAllPlayersCardTags, showAllPlayersTradeRatings, userId])
+  }, [cardTagsPreferenceHydrated, isAuthLoaded, isUserLoaded, showAllPlayersCardStats, showAllPlayersCardTags, showAllPlayersTradeRatings, userId])
 
   const scrollToPlayerDetails = useCallback(() => {
     if (typeof window === "undefined") return
@@ -3913,6 +3909,22 @@ export function FantasyDashboard({
       scrollToPlayerDetails()
     },
     [playerRouteBasePath, router, scrollToPlayerDetails, showAllPlayersOnly]
+  )
+  const playerRouteHref = useCallback(
+    (name: string) => {
+      if (!playerRouteBasePath) return null
+      const sourceQuery = showAllPlayersOnly ? "?from=all-players" : ""
+      return `${playerRouteBasePath}/${encodeURIComponent(fantasyPlayerSlug(name))}${sourceQuery}`
+    },
+    [playerRouteBasePath, showAllPlayersOnly]
+  )
+  const prefetchPlayerRoute = useCallback(
+    (name: string) => {
+      const href = playerRouteHref(name)
+      if (!href) return
+      router.prefetch(href)
+    },
+    [playerRouteHref, router]
   )
 
   const loadTeammateLookupRows = useCallback(async (years: string[]) => {
@@ -5127,14 +5139,6 @@ export function FantasyDashboard({
   )
   const shouldVirtualizeAllPlayersRows =
     hasLoadedFullAllPlayersRows && sortedAllPlayersTableRows.length > ALL_PLAYERS_VIRTUALIZE_THRESHOLD
-  const mobileAllPlayersVirtualRows = useVirtualRows(
-    visibleAllPlayersCardRows.length,
-    renderAllPlayersTradeRatings || showAllPlayersCardStats
-      ? ALL_PLAYERS_MOBILE_CARD_STATS_ESTIMATED_HEIGHT_PX
-      : ALL_PLAYERS_MOBILE_CARD_ESTIMATED_HEIGHT_PX,
-    6,
-    shouldVirtualizeAllPlayersRows
-  )
   const desktopAllPlayersVirtualRows = useVirtualRows(
     sortedAllPlayersTableRows.length,
     ALL_PLAYERS_TABLE_ROW_HEIGHT_PX,
@@ -6822,11 +6826,7 @@ export function FantasyDashboard({
               </button>
             </div>
           </div>
-          <div
-            ref={mobileAllPlayersVirtualRows.containerRef}
-            onScroll={mobileAllPlayersVirtualRows.onScroll}
-            className={`${hasLoadedFullAllPlayersRows ? "grid max-h-[calc(100vh-13rem)] overflow-y-auto md:hidden" : "grid"} grid-cols-1 gap-2 p-2.5`}
-          >
+          <div className={`${hasLoadedFullAllPlayersRows ? "grid md:hidden" : "grid"} grid-cols-1 gap-2 p-2.5`}>
             {sortedAllPlayersTableRows.length === 0 ? (
               <div className="rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-5 text-center text-xs text-nrl-muted">
                 {activeAllPlayersFilterCount > 0
@@ -6836,13 +6836,7 @@ export function FantasyDashboard({
                   : `No ${ALL_PLAYERS_STATS_YEAR} player stats available.`}
               </div>
             ) : (
-              <>
-              {mobileAllPlayersVirtualRows.paddingTop > 0 ? (
-                <div style={{ height: mobileAllPlayersVirtualRows.paddingTop }} />
-              ) : null}
-              {mobileAllPlayersVirtualRows.items.map(({ index }) => {
-                const row = visibleAllPlayersCardRows[index]
-                if (!row) return null
+              visibleAllPlayersCardRows.map((row) => {
                 const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
                 const tradeRatingCardStats = [
                   {
@@ -7014,8 +7008,10 @@ export function FantasyDashboard({
                     key={row.player.id}
                     type="button"
                     onClick={() => navigateToPlayer(row.player.name)}
+                    onFocus={() => prefetchPlayerRoute(row.player.name)}
+                    onMouseEnter={() => prefetchPlayerRoute(row.player.name)}
+                    onTouchStart={() => prefetchPlayerRoute(row.player.name)}
 	                    className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-3 text-left transition-colors hover:border-white/25 hover:bg-[#17213d]"
-                    style={renderAllPlayersTradeRatings ? ALL_PLAYERS_RATED_CARD_CONTENT_STYLE : ALL_PLAYERS_CARD_CONTENT_STYLE}
 	                  >
 	                    <div className="flex w-full items-start justify-between gap-3">
                       <div className="flex min-w-0 flex-1 items-start gap-2.5">
@@ -7141,11 +7137,7 @@ export function FantasyDashboard({
 	                    ) : null}
                   </button>
                 )
-              })}
-              {mobileAllPlayersVirtualRows.paddingBottom > 0 ? (
-                <div style={{ height: mobileAllPlayersVirtualRows.paddingBottom }} />
-              ) : null}
-              </>
+              })
             )}
           </div>
           <div
@@ -7210,6 +7202,8 @@ export function FantasyDashboard({
                       <tr
                         key={row.player.id}
                         onClick={() => navigateToPlayer(row.player.name)}
+                        onFocus={() => prefetchPlayerRoute(row.player.name)}
+                        onMouseEnter={() => prefetchPlayerRoute(row.player.name)}
                         className="h-14 cursor-pointer border-b border-nrl-border/60"
                       >
                         <td className="sticky left-0 z-[1] w-13 min-w-13 max-w-13 border-r border-nrl-border bg-nrl-panel px-1 py-2 sm:w-15 sm:min-w-15 sm:max-w-15">

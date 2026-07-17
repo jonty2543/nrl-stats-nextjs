@@ -1139,6 +1139,32 @@ function findLocalPlayerMatchFromIndex(fantasyName: string, nameIndex: LocalPlay
   return null
 }
 
+function findLocalPlayerAliasesFromIndex(fantasyName: string, nameIndex: LocalPlayerNameIndex): string[] {
+  if (!fantasyName) return []
+
+  const aliases = new Set<string>()
+  const exact = nameIndex.exact.get(normaliseName(fantasyName))
+  if (exact) aliases.add(exact)
+
+  const target = parseName(fantasyName)
+  const candidates = target.last ? nameIndex.byLast.get(target.last) ?? [] : []
+  const prefixMatches = candidates.filter((name) => {
+    const parsed = parseName(name)
+    return parsed.first.startsWith(target.first) || target.first.startsWith(parsed.first)
+  })
+  for (const name of prefixMatches) aliases.add(name)
+
+  if (aliases.size === 0) {
+    const initialMatches = candidates.filter((name) => {
+      const parsed = parseName(name)
+      return parsed.first[0] && parsed.first[0] === target.first[0]
+    })
+    if (initialMatches.length === 1) aliases.add(initialMatches[0])
+  }
+
+  return Array.from(aliases)
+}
+
 function useVirtualRows(count: number, estimatedRowHeight: number, overscan: number, enabled: boolean) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [viewportHeight, setViewportHeight] = useState(0)
@@ -4084,17 +4110,20 @@ export function FantasyDashboard({
         : null,
     [selectedFantasyPlayer, allLocalNameIndex]
   )
+  const matchedLocalNameKeys = useMemo(() => {
+    if (!selectedFantasyPlayer) return new Set<string>()
+    const aliases = findLocalPlayerAliasesFromIndex(selectedFantasyPlayer.name, allLocalNameIndex)
+    return new Set(aliases.map(normaliseName))
+  }, [selectedFantasyPlayer, allLocalNameIndex])
 
   const playerRowsForYear = useMemo(() => {
-    if (!matchedLocalName) return []
-    const matchedKey = normaliseName(matchedLocalName)
-    return selectedYearData.filter((row) => normaliseName(row.Name) === matchedKey)
-  }, [matchedLocalName, selectedYearData])
+    if (matchedLocalNameKeys.size === 0) return []
+    return selectedYearData.filter((row) => matchedLocalNameKeys.has(normaliseName(row.Name)))
+  }, [matchedLocalNameKeys, selectedYearData])
   const playerRowsAllYears = useMemo(() => {
-    if (!matchedLocalName) return []
-    const matchedKey = normaliseName(matchedLocalName)
-    return allData.filter((row) => normaliseName(row.Name) === matchedKey)
-  }, [allData, matchedLocalName])
+    if (matchedLocalNameKeys.size === 0) return []
+    return allData.filter((row) => matchedLocalNameKeys.has(normaliseName(row.Name)))
+  }, [allData, matchedLocalNameKeys])
 
   const fantasyRank = useMemo(() => buildFantasyRank(teammateLookupSourceRows), [teammateLookupSourceRows])
   const teammateOptions = useMemo(

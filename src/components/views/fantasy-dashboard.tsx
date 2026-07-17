@@ -590,8 +590,23 @@ const ALL_PLAYERS_MOBILE_SORT_OPTIONS: Array<{ key: AllPlayersSortKey; label: st
   { key: "gamesPlayed", label: "Games" },
 ]
 
+const ALL_PLAYERS_TRADE_RATING_SORT_KEYS = new Set<AllPlayersSortKey>([
+  "tradeRating",
+  "tradeWeeklyDelta",
+  "tradeValue",
+  "tradeKeeper",
+  "tradeRole",
+  "tradeForm",
+  "tradeBreakeven",
+  "tradeAvailability",
+])
+
 function isAllPlayersSortKey(value: unknown): value is AllPlayersSortKey {
   return typeof value === "string" && ALL_PLAYERS_BASE_COLUMNS.some((column) => column.key === value)
+}
+
+function isAllPlayersTradeRatingSortKey(value: AllPlayersSortKey): boolean {
+  return ALL_PLAYERS_TRADE_RATING_SORT_KEYS.has(value)
 }
 
 function isAllPlayersSortDirection(value: unknown): value is AllPlayersSortDirection {
@@ -4411,6 +4426,7 @@ export function FantasyDashboard({
 
     const teamKey = normaliseTeamKey(teamForDrawStrip)
     if (!teamKey) return []
+    const drawTeamLogos = { ...draw2026Data.teamLogos, ...teamLogos }
 
     const fixturesByRound = new Map<number, PlayerDrawStripRound>()
     let maxRound = 0
@@ -4424,7 +4440,7 @@ export function FantasyDashboard({
 
       const isHome = homeKey === teamKey
       const opponent = isHome ? row.away : row.home
-      const opponentLogoUrl = draw2026Data.teamLogos[normaliseTeamKey(opponent)] ?? null
+      const opponentLogoUrl = resolveTeamLogoUrl(opponent, drawTeamLogos)
 
       fixturesByRound.set(row.round, {
         round: row.round,
@@ -4451,7 +4467,7 @@ export function FantasyDashboard({
     }
 
     return out
-  }, [draw2026Data, teamForDrawStrip])
+  }, [draw2026Data, teamForDrawStrip, teamLogos])
 
   const fantasyCardPosition = useMemo(
     () =>
@@ -4813,12 +4829,13 @@ export function FantasyDashboard({
     })
   }, [allPlayerCardSummaryRows, allPlayersStatsSourceData, casualtyWardPlayerNames, casualtyWardRowsByPlayerName, draw2026Data, fantasyCoachPlayerById, fantasyPlayerById, fantasyPlayerByNormalisedName, fantasyPlayers, hasPrecomputedAllPlayersRows, isAllPlayersPreview, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
 
+  const shouldCalculateAllPlayersTradeRatings =
+    hasLoadedFullAllPlayersRows ||
+    showAllPlayersTradeRatings ||
+    rawAllPlayersTableRows.length <= ALL_PLAYERS_PREVIEW_LIMIT
+
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
-    if (
-      !hasLoadedFullAllPlayersRows &&
-      !showAllPlayersTradeRatings &&
-      rawAllPlayersTableRows.length > ALL_PLAYERS_PREVIEW_LIMIT
-    ) {
+    if (!shouldCalculateAllPlayersTradeRatings) {
       return rawAllPlayersTableRows
     }
 
@@ -4844,7 +4861,7 @@ export function FantasyDashboard({
         currentRound,
       }),
     }))
-  }, [draw2026Data, hasLoadedFullAllPlayersRows, lineupsProjections?.round, rawAllPlayersTableRows, selectedFantasyCoachRound, showAllPlayersTradeRatings])
+  }, [draw2026Data, lineupsProjections?.round, rawAllPlayersTableRows, selectedFantasyCoachRound, shouldCalculateAllPlayersTradeRatings])
 
   const selectedAllPlayersTableRow = useMemo(
     () => selectedFantasyPlayer
@@ -6841,69 +6858,73 @@ export function FantasyDashboard({
             ) : (
               visibleAllPlayersCardRows.map((row) => {
                 const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
-                const tradeRatingCardStats = [
-                  {
-                    key: "tradeRating",
-                    label: "Overall",
-                    value: formatTradeScore(row.tradeRating?.overall ?? null),
-                    tradeScore: row.tradeRating?.overall ?? null,
-                    locked: false,
-                    highlighted: true,
-                  },
-                  {
-                    key: "tradeWeeklyDelta",
-                    label: "Popularity Rating",
-                    value: formatTradeScore(tradeScore10(row.tradeRating?.weeklyDelta)),
-                    tradeScore: tradeScore10(row.tradeRating?.weeklyDelta),
-                    locked: true,
-                  },
-                  {
-                    key: "tradeValue",
-                    label: "Value Rating",
-                    value: formatTradeScore(tradeScore10(row.tradeRating?.value)),
-                    tradeScore: tradeScore10(row.tradeRating?.value),
-                    locked: true,
-                  },
-                  {
-                    key: "tradeKeeper",
-                    label: "Keeper Rating",
-                    value: formatTradeScore(tradeScore10(row.tradeRating?.keeperScore)),
-                    tradeScore: tradeScore10(row.tradeRating?.keeperScore),
-                    locked: true,
-                  },
-                  {
-                    key: "tradeRole",
-                    label: "Role Rating",
-                    value: formatTradeScore(tradeScore10(row.tradeRating?.roleSecurityScore)),
-                    tradeScore: tradeScore10(row.tradeRating?.roleSecurityScore),
-                    locked: true,
-                    maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
-                  },
-                  {
-                    key: "tradeForm",
-                    label: "Form Rating",
-                    value: formatTradeScore(tradeScore10(row.tradeRating?.form)),
-                    tradeScore: tradeScore10(row.tradeRating?.form),
-                    locked: true,
-                    maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
-                  },
-                  {
-                    key: "tradeBreakeven",
-                    label: "Breakeven Rating",
-                    value: formatTradeScore(tradeScore10(row.tradeRating?.breakeven)),
-                    tradeScore: tradeScore10(row.tradeRating?.breakeven),
-                    locked: true,
-                    maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
-                  },
-                  {
-                    key: "tradeAvailability",
-                    label: "Availability Rating",
-                    value: formatTradeScore(tradeScore10(row.tradeRating?.availability)),
-                    tradeScore: tradeScore10(row.tradeRating?.availability),
-                    locked: true,
-                    maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
-                  },
-                ]
+                const shouldBuildTradeRatingCardStats =
+                  renderAllPlayersTradeRatings || isAllPlayersTradeRatingSortKey(allPlayersSortDisplayColumn)
+                const tradeRatingCardStats = shouldBuildTradeRatingCardStats
+                  ? [
+                    {
+                      key: "tradeRating",
+                      label: "Overall",
+                      value: formatTradeScore(row.tradeRating?.overall ?? null),
+                      tradeScore: row.tradeRating?.overall ?? null,
+                      locked: false,
+                      highlighted: true,
+                    },
+                    {
+                      key: "tradeWeeklyDelta",
+                      label: "Popularity Rating",
+                      value: formatTradeScore(tradeScore10(row.tradeRating?.weeklyDelta)),
+                      tradeScore: tradeScore10(row.tradeRating?.weeklyDelta),
+                      locked: true,
+                    },
+                    {
+                      key: "tradeValue",
+                      label: "Value Rating",
+                      value: formatTradeScore(tradeScore10(row.tradeRating?.value)),
+                      tradeScore: tradeScore10(row.tradeRating?.value),
+                      locked: true,
+                    },
+                    {
+                      key: "tradeKeeper",
+                      label: "Keeper Rating",
+                      value: formatTradeScore(tradeScore10(row.tradeRating?.keeperScore)),
+                      tradeScore: tradeScore10(row.tradeRating?.keeperScore),
+                      locked: true,
+                    },
+                    {
+                      key: "tradeRole",
+                      label: "Role Rating",
+                      value: formatTradeScore(tradeScore10(row.tradeRating?.roleSecurityScore)),
+                      tradeScore: tradeScore10(row.tradeRating?.roleSecurityScore),
+                      locked: true,
+                      maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
+                    },
+                    {
+                      key: "tradeForm",
+                      label: "Form Rating",
+                      value: formatTradeScore(tradeScore10(row.tradeRating?.form)),
+                      tradeScore: tradeScore10(row.tradeRating?.form),
+                      locked: true,
+                      maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
+                    },
+                    {
+                      key: "tradeBreakeven",
+                      label: "Breakeven Rating",
+                      value: formatTradeScore(tradeScore10(row.tradeRating?.breakeven)),
+                      tradeScore: tradeScore10(row.tradeRating?.breakeven),
+                      locked: true,
+                      maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
+                    },
+                    {
+                      key: "tradeAvailability",
+                      label: "Availability Rating",
+                      value: formatTradeScore(tradeScore10(row.tradeRating?.availability)),
+                      tradeScore: tradeScore10(row.tradeRating?.availability),
+                      locked: true,
+                      maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS,
+                    },
+                  ]
+                  : []
                 const baseCardStats = [
                   {
                     key: "weeklyChange",

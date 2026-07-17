@@ -3612,7 +3612,7 @@ export function FantasyDashboard({
     } catch {
       saved = null
     }
-    if (saved) {
+    if (saved && !showAllPlayersOnly) {
       if (Array.isArray(saved.allPlayersPositionFilters)) {
         setAllPlayersPositionFilters(saved.allPlayersPositionFilters.filter((position): position is string => typeof position === "string"))
       } else if (typeof saved.allPlayersPositionFilter === "string" && saved.allPlayersPositionFilter !== "All Positions") {
@@ -3657,10 +3657,10 @@ export function FantasyDashboard({
       }
     }
     setDashboardStateHydrated(true)
-  }, [showOwnedCards])
+  }, [showAllPlayersOnly, showOwnedCards])
 
   useEffect(() => {
-    if (!showOwnedCards || !dashboardStateHydrated) return
+    if (!showOwnedCards || !dashboardStateHydrated || showAllPlayersOnly) return
     const state: FantasyDashboardPersistedState = {
       allPlayersPositionFilters,
       allPlayersTagFilters,
@@ -3703,6 +3703,7 @@ export function FantasyDashboard({
     fantasyTemplateMode,
     globalStatVsFantasyPositionFilter,
     selectedGlobalStatVsFantasyLabel,
+    showAllPlayersOnly,
     showOwnedCards,
   ])
 

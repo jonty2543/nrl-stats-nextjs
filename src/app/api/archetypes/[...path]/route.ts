@@ -13,8 +13,6 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 const APP_FONT_STACK = "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-const DASHBOARD_BACKGROUND_IMAGE =
-  "radial-gradient(circle at top left, rgba(92, 108, 220, 0.18), transparent 36%), radial-gradient(circle at 72% 18%, rgba(70, 92, 180, 0.08), transparent 28%), radial-gradient(circle at bottom right, rgba(58, 84, 176, 0.16), transparent 34%), linear-gradient(180deg, #111733 0%, #10162f 48%, #0f142b 100%)";
 const ARCHETYPES_ARTICLE_TITLE = "NRL Archetypes: Understanding Player Roles Beyond Position";
 const ARCHETYPES_ARTICLE_SLUG = "nrl-archetypes-understanding-player-roles-beyond-position";
 const ARTICLES_PATH = "/dashboard/articles";
@@ -108,9 +106,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
       `
         html,
         body {
-            background-color: #111733;
-            background-image: ${DASHBOARD_BACKGROUND_IMAGE};
-            background-attachment: fixed;
+            background: transparent !important;
             font-family: ${APP_FONT_STACK};
         }
 
@@ -180,6 +176,11 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
         }
 
         @media (max-width: 768px) {
+            html,
+            body {
+                min-height: 100dvh;
+            }
+
             .tabs {
                 gap: 0.55rem;
             }
@@ -206,7 +207,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
 
         .plot-container iframe {
             display: block;
-            background: #111733;
+            background: transparent;
             color-scheme: dark;
             opacity: 0;
         }
@@ -356,6 +357,8 @@ function stylePlotHtml(html: string): string {
     .replaceAll("#2A3B6E", "#2a3356")
     .replaceAll("#f0f0f0", "#111733")
     .replaceAll("#E5ECF6", "#1e2542")
+    .replaceAll('"paper_bgcolor":"#111733"', '"paper_bgcolor":"rgba(0,0,0,0)"')
+    .replaceAll('"plot_bgcolor":"#111733"', '"plot_bgcolor":"rgba(0,0,0,0)"')
     .replaceAll("#2a3f5f", "#f5f7ff")
     .replaceAll('"gridcolor":"white"', '"gridcolor":"rgba(245,247,255,0.14)"')
     .replaceAll('"zerolinecolor":"white"', '"zerolinecolor":"rgba(245,247,255,0.18)"')
@@ -381,13 +384,21 @@ function stylePlotHtml(html: string): string {
                 html,
                 body,
                 #plotly-wrapper {
-                    background: #111733;
+                    background: transparent !important;
                     font-family: ${APP_FONT_STACK};
                 }
 
                 html,
                 body {
                     min-height: 100%;
+                }
+
+                @media (max-width: 768px) {
+                    html,
+                    body,
+                    #plotly-wrapper {
+                        min-height: 100dvh;
+                    }
                 }
 
                 body *,

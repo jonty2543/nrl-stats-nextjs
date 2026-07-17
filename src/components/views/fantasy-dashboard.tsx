@@ -4184,6 +4184,7 @@ export function FantasyDashboard({
   useEffect(() => {
     if (
       !showOwnedCards ||
+      isAllPlayersPreview ||
       hasPrecomputedAllPlayersRows ||
       allPlayersStatsLoadFailed ||
       hasRequestedAllPlayersStats ||
@@ -4219,7 +4220,7 @@ export function FantasyDashboard({
     return () => {
       cancelled = true
     }
-  }, [allPlayersStatsLoadFailed, allPlayersStatsSourceData, hasPrecomputedAllPlayersRows, hasRequestedAllPlayersStats, showOwnedCards])
+  }, [allPlayersStatsLoadFailed, allPlayersStatsSourceData, hasPrecomputedAllPlayersRows, hasRequestedAllPlayersStats, isAllPlayersPreview, showOwnedCards])
 
   useEffect(() => {
     if (hasLoginAccess) return
@@ -4603,6 +4604,7 @@ export function FantasyDashboard({
         }
       })
     }
+    if (isAllPlayersPreview) return []
 
     const rows2026 = allPlayersStatsSourceData.filter((row) => playerStatYear(row) === ALL_PLAYERS_STATS_YEAR)
     const localNames = Array.from(new Set(rows2026.map(playerStatName).filter(Boolean))).sort()
@@ -4809,7 +4811,7 @@ export function FantasyDashboard({
         team: projectionTeam ?? imageRow?.team ?? teamHint,
       }
     })
-  }, [allPlayerCardSummaryRows, allPlayersStatsSourceData, casualtyWardPlayerNames, casualtyWardRowsByPlayerName, draw2026Data, fantasyCoachPlayerById, fantasyPlayerById, fantasyPlayerByNormalisedName, fantasyPlayers, hasPrecomputedAllPlayersRows, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
+  }, [allPlayerCardSummaryRows, allPlayersStatsSourceData, casualtyWardPlayerNames, casualtyWardRowsByPlayerName, draw2026Data, fantasyCoachPlayerById, fantasyPlayerById, fantasyPlayerByNormalisedName, fantasyPlayers, hasPrecomputedAllPlayersRows, isAllPlayersPreview, lineupsProjections, originChancePlayerNames, ownershipDeltaByPlayerId, playerImages, precomputedAllPlayersRowsByKey, relevantOutCandidates])
 
   const allPlayersTableRows = useMemo<AllPlayersTableRow[]>(() => {
     if (

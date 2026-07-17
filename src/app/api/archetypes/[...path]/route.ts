@@ -13,6 +13,8 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 const APP_FONT_STACK = "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+const DASHBOARD_BACKGROUND_IMAGE =
+  "radial-gradient(circle at top left, rgba(92, 108, 220, 0.18), transparent 36%), radial-gradient(circle at 72% 18%, rgba(70, 92, 180, 0.08), transparent 28%), radial-gradient(circle at bottom right, rgba(58, 84, 176, 0.16), transparent 34%), linear-gradient(180deg, #111733 0%, #10162f 48%, #0f142b 100%)";
 const ARCHETYPES_ARTICLE_TITLE = "NRL Archetypes: Understanding Player Roles Beyond Position";
 const ARCHETYPES_ARTICLE_SLUG = "nrl-archetypes-understanding-player-roles-beyond-position";
 const ARTICLES_PATH = "/dashboard/articles";
@@ -106,7 +108,10 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
       `
         html,
         body {
-            background: transparent !important;
+            background-color: #111733;
+            background-image: ${DASHBOARD_BACKGROUND_IMAGE};
+            background-repeat: no-repeat;
+            background-size: cover;
             font-family: ${APP_FONT_STACK};
         }
 
@@ -207,7 +212,10 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
 
         .plot-container iframe {
             display: block;
-            background: transparent;
+            background-color: #111733;
+            background-image: ${DASHBOARD_BACKGROUND_IMAGE};
+            background-repeat: no-repeat;
+            background-size: cover;
             color-scheme: dark;
             opacity: 0;
         }
@@ -384,7 +392,10 @@ function stylePlotHtml(html: string): string {
                 html,
                 body,
                 #plotly-wrapper {
-                    background: transparent !important;
+                    background-color: #111733;
+                    background-image: ${DASHBOARD_BACKGROUND_IMAGE};
+                    background-repeat: no-repeat;
+                    background-size: cover;
                     font-family: ${APP_FONT_STACK};
                 }
 

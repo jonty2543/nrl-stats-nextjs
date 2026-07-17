@@ -17,7 +17,7 @@ export function ArchetypesFrame() {
         className={`block h-[calc(100vh-14.5rem)] min-h-[720px] w-full border-0 bg-transparent transition-opacity duration-0 ${
           loaded ? "opacity-100" : "opacity-0"
         }`}
-        style={{ colorScheme: "dark", backgroundColor: "transparent" }}
+        style={{ colorScheme: "dark", backgroundColor: "#111733", backgroundImage: dashboardBackgroundImage }}
       />
     </section>
   );

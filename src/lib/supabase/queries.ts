@@ -10,6 +10,7 @@ import type { PlayerTryHistory } from "@/lib/lineups/matchup-insights";
 import type {
   LineupCasualtyOut,
   LineupMatch,
+  LineupMatchPrediction,
   LineupMatchStats,
   LineupRoundOption,
   LineupSportsbetOdds,
@@ -874,6 +875,7 @@ interface PredictionModelRow extends Record<string, unknown> {
   pred_margin_model?: unknown;
   pred_margin_pre_manual?: unknown;
   pred_total?: unknown;
+  lineup_context?: unknown;
   updated_at?: unknown;
 }
 
@@ -957,6 +959,13 @@ function predictionHomeTeam(raw: PredictionModelRow): string | null {
   const parts = match.split(/\s+v(?:s)?\.?\s+/i);
   if (parts.length !== 2) return null;
   return teamJoinKey(parts[0]);
+}
+
+function predictionAwayTeam(raw: PredictionModelRow): string | null {
+  const match = typeof raw.match === "string" ? raw.match : "";
+  const parts = match.split(/\s+v(?:s)?\.?\s+/i);
+  if (parts.length !== 2) return null;
+  return teamJoinKey(parts[1]);
 }
 
 function toUpdatedAtMs(value: unknown): number {
@@ -2313,6 +2322,127 @@ async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Pro
   return allRows;
 }
 
+function lineupPredictionMatchKey(match: LineupMatch): string {
+  return matchKey(match.match);
+}
+
+function lineupPredictionTeamKey(team: LineupMatch["homeTeam"]): string {
+  return teamJoinKey(team?.team ?? team?.teamName);
+}
+
+function signedHomePredictionMargin(raw: PredictionModelRow, homeKey: string, awayKey: string): number | null {
+  const predMargin = toNullableFinite(raw.pred_margin_model ?? raw.pred_margin);
+  if (predMargin == null) return null;
+
+  const teamKey = teamJoinKey(raw.team);
+  if (teamKey === homeKey) return predMargin;
+  if (teamKey === awayKey) return -predMargin;
+
+  const predictionHomeKey = predictionHomeTeam(raw);
+  const predictionAwayKey = predictionAwayTeam(raw);
+  if (predictionHomeKey === homeKey && predictionAwayKey === awayKey) return predMargin;
+  if (predictionHomeKey === awayKey && predictionAwayKey === homeKey) return -predMargin;
+
+  return null;
+}
+
+function chooseLineupPrediction(
+  existing: LineupMatchPrediction | undefined,
+  next: LineupMatchPrediction
+): LineupMatchPrediction {
+  if (!existing) return next;
+  const existingUpdatedAt = toUpdatedAtMs(existing.updatedAt);
+  const nextUpdatedAt = toUpdatedAtMs(next.updatedAt);
+  if (nextUpdatedAt > existingUpdatedAt) return next;
+  if (nextUpdatedAt < existingUpdatedAt) return existing;
+  const existingCompleteness = Number(existing.predMargin != null) + Number(existing.predTotal != null) + Number(existing.lineupContext != null);
+  const nextCompleteness = Number(next.predMargin != null) + Number(next.predTotal != null) + Number(next.lineupContext != null);
+  return nextCompleteness >= existingCompleteness ? next : existing;
+}
+
+export async function fetchLineupsMatchPredictions(matches: LineupMatch[]): Promise<Record<string, LineupMatchPrediction>> {
+  const dateSet = new Set(matches.map((match) => toIsoDate(match.matchDate)).filter(Boolean));
+  const dates = [...dateSet].sort();
+  const minDate = dates[0];
+  const maxDate = dates[dates.length - 1];
+  if (!minDate || !maxDate) return {};
+
+  const supabase = createServerSupabaseClient("nrl");
+  const rows: PredictionModelRow[] = [];
+  let start = 0;
+  let select = "match_date,match,team,pred_margin,pred_margin_model,pred_total,lineup_context,updated_at";
+
+  while (true) {
+    const end = start + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("nrl_predictions")
+      .select(select)
+      .gte("match_date", minDate)
+      .lte("match_date", maxDate)
+      .range(start, end);
+
+    if (error) {
+      const message = error.message.toLowerCase();
+      if (select.includes("lineup_context") && (message.includes("lineup_context") || message.includes("column") || message.includes("schema cache"))) {
+        select = select.replace(",lineup_context", "");
+        start = 0;
+        rows.length = 0;
+        continue;
+      }
+      if (select.includes("pred_total") && (message.includes("pred_total") || message.includes("column") || message.includes("schema cache"))) {
+        select = select.replace(",pred_total", "");
+        start = 0;
+        rows.length = 0;
+        continue;
+      }
+      if (select.includes("pred_margin_model") && (message.includes("pred_margin_model") || message.includes("column") || message.includes("schema cache"))) {
+        select = select.replace(",pred_margin_model", "");
+        start = 0;
+        rows.length = 0;
+        continue;
+      }
+      throw new Error(`Supabase fetch nrl.nrl_predictions for lineups: ${error.message}`);
+    }
+
+    const pageRows = (data ?? []) as unknown as PredictionModelRow[];
+    if (pageRows.length === 0) break;
+    rows.push(...pageRows);
+    if (pageRows.length < PAGE_SIZE) break;
+    start += PAGE_SIZE;
+  }
+
+  const rowsByDateMatch = new Map<string, PredictionModelRow[]>();
+  for (const row of rows) {
+    const date = toIsoDate(row.match_date);
+    const key = matchKey(row.match);
+    if (!date || !key) continue;
+    const dateMatchKey = `${date}|${key}`;
+    rowsByDateMatch.set(dateMatchKey, [...(rowsByDateMatch.get(dateMatchKey) ?? []), row]);
+  }
+
+  const predictions: Record<string, LineupMatchPrediction> = {};
+  for (const match of matches) {
+    const date = toIsoDate(match.matchDate);
+    const key = lineupPredictionMatchKey(match);
+    const homeKey = lineupPredictionTeamKey(match.homeTeam);
+    const awayKey = lineupPredictionTeamKey(match.awayTeam);
+    if (!date || !key || !homeKey || !awayKey) continue;
+
+    for (const row of rowsByDateMatch.get(`${date}|${key}`) ?? []) {
+      const predMargin = signedHomePredictionMargin(row, homeKey, awayKey);
+      const prediction: LineupMatchPrediction = {
+        predMargin,
+        predTotal: toNullableFinite(row.pred_total),
+        lineupContext: row.lineup_context ?? null,
+        updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+      };
+      predictions[match.matchId] = chooseLineupPrediction(predictions[match.matchId], prediction);
+    }
+  }
+
+  return predictions;
+}
+
 async function fetchTotalPredictionRowsFromSupabase(rows: BettingOddsRow[]): Promise<TotalPredictionRow[]> {
   const dateRange = bettingOddsDateRange(rows);
   if (!dateRange) return [];
@@ -2468,18 +2598,39 @@ function asStringRecord(value: unknown): Record<string, string> {
   );
 }
 
+function teamFormValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === "string") return item;
+        const row = asRecord(item);
+        return typeof row.result === "string" ? row.result : "";
+      })
+      .map((item) => item.trim().toUpperCase())
+      .filter((item) => item === "W" || item === "L" || item === "D")
+      .slice(0, 5);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .trim()
+      .toUpperCase()
+      .split("")
+      .filter((item) => item === "W" || item === "L" || item === "D")
+      .slice(0, 5);
+  }
+
+  const row = asRecord(value);
+  const nested = row.form ?? row.lastFive ?? row.last_five;
+  return nested == null ? [] : teamFormValues(nested);
+}
+
 function mapBettingSummaryGame(raw: unknown): BettingSummaryGame | null {
   const row = asRecord(raw);
   const matchDate = typeof row.matchDate === "string" ? row.matchDate : "";
   const match = typeof row.match === "string" ? row.match : "";
   const matchKey = typeof row.matchKey === "string" ? row.matchKey : "";
   if (!matchDate || !match || !matchKey) return null;
-  const formValues = (value: unknown): string[] => Array.isArray(value)
-    ? value
-      .map((item) => String(item ?? "").trim().toUpperCase())
-      .filter((item) => item === "W" || item === "L" || item === "D")
-      .slice(0, 5)
-    : [];
 
   return {
     round: typeof row.round === "number" && Number.isFinite(row.round) ? row.round : null,
@@ -2495,8 +2646,8 @@ function mapBettingSummaryGame(raw: unknown): BettingSummaryGame | null {
     matchKey,
     homeLogoUrl: typeof row.homeLogoUrl === "string" ? row.homeLogoUrl : null,
     awayLogoUrl: typeof row.awayLogoUrl === "string" ? row.awayLogoUrl : null,
-    homeLastFive: formValues(row.homeLastFive ?? row.home_last_five ?? row.homeTeamLastFive ?? row.home_team_last_five ?? row.homeForm ?? row.home_form),
-    awayLastFive: formValues(row.awayLastFive ?? row.away_last_five ?? row.awayTeamLastFive ?? row.away_team_last_five ?? row.awayForm ?? row.away_form),
+    homeLastFive: teamFormValues(row.homeLastFive ?? row.home_last_five ?? row.homeTeamLastFive ?? row.home_team_last_five ?? row.homeForm ?? row.home_form),
+    awayLastFive: teamFormValues(row.awayLastFive ?? row.away_last_five ?? row.awayTeamLastFive ?? row.away_team_last_five ?? row.awayForm ?? row.away_form),
   };
 }
 
@@ -2610,12 +2761,7 @@ export async function fetchBettingPageSummaryFromSupabase(): Promise<BettingPage
     lineupPlayersByMatch: asRecord(row.lineup_players_by_match),
     teamLastFiveByMatch: Object.fromEntries(
       Object.entries(asRecord(row.team_last_five_by_match)).flatMap(([key, value]) => {
-        const form = Array.isArray(value)
-          ? value
-            .map((item) => String(item ?? "").trim().toUpperCase())
-            .filter((item) => item === "W" || item === "L" || item === "D")
-            .slice(0, 5)
-          : [];
+        const form = teamFormValues(value);
         return form.length > 0 ? [[key, form] as const] : [];
       })
     ),

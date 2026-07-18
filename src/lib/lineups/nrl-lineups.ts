@@ -17,6 +17,8 @@ export interface LineupPlayer {
   playerId: number | null
   isCaptain: boolean
   isOnField: boolean
+  cachedHeadImage?: string | null
+  cachedBodyImage?: string | null
   headImage: string | null
   bodyImage: string | null
   fantasyProjection: number | null
@@ -115,6 +117,13 @@ export interface LineupSportsbetOdds {
   matchDate: string
   match: string
   price: number
+}
+
+export interface LineupMatchPrediction {
+  predMargin: number | null
+  predTotal: number | null
+  lineupContext: unknown | null
+  updatedAt: string | null
 }
 
 export interface LineupCasualtyOut {
@@ -672,6 +681,8 @@ function buildPlayer(
     playerId,
     isCaptain: booleanValue(row.is_captain),
     isOnField,
+    cachedHeadImage: nullableText(row.cached_head_image),
+    cachedBodyImage: nullableText(row.cached_body_image),
     headImage: nullableText(row.head_image),
     bodyImage: nullableText(row.body_image),
     fantasyProjection: includeFantasyProjection

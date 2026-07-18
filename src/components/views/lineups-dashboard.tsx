@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
+import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
@@ -12,6 +13,7 @@ import type {
   LineupLivePlayerState,
   LineupLivePlayerStats,
   LineupMatch,
+  LineupMatchPrediction,
   LineupMatchStats,
   LineupPlayer,
   LineupRecentResult,
@@ -34,6 +36,7 @@ interface LineupsDashboardProps {
   selectedCompetition: LineupCompetition
   teamLogos: Record<string, string>
   sportsbetOdds?: Record<string, LineupSportsbetOdds>
+  matchPredictions?: Record<string, LineupMatchPrediction>
   tryChartsByTeam: Record<string, StatsinsiderTryChart>
   canAccessFantasyProjections: boolean
   summaryDiagnostic?: string | null
@@ -837,9 +840,11 @@ function LiveStatusIcon({ type, compact = false }: { type: "off" | "on"; compact
 function weatherConditionEmoji(condition: string): string {
   const value = condition.toLowerCase()
   if (value.includes("storm")) return "⛈️"
-  if (value.includes("rain") || value.includes("drizzle")) return "🌧️"
-  if (value.includes("snow")) return "❄️"
+  if (value.includes("drizzle")) return "🌦️"
+  if (value.includes("rain")) return "🌧️"
+  if (value.includes("snow")) return "🌨️"
   if (value.includes("fog")) return "🌫️"
+  if (value.includes("partly") || value.includes("mostly")) return "🌤️"
   if (value.includes("cloud")) return "☁️"
   if (value.includes("clear")) return "☀️"
   return "🌤️"
@@ -1474,7 +1479,7 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
   if (!selection || typeof document === "undefined") return null
   const { player, liveState, liveStats, showPregameMetrics } = selection
   const fantasyPpm = fantasyPointsPerMinute(liveStats)
-  const imageSources = playerImageSources(player.headImage, player.bodyImage)
+  const imageSources = playerImageSources(player.cachedHeadImage, player.cachedBodyImage, player.headImage, player.bodyImage)
   const averageItems: PlayerStatDisplayItem[] = DISPLAY_MODES
     .filter((mode): mode is { key: AverageStatKey; label: string; shortLabel: string } => isAverageDisplayMode(mode.key))
     .map((mode) => ({
@@ -1831,7 +1836,7 @@ function PitchPlayer({
   positionPpmBaselines: Record<string, number>
   onPlayerSelect: (player: LineupPlayer) => void
 }) {
-  const imageSources = playerImageSources(player.headImage, player.bodyImage)
+  const imageSources = playerImageSources(player.cachedHeadImage, player.cachedBodyImage, player.headImage, player.bodyImage)
   const position = slotPosition(slot, player, side, orientation, propLaneIndex)
   const compact = orientation === "portrait"
   const liveState = getLivePlayerState(liveMatch, player)
@@ -2185,10 +2190,18 @@ type TeamFormSummary = {
   closeGames: number
 }
 
-type MatchDriver = {
-  label: string
-  homeAdvantage: number
-}
+type MatchDriver =
+  | {
+      kind: "bar"
+      label: string
+      homeAdvantage: number
+      value: string | null
+    }
+  | {
+      kind: "value"
+      label: string
+      value: string
+    }
 
 function teamDisplayName(team: LineupTeam | null, fallback: string): string {
   return team?.team || team?.teamName || fallback
@@ -2235,170 +2248,199 @@ function buildTeamFormSummary(team: string, results: LineupRecentResult[], curre
   }
 }
 
-function projectionTotalForTeam(team: LineupTeam | null): number | null {
-  const projections = (team?.players ?? [])
-    .filter((player) => player.isOnField)
-    .map((player) => player.fantasyProjection)
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
-  return projections.length >= 8 ? projections.reduce((total, value) => total + value, 0) : null
-}
-
 function clampDriver(value: number): number {
   return Math.max(-1, Math.min(1, value))
 }
 
-function buildMatchDrivers(match: LineupMatch, homeSummary: TeamFormSummary, awaySummary: TeamFormSummary): MatchDriver[] {
-  const homeProjection = projectionTotalForTeam(match.homeTeam)
-  const awayProjection = projectionTotalForTeam(match.awayTeam)
+function formatRatingNumber(value: number): string {
+  return value.toFixed(1).replace(/\.0$/, "")
+}
+
+function formatSignedRatingDelta(value: number): string {
+  if (Math.abs(value) < 0.05) return "0"
+  return `${value > 0 ? "+" : ""}${formatRatingNumber(value)}`
+}
+
+function buildRecentMatchupsDriver(match: LineupMatch, homeName: string): MatchDriver | null {
+  const margins = (match.recentHeadToHead ?? [])
+    .map((result) => resultScoreForTeam(result, homeName))
+    .filter((score): score is NonNullable<ReturnType<typeof resultScoreForTeam>> => score != null)
+    .map((score) => score.for - score.against)
+
+  if (margins.length === 0) return null
+
+  const averageMargin = margins.reduce((total, value) => total + value, 0) / margins.length
+  return {
+    kind: "bar",
+    label: "Recent Matchups",
+    homeAdvantage: clampDriver(averageMargin / 24),
+    value: formatSignedRatingDelta(averageMargin),
+  }
+}
+
+function buildMatchDrivers(
+  match: LineupMatch,
+  homeSummary: TeamFormSummary,
+  awaySummary: TeamFormSummary,
+  matchPrediction: LineupMatchPrediction | null
+): MatchDriver[] {
   const drivers: MatchDriver[] = []
+  const homeName = teamDisplayName(match.homeTeam, "Home")
 
-  if (homeProjection != null && awayProjection != null) {
-    drivers.push({ label: "Overall rating", homeAdvantage: clampDriver((homeProjection - awayProjection) / 80) })
-    drivers.push({ label: "Team lists", homeAdvantage: clampDriver((homeProjection - awayProjection) / 60) })
+  if (matchPrediction?.predMargin != null) {
+    drivers.push({
+      kind: "bar",
+      label: "Predicted Margin",
+      homeAdvantage: clampDriver(matchPrediction.predMargin / 24),
+      value: formatSignedRatingDelta(matchPrediction.predMargin),
+    })
   }
 
-  if (homeSummary.pointsFor != null && awaySummary.pointsFor != null && homeSummary.pointsAgainst != null && awaySummary.pointsAgainst != null) {
-    const homeAttackDefence = homeSummary.pointsFor - homeSummary.pointsAgainst
-    const awayAttackDefence = awaySummary.pointsFor - awaySummary.pointsAgainst
-    drivers.push({ label: "Attack vs defence", homeAdvantage: clampDriver((homeAttackDefence - awayAttackDefence) / 28) })
+  if (homeSummary.pointsFor != null && awaySummary.pointsFor != null) {
+    const attackDelta = homeSummary.pointsFor - awaySummary.pointsFor
+    drivers.push({
+      kind: "bar",
+      label: "Attack",
+      homeAdvantage: clampDriver(attackDelta / 18),
+      value: formatSignedRatingDelta(attackDelta),
+    })
   }
 
-  if (homeSummary.winRate != null && awaySummary.winRate != null) {
-    drivers.push({ label: "Recent form", homeAdvantage: clampDriver(homeSummary.winRate - awaySummary.winRate) })
+  if (homeSummary.pointsAgainst != null && awaySummary.pointsAgainst != null) {
+    const defenseDelta = awaySummary.pointsAgainst - homeSummary.pointsAgainst
+    drivers.push({
+      kind: "bar",
+      label: "Defense",
+      homeAdvantage: clampDriver(defenseDelta / 18),
+      value: formatSignedRatingDelta(defenseDelta),
+    })
   }
 
-  drivers.push({ label: "Home ground", homeAdvantage: 0.28 })
+  const recentMatchupsDriver = buildRecentMatchupsDriver(match, homeName)
+  if (recentMatchupsDriver) drivers.push(recentMatchupsDriver)
+
+  if (matchPrediction?.predTotal != null) {
+    drivers.push({ kind: "value", label: "Total Points Prediction", value: formatRatingNumber(matchPrediction.predTotal) })
+  }
+
   return drivers.filter((driver, index, list) => list.findIndex((item) => item.label === driver.label) === index)
 }
 
-function insightText(insight: MatchupInsight): string {
-  return `${insight.title} ${insight.description}`.toLowerCase()
-}
-
-function buildSmartTags({
-  insights,
-  weatherForecast,
-  homeOuts,
-  awayOuts,
-  homeSummary,
-  awaySummary,
+function DriverBar({
+  driver,
+  homeLogo,
+  awayLogo,
+  locked = false,
+  lockValue = false,
 }: {
-  insights: MatchupInsight[]
-  weatherForecast: LineupWeatherForecast | null
-  homeOuts: LineupCasualtyOut[]
-  awayOuts: LineupCasualtyOut[]
-  homeSummary: TeamFormSummary
-  awaySummary: TeamFormSummary
-}): string[] {
-  const tags = new Set<string>()
-  const weather = weatherForecast?.condition.toLowerCase() ?? ""
-  if (weather.includes("rain") || weather.includes("drizzle") || weather.includes("storm")) tags.add("Wet Track")
-  if (homeOuts.length + awayOuts.length > 0) tags.add("Late Mail")
-  for (const insight of insights) {
-    const text = insightText(insight)
-    if (insight.category === "Betting") tags.add("Market Value")
-    if (text.includes("try")) tags.add("Try Edge")
-    if (text.includes("first-half") || text.includes("first half") || text.includes("early") || text.includes("fast")) tags.add("Fast Starter")
-    if (text.includes("close") || text.includes("tight") || text.includes("six or less") || text.includes("one-score")) tags.add("Clutch")
+  driver: MatchDriver
+  homeLogo: string | null
+  awayLogo: string | null
+  locked?: boolean
+  lockValue?: boolean
+}) {
+  if (driver.kind === "value") {
+    return (
+      <div className="my-2 grid grid-cols-[minmax(10.5rem,1fr)_auto] items-center gap-3 border-y border-white/8 py-2 sm:grid-cols-[minmax(13rem,1fr)_auto]">
+        <div className="truncate text-xs font-semibold text-nrl-text">{driver.label}</div>
+        <div className="text-right text-sm font-black tabular-nums text-nrl-text">
+          {lockValue ? <span aria-label="Premium locked" className="grayscale">🔒</span> : driver.value}
+        </div>
+      </div>
+    )
   }
-  if (homeSummary.closeGames >= 2 || awaySummary.closeGames >= 2) tags.add("Clutch")
-  return [...tags].slice(0, 5)
-}
 
-function SmartTagList({ tags }: { tags: string[] }) {
-  if (tags.length === 0) return null
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <span key={tag} className="rounded-md border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-200">
-          {tag}
-        </span>
-      ))}
-    </div>
-  )
-}
+  if (locked) {
+    return (
+      <div className="grid grid-cols-[minmax(10.5rem,1fr)_minmax(0,2.4fr)] items-center gap-3 sm:grid-cols-[minmax(13rem,1fr)_minmax(0,2.6fr)]">
+        <div className="truncate text-xs font-semibold text-nrl-text">{driver.label}</div>
+        <div className="grid h-7 place-items-center rounded-full border border-white/10 bg-white/[0.03]">
+          <BillingPageLink
+            className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:border-emerald-300/35 hover:text-nrl-text"
+            aria-label="View premium billing"
+          >
+            <span aria-hidden="true" className="grayscale">🔒</span>
+            Premium
+          </BillingPageLink>
+        </div>
+      </div>
+    )
+  }
 
-function DriverBar({ driver }: { driver: MatchDriver }) {
-  const width = Math.abs(driver.homeAdvantage) * 50
+  const width = Math.max(4, Math.abs(driver.homeAdvantage) * 50)
   const left = driver.homeAdvantage >= 0 ? 50 - width : 50
+  const logoLeft = driver.homeAdvantage >= 0 ? 50 - width : 50 + width
+  const logo = driver.homeAdvantage >= 0 ? homeLogo : awayLogo
 
   return (
-    <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
+    <div className="grid grid-cols-[minmax(10.5rem,1fr)_minmax(0,2.4fr)] items-center gap-3 sm:grid-cols-[minmax(13rem,1fr)_minmax(0,2.6fr)]">
       <div className="truncate text-xs font-semibold text-nrl-text">{driver.label}</div>
       <div className="relative h-3 rounded-full bg-white/8">
         <div className="absolute left-1/2 top-0 h-full w-px bg-white/20" />
         <div
           className={`absolute top-0 h-full rounded-full ${driver.homeAdvantage >= 0 ? "bg-nrl-accent" : "bg-sky-400"}`}
-          style={{ left: `${left}%`, width: `${Math.max(4, width)}%` }}
+          style={{ left: `${left}%`, width: `${width}%` }}
         />
+        {logo ? (
+          <span
+            aria-hidden="true"
+            className="absolute top-1/2 grid h-5 w-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-nrl-panel p-0.5 ring-1 ring-white/20"
+            style={{ left: `${logoLeft}%` }}
+          >
+            <ImageWithFallback sources={[logo]} alt="" className="h-full w-full object-contain" />
+          </span>
+        ) : null}
       </div>
     </div>
-  )
-}
-
-function MatchReadPanel({
-  match,
-  insights,
-  weatherForecast,
-  smartTags,
-  homeSummary,
-  awaySummary,
-}: {
-  match: LineupMatch
-  insights: MatchupInsight[]
-  weatherForecast: LineupWeatherForecast | null
-  smartTags: string[]
-  homeSummary: TeamFormSummary
-  awaySummary: TeamFormSummary
-}) {
-  const homeName = teamDisplayName(match.homeTeam, "Home")
-  const awayName = teamDisplayName(match.awayTeam, "Away")
-  const homeProjection = projectionTotalForTeam(match.homeTeam)
-  const awayProjection = projectionTotalForTeam(match.awayTeam)
-  const projectedLeader = homeProjection != null && awayProjection != null
-    ? homeProjection >= awayProjection ? homeName : awayName
-    : (homeSummary.winRate ?? 0) >= (awaySummary.winRate ?? 0) ? homeName : awayName
-  const lead = insights[0]
-  const support = insights[1]
-  const weather = weatherForecast ? ` Conditions: ${weatherForecast.condition}.` : ""
-  const read = lead
-    ? `${projectedLeader} shape as the side with the stronger read. ${lead.description}${support ? ` ${support.description}` : ""}${weather}`
-    : `${homeName} and ${awayName} profile as a tighter read from the available data.${weather}`
-
-  return (
-    <section className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/75 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-nrl-accent">Match Read</div>
-        <SmartTagList tags={smartTags} />
-      </div>
-      <p className="text-sm leading-relaxed text-nrl-text">{read}</p>
-      <p className="text-[11px] leading-relaxed text-nrl-muted">Statistical estimates for information only, not betting advice. Gamble responsibly.</p>
-    </section>
   )
 }
 
 function DrivingPickPanel({
   match,
   drivers,
+  teamLogos,
+  canAccessFantasyProjections,
 }: {
   match: LineupMatch
   drivers: MatchDriver[]
+  teamLogos: Record<string, string>
+  canAccessFantasyProjections: boolean
 }) {
   if (drivers.length === 0) return null
+  const homeLogo = resolveLogo(match.homeTeam, teamLogos)
+  const awayLogo = resolveLogo(match.awayTeam, teamLogos)
+
   return (
     <section className="rounded-lg border border-nrl-border bg-nrl-panel/75 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.18em] text-nrl-muted">
-          What&apos;s Driving The Pick
-        </div>
-        <div className="flex min-w-0 items-center gap-2 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
-          <span className="truncate text-nrl-accent">{teamDisplayName(match.homeTeam, "Home")}</span>
-          <span>vs</span>
-          <span className="truncate text-sky-300">{teamDisplayName(match.awayTeam, "Away")}</span>
-        </div>
+      <div className="mb-2 flex justify-end">
+        <details className="group/info relative">
+          <summary
+            className="grid h-6 w-6 cursor-pointer list-none place-items-center rounded-full border border-white/12 bg-white/[0.04] text-[11px] font-black text-nrl-muted transition-colors hover:border-emerald-300/35 hover:text-nrl-text marker:hidden [&::-webkit-details-marker]:hidden"
+            aria-label="Explain matchup drivers"
+            title="Explain matchup drivers"
+          >
+            i
+          </summary>
+          <div className="absolute right-0 top-8 z-20 w-72 rounded-md border border-white/12 bg-[#111a35] p-3 text-[10px] leading-relaxed text-nrl-muted shadow-[0_16px_34px_rgba(0,0,0,0.35)]">
+            <div><span className="font-black text-nrl-text">Predicted Margin:</span> premium model margin projection.</div>
+            <div className="mt-1"><span className="font-black text-nrl-text">Attack:</span> season points-for differential.</div>
+            <div className="mt-1"><span className="font-black text-nrl-text">Defense:</span> season points-against differential.</div>
+            <div className="mt-1"><span className="font-black text-nrl-text">Recent Matchups:</span> average margin from recent head-to-head games.</div>
+            <div className="mt-1"><span className="font-black text-nrl-text">Total Points Prediction:</span> premium model total-points projection.</div>
+          </div>
+        </details>
       </div>
       <div className="space-y-2">
-        {drivers.map((driver) => <DriverBar key={driver.label} driver={driver} />)}
+        {drivers.map((driver) => (
+          <DriverBar
+            key={driver.label}
+            driver={driver}
+            homeLogo={homeLogo}
+            awayLogo={awayLogo}
+            locked={!canAccessFantasyProjections && driver.label === "Predicted Margin"}
+            lockValue={!canAccessFantasyProjections && driver.label === "Total Points Prediction"}
+          />
+        ))}
       </div>
     </section>
   )
@@ -2525,24 +2567,44 @@ function TryChartPlayers({
 }) {
   const players = tryChartPlayers(team, side, inverted)
   const toneClass = tone === "defence"
-    ? "border-[#fb7185]/14 bg-[#fb7185]/8"
-    : "border-emerald-300/12 bg-emerald-300/[0.055]"
+    ? "border-[#fb7185]/45 bg-[#fb7185]/24 shadow-[inset_0_0_18px_rgba(251,113,133,0.12)]"
+    : "border-emerald-300/42 bg-emerald-300/24 shadow-[inset_0_0_18px_rgba(110,231,183,0.12)]"
 
   return (
-    <div className={`grid min-h-[4.75rem] grid-cols-4 gap-1 rounded border p-1 ${toneClass}`}>
+    <div className={`relative grid min-h-[4.75rem] grid-cols-4 gap-1 overflow-hidden rounded border px-1 pb-1 pt-2 ${toneClass}`}>
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2 text-3xl font-black leading-none ${
+          tone === "defence" ? "text-[#fecdd3]/18" : "text-emerald-100/18"
+        }`}
+      >
+        {tone === "defence" ? "↓" : "↑"}
+      </div>
       {players.map(({ label, player }, index) => (
-        <div key={`${label}-${index}`} className="min-w-0 text-center">
-          <div className="mx-auto grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-white/10 bg-nrl-panel text-[7px] font-black text-nrl-muted">
+        <div key={`${label}-${index}`} className="relative z-[1] min-w-0 text-center">
+          {tone === "defence" ? (
+            <>
+              <div className="truncate text-[8px] font-semibold leading-tight text-slate-100" title={player?.player ?? undefined}>
+                {tryChartPlayerDisplayName(player)}
+              </div>
+              <div className="mt-0.5 text-[7px] font-black uppercase leading-none tracking-wide text-nrl-muted">{label}</div>
+            </>
+          ) : null}
+          <div className={`mx-auto grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-white/10 bg-nrl-panel text-[7px] font-black text-nrl-muted ${tone === "defence" ? "mt-1" : ""}`}>
             {player ? (
-              <ImageWithFallback sources={playerImageSources(player.headImage, player.bodyImage)} alt={player.player} className="h-full w-full object-cover object-top" />
+              <ImageWithFallback sources={playerImageSources(player.cachedHeadImage, player.cachedBodyImage, player.headImage, player.bodyImage)} alt={player.player} className="h-full w-full object-cover object-top" />
             ) : (
               label.slice(0, 1)
             )}
           </div>
-          <div className="mt-0.5 text-[7px] font-black uppercase leading-none tracking-wide text-nrl-muted">{label}</div>
-          <div className="mt-0.5 truncate text-[8px] font-semibold leading-tight text-slate-100" title={player?.player ?? undefined}>
-            {tryChartPlayerDisplayName(player)}
-          </div>
+          {tone !== "defence" ? (
+            <>
+              <div className="mt-0.5 text-[7px] font-black uppercase leading-none tracking-wide text-nrl-muted">{label}</div>
+              <div className="mt-0.5 truncate text-[8px] font-semibold leading-tight text-slate-100" title={player?.player ?? undefined}>
+                {tryChartPlayerDisplayName(player)}
+              </div>
+            </>
+          ) : null}
         </div>
       ))}
     </div>
@@ -2581,14 +2643,14 @@ function TryChartField({
     const pct = isConceded ? lane.concededPct : lane.scoredPct
     const count = isConceded ? lane.conceded : lane.scored
     return (
-      <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded px-1 py-1 ${isConceded ? "bg-[#fb7185]/14" : "bg-emerald-300/15"}`}>
+      <div className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 rounded-md border px-1.5 py-1.5 shadow-[0_6px_14px_rgba(0,0,0,0.18)] ${isConceded ? "border-[#fb7185]/45 bg-[#fb7185]/24 shadow-[inset_0_0_18px_rgba(251,113,133,0.12)]" : "border-emerald-300/42 bg-emerald-300/24 shadow-[inset_0_0_18px_rgba(110,231,183,0.12)]"}`}>
         <div>
-          <div className={`h-1.5 rounded-full ${isConceded ? "bg-[#fb7185]/22" : "bg-emerald-300/20"}`}>
-            <div className={`h-full rounded-full ${isConceded ? "bg-[#fb7185]" : "bg-emerald-300"}`} style={{ width: `${Math.max(8, pct * 100)}%` }} />
+          <div className={`h-2 rounded-full ${isConceded ? "bg-[#fb7185]/22" : "bg-emerald-300/20"}`}>
+            <div className={`h-full rounded-full shadow-[0_0_10px_currentColor] ${isConceded ? "bg-[#fb7185] text-[#fb7185]" : "bg-emerald-300 text-emerald-300"}`} style={{ width: `${Math.max(8, pct * 100)}%` }} />
           </div>
-          <div className={`mt-0.5 text-[8px] ${isConceded ? "text-[#fecdd3]/80" : "text-emerald-100/70"}`}>{formatTryChartPct(pct)}</div>
+          <div className={`mt-1 text-center text-[9px] font-black tabular-nums ${isConceded ? "text-[#fecdd3]" : "text-emerald-100"}`}>{formatTryChartPct(pct)}</div>
         </div>
-        <div className={`inline-flex min-w-[2.25rem] items-center justify-start gap-1 text-[9px] font-bold ${isConceded ? "text-[#ffe4e6]" : "text-emerald-200"}`}>
+        <div className={`inline-flex min-w-[2.55rem] items-center justify-start gap-1 rounded bg-black/18 px-1 py-0.5 text-[10px] font-black ${isConceded ? "text-[#ffe4e6]" : "text-emerald-100"}`}>
           <TryChartLogo logo={isConceded ? opponentLogo : teamLogo} label={isConceded ? opponentName : teamName} />
           <span>{count}</span>
         </div>
@@ -2597,15 +2659,38 @@ function TryChartField({
   }
 
   return (
-    <div className="relative overflow-hidden rounded-md border border-emerald-300/20 bg-[linear-gradient(90deg,rgba(16,185,129,0.18),rgba(15,118,110,0.24)),repeating-linear-gradient(0deg,rgba(255,255,255,0.08)_0_1px,transparent_1px_20%)] p-2">
+    <div className="relative overflow-hidden rounded-md border border-lime-300/20 bg-[linear-gradient(90deg,rgba(68,126,47,0.72),rgba(100,153,55,0.62)),repeating-linear-gradient(0deg,rgba(255,255,255,0.12)_0_1px,transparent_1px_20%)] p-2">
       <div className="grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(7.5rem,0.72fr)_minmax(0,1fr)]">
         {lanes.map((lane) => (
-          <div key={lane.label} className="relative min-h-28 rounded border border-white/10 bg-slate-950/20 px-1.5 py-2 text-center">
-            <div className="space-y-2">
-              <TryChartPlayers team={opponentTeam} side={lane.defenceSide} tone="defence" inverted={lane.side !== "middle"} />
-              {barRow("conceded", lane)}
-              {barRow("scored", lane)}
+          <div key={lane.label} className="relative min-h-28 overflow-hidden rounded border border-white/18 bg-green-950/18 px-1.5 py-2 text-center">
+            <div className="pointer-events-none absolute inset-1.5 rounded opacity-55 [background:repeating-linear-gradient(0deg,rgba(255,255,255,0.42)_0_1px,transparent_1px_24px)]" />
+            <div className="relative space-y-2">
+              <div className="relative">
+                {lane.side !== "middle" ? (
+                  <>
+                    <div className={`pointer-events-none absolute top-0 z-10 h-[2px] w-16 shadow-[0_0_10px_rgba(255,255,255,0.42)] ${
+                      lane.side === "left"
+                        ? "left-0 bg-gradient-to-r from-white to-white/0"
+                        : "right-0 bg-gradient-to-l from-white to-white/0"
+                    }`} />
+                    <div className={`pointer-events-none absolute top-0 z-10 h-16 w-[2px] shadow-[0_0_10px_rgba(255,255,255,0.42)] ${
+                      lane.side === "left"
+                        ? "left-0 bg-gradient-to-b from-white to-white/0"
+                        : "right-0 bg-gradient-to-b from-white to-white/0"
+                    }`} />
+                    <div className={`pointer-events-none absolute top-0 z-20 h-4 w-3 ${lane.side === "left" ? "left-0 -translate-x-1/2 -translate-y-1/2" : "right-0 translate-x-1/2 -translate-y-1/2"}`}>
+                      <div className="absolute bottom-0 left-1/2 h-4 w-px -translate-x-1/2 bg-white/70" />
+                      <div className={`absolute top-0 h-2.5 w-2.5 bg-sky-400 ${lane.side === "left" ? "left-1/2" : "right-1/2"}`} />
+                    </div>
+                  </>
+                ) : null}
+                <TryChartPlayers team={opponentTeam} side={lane.defenceSide} tone="defence" inverted={lane.side !== "middle"} />
+              </div>
               <TryChartPlayers team={team} side={lane.side} />
+              <div className="space-y-1.5">
+                {barRow("conceded", lane)}
+                {barRow("scored", lane)}
+              </div>
               <div className="pt-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-slate-200">{lane.label}</div>
             </div>
           </div>
@@ -2693,10 +2778,6 @@ function TeamTryChartCard({
 
   return (
     <div className="rounded-md border border-white/10 bg-nrl-panel-2/65 p-2 shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="min-w-0 truncate text-[10px] font-black text-nrl-text">{teamName}</div>
-        <div className="shrink-0 text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">R{chart.round}</div>
-      </div>
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[8px] font-bold uppercase tracking-[0.12em]">
         <span className="text-emerald-200">Green scored</span>
         <span className="text-red-300">Red conceded</span>
@@ -2723,12 +2804,47 @@ function MatchupTryCharts({
   awayChart: StatsinsiderTryChart | null
   teamLogos: Record<string, string>
 }) {
+  const [selectedTeam, setSelectedTeam] = useState<"home" | "away">("home")
   if (!homeChart && !awayChart) return null
+  const cards = [
+    homeChart && {
+      key: "home" as const,
+      label: shortLineupTeamName(homeTeam?.teamName ?? homeTeam?.team ?? homeChart.team),
+      logo: resolveLogo(homeTeam, teamLogos),
+      card: <TeamTryChartCard team={homeTeam} opponentTeam={awayTeam} chart={homeChart} opponentChart={awayChart ?? homeChart} teamLogos={teamLogos} />,
+    },
+    awayChart && {
+      key: "away" as const,
+      label: shortLineupTeamName(awayTeam?.teamName ?? awayTeam?.team ?? awayChart.team),
+      logo: resolveLogo(awayTeam, teamLogos),
+      card: <TeamTryChartCard team={awayTeam} opponentTeam={homeTeam} chart={awayChart} opponentChart={homeChart ?? awayChart} teamLogos={teamLogos} />,
+    },
+  ].filter((card): card is NonNullable<typeof card> => Boolean(card))
+  const selectedCard = cards.find((card) => card.key === selectedTeam) ?? cards[0]
 
   return (
     <div className="grid gap-2.5">
-      {homeChart && awayChart ? <TeamTryChartCard team={homeTeam} opponentTeam={awayTeam} chart={homeChart} opponentChart={awayChart} teamLogos={teamLogos} /> : null}
-      {awayChart && homeChart ? <TeamTryChartCard team={awayTeam} opponentTeam={homeTeam} chart={awayChart} opponentChart={homeChart} teamLogos={teamLogos} /> : null}
+      {cards.length > 1 ? (
+        <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-md border border-white/10 bg-nrl-panel/70 p-1.5">
+          {cards.map((card) => (
+            <button
+              key={card.key}
+              type="button"
+              onClick={() => setSelectedTeam(card.key)}
+              className={`grid h-8 w-8 place-items-center rounded-full border bg-transparent p-1 transition-colors ${
+                selectedCard?.key === card.key
+                  ? "border-nrl-accent ring-1 ring-nrl-accent/45"
+                  : "border-white/12 opacity-65 hover:border-white/30 hover:opacity-100"
+              }`}
+              aria-label={`Show ${card.label} try chart`}
+              title={card.label}
+            >
+              <TryChartLogo logo={card.logo} label={card.label} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {selectedCard?.card}
     </div>
   )
 }
@@ -2737,8 +2853,7 @@ function MatchupInsightCard({ insight, muted = false }: { insight: MatchupInsigh
   return (
     <div className={`min-w-0 rounded-md border border-white/10 bg-nrl-panel-2/65 px-1.5 py-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.18)] sm:px-2 sm:py-2 ${muted ? "opacity-75" : ""}`}>
       <div className="min-w-0">
-        <div className="text-[9px] font-semibold leading-snug text-nrl-text sm:text-[10px]">{insight.title}</div>
-        <div className="mt-0.5 text-[8px] leading-snug text-nrl-muted sm:text-[9px]">{insight.description}</div>
+        <div className="text-[9px] leading-snug text-white sm:text-[10px]">{insight.description}</div>
       </div>
     </div>
   )
@@ -2760,6 +2875,7 @@ function MatchupInsightsPanel({
   teamLogos: Record<string, string>
 }) {
   const hasTryCharts = Boolean(homeTryChart && awayTryChart)
+  const visibleInsights = insights.slice(0, 4)
 
   return (
     <details
@@ -2770,7 +2886,7 @@ function MatchupInsightsPanel({
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2.5 py-2 marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-nrl-accent">Matchup Insights</span>
         <span className="flex shrink-0 items-center gap-2">
-          <span className="text-[10px] font-semibold tabular-nums text-nrl-muted">{insights.length}</span>
+          <span className="text-[10px] font-semibold tabular-nums text-nrl-muted">{visibleInsights.length}</span>
           <svg
             viewBox="0 0 16 16"
             className="h-4 w-4 text-nrl-muted transition-transform group-open/insights:rotate-180"
@@ -2784,9 +2900,9 @@ function MatchupInsightsPanel({
 
       <div className="max-h-[34rem] overflow-y-auto border-t border-nrl-border p-2">
         <div className="grid gap-2.5">
-          {insights.length > 0 ? (
+          {visibleInsights.length > 0 ? (
             <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
-              {insights.map((insight, insightIndex) => (
+              {visibleInsights.map((insight, insightIndex) => (
                 <MatchupInsightCard key={`${insight.category}-${insight.title}-${insightIndex}`} insight={insight} />
               ))}
             </div>
@@ -2873,6 +2989,7 @@ function LineupCard({
   onStatsSourceChange,
   selectedCompetition,
   canAccessFantasyProjections,
+  matchPrediction,
   detail,
   detailStatus,
   tryChartsByTeam,
@@ -2888,6 +3005,7 @@ function LineupCard({
   onStatsSourceChange: (source: StatsSource) => void
   selectedCompetition: LineupCompetition
   canAccessFantasyProjections: boolean
+  matchPrediction: LineupMatchPrediction | null
   detail: LineupMatchDetailData | null
   detailStatus: "idle" | "loading" | "loaded" | "error"
   tryChartsByTeam: Record<string, StatsinsiderTryChart>
@@ -2997,17 +3115,7 @@ function LineupCard({
     detailMatch.awayRecentResults ?? [],
     "away"
   )
-  const homeOuts = getTeamOuts(homeTeamForDisplay, casualtyWardOuts)
-  const awayOuts = getTeamOuts(awayTeamForDisplay, casualtyWardOuts)
-  const smartTags = buildSmartTags({
-    insights,
-    weatherForecast,
-    homeOuts,
-    awayOuts,
-    homeSummary,
-    awaySummary,
-  })
-  const matchDrivers = buildMatchDrivers(detailMatch, homeSummary, awaySummary)
+  const matchDrivers = buildMatchDrivers(detailMatch, homeSummary, awaySummary, matchPrediction)
 
   useEffect(() => {
     if (window.location.hash !== `#${anchorId}`) return
@@ -3152,15 +3260,12 @@ function LineupCard({
           </div>
         ) : activeDetailView === "insights" ? (
           <div className="space-y-3">
-            <MatchReadPanel
+            <DrivingPickPanel
               match={detailMatch}
-              insights={insights}
-              weatherForecast={weatherForecast}
-              smartTags={smartTags}
-              homeSummary={homeSummary}
-              awaySummary={awaySummary}
+              drivers={matchDrivers}
+              teamLogos={teamLogos}
+              canAccessFantasyProjections={canAccessFantasyProjections}
             />
-            <DrivingPickPanel match={detailMatch} drivers={matchDrivers} />
             <MatchupInsightsPanel
               insights={insights}
               homeTeam={detailMatch.homeTeam}
@@ -3308,6 +3413,7 @@ export function LineupsDashboard({
   selectedYear,
   selectedCompetition,
   teamLogos,
+  matchPredictions = {},
   tryChartsByTeam,
   canAccessFantasyProjections,
   summaryDiagnostic,
@@ -3458,6 +3564,7 @@ export function LineupsDashboard({
                   onStatsSourceChange={setStatsSource}
                   selectedCompetition={selectedCompetition}
                   canAccessFantasyProjections={canAccessFantasyProjections}
+                  matchPrediction={matchPredictions[match.matchId] ?? null}
                   detail={matchDetails[match.matchId]?.detail ?? null}
                   detailStatus={matchDetails[match.matchId]?.status ?? "idle"}
                   tryChartsByTeam={tryChartsByTeam}

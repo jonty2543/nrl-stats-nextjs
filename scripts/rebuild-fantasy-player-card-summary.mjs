@@ -258,7 +258,7 @@ async function fetchAllRows(supabase, table, select, applyFilters = (query) => q
 }
 
 async function fetchPlayerImages(supabase) {
-  return fetchAllRows(supabase, "player_images", "player,team,number,position,head_image,body_image,last_seen_match_date");
+  return fetchAllRows(supabase, "player_images", "player,team,number,position,cached_head_image,cached_body_image,head_image,body_image,last_seen_match_date");
 }
 
 async function fetchTeamLogos(supabase) {
@@ -367,6 +367,25 @@ async function fetchPlayerStats2026(supabase) {
       stats: row,
     }))
     .filter((row) => row.player && row.fantasy != null && (row.minutes ?? 0) > 0);
+}
+
+async function fetchBettingTryscorerFormRows(supabase, year) {
+  const rows = await fetchAllRows(
+    supabase,
+    "player_stats",
+    "player,team,position,match_date,round,tries",
+    (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`)
+  );
+  return rows
+    .map((row) => ({
+      player: typeof row.player === "string" ? row.player.trim() : "",
+      team: typeof row.team === "string" ? row.team.trim() : null,
+      position: typeof row.position === "string" ? row.position.trim() : null,
+      matchDate: typeof row.match_date === "string" ? row.match_date : "",
+      round: Number.parseInt(String(row.round ?? "").match(/\d+/)?.[0] ?? "0", 10),
+      tries: toNum(row.tries) ?? 0,
+    }))
+    .filter((row) => row.player && row.matchDate);
 }
 
 function currentYearInBrisbane() {
@@ -1091,7 +1110,7 @@ async function fetchLineupRoundOptionsSummary(supabase, year) {
   return [...byRound.values()].sort((a, b) => a.roundNumber - b.roundNumber);
 }
 
-async function fetchLineupMatchesSummary(supabase, round, year) {
+async function fetchLineupMatchesSummary(supabase, round, year, playerImages = []) {
   const rows = await fetchAllRows(
     supabase,
     "lineups",
@@ -1143,6 +1162,7 @@ async function fetchLineupMatchesSummary(supabase, round, year) {
     const number = toNum(row.number);
     const modelProjection = toNum(row.model_projection);
     const projectionDelta = overrideByKey.get(`${row.match_id ?? ""}:${row.player_id ?? ""}`) ?? 0;
+    const playerImage = resolvePlayerImage(text(row.player), null, text(row.team), playerImages);
     group.players.push({
       matchId,
       team: text(row.team),
@@ -1155,8 +1175,10 @@ async function fetchLineupMatchesSummary(supabase, round, year) {
       playerId: toNum(row.player_id),
       isCaptain: booleanValue(row.is_captain),
       isOnField: booleanValue(row.is_on_field),
-      headImage: nullableText(row.head_image),
-      bodyImage: nullableText(row.body_image),
+      cachedHeadImage: nullableText(playerImage?.cached_head_image),
+      cachedBodyImage: nullableText(playerImage?.cached_body_image),
+      headImage: nullableText(playerImage?.head_image) ?? nullableText(row.head_image),
+      bodyImage: nullableText(playerImage?.body_image) ?? nullableText(row.body_image),
       fantasyProjection: isZeroProjectionPosition(row.position)
         ? 0
         : modelProjection == null
@@ -1326,7 +1348,66 @@ function bettingMatchKey(homeTeam, awayTeam) {
   return [teamGroup(homeTeam), teamGroup(awayTeam)].filter(Boolean).sort().join("|");
 }
 
-function buildBettingPageSummaryRow({ year, matches, recentResults, teamLogos }) {
+function teamLogoFromSummary(team, teamLogos) {
+  if (!team) return null;
+  return teamLogos[normaliseName(team)] ?? teamLogos[normaliseTeamKey(team)] ?? teamLogos[teamGroup(team)] ?? null;
+}
+
+function buildBettingTryscorerFormByPlayer(playerStatsRows, teamLogos) {
+  const byPlayer = new Map();
+  for (const row of playerStatsRows) {
+    const key = normaliseName(row.player);
+    if (!key || !row.matchDate) continue;
+    const bucket = byPlayer.get(key) ?? [];
+    bucket.push(row);
+    byPlayer.set(key, bucket);
+  }
+
+  return Object.fromEntries([...byPlayer.entries()].map(([key, rows]) => {
+    const latestRows = [...rows].sort((a, b) => b.matchDate.localeCompare(a.matchDate) || b.round - a.round);
+    const latest = latestRows[0];
+    const tries2026 = rows.reduce((total, row) => total + (row.tries ?? 0), 0);
+    return [key, {
+      player: latest?.player ?? rows[0]?.player ?? key,
+      team: latest?.team ?? primaryTeam(rows),
+      position: latest?.position ?? latestPosition(rows),
+      gamesPlayed: rows.length,
+      tries2026,
+      lastFive: latestRows.slice(0, 5).map((row) => row.tries ?? 0),
+      average: rows.length > 0 ? tries2026 / rows.length : 0,
+      teamLogoUrl: teamLogoFromSummary(latest?.team ?? primaryTeam(rows), teamLogos),
+    }];
+  }));
+}
+
+function buildPlayerTeamsByName(playerStatsRows) {
+  const teams = new Map();
+  for (const row of [...playerStatsRows].sort((a, b) => b.matchDate.localeCompare(a.matchDate) || b.round - a.round)) {
+    const key = normaliseName(row.player);
+    if (key && row.team && !teams.has(key)) teams.set(key, row.team);
+  }
+  return Object.fromEntries(teams);
+}
+
+function buildLineupPlayersByMatch(matches) {
+  const lineupsByMatch = {};
+  for (const match of matches) {
+    const { home, away } = matchTeams(match);
+    const matchDate = String(match.matchDate ?? "").slice(0, 10);
+    const matchKey = bettingMatchKey(home, away);
+    if (!home || !away || !matchDate || !matchKey) continue;
+
+    const lineup = {
+      homeTeam: match.homeTeam ?? null,
+      awayTeam: match.awayTeam ?? null,
+    };
+    lineupsByMatch[`${matchDate}|${matchKey}`] = lineup;
+    lineupsByMatch[matchKey] = lineup;
+  }
+  return lineupsByMatch;
+}
+
+function buildBettingPageSummaryRow({ year, matches, recentResults, teamLogos, playerStatsRows }) {
   const teamLastFiveByMatch = {};
   const games = matches.flatMap((match) => {
     const { home, away } = matchTeams(match);
@@ -1368,6 +1449,10 @@ function buildBettingPageSummaryRow({ year, matches, recentResults, teamLogos })
     id: "current",
     year,
     games,
+    team_logos: teamLogos,
+    player_teams_by_name: buildPlayerTeamsByName(playerStatsRows),
+    tryscorer_form_by_player: buildBettingTryscorerFormByPlayer(playerStatsRows, teamLogos),
+    lineup_players_by_match: buildLineupPlayersByMatch(matches),
     team_last_five_by_match: teamLastFiveByMatch,
     updated_at: new Date().toISOString(),
   };
@@ -1410,6 +1495,7 @@ async function main() {
     casualtyRows,
     projectionSigmas,
     playerTryHistoryRows,
+    bettingTryscorerRows,
   ] = await Promise.all([
     fetchFantasyPlayers(),
     fetchCoachPlayers(),
@@ -1438,6 +1524,10 @@ async function main() {
       console.warn("Unable to fetch player try history summary rows.", error);
       return [];
     }),
+    fetchBettingTryscorerFormRows(supabaseNrl, currentYear).catch((error) => {
+      console.warn("Unable to fetch betting tryscorer form rows.", error);
+      return [];
+    }),
   ]);
 
   const statsByName = buildStatsByName(playerStats2026);
@@ -1457,7 +1547,7 @@ async function main() {
   const lineupsRound = currentRoundOption(lineupsRoundOptions, lineups.round);
   const today = getTodayInBrisbane();
   const currentRoundSummary = lineupsRound ? await Promise.all([
-    fetchLineupMatchesSummary(supabaseNrl, lineupsRound.value, currentYear).catch((error) => {
+    fetchLineupMatchesSummary(supabaseNrl, lineupsRound.value, currentYear, playerImages).catch((error) => {
       console.warn("Unable to fetch lineups matches for page summary.", error);
       return [];
     }),
@@ -1497,6 +1587,7 @@ async function main() {
         matches,
         recentResults,
         teamLogos: lineupsTeamLogos,
+        playerStatsRows: bettingTryscorerRows,
       }),
     };
   }) : null;

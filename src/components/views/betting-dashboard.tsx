@@ -26,6 +26,7 @@ interface BettingDashboardProps {
   tryscorerFormByPlayer?: Record<string, TryscorerFormSummary>;
   tryscorerLastFiveVsOpponentByMatch?: Record<string, unknown>;
   tryscorerKickoffsByMatch?: Record<string, string>;
+  lineupPlayersByMatch?: Record<string, unknown>;
   lineupLinksByMatchKey?: Record<string, string>;
   teamFormByMatchKey?: Record<string, string[]>;
 }
@@ -224,9 +225,9 @@ interface MobileBetSlip {
   legs: ManualBetLegDraft[];
 }
 
-const MARKET_TABS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
-const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["H2H", "Line", "Total", "Tryscorer"];
-const DEFAULT_BETTING_MARKET: BettingMarket = "H2H";
+const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Total"];
+const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Total"];
+const DEFAULT_BETTING_MARKET: BettingMarket = "Tryscorer";
 const TOTAL_MODEL_BETA_MARKET: BettingMarket = "Total";
 const SUSPICIOUS_EDGE_THRESHOLD_PP = 6;
 const SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP = 10;
@@ -238,6 +239,12 @@ const SUSPICIOUS_EDGE_WARNING_COPY =
   "If the model has an edge > 6% on the market, this may be suspicious and suggest the market knows something the model doesn't";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
+const WEEKLY_FREE_BET_LOCAL_KEY_PREFIX = "weekly-free-bet-v1";
+const WEEKLY_FREE_BET_NONE_VALUE = "none";
+const FREE_BET_MIN_EDGE_PP = 2;
+const FREE_BET_MAX_EDGE_PP = 6;
+const BEST_BETS_TRYSCORER_MAX_ODDS = 8;
+const BEST_BETS_TRYSCORER_MIN_PREMIUM_STAR_RATING = 2;
 const BETTING_PANEL_HEADER_CLASS = "text-[10px] font-bold uppercase tracking-[0.22em]";
 const BETTING_TOUR_HIGHLIGHT_CLASS = "relative z-[140] ring-2 ring-emerald-300/75 shadow-[0_20px_55px_rgba(0,0,0,0.38)]";
 const BETTING_TOUR_STEPS: Array<{
@@ -393,6 +400,35 @@ function buildMatchGroupKey(match: string): string {
   const { home, away } = parseMatch(match);
   if (!home || !away) return normaliseLookupKey(match);
   return [normaliseTeamMatchKey(home), normaliseTeamMatchKey(away)].sort().join("|");
+}
+
+function hasLineupPlayers(value: unknown): boolean {
+  if (typeof value === "string") return normaliseLookupKey(value).length > 0;
+  if (Array.isArray(value)) return value.some((item) => hasLineupPlayers(item));
+  if (!value || typeof value !== "object") return false;
+
+  const row = value as Record<string, unknown>;
+  const player =
+    typeof row.player === "string" ? row.player :
+      typeof row.playerName === "string" ? row.playerName :
+        typeof row.name === "string" ? row.name :
+          "";
+  if (normaliseLookupKey(player)) return true;
+
+  return ["players", "homeTeam", "awayTeam", "home", "away", "lineup"].some((key) => hasLineupPlayers(row[key]));
+}
+
+function hasAnnouncedLineupsForGroup(group: EventGroup, lineupPlayersByMatch: Record<string, unknown>): boolean {
+  const matchKey = buildMatchGroupKey(group.match);
+  const lookupKeys = [
+    `${group.date}|${matchKey}`,
+    matchKey,
+    `${group.date}|${normaliseLookupKey(group.match)}`,
+    normaliseLookupKey(group.match),
+    group.match,
+  ].filter(Boolean);
+
+  return lookupKeys.some((key) => hasLineupPlayers(lineupPlayersByMatch[key]));
 }
 
 function kickoffSortMs(group: Pick<EventGroup, "date" | "match">, kickoffsByMatch: Record<string, string>): number {
@@ -1394,7 +1430,10 @@ function lookupTeamLastFiveForm({
 }): string[] {
   const teamKey = normaliseTeamMatchKey(stripSelectionLineSuffix(selection));
   if (!teamKey) return [];
-  return formByMatchKey[`${date}|${buildMatchGroupKey(match)}|${teamKey}`] ?? [];
+  const matchKey = buildMatchGroupKey(match);
+  const exact = formByMatchKey[`${date}|${matchKey}|${teamKey}`];
+  if (exact) return exact;
+  return Object.entries(formByMatchKey).find(([key]) => key.endsWith(`|${matchKey}|${teamKey}`))?.[1] ?? [];
 }
 
 function TeamLastFivePills({ values }: { values: string[] }) {
@@ -1456,6 +1495,15 @@ function SuspiciousEdgeCaution() {
     >
       ⚠️
     </span>
+  );
+}
+
+function PremiumValueMask({ className = "w-12" }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-block h-3 rounded-full bg-white/22 blur-[2px] ${className}`}
+    />
   );
 }
 
@@ -1930,7 +1978,8 @@ function buildBestBets({
         modelProbability == null ||
         implied == null ||
         bestBookie == null ||
-        odds <= 1
+        odds <= 1 ||
+        (group.market === "Tryscorer" && odds > BEST_BETS_TRYSCORER_MAX_ODDS)
       ) {
         continue;
       }
@@ -1994,8 +2043,11 @@ function buildBestBets({
     const marketCandidates = sorted.filter((candidate) => candidate.market === market);
     const displaySorted = applyFeaturedBestBetOverride(marketCandidates, todayIso);
     const biggestEdgeId = [...marketCandidates].sort((a, b) => b.edgePp - a.edgePp)[0]?.id;
+    const displayCandidates = market === "Tryscorer"
+      ? displaySorted.filter((candidate) => betScoreStarRating(candidate.score).rating > BEST_BETS_TRYSCORER_MIN_PREMIUM_STAR_RATING)
+      : displaySorted.slice(0, BEST_BETS_CONFIG.maxCards);
 
-    return displaySorted.slice(0, BEST_BETS_CONFIG.maxCards).map((candidate, index) => {
+    return displayCandidates.map((candidate, index) => {
       const tags: string[] = [];
       if (index === 0) tags.push("Top Rated Bet");
       if (candidate.id === biggestEdgeId) tags.push("Highest Edge");
@@ -2009,6 +2061,62 @@ function buildBestBets({
       };
     });
   });
+}
+
+function localIsoDateFromMs(value: number): string {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function weeklyFreeBetKey(nowMs: number, market: BettingMarket): string {
+  const date = new Date(localIsoDateFromMs(nowMs));
+  const day = date.getDay();
+  const daysSinceMonday = (day + 6) % 7;
+  date.setDate(date.getDate() - daysSinceMonday);
+  return `${WEEKLY_FREE_BET_LOCAL_KEY_PREFIX}:${localIsoDateFromMs(date.getTime())}:${market}`;
+}
+
+function isWeekendBet(date: string): boolean {
+  const day = new Date(`${date}T12:00:00`).getDay();
+  return day === 0 || day === 6;
+}
+
+function isBestBetExpired(
+  bet: BestBetCandidate,
+  kickoffsByMatch: Record<string, string>,
+  nowMs: number
+): boolean {
+  const startMs = eventStartMs(bet, kickoffsByMatch);
+  return startMs != null && startMs <= nowMs;
+}
+
+function weeklyFreeBetCandidates(
+  bets: BestBetCandidate[],
+  kickoffsByMatch: Record<string, string>,
+  nowMs: number
+): BestBetCandidate[] {
+  return bets.filter((bet) => isWeeklyFreeBetEligible(bet, kickoffsByMatch, nowMs));
+}
+
+function isWeeklyFreeBetEligible(
+  bet: BestBetCandidate,
+  kickoffsByMatch: Record<string, string>,
+  nowMs: number
+): boolean {
+  return bet.edgePp >= FREE_BET_MIN_EDGE_PP &&
+    bet.edgePp <= FREE_BET_MAX_EDGE_PP &&
+    (bet.market !== "Tryscorer" || bet.odds <= BEST_BETS_TRYSCORER_MAX_ODDS) &&
+    !isBestBetExpired(bet, kickoffsByMatch, nowMs);
+}
+
+function chooseWeeklyFreeBetId(candidates: BestBetCandidate[]): string | null {
+  if (candidates.length === 0) return null;
+  const weekendCandidates = candidates.filter((bet) => isWeekendBet(bet.date));
+  const pool = weekendCandidates.length > 0 ? weekendCandidates : candidates;
+  return pool[Math.floor(Math.random() * pool.length)]?.id ?? null;
 }
 
 function buildArbitrageBets({
@@ -2109,6 +2217,7 @@ export function BettingDashboard({
   tryscorerFormByPlayer = {},
   tryscorerLastFiveVsOpponentByMatch = {},
   tryscorerKickoffsByMatch = {},
+  lineupPlayersByMatch = {},
   lineupLinksByMatchKey = {},
   teamFormByMatchKey = {},
 }: BettingDashboardProps) {
@@ -2201,8 +2310,10 @@ export function BettingDashboard({
     : selectedMarket === "Line"
       ? lineGroups
       : selectedMarket === "Total"
-        ? totalGroups
+      ? totalGroups
         : tryscorerGroups;
+  const showTeamListsAccuracyNote = selectedMarketGroups.length > 0 &&
+    selectedMarketGroups.every((group) => !hasAnnouncedLineupsForGroup(group, lineupPlayersByMatch));
   const bestBets = useMemo(
     () => buildBestBets({
       groups: [...h2hGroups, ...lineGroups, ...totalGroups, ...tryscorerGroups],
@@ -3643,9 +3754,11 @@ export function BettingDashboard({
         }`}
       >
         <MarketTabsRail selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
-        <div className="rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
-          Note: edge and ratings are more accurate once team lists have been announced.
-        </div>
+        {showTeamListsAccuracyNote ? (
+          <div className="rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
+            Note: edge and ratings are more accurate once team lists have been announced.
+          </div>
+        ) : null}
         <section className="min-w-0">
           <MarketSection
             groups={selectedMarketGroups}
@@ -3737,9 +3850,10 @@ function BestBetsHero({
   isTourActive?: boolean;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
-  const [selectedModelMarket, setSelectedModelMarket] = useState<BettingMarket>("H2H");
+  const [selectedModelMarket, setSelectedModelMarket] = useState<BettingMarket>(DEFAULT_BETTING_MARKET);
   const [selectedBestBetIds, setSelectedBestBetIds] = useState<Partial<Record<"model" | "arbitrage", string>>>({});
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [weeklyFreeBetId, setWeeklyFreeBetId] = useState<string | null | undefined>(undefined);
   const [bestBetSlip, setBestBetSlip] = useState<{
     bet: BestBetCandidate;
     odds: number;
@@ -3770,8 +3884,21 @@ function BestBetsHero({
     () => modelBets.filter((bet) => bet.market === selectedModelMarket),
     [modelBets, selectedModelMarket]
   );
+  const weeklyFreeBetCandidatesList = useMemo(
+    () => weeklyFreeBetCandidates(selectedModelBets, tryscorerKickoffsByMatch, nowMs),
+    [nowMs, selectedModelBets, tryscorerKickoffsByMatch]
+  );
+  const weeklyFreeBet = useMemo(() => {
+    if (weeklyFreeBetId == null) return null;
+    const bet = selectedModelBets.find((candidate) => candidate.id === weeklyFreeBetId) ?? null;
+    if (!bet || !isWeeklyFreeBetEligible(bet, tryscorerKickoffsByMatch, nowMs)) return null;
+    return bet;
+  }, [nowMs, selectedModelBets, tryscorerKickoffsByMatch, weeklyFreeBetId]);
   const activeSelectedBestBetId = selectedBestBetIds[category];
   const activeItems = useMemo(() => {
+    if (!canAccessPremium && !isArbitrage) return weeklyFreeBet ? [weeklyFreeBet] : [];
+    if (!isArbitrage) return selectedModelBets;
+
     const sortedItems = isArbitrage ? ratedArbitrageBets : selectedModelBets;
     if (!activeSelectedBestBetId) return sortedItems;
 
@@ -3786,9 +3913,13 @@ function BestBetsHero({
       ...sortedItems.slice(0, selectedIndex),
       ...sortedItems.slice(selectedIndex + 1),
     ];
-  }, [activeSelectedBestBetId, isArbitrage, ratedArbitrageBets, selectedModelBets]);
-  const featuredItem = activeItems[0] ?? null;
-  const queueItems = activeItems.slice(1);
+  }, [activeSelectedBestBetId, canAccessPremium, isArbitrage, ratedArbitrageBets, selectedModelBets, weeklyFreeBet]);
+  const featuredItem = !canAccessPremium && !isArbitrage
+    ? weeklyFreeBet
+    : activeItems[0] ?? null;
+  const queueItems = !canAccessPremium && !isArbitrage
+    ? selectedModelBets.filter((bet) => bet.id !== weeklyFreeBet?.id)
+    : activeItems.slice(1);
   const activeTheme = isArbitrage
     ? {
         label: "Arbitrage",
@@ -3798,7 +3929,7 @@ function BestBetsHero({
         metric: "text-violet-300 drop-shadow-[0_0_10px_rgba(139,92,246,0.24)]",
       }
     : {
-        label: "Model Value",
+        label: "Free Bet",
         pill: "border-nrl-accent/45 bg-nrl-accent/12 text-nrl-accent",
         activeBorder: "border-nrl-accent/45",
         activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.08)]",
@@ -3821,6 +3952,27 @@ function BestBetsHero({
     const intervalId = window.setInterval(() => setNowMs(Date.now()), 30_000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (canAccessPremium || isArbitrage) return;
+    let cancelled = false;
+    const key = weeklyFreeBetKey(nowMs, selectedModelMarket);
+    const storedValue = window.localStorage.getItem(key);
+    let nextId: string | null = null;
+    if (storedValue) {
+      nextId = storedValue === WEEKLY_FREE_BET_NONE_VALUE ? null : storedValue;
+    } else {
+      nextId = chooseWeeklyFreeBetId(weeklyFreeBetCandidatesList);
+      window.localStorage.setItem(key, nextId ?? WEEKLY_FREE_BET_NONE_VALUE);
+    }
+
+    window.setTimeout(() => {
+      if (!cancelled) setWeeklyFreeBetId(nextId);
+    }, 0);
+    return () => {
+      cancelled = true;
+    };
+  }, [canAccessPremium, isArbitrage, nowMs, selectedModelMarket, weeklyFreeBetCandidatesList]);
 
   const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
     setCategory(nextCategory);
@@ -3855,7 +4007,7 @@ function BestBetsHero({
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3 sm:px-5">
         <div className={`${BETTING_PANEL_HEADER_CLASS} text-nrl-text`}>
-          Today&apos;s Best Bets
+          Best Bets
         </div>
         <div className="flex gap-2">
           <button
@@ -3867,7 +4019,7 @@ function BestBetsHero({
                 : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
             }`}
           >
-            Model Value <span className="ml-1 text-nrl-muted">{modelBets.length}</span>
+            Best Bets <span className="ml-1 text-nrl-muted">{modelBets.length}</span>
           </button>
           <button
             type="button"
@@ -3913,20 +4065,34 @@ function BestBetsHero({
         <div className="border-t border-white/8 px-4 py-2.5 text-sm text-nrl-muted sm:px-5">
           {isArbitrage
             ? "No arbitrage markets currently identified."
-            : `No strong ${formatBestBetMarketLabel(selectedModelMarket).toLowerCase()} model value currently identified.`}
+            : !canAccessPremium
+              ? "No free bets available"
+              : `No strong ${formatBestBetMarketLabel(selectedModelMarket).toLowerCase()} model value currently identified.`}
         </div>
       ) : featuredItem ? (
-        <div className="space-y-3 p-3">
+        <div className="space-y-4 p-4">
+          {!isArbitrage ? (
+            <div className="flex items-center justify-between gap-3 px-1 py-1.5">
+              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-text">
+                Free Bet
+              </div>
+              <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
+                {formatBestBetMarketLabel((featuredItem as BestBetCandidate).market)}
+              </div>
+            </div>
+          ) : null}
           <article
             onClick={!isArbitrage ? () => onOpenMarket(featuredItem as BestBetCandidate) : undefined}
-            className={`rounded-lg border bg-[#14213b] px-3 py-3 sm:px-4 ${activeTheme.activeBorder} ${activeTheme.activeShadow} ${!isArbitrage ? "cursor-pointer transition-colors hover:bg-[#172743]" : ""}`}
+            className={`rounded-lg border bg-[#14213b] px-3 py-3 sm:px-4 ${activeTheme.activeBorder} ${activeTheme.activeShadow} ${!isArbitrage ? "mb-8 cursor-pointer transition-colors hover:bg-[#172743]" : ""}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-sm border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${activeTheme.pill}`}>
-                    {activeTheme.label}
-                  </span>
+                  {isArbitrage ? (
+                    <span className={`rounded-sm border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${activeTheme.pill}`}>
+                      {activeTheme.label}
+                    </span>
+                  ) : null}
                   <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
                     {isArbitrage ? "H2H" : (featuredItem as BestBetCandidate).market}
                   </span>
@@ -3956,7 +4122,7 @@ function BestBetsHero({
                     : (featuredItem as BestBetCandidate).match}
                 </div>
               </div>
-              <div className="shrink-0 text-right">
+              <div className="flex w-52 shrink-0 justify-center">
                 {isArbitrage ? (
                   <>
                     <div className={`text-3xl font-bold leading-none sm:text-4xl ${activeTheme.metric}`}>
@@ -4038,39 +4204,32 @@ function BestBetsHero({
               </div>
             ) : (
               <div className="mt-3">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/8 pt-3 text-xs">
-                  <div>
-                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
-                    <div className="mt-0.5 flex items-center gap-2 text-white">
-                      <div className="flex items-center gap-1">
-                        {(featuredItem as BestBetCandidate).bestBookies.slice(0, 3).map((bookie) => (
-                          <BookieLogo key={`${(featuredItem as BestBetCandidate).id}-${bookie}`} bookie={bookie} compact />
-                        ))}
+                <div className="relative border-t border-white/8 pt-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pr-52">
+                    <div>
+                      <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
+                      <div className="mt-0.5 flex items-center gap-2 text-white">
+                        <div className="flex items-center gap-1">
+                          {(featuredItem as BestBetCandidate).bestBookies.slice(0, 3).map((bookie) => (
+                            <BookieLogo key={`${(featuredItem as BestBetCandidate).id}-${bookie}`} bookie={bookie} compact />
+                          ))}
+                        </div>
+                        <span className="text-base font-bold">{formatPrice((featuredItem as BestBetCandidate).odds)}</span>
+                        {(featuredItem as BestBetCandidate).bestBookieCount > 3 ? (
+                          <span className="text-[10px] text-nrl-muted">+{(featuredItem as BestBetCandidate).bestBookieCount - 3} books</span>
+                        ) : null}
                       </div>
-                      <span className="text-base font-bold">{formatPrice((featuredItem as BestBetCandidate).odds)}</span>
-                      {(featuredItem as BestBetCandidate).bestBookieCount > 3 ? (
-                        <span className="text-[10px] text-nrl-muted">+{(featuredItem as BestBetCandidate).bestBookieCount - 3} books</span>
-                      ) : null}
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
+                      <div className="mt-0.5 font-semibold text-nrl-text">
+                        <span className="text-white">{formatPct((featuredItem as BestBetCandidate).modelProbability * 100)}</span>
+                        <span className="mx-1.5 text-nrl-muted">vs</span>
+                        <span>{formatPct((featuredItem as BestBetCandidate).impliedProbability * 100)}</span>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
-                    <div className="mt-0.5 font-semibold text-nrl-text">
-                      <span className="text-white">{formatPct((featuredItem as BestBetCandidate).modelProbability * 100)}</span>
-                      <span className="mx-1.5 text-nrl-muted">vs</span>
-                      <span>{formatPct((featuredItem as BestBetCandidate).impliedProbability * 100)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {(featuredItem as BestBetCandidate).marketEfficiencyPct != null ? (
-                  <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
-                    Market {formatPct((featuredItem as BestBetCandidate).marketEfficiencyPct)}
-                  </div>
-                ) : null}
-
-                {canAccessPremium ? (
-                  <div className="mt-3">
+                  {canAccessPremium ? (
                     <button
                       type="button"
                       onClick={(event) => {
@@ -4083,110 +4242,193 @@ function BestBetsHero({
                           stake: bet.kellyStake,
                         });
                       }}
-                      className="w-full cursor-pointer rounded-md border border-white/12 bg-white/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-nrl-text transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12 hover:text-emerald-300"
+                      aria-label="Add to bet tracker"
+                      className="absolute right-0 top-3 grid h-8 w-52 cursor-pointer place-items-center text-emerald-300"
                     >
-                      Add To Bet Tracker
+                      <span className="relative grid h-8 w-8 place-items-center rounded-full border border-emerald-300/35 bg-emerald-400/10 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/16 hover:text-emerald-200">
+                        <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current" />
+                        <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-0.5 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current" />
+                      </span>
                     </button>
-                  </div>
-                ) : null}
+                  ) : null}
+                </div>
               </div>
             )}
           </article>
 
           {queueItems.length > 0 ? (
             <div>
+              <div className="mb-2 flex items-center justify-between gap-3 px-1">
+                <div className={`text-[9px] font-bold uppercase tracking-[0.16em] ${isArbitrage ? "text-violet-200" : "text-nrl-text"}`}>
+                  {isArbitrage ? "More Arbitrage" : "Premium Bets"}
+                </div>
+                <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
+                  {queueItems.length} {queueItems.length === 1 ? "pick" : "picks"}
+                </div>
+              </div>
               <div className="relative rounded-lg border border-white/8 bg-[#0f1732]/70">
                 <div
                   ref={queueViewportRef}
-                  className={`max-h-[176px] space-y-1.5 overflow-y-auto overscroll-contain p-2 pr-1 [scrollbar-color:rgba(148,163,184,0.32)_transparent] ${!canAccessPremium ? "pointer-events-none select-none opacity-75" : ""}`}
+                  className={`${!canAccessPremium ? "h-12 select-none opacity-75" : isArbitrage ? "max-h-[176px] space-y-1.5" : "max-h-[236px] space-y-3"} overflow-y-auto overscroll-contain p-2 pr-1 [scrollbar-color:rgba(148,163,184,0.32)_transparent]`}
                 >
-                {queueItems.map((item) => {
+                {!canAccessPremium ? (
+                  <div className="grid h-full place-items-center">
+                    <BillingPageLink
+                      className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:border-emerald-300/35 hover:text-nrl-text"
+                      aria-label="View premium billing"
+                    >
+                      <span aria-hidden="true" className="grayscale">🔒</span>
+                      Premium
+                    </BillingPageLink>
+                  </div>
+                ) : queueItems.map((item) => {
                   const isLocked = !canAccessPremium;
-                  const rowContent = (
+                  const rowContent = isArbitrage ? (
                     <div className={`flex min-h-[38px] items-center justify-between gap-3 rounded-md border border-white/8 bg-nrl-panel/72 px-2.5 py-1.5 text-left transition-colors ${canAccessPremium ? "hover:border-white/20" : ""}`}>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-sm border px-1 py-0.5 text-[7px] font-bold uppercase tracking-[0.14em] ${activeTheme.pill}`}>
-                            {isLocked ? "Premium" : activeTheme.label}
+                            {activeTheme.label}
                           </span>
-                          <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
-                            {isArbitrage ? "H2H" : isLocked ? "Locked" : (item as BestBetCandidate).market}
-                          </span>
+                          <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">H2H</span>
                           <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
                             {formatEventCountdown(item, tryscorerKickoffsByMatch, nowMs)}
                           </span>
                         </div>
                         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-white">
-                          {!isLocked && isArbitrage ? (
+                          {!isLocked ? (
                             <MatchLogoCluster match={(item as ArbitrageCandidate).match} teamLogos={teamLogos} className="h-4 w-4" />
-                          ) : !isLocked ? (
-                            <BettingTeamLogos
-                              selection={(item as BestBetCandidate).selection}
-                              match={(item as BestBetCandidate).match}
-                              market={(item as BestBetCandidate).market}
-                              teamLogos={teamLogos}
-                              className="h-4 w-4"
-                            />
                           ) : null}
-                          <span className="truncate">
-                          {isLocked
-                            ? "Selection hidden"
-                            : isArbitrage
-                              ? (item as ArbitrageCandidate).match
-                              : (item as BestBetCandidate).selectionLabel}
-                          </span>
+                          <span className="truncate">{isLocked ? "Selection hidden" : (item as ArbitrageCandidate).match}</span>
                         </div>
                         <div className="mt-1 flex min-w-0 items-center gap-1 text-[10px] font-semibold text-nrl-muted">
                           {isLocked ? (
                             <span>Odds hidden</span>
-                          ) : isArbitrage ? (
-                            <>
-                              {(item as ArbitrageCandidate).stakes.slice(0, 2).map((stake) => (
-                                <span key={`${item.id}-${stake.selection}`} className="inline-flex items-center gap-0.5">
-                                  {stake.bookies.slice(0, 1).map((bookie) => (
-                                    <BookieLogo key={`${item.id}-${stake.selection}-${bookie}`} bookie={bookie} compact />
-                                  ))}
-                                  <span>{formatPrice(stake.odds)}</span>
-                                </span>
-                              ))}
-                            </>
                           ) : (
-                            <>
-                              {(item as BestBetCandidate).bestBookies.slice(0, 2).map((bookie) => (
-                                <BookieLogo key={`${item.id}-${bookie}`} bookie={bookie} compact />
-                              ))}
-                              <span className="text-nrl-text">{formatPrice((item as BestBetCandidate).odds)}</span>
-                            </>
+                            (item as ArbitrageCandidate).stakes.slice(0, 2).map((stake) => (
+                              <span key={`${item.id}-${stake.selection}`} className="inline-flex items-center gap-0.5">
+                                {stake.bookies.slice(0, 1).map((bookie) => (
+                                  <BookieLogo key={`${item.id}-${stake.selection}-${bookie}`} bookie={bookie} compact />
+                                ))}
+                                <span>{formatPrice(stake.odds)}</span>
+                              </span>
+                            ))
                           )}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
                         {isLocked ? (
-                          <div className="text-base font-bold leading-none text-nrl-muted">
-                            {isArbitrage ? "ARB" : "+EV"}
-                          </div>
-                        ) : isArbitrage ? (
+                          <div className="text-base font-bold leading-none text-nrl-muted">ARB</div>
+                        ) : (
                           <>
                             <div className={`text-base font-bold leading-none ${activeTheme.metric}`}>
                               +{(item as ArbitrageCandidate).returnPct.toFixed(2)}%
                             </div>
-                            <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
-                              return
-                            </div>
+                            <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-nrl-muted">return</div>
                           </>
-                        ) : (
-                          <div className="inline-flex flex-col items-center justify-center gap-0.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1">
-                            <BetScoreStars
-                              score={(item as BestBetCandidate).score}
-                              blurred={false}
-                              className="text-sm"
-                            />
-                            <span className="inline-flex items-center justify-center gap-1 text-[8px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
-                              Edge +{(item as BestBetCandidate).edgePp.toFixed(2)}%
-                              {isSuspiciousEdge((item as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={`rounded-lg border border-white/8 bg-[#14213b] px-3 py-3 text-left transition-colors ${canAccessPremium ? "hover:border-emerald-300/35 hover:bg-[#172743]" : ""}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                              {isLocked ? "Locked" : (item as BestBetCandidate).market}
+                            </span>
+                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">
+                              {formatEventCountdown(item, tryscorerKickoffsByMatch, nowMs)}
                             </span>
                           </div>
-                        )}
+                          <div className="mt-2 flex min-w-0 items-center gap-2 text-lg font-semibold leading-tight text-white">
+                            {!isLocked ? (
+                              <BettingTeamLogos
+                                selection={(item as BestBetCandidate).selection}
+                                match={(item as BestBetCandidate).match}
+                                market={(item as BestBetCandidate).market}
+                                teamLogos={teamLogos}
+                                className="h-6 w-6"
+                              />
+                            ) : null}
+                            <span className="min-w-0 truncate">
+                              {isLocked ? "Selection hidden" : (item as BestBetCandidate).selectionLabel}
+                            </span>
+                          </div>
+                          <div className="mt-1 truncate text-xs text-nrl-muted">
+                            {isLocked ? "Match hidden" : (item as BestBetCandidate).match}
+                          </div>
+                        </div>
+                        <div className="flex w-52 shrink-0 justify-center">
+                          {isLocked ? (
+                            <div className="text-lg font-bold leading-none text-nrl-muted">+EV</div>
+                          ) : (
+                            <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
+                              <BetScoreStars score={(item as BestBetCandidate).score} blurred={false} className="text-xl" />
+                              <span className="inline-flex items-center justify-center gap-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                                Edge <span className="text-nrl-text">+{(item as BestBetCandidate).edgePp.toFixed(2)}%</span>
+                                {isSuspiciousEdge((item as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="relative mt-3 border-t border-white/8 pt-3 text-xs">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pr-52">
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
+                            <div className="mt-0.5 flex items-center gap-2 text-white">
+                              {isLocked ? (
+                                <span className="font-semibold text-nrl-muted">Hidden</span>
+                              ) : (
+                                <>
+                                  <div className="flex items-center gap-1">
+                                    {(item as BestBetCandidate).bestBookies.slice(0, 3).map((bookie) => (
+                                      <BookieLogo key={`${item.id}-${bookie}`} bookie={bookie} compact />
+                                    ))}
+                                  </div>
+                                  <span className="text-base font-bold">{formatPrice((item as BestBetCandidate).odds)}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
+                            <div className="mt-0.5 font-semibold text-nrl-text">
+                              {isLocked ? (
+                                <span className="text-nrl-muted">Hidden</span>
+                              ) : (
+                                <>
+                                  <span className="text-white">{formatPct((item as BestBetCandidate).modelProbability * 100)}</span>
+                                  <span className="mx-1.5 text-nrl-muted">vs</span>
+                                  <span>{formatPct((item as BestBetCandidate).impliedProbability * 100)}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        {!isLocked && canAccessPremium ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              const bet = item as BestBetCandidate;
+                              setBestBetSubmitAttempted(false);
+                              setBestBetSlip({
+                                bet,
+                                odds: bet.odds,
+                                stake: bet.kellyStake,
+                              });
+                            }}
+                            aria-label="Add to bet tracker"
+                            className="absolute right-0 top-3 grid h-8 w-52 cursor-pointer place-items-center text-emerald-300"
+                          >
+                            <span className="relative grid h-8 w-8 place-items-center rounded-full border border-emerald-300/35 bg-emerald-400/10 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/16 hover:text-emerald-200">
+                              <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current" />
+                              <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-0.5 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current" />
+                            </span>
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -4195,7 +4437,7 @@ function BestBetsHero({
                     <div key={item.id} className="relative overflow-hidden rounded-md">
                       {rowContent}
                     </div>
-                  ) : (
+                  ) : isArbitrage ? (
                     <button
                       key={item.id}
                       type="button"
@@ -4204,16 +4446,25 @@ function BestBetsHero({
                     >
                       {rowContent}
                     </button>
+                  ) : (
+                    <div
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onOpenMarket(item as BestBetCandidate)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onOpenMarket(item as BestBetCandidate);
+                        }
+                      }}
+                      className="block w-full cursor-pointer"
+                    >
+                      {rowContent}
+                    </div>
                   );
                 })}
                 </div>
-                {!canAccessPremium ? (
-                  <div className="absolute right-2 top-2 z-10">
-                    <BillingPageLink className="rounded-md border border-emerald-300/35 bg-slate-950/80 px-2.5 py-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-100 shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition-colors hover:border-emerald-300/60">
-                      Premium picks
-                    </BillingPageLink>
-                  </div>
-                ) : null}
               </div>
             </div>
           ) : null}
@@ -5044,18 +5295,22 @@ function MarketSection({
                                         {blurPremiumColumns ? (
                                           <span aria-hidden="true" className="text-[9px] opacity-55 grayscale">🔒</span>
                                         ) : null}
-                                        <span
-                                          className={`tabular-nums ${
-                                            edgePp == null
-                                              ? "text-nrl-muted"
-                                              : edgePp < 0
-                                                ? "text-red-400"
-                                                : "text-nrl-accent"
-                                          } ${blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}`}
-                                        >
-                                          {formatEdge(edgePp)}
-                                        </span>
-                                        {suspiciousEdge ? <SuspiciousEdgeCaution /> : null}
+                                        {blurPremiumColumns ? (
+                                          <PremiumValueMask className="w-10" />
+                                        ) : (
+                                          <span
+                                            className={`tabular-nums ${
+                                              edgePp == null
+                                                ? "text-nrl-muted"
+                                                : edgePp < 0
+                                                  ? "text-red-400"
+                                                  : "text-nrl-accent"
+                                            }`}
+                                          >
+                                            {formatEdge(edgePp)}
+                                          </span>
+                                        )}
+                                        {!blurPremiumColumns && suspiciousEdge ? <SuspiciousEdgeCaution /> : null}
                                       </span>
                                     ) : null}
                                   </div>
@@ -5072,6 +5327,7 @@ function MarketSection({
                                     </div>
                                     {showModelColumns ? (
                                       <div className="flex shrink-0 items-center gap-1">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.08em] text-nrl-muted">Bet Rating:</span>
                                         {blurPremiumColumns ? (
                                           <span aria-hidden="true" className="text-[9px] opacity-55 grayscale">🔒</span>
                                         ) : null}
@@ -5354,23 +5610,30 @@ function MarketSection({
                             {showModelColumns ? (
                               <>
                                 <td className="py-2 pr-3 text-nrl-text">
-                                  <span className={blurPremiumColumns ? "inline-block select-none opacity-75 blur-[2px]" : ""}>
-                                    {formatPct(modelProbability == null ? null : modelProbability * 100)}
-                                  </span>
+                                  {blurPremiumColumns ? (
+                                    <PremiumValueMask className="w-14" />
+                                  ) : (
+                                    <span>{formatPct(modelProbability == null ? null : modelProbability * 100)}</span>
+                                  )}
                                 </td>
                                 <td className={`py-2 pr-5 ${edgeClass}`}>
                                   <span className="inline-flex items-center gap-1.5">
-                                    <span className={blurPremiumColumns ? "inline-block select-none opacity-65 blur-[3px]" : ""}>
-                                      {edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}
-                                    </span>
-                                    {suspiciousEdge ? <SuspiciousEdgeCaution /> : null}
+                                    {blurPremiumColumns ? (
+                                      <PremiumValueMask className="w-10" />
+                                    ) : (
+                                      <span>{edgePp == null ? "-" : `${edgePp >= 0 ? "+" : ""}${edgePp.toFixed(2)}`}</span>
+                                    )}
+                                    {!blurPremiumColumns && suspiciousEdge ? <SuspiciousEdgeCaution /> : null}
                                   </span>
                                 </td>
                                 <td className="py-2 pr-5">
                                   {betScore == null ? (
                                     <span className="text-nrl-muted">-</span>
                                   ) : (
-                                    <BetScoreStars score={betScore} blurred={blurPremiumColumns} className="text-sm" />
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <span className="text-[9px] font-black uppercase tracking-[0.08em] text-nrl-muted">Bet Rating</span>
+                                      <BetScoreStars score={betScore} blurred={blurPremiumColumns} className="text-sm" />
+                                    </span>
                                   )}
                                 </td>
                               </>

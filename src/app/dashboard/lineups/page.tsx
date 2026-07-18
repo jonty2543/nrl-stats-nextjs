@@ -1,5 +1,4 @@
 import { auth } from "@clerk/nextjs/server"
-import { headers } from "next/headers"
 import { LineupsDashboard } from "@/components/views/lineups-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import {
@@ -7,8 +6,9 @@ import {
   fetchLineupYearOptions,
   fetchLiveLineupData,
   fetchLineupsForRound,
+  type LineupPlayer,
 } from "@/lib/lineups/nrl-lineups"
-import { fetchLatestLineupsPageShellSummary, fetchLineupsPageShellSummary, fetchStatsinsiderTryCharts, fetchTeamLogos } from "@/lib/supabase/queries"
+import { fetchLatestLineupsPageShellSummary, fetchLineupsMatchPredictions, fetchLineupsPageShellSummary, fetchPlayerImages, fetchStatsinsiderTryCharts, fetchTeamLogos, type PlayerImageRecord } from "@/lib/supabase/queries"
 import type { LineupMatch, LineupRoundOption, LineupYearOption } from "@/lib/lineups/nrl-lineups"
 import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
 
@@ -130,18 +130,10 @@ function mergeYearOptions(...optionGroups: LineupYearOption[][]): LineupYearOpti
   return [...byYear.values()].sort((a, b) => b.year - a.year)
 }
 
-async function shouldShowLineupsSummaryDiagnostic(): Promise<boolean> {
+function shouldShowLineupsSummaryDiagnostic(): boolean {
+  if (process.env.LINEUPS_SUMMARY_DIAGNOSTIC === "1") return true
   if (process.env.VERCEL_GIT_COMMIT_REF === "betting/testing") return true
-
-  const headerStore = await headers()
-  const host = headerStore.get("host")?.split(":")[0].toLowerCase() ?? ""
-  const forwardedHost = headerStore.get("x-forwarded-host")?.split(":")[0].toLowerCase() ?? ""
-  const hosts = [host, forwardedHost]
-
-  return hosts.some((value) =>
-    ["localhost", "127.0.0.1", "::1"].includes(value) ||
-    value.includes("betting-testing")
-  )
+  return false
 }
 
 function lineupsSummaryMissReason(summary: Awaited<ReturnType<typeof fetchLineupsPageShellSummary>>): string | null {
@@ -175,6 +167,50 @@ function matchShell(match: LineupMatch): LineupMatch {
     ...match,
     homeTeam: match.homeTeam ? { ...match.homeTeam, players: [] } : null,
     awayTeam: match.awayTeam ? { ...match.awayTeam, players: [] } : null,
+  }
+}
+
+function normalisePlayerImageLookupKey(value: string | null | undefined): string {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+function buildPlayerImageLookup(rows: PlayerImageRecord[]): Map<string, PlayerImageRecord> {
+  const lookup = new Map<string, PlayerImageRecord>()
+  for (const row of rows) {
+    const playerKey = normalisePlayerImageLookupKey(row.player)
+    if (!playerKey) continue
+    const teamKey = normalisePlayerImageLookupKey(row.team)
+    if (teamKey && !lookup.has(`${playerKey}|${teamKey}`)) lookup.set(`${playerKey}|${teamKey}`, row)
+    if (!lookup.has(playerKey)) lookup.set(playerKey, row)
+  }
+  return lookup
+}
+
+function enrichLineupPlayerImages(player: LineupPlayer, lookup: Map<string, PlayerImageRecord>): LineupPlayer {
+  const playerKey = normalisePlayerImageLookupKey(player.player)
+  const teamKey = normalisePlayerImageLookupKey(player.team)
+  const imageRow = lookup.get(`${playerKey}|${teamKey}`) ?? lookup.get(playerKey) ?? null
+  if (!imageRow) return player
+  return {
+    ...player,
+    cachedHeadImage: imageRow.cached_head_image ?? player.cachedHeadImage ?? null,
+    cachedBodyImage: imageRow.cached_body_image ?? player.cachedBodyImage ?? null,
+    headImage: imageRow.head_image ?? player.headImage,
+    bodyImage: imageRow.body_image ?? player.bodyImage,
+  }
+}
+
+function enrichLineupMatchImages(match: LineupMatch, lookup: Map<string, PlayerImageRecord>): LineupMatch {
+  return {
+    ...match,
+    homeTeam: match.homeTeam ? {
+      ...match.homeTeam,
+      players: match.homeTeam.players.map((player) => enrichLineupPlayerImages(player, lookup)),
+    } : null,
+    awayTeam: match.awayTeam ? {
+      ...match.awayTeam,
+      players: match.awayTeam.players.map((player) => enrichLineupPlayerImages(player, lookup)),
+    } : null,
   }
 }
 
@@ -265,11 +301,21 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const matches = (summary?.matches ?? fallbackData?.matches ?? []).map((match) =>
     shouldUseShellMatches ? matchShell(match) : match
   )
+  const playerImages = matches.some((match) => (match.homeTeam?.players.length ?? 0) > 0 || (match.awayTeam?.players.length ?? 0) > 0)
+    ? await withFallback(fetchPlayerImages(), [], "Lineups player images")
+    : []
+  const playerImageLookup = buildPlayerImageLookup(playerImages)
+  const imageEnrichedMatches = playerImageLookup.size > 0
+    ? matches.map((match) => enrichLineupMatchImages(match, playerImageLookup))
+    : matches
   const summaryTeamLogos = summary?.teamLogos ?? {}
   const teamLogos = Object.keys(summaryTeamLogos).length > 0
     ? summaryTeamLogos
     : fallbackData?.teamLogos ?? await withFallback(fetchTeamLogos(), {}, "Lineups team logos")
-  const visibleMatches = matches.filter((match) => match.homeTeam || match.awayTeam || isDrawFallbackMatch(match) || !isPastMatch(match))
+  const visibleMatches = imageEnrichedMatches.filter((match) => match.homeTeam || match.awayTeam || isDrawFallbackMatch(match) || !isPastMatch(match))
+  const matchPredictions = selectedCompetition === "nrl" && visibleMatches.length > 0
+    ? await withFallback(fetchLineupsMatchPredictions(visibleMatches), {}, "Lineups match predictions")
+    : {}
   const initialLiveMatches = selectedCompetition === "nrl" && visibleMatches.length > 0
     ? await withFallback(fetchLiveLineupData(visibleMatches.map((match) => match.matchId)), {}, "Live lineups data")
     : {}
@@ -284,7 +330,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const summaryDiagnosticReason = summaryMissReason
     ? `lineups_page_summary miss: ${summaryMissReason} Heavy fallback data path is active for ${selectedYear} ${selectedRound}.`
     : summarySparseReason
-  const summaryDiagnostic = summaryDiagnosticReason && await shouldShowLineupsSummaryDiagnostic()
+  const summaryDiagnostic = summaryDiagnosticReason && shouldShowLineupsSummaryDiagnostic()
     ? summaryDiagnosticReason
     : null
 
@@ -300,6 +346,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       selectedCompetition={selectedCompetition}
       teamLogos={teamLogos}
       sportsbetOdds={summary?.sportsbetOdds ?? {}}
+      matchPredictions={matchPredictions}
       tryChartsByTeam={tryChartsByTeam}
       canAccessFantasyProjections={hasProAccess}
       summaryDiagnostic={summaryDiagnostic}

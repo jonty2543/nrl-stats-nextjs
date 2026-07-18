@@ -57,10 +57,12 @@ function imageSourceCandidates(value: string): string[] {
 }
 
 export function ImageWithFallback({ sources, alt, className }: ImageWithFallbackProps) {
+  const rawSourceSignature = sources.join("|")
   const uniqueSources = useMemo(() => {
     const seen = new Set<string>()
     const out: string[] = []
-    for (const source of sources) {
+    const rawSources = rawSourceSignature ? rawSourceSignature.split("|") : []
+    for (const source of rawSources) {
       const trimmed = source?.trim()
       if (!trimmed || seen.has(trimmed)) continue
       for (const normalised of imageSourceCandidates(trimmed)) {
@@ -71,7 +73,7 @@ export function ImageWithFallback({ sources, alt, className }: ImageWithFallback
       }
     }
     return out
-  }, [sources])
+  }, [rawSourceSignature])
 
   const sourceSignature = uniqueSources.join("|")
   const [state, setState] = useState({ signature: sourceSignature, index: 0 })
@@ -89,6 +91,7 @@ export function ImageWithFallback({ sources, alt, className }: ImageWithFallback
       alt={alt}
       className={className}
       loading="lazy"
+      decoding="async"
       referrerPolicy="no-referrer"
       onError={() => {
         setState((current) => {

@@ -328,6 +328,7 @@ export default async function BettingPage() {
       tryscorerFormByPlayer={bettingSummary.tryscorerFormByPlayer}
       tryscorerLastFiveVsOpponentByMatch={bettingSummary.tryscorerLastFiveVsOpponentByMatch}
       tryscorerKickoffsByMatch={bettingSummary.tryscorerKickoffsByMatch}
+      lineupPlayersByMatch={bettingSummary.lineupPlayersByMatch}
       lineupLinksByMatchKey={buildLineupLinksByMatchKey(bettingSummary.games)}
       teamFormByMatchKey={{ ...bettingSummary.teamLastFiveByMatch, ...buildTeamFormByMatchKey(bettingSummary.games) }}
     />

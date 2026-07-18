@@ -241,7 +241,7 @@ const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const WEEKLY_FREE_BET_LOCAL_KEY_PREFIX = "weekly-free-bet-v1";
 const WEEKLY_FREE_BET_NONE_VALUE = "none";
-const FREE_BET_MIN_EDGE_PP = 2;
+const FREE_BET_MIN_EDGE_PP = 3;
 const FREE_BET_MAX_EDGE_PP = 6;
 const BEST_BETS_TRYSCORER_MAX_ODDS = 8;
 const BEST_BETS_TRYSCORER_MIN_PREMIUM_STAR_RATING = 2;
@@ -2106,8 +2106,8 @@ function isWeeklyFreeBetEligible(
   kickoffsByMatch: Record<string, string>,
   nowMs: number
 ): boolean {
-  return bet.edgePp >= FREE_BET_MIN_EDGE_PP &&
-    bet.edgePp <= FREE_BET_MAX_EDGE_PP &&
+  return bet.edgePp > FREE_BET_MIN_EDGE_PP &&
+    bet.edgePp < FREE_BET_MAX_EDGE_PP &&
     (bet.market !== "Tryscorer" || bet.odds <= BEST_BETS_TRYSCORER_MAX_ODDS) &&
     !isBestBetExpired(bet, kickoffsByMatch, nowMs);
 }
@@ -3896,8 +3896,13 @@ function BestBetsHero({
   }, [nowMs, selectedModelBets, tryscorerKickoffsByMatch, weeklyFreeBetId]);
   const activeSelectedBestBetId = selectedBestBetIds[category];
   const activeItems = useMemo(() => {
-    if (!canAccessPremium && !isArbitrage) return weeklyFreeBet ? [weeklyFreeBet] : [];
-    if (!isArbitrage) return selectedModelBets;
+    if (!isArbitrage) {
+      if (!weeklyFreeBet) return [];
+      return [
+        weeklyFreeBet,
+        ...selectedModelBets.filter((bet) => bet.id !== weeklyFreeBet.id),
+      ];
+    }
 
     const sortedItems = isArbitrage ? ratedArbitrageBets : selectedModelBets;
     if (!activeSelectedBestBetId) return sortedItems;
@@ -3913,13 +3918,9 @@ function BestBetsHero({
       ...sortedItems.slice(0, selectedIndex),
       ...sortedItems.slice(selectedIndex + 1),
     ];
-  }, [activeSelectedBestBetId, canAccessPremium, isArbitrage, ratedArbitrageBets, selectedModelBets, weeklyFreeBet]);
-  const featuredItem = !canAccessPremium && !isArbitrage
-    ? weeklyFreeBet
-    : activeItems[0] ?? null;
-  const queueItems = !canAccessPremium && !isArbitrage
-    ? selectedModelBets.filter((bet) => bet.id !== weeklyFreeBet?.id)
-    : activeItems.slice(1);
+  }, [activeSelectedBestBetId, isArbitrage, ratedArbitrageBets, selectedModelBets, weeklyFreeBet]);
+  const featuredItem = activeItems[0] ?? null;
+  const queueItems = activeItems.slice(1);
   const activeTheme = isArbitrage
     ? {
         label: "Arbitrage",
@@ -3954,13 +3955,20 @@ function BestBetsHero({
   }, []);
 
   useEffect(() => {
-    if (canAccessPremium || isArbitrage) return;
+    if (isArbitrage) return;
     let cancelled = false;
     const key = weeklyFreeBetKey(nowMs, selectedModelMarket);
     const storedValue = window.localStorage.getItem(key);
     let nextId: string | null = null;
     if (storedValue) {
       nextId = storedValue === WEEKLY_FREE_BET_NONE_VALUE ? null : storedValue;
+      if (
+        (nextId == null && weeklyFreeBetCandidatesList.length > 0) ||
+        (nextId != null && !weeklyFreeBetCandidatesList.some((bet) => bet.id === nextId))
+      ) {
+        nextId = chooseWeeklyFreeBetId(weeklyFreeBetCandidatesList);
+        window.localStorage.setItem(key, nextId ?? WEEKLY_FREE_BET_NONE_VALUE);
+      }
     } else {
       nextId = chooseWeeklyFreeBetId(weeklyFreeBetCandidatesList);
       window.localStorage.setItem(key, nextId ?? WEEKLY_FREE_BET_NONE_VALUE);
@@ -3972,7 +3980,7 @@ function BestBetsHero({
     return () => {
       cancelled = true;
     };
-  }, [canAccessPremium, isArbitrage, nowMs, selectedModelMarket, weeklyFreeBetCandidatesList]);
+  }, [isArbitrage, nowMs, selectedModelMarket, weeklyFreeBetCandidatesList]);
 
   const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
     setCategory(nextCategory);
@@ -4273,7 +4281,7 @@ function BestBetsHero({
                       </span>
                     </button>
                   ) : null}
-                  <div className="absolute right-0 top-3 flex justify-end sm:hidden">
+                  <div className="absolute right-2 top-5 flex justify-end sm:hidden">
                     <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
                       <BetScoreStars
                         score={(featuredItem as BestBetCandidate).score}
@@ -4487,7 +4495,7 @@ function BestBetsHero({
                           </button>
                         ) : null}
                         {!isLocked ? (
-                          <div className="absolute right-0 top-3 flex justify-end sm:hidden">
+                          <div className="absolute right-2 top-5 flex justify-end sm:hidden">
                             <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
                               <BetScoreStars score={(item as BestBetCandidate).score} blurred={false} className="text-2xl" />
                               <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
@@ -5383,7 +5391,7 @@ function MarketSection({
                                     ) : null}
                                   </div>
                                   {showModelColumns ? (
-                                    <div className="flex min-w-0 items-center justify-between gap-3 pt-1">
+                                    <div className="flex min-w-0 items-center gap-2 pt-1">
                                       <div className="flex min-w-0 items-center gap-1">
                                         <span className="text-[10px] font-black uppercase tracking-[0.08em] text-nrl-muted">Bet Rating:</span>
                                         {blurPremiumColumns ? (
@@ -5395,7 +5403,7 @@ function MarketSection({
                                     </div>
                                   ) : null}
                                   {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
-                                    <div className="grid grid-cols-2 gap-4 pt-1">
+                                    <div className="grid grid-cols-2 items-start gap-4 pt-3">
                                       <div className="min-w-0">
                                         <div className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-nrl-muted">L5</div>
                                         <TryFormDots values={tryscorerForm.lastFive} />

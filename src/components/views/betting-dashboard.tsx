@@ -4227,7 +4227,7 @@ function BestBetsHero({
             ) : (
               <div className="mt-3">
                 <div className="relative border-t border-white/8 pt-3 text-xs">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:pr-52">
+                  <div className="flex max-w-[11.5rem] flex-col items-start gap-y-2 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:pr-52">
                     <div>
                       <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
                       <div className="mt-0.5 flex items-center gap-2 text-white">
@@ -4273,7 +4273,7 @@ function BestBetsHero({
                       </span>
                     </button>
                   ) : null}
-                  <div className="mt-3 flex justify-end sm:hidden">
+                  <div className="absolute right-0 top-3 flex justify-end sm:hidden">
                     <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
                       <BetScoreStars
                         score={(featuredItem as BestBetCandidate).score}
@@ -4431,7 +4431,7 @@ function BestBetsHero({
                         </div>
                       </div>
                       <div className="relative mt-3 border-t border-white/8 pt-3 text-xs">
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:pr-52">
+                        <div className="flex max-w-[11.5rem] flex-col items-start gap-y-2 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:pr-52">
                           <div>
                             <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
                             <div className="mt-0.5 flex items-center gap-2 text-white">
@@ -4487,7 +4487,7 @@ function BestBetsHero({
                           </button>
                         ) : null}
                         {!isLocked ? (
-                          <div className="mt-3 flex justify-end sm:hidden">
+                          <div className="absolute right-0 top-3 flex justify-end sm:hidden">
                             <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
                               <BetScoreStars score={(item as BestBetCandidate).score} blurred={false} className="text-2xl" />
                               <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
@@ -5383,12 +5383,15 @@ function MarketSection({
                                     ) : null}
                                   </div>
                                   {showModelColumns ? (
-                                    <div className="flex min-w-0 items-center gap-1 pt-1">
-                                      <span className="text-[10px] font-black uppercase tracking-[0.08em] text-nrl-muted">Bet Rating:</span>
-                                      {blurPremiumColumns ? (
-                                        <span aria-hidden="true" className="text-[9px] opacity-55 grayscale">🔒</span>
-                                      ) : null}
-                                      <BetScoreStars score={betScore} blurred={blurPremiumColumns} className="text-base" />
+                                    <div className="flex min-w-0 items-center justify-between gap-3 pt-1">
+                                      <div className="flex min-w-0 items-center gap-1">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.08em] text-nrl-muted">Bet Rating:</span>
+                                        {blurPremiumColumns ? (
+                                          <span aria-hidden="true" className="text-[9px] opacity-55 grayscale">🔒</span>
+                                        ) : null}
+                                        <BetScoreStars score={betScore} blurred={blurPremiumColumns} className="text-base" />
+                                      </div>
+                                      {mobileBetAction}
                                     </div>
                                   ) : null}
                                   {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
@@ -5406,7 +5409,7 @@ function MarketSection({
                                       <TeamLastFivePills values={teamLastFive} />
                                     </div>
                                   )}
-                                  {mobileBetAction ? (
+                                  {!showModelColumns && mobileBetAction ? (
                                     <div className="pt-1">{mobileBetAction}</div>
                                   ) : null}
                                 </div>

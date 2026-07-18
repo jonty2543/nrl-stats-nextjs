@@ -4122,7 +4122,7 @@ function BestBetsHero({
                     : (featuredItem as BestBetCandidate).match}
                 </div>
               </div>
-              <div className="flex w-52 shrink-0 justify-center">
+              <div className="flex w-auto shrink-0 justify-end sm:w-52 sm:justify-center">
                 {isArbitrage ? (
                   <>
                     <div className={`text-3xl font-bold leading-none sm:text-4xl ${activeTheme.metric}`}>
@@ -4133,17 +4133,39 @@ function BestBetsHero({
                     </div>
                   </>
                 ) : (
-                  <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
-                    <BetScoreStars
-                      score={(featuredItem as BestBetCandidate).score}
-                      blurred={false}
-                      className="text-2xl sm:text-3xl"
-                    />
-                    <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
-                      Edge <span className="text-nrl-text">+{(featuredItem as BestBetCandidate).edgePp.toFixed(2)}%</span>
-                      {isSuspiciousEdge((featuredItem as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
-                    </span>
-                  </div>
+                  <>
+                    {canAccessPremium ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const bet = featuredItem as BestBetCandidate;
+                          setBestBetSubmitAttempted(false);
+                          setBestBetSlip({
+                            bet,
+                            odds: bet.odds,
+                            stake: bet.kellyStake,
+                          });
+                        }}
+                        aria-label="Add to bet tracker"
+                        className="relative grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-emerald-300/35 bg-emerald-400/10 text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/16 hover:text-emerald-200 sm:hidden"
+                      >
+                        <span aria-hidden="true" className="absolute h-4 w-0.5 rounded-full bg-current" />
+                        <span aria-hidden="true" className="absolute h-0.5 w-4 rounded-full bg-current" />
+                      </button>
+                    ) : null}
+                    <div className="hidden flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)] sm:inline-flex">
+                      <BetScoreStars
+                        score={(featuredItem as BestBetCandidate).score}
+                        blurred={false}
+                        className="text-2xl sm:text-3xl"
+                      />
+                      <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                        Edge <span className="text-nrl-text">+{(featuredItem as BestBetCandidate).edgePp.toFixed(2)}%</span>
+                        {isSuspiciousEdge((featuredItem as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
+                      </span>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -4205,7 +4227,7 @@ function BestBetsHero({
             ) : (
               <div className="mt-3">
                 <div className="relative border-t border-white/8 pt-3 text-xs">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pr-52">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:pr-52">
                     <div>
                       <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
                       <div className="mt-0.5 flex items-center gap-2 text-white">
@@ -4243,7 +4265,7 @@ function BestBetsHero({
                         });
                       }}
                       aria-label="Add to bet tracker"
-                      className="absolute right-0 top-3 grid h-8 w-52 cursor-pointer place-items-center text-emerald-300"
+                      className="absolute right-0 top-3 hidden h-8 w-52 cursor-pointer place-items-center text-emerald-300 sm:grid"
                     >
                       <span className="relative grid h-8 w-8 place-items-center rounded-full border border-emerald-300/35 bg-emerald-400/10 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/16 hover:text-emerald-200">
                         <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current" />
@@ -4251,6 +4273,19 @@ function BestBetsHero({
                       </span>
                     </button>
                   ) : null}
+                  <div className="mt-3 flex justify-end sm:hidden">
+                    <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
+                      <BetScoreStars
+                        score={(featuredItem as BestBetCandidate).score}
+                        blurred={false}
+                        className="text-2xl"
+                      />
+                      <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                        Edge <span className="text-nrl-text">+{(featuredItem as BestBetCandidate).edgePp.toFixed(2)}%</span>
+                        {isSuspiciousEdge((featuredItem as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -4359,22 +4394,44 @@ function BestBetsHero({
                             {isLocked ? "Match hidden" : (item as BestBetCandidate).match}
                           </div>
                         </div>
-                        <div className="flex w-52 shrink-0 justify-center">
+                        <div className="flex w-auto shrink-0 justify-end sm:w-52 sm:justify-center">
                           {isLocked ? (
                             <div className="text-lg font-bold leading-none text-nrl-muted">+EV</div>
                           ) : (
-                            <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
-                              <BetScoreStars score={(item as BestBetCandidate).score} blurred={false} className="text-xl" />
-                              <span className="inline-flex items-center justify-center gap-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
-                                Edge <span className="text-nrl-text">+{(item as BestBetCandidate).edgePp.toFixed(2)}%</span>
-                                {isSuspiciousEdge((item as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
-                              </span>
-                            </div>
+                            <>
+                              {!isLocked && canAccessPremium ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    const bet = item as BestBetCandidate;
+                                    setBestBetSubmitAttempted(false);
+                                    setBestBetSlip({
+                                      bet,
+                                      odds: bet.odds,
+                                      stake: bet.kellyStake,
+                                    });
+                                  }}
+                                  aria-label="Add to bet tracker"
+                                  className="relative grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-emerald-300/35 bg-emerald-400/10 text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/16 hover:text-emerald-200 sm:hidden"
+                                >
+                                  <span aria-hidden="true" className="absolute h-4 w-0.5 rounded-full bg-current" />
+                                  <span aria-hidden="true" className="absolute h-0.5 w-4 rounded-full bg-current" />
+                                </button>
+                              ) : null}
+                              <div className="hidden flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)] sm:inline-flex">
+                                <BetScoreStars score={(item as BestBetCandidate).score} blurred={false} className="text-xl" />
+                                <span className="inline-flex items-center justify-center gap-1 text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                                  Edge <span className="text-nrl-text">+{(item as BestBetCandidate).edgePp.toFixed(2)}%</span>
+                                  {isSuspiciousEdge((item as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
+                                </span>
+                              </div>
+                            </>
                           )}
                         </div>
                       </div>
                       <div className="relative mt-3 border-t border-white/8 pt-3 text-xs">
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pr-52">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:pr-52">
                           <div>
                             <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Best odds</div>
                             <div className="mt-0.5 flex items-center gap-2 text-white">
@@ -4421,13 +4478,24 @@ function BestBetsHero({
                               });
                             }}
                             aria-label="Add to bet tracker"
-                            className="absolute right-0 top-3 grid h-8 w-52 cursor-pointer place-items-center text-emerald-300"
+                            className="absolute right-0 top-3 hidden h-8 w-52 cursor-pointer place-items-center text-emerald-300 sm:grid"
                           >
                             <span className="relative grid h-8 w-8 place-items-center rounded-full border border-emerald-300/35 bg-emerald-400/10 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/16 hover:text-emerald-200">
                               <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current" />
                               <span aria-hidden="true" className="absolute left-1/2 top-1/2 h-0.5 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current" />
                             </span>
                           </button>
+                        ) : null}
+                        {!isLocked ? (
+                          <div className="mt-3 flex justify-end sm:hidden">
+                            <div className="inline-flex flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 shadow-[0_8px_18px_rgba(2,6,23,0.16)]">
+                              <BetScoreStars score={(item as BestBetCandidate).score} blurred={false} className="text-2xl" />
+                              <span className="inline-flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
+                                Edge <span className="text-nrl-text">+{(item as BestBetCandidate).edgePp.toFixed(2)}%</span>
+                                {isSuspiciousEdge((item as BestBetCandidate).edgePp) ? <SuspiciousEdgeCaution /> : null}
+                              </span>
+                            </div>
+                          </div>
                         ) : null}
                       </div>
                     </div>
@@ -5240,7 +5308,7 @@ function MarketSection({
                             })],
                           });
                         }}
-                        className={`ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-base font-black leading-none ${
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-base font-black leading-none ${
                           canOpenMobileBet
                             ? "cursor-pointer border-nrl-accent/55 bg-nrl-accent/12 text-nrl-accent hover:bg-nrl-accent/18"
                             : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
@@ -5314,34 +5382,34 @@ function MarketSection({
                                       </span>
                                     ) : null}
                                   </div>
-                                  <div className="flex min-w-0 items-center justify-start gap-7">
-                                    <div className="min-w-0">
-                                      {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
-                                        <div className="flex min-w-0 items-center gap-2">
-                                          <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-nrl-muted">L5:</span>
-                                          <TryFormDots values={tryscorerForm.lastFive} />
-                                        </div>
-                                      ) : (
-                                        <TeamLastFivePills values={teamLastFive} />
-                                      )}
+                                  {showModelColumns ? (
+                                    <div className="flex min-w-0 items-center gap-1 pt-1">
+                                      <span className="text-[10px] font-black uppercase tracking-[0.08em] text-nrl-muted">Bet Rating:</span>
+                                      {blurPremiumColumns ? (
+                                        <span aria-hidden="true" className="text-[9px] opacity-55 grayscale">🔒</span>
+                                      ) : null}
+                                      <BetScoreStars score={betScore} blurred={blurPremiumColumns} className="text-base" />
                                     </div>
-                                    {showModelColumns ? (
-                                      <div className="flex shrink-0 items-center gap-1">
-                                        <span className="text-[10px] font-black uppercase tracking-[0.08em] text-nrl-muted">Bet Rating:</span>
-                                        {blurPremiumColumns ? (
-                                          <span aria-hidden="true" className="text-[9px] opacity-55 grayscale">🔒</span>
-                                        ) : null}
-                                        <BetScoreStars score={betScore} blurred={blurPremiumColumns} className="text-base" />
+                                  ) : null}
+                                  {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
+                                    <div className="grid grid-cols-2 gap-4 pt-1">
+                                      <div className="min-w-0">
+                                        <div className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-nrl-muted">L5</div>
+                                        <TryFormDots values={tryscorerForm.lastFive} />
                                       </div>
-                                    ) : null}
-                                    {mobileBetAction}
-                                  </div>
+                                      {tryscorerOpponent ? (
+                                        <TryOpponentForm opponent={tryscorerOpponent} values={opponentLastFive} />
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <div className="min-w-0 pt-1">
+                                      <TeamLastFivePills values={teamLastFive} />
+                                    </div>
+                                  )}
+                                  {mobileBetAction ? (
+                                    <div className="pt-1">{mobileBetAction}</div>
+                                  ) : null}
                                 </div>
-                                {group.market === "Tryscorer" && tryscorerOpponent ? (
-                                  <div className="grid grid-cols-[minmax(7.75rem,1fr)] gap-2 pt-1">
-                                    <TryOpponentForm opponent={tryscorerOpponent} values={opponentLastFive} />
-                                  </div>
-                                ) : null}
                               </div>
                             </div>
                           </div>

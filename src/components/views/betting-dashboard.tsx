@@ -5405,7 +5405,7 @@ function MarketSection({
                                   {group.market === "Tryscorer" && tryscorerForm?.lastFive.length ? (
                                     <div className="grid grid-cols-2 items-start gap-4 pt-3">
                                       <div className="min-w-0">
-                                        <div className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-nrl-muted">L5</div>
+                                        <div className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">L5</div>
                                         <TryFormDots values={tryscorerForm.lastFive} />
                                       </div>
                                       {tryscorerOpponent ? (

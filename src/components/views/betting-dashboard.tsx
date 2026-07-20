@@ -273,6 +273,36 @@ const BETTING_TOUR_STEPS: Array<{
     body: "Use the market tabs and odds tables here to compare bookies, model probabilities, edge, and staking outputs.",
   },
 ];
+
+function countBestBetsByMarket(bets: BestBetCandidate[]): Record<BettingMarket, number> {
+  const counts: Record<BettingMarket, number> = {
+    H2H: 0,
+    Line: 0,
+    Total: 0,
+    Tryscorer: 0,
+  };
+  for (const bet of bets) {
+    counts[bet.market] += 1;
+  }
+  return counts;
+}
+
+function hasMarketOdds(groups: EventGroup[]): boolean {
+  return groups.some((group) => group.outcomes.length > 0);
+}
+
+function orderMarketsByAvailability(
+  markets: BettingMarket[],
+  groupsByMarket: Record<BettingMarket, EventGroup[]>,
+  bestBetCountsByMarket: Record<BettingMarket, number>
+): BettingMarket[] {
+  return [...markets].sort((a, b) => {
+    const aUnavailable = !hasMarketOdds(groupsByMarket[a]) || bestBetCountsByMarket[a] === 0;
+    const bUnavailable = !hasMarketOdds(groupsByMarket[b]) || bestBetCountsByMarket[b] === 0;
+    if (aUnavailable === bUnavailable) return markets.indexOf(a) - markets.indexOf(b);
+    return aUnavailable ? 1 : -1;
+  });
+}
 const IMPLIED_LINE_SIGMA = 16.85;
 const IMPLIED_TOTAL_SIGMA = 16.85;
 const BEST_BETS_CONFIG = {
@@ -2257,6 +2287,7 @@ export function BettingDashboard({
   const [manualError, setManualError] = useState<string | null>(null);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
   const [marketJumpTarget, setMarketJumpTarget] = useState<BettingMarketJumpTarget | null>(null);
+  const hasAutoSelectedMarketRef = useRef(false);
   const [tourStepIndex, setTourStepIndex] = useState<number | null>(null);
   const [tourTargetRect, setTourTargetRect] = useState<DOMRect | null>(null);
   const [signedOutGuideNudgeDismissed, setSignedOutGuideNudgeDismissed] = useState(false);
@@ -2323,6 +2354,17 @@ export function BettingDashboard({
     }),
     [bankroll, h2hGroups, kellyScale, lineGroups, todayIso, totalGroups, tryscorerGroups]
   );
+  const bestBetCountsByMarket = useMemo(() => countBestBetsByMarket(bestBets), [bestBets]);
+  const marketGroupsByMarket = useMemo<Record<BettingMarket, EventGroup[]>>(() => ({
+    H2H: h2hGroups,
+    Line: lineGroups,
+    Total: totalGroups,
+    Tryscorer: tryscorerGroups,
+  }), [h2hGroups, lineGroups, totalGroups, tryscorerGroups]);
+  const orderedMarkets = useMemo(
+    () => orderMarketsByAvailability(MARKET_TABS, marketGroupsByMarket, bestBetCountsByMarket),
+    [bestBetCountsByMarket, marketGroupsByMarket]
+  );
   const arbitrageBets = useMemo(
     () => buildArbitrageBets({
       groups: h2hGroups,
@@ -2353,6 +2395,20 @@ export function BettingDashboard({
   };
 
   useEffect(() => {
+    let autoSelectTimeoutId: number | null = null;
+    const firstAvailableMarket = orderedMarkets.find((market) =>
+      hasMarketOdds(marketGroupsByMarket[market]) && bestBetCountsByMarket[market] > 0
+    );
+    if (
+      !hasAutoSelectedMarketRef.current &&
+      firstAvailableMarket &&
+      firstAvailableMarket !== selectedMarket &&
+      (!hasMarketOdds(marketGroupsByMarket[selectedMarket]) || bestBetCountsByMarket[selectedMarket] === 0)
+    ) {
+      hasAutoSelectedMarketRef.current = true;
+      autoSelectTimeoutId = window.setTimeout(() => setSelectedMarket(firstAvailableMarket), 0);
+    }
+
     const scrollToGameHash = () => {
       const hash = window.location.hash.replace(/^#/, "");
       if (!hash.startsWith("betting-game-")) return;
@@ -2372,8 +2428,11 @@ export function BettingDashboard({
 
     scrollToGameHash();
     window.addEventListener("hashchange", scrollToGameHash);
-    return () => window.removeEventListener("hashchange", scrollToGameHash);
-  }, [selectedMarket, selectedMarketGroups]);
+    return () => {
+      if (autoSelectTimeoutId != null) window.clearTimeout(autoSelectTimeoutId);
+      window.removeEventListener("hashchange", scrollToGameHash);
+    };
+  }, [bestBetCountsByMarket, marketGroupsByMarket, orderedMarkets, selectedMarket, selectedMarketGroups]);
 
   const handleStakingModeChange = (mode: StakingMode) => {
     if (!hasPremiumBettingAccess && mode === "kelly") {
@@ -3117,6 +3176,7 @@ export function BettingDashboard({
       <BestBetsHero
         modelBets={bestBets}
         arbitrageBets={arbitrageBets}
+        orderedMarkets={orderedMarkets}
         canAccessPremium={hasPremiumBettingAccess}
         teamLogos={teamLogos}
         tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
@@ -3753,7 +3813,7 @@ export function BettingDashboard({
           activeTourStep?.target === "main-dashboard" ? BETTING_TOUR_HIGHLIGHT_CLASS : ""
         }`}
       >
-        <MarketTabsRail selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
+        <MarketTabsRail orderedMarkets={orderedMarkets} selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
         {showTeamListsAccuracyNote ? (
           <div className="rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
             Note: edge and ratings are more accurate once team lists have been announced.
@@ -3833,6 +3893,7 @@ export function BettingDashboard({
 function BestBetsHero({
   modelBets,
   arbitrageBets,
+  orderedMarkets,
   canAccessPremium,
   teamLogos,
   tryscorerKickoffsByMatch,
@@ -3842,6 +3903,7 @@ function BestBetsHero({
 }: {
   modelBets: BestBetCandidate[];
   arbitrageBets: ArbitrageCandidate[];
+  orderedMarkets: BettingMarket[];
   canAccessPremium: boolean;
   teamLogos: Record<string, string>;
   tryscorerKickoffsByMatch: Record<string, string>;
@@ -3860,6 +3922,7 @@ function BestBetsHero({
     stake: number;
   } | null>(null);
   const queueViewportRef = useRef<HTMLDivElement | null>(null);
+  const hasAutoSelectedModelMarketRef = useRef(false);
   const isArbitrage = category === "arbitrage";
   const ratedArbitrageBets = useMemo(
     () => [...arbitrageBets].sort((a, b) => {
@@ -3955,6 +4018,16 @@ function BestBetsHero({
   }, []);
 
   useEffect(() => {
+    if (hasAutoSelectedModelMarketRef.current || isArbitrage || modelBetCountsByMarket[selectedModelMarket] > 0) return;
+    const firstMarketWithBets = orderedMarkets.find((market) => modelBetCountsByMarket[market] > 0);
+    if (!firstMarketWithBets || firstMarketWithBets === selectedModelMarket) return;
+
+    hasAutoSelectedModelMarketRef.current = true;
+    const timeoutId = window.setTimeout(() => setSelectedModelMarket(firstMarketWithBets), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [isArbitrage, modelBetCountsByMarket, orderedMarkets, selectedModelMarket]);
+
+  useEffect(() => {
     if (isArbitrage) return;
     let cancelled = false;
     const key = weeklyFreeBetKey(nowMs, selectedModelMarket);
@@ -4045,7 +4118,7 @@ function BestBetsHero({
 
       {!isArbitrage ? (
         <div className="flex gap-2 overflow-x-auto border-b border-white/8 px-4 py-2 sm:px-5">
-          {BEST_BET_MODEL_MARKETS.map((market) => {
+          {orderedMarkets.map((market) => {
             const active = selectedModelMarket === market;
             return (
               <button
@@ -4685,9 +4758,11 @@ function gameJumpAnchorId(group: EventGroup): string {
 }
 
 function MarketTabsRail({
+  orderedMarkets,
   selectedMarket,
   onMarketChange,
 }: {
+  orderedMarkets: BettingMarket[];
   selectedMarket: BettingMarket;
   onMarketChange: (market: BettingMarket) => void;
 }) {
@@ -4755,7 +4830,7 @@ function MarketTabsRail({
           width: pinState.width,
         } : undefined}
       >
-        {MARKET_TABS.map((tab) => {
+        {orderedMarkets.map((tab) => {
           const active = tab === selectedMarket;
           return (
             <button

@@ -134,16 +134,6 @@ function bettingSnapshotDates(snapshot: BettingOddsSnapshot): string[] {
   ].filter(Boolean))).sort();
 }
 
-function bettingSnapshotHasRows(snapshot: BettingOddsSnapshot): boolean {
-  return snapshot.h2h.length + snapshot.line.length + snapshot.total.length + snapshot.tryscorer.length > 0;
-}
-
-function isoDateDaysBefore(dateIso: string, days: number): string {
-  const parsed = Date.parse(`${dateIso}T00:00:00Z`);
-  if (!Number.isFinite(parsed)) return dateIso;
-  return new Date(parsed - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
 function isoDateDaysAfter(dateIso: string, days: number): string {
   const parsed = Date.parse(`${dateIso}T00:00:00Z`);
   if (!Number.isFinite(parsed)) return dateIso;
@@ -161,17 +151,8 @@ function localhostScreenshotWindowSnapshot(
     day: "2-digit",
   }).format(now);
   const dates = bettingSnapshotDates(snapshot);
-  const completedDates = dates.filter((date) => date <= todayIso);
-  const upcomingDates = dates.filter((date) => date > todayIso);
+  const upcomingDates = dates.filter((date) => date >= todayIso);
   const selectedDates = new Set<string>();
-
-  const latestCompletedDate = completedDates.at(-1) ?? null;
-  if (latestCompletedDate) {
-    const completedWindowStart = isoDateDaysBefore(latestCompletedDate, 7);
-    for (const date of completedDates) {
-      if (date >= completedWindowStart && date <= latestCompletedDate) selectedDates.add(date);
-    }
-  }
 
   const firstUpcomingDate = upcomingDates[0] ?? null;
   if (firstUpcomingDate) {
@@ -182,14 +163,18 @@ function localhostScreenshotWindowSnapshot(
   }
 
   if (selectedDates.size === 0) {
-    return { snapshot, displayTodayIso: null, showPastMarkets: true };
+    return {
+      snapshot: filterBettingSnapshotToDates(snapshot, selectedDates),
+      displayTodayIso: todayIso,
+      showPastMarkets: false,
+    };
   }
 
   const screenshotSnapshot = filterBettingSnapshotToDates(snapshot, selectedDates);
   return {
-    snapshot: bettingSnapshotHasRows(screenshotSnapshot) ? screenshotSnapshot : snapshot,
-    displayTodayIso: latestCompletedDate ?? firstUpcomingDate,
-    showPastMarkets: true,
+    snapshot: screenshotSnapshot,
+    displayTodayIso: todayIso,
+    showPastMarkets: false,
   };
 }
 

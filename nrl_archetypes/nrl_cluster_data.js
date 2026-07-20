@@ -328,19 +328,19 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 32,
+                    "count": 31,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 150,
-                    "description": "The most effective hit up takers, these middles are characterised by their strength and big engines."
+                    "count": 33,
+                    "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 39,
+                    "count": 157,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

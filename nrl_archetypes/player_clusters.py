@@ -84,6 +84,16 @@ PROFILES_MIDDLE = {
     'Standard Middle': [-0.5, -0.5, 1.0]
 }
 
+def build_middle_label_map(cluster_centroids):
+    label_map = {i: 'Standard Middle' for i in range(len(cluster_centroids))}
+    ball_playing_cluster = int(np.argmax(cluster_centroids[:, 0]))
+    impact_candidates = [i for i in range(len(cluster_centroids)) if i != ball_playing_cluster]
+    impact_cluster = max(impact_candidates, key=lambda i: cluster_centroids[i, 1])
+
+    label_map[ball_playing_cluster] = 'Ball Playing Middle'
+    label_map[impact_cluster] = 'Impact Middle'
+    return label_map
+
 POSITION_CONFIGS = [
     PositionConfig(
         name='Fullback',
@@ -192,11 +202,11 @@ POSITION_CONFIGS = [
         features2=['all_run_metres', 'tackle_breaks', 'post_contact_metres', 'offloads'],
         features3=['tackles_made', 'tackle_efficiency'],
         pc_names=['Ball Playing', 'Ball Running', 'Defense'],
-        n_clusters=3,
+        n_clusters=5,
         labels=['Ball Playing Middle', 'Impact Middle', 'Standard Middle'],
         descriptions=[
             "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park.",
-            "The most effective hit up takers, these middles are characterised by their strength and big engines.",
+            "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres.",
             "Making up the rest of the middle, these players share the hit up and tackling duties."
         ],
         min_games=7,
@@ -457,7 +467,12 @@ def train_models(training_agg, configs):
         # Match with profiles
         label_map = {} # Cluster ID -> Label Name
         
-        if config.profiles:
+        if config.name == 'Middle':
+            label_map = build_middle_label_map(cluster_centroids)
+            print("  Label Mapping:")
+            for cid, label in label_map.items():
+                print(f"    Cluster {cid} -> {label}")
+        elif config.profiles:
             # Filter profiles to only those in labels list
             active_profiles = {k: v for k, v in config.profiles.items() if k in config.labels}
             profile_labels = list(active_profiles.keys())

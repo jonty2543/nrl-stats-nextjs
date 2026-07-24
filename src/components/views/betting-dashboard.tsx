@@ -58,6 +58,15 @@ interface OutcomeRow {
   bestBookiesComputed: BettingBookie[];
 }
 
+type TryscorerSortKey = "betRating" | "edge" | "odds";
+type TryscorerSortDirection = "best" | "worst";
+
+const TRYS_CORER_SORT_OPTIONS: { key: TryscorerSortKey; label: string }[] = [
+  { key: "betRating", label: "Bet Rating" },
+  { key: "edge", label: "Edge" },
+  { key: "odds", label: "Odds" },
+];
+
 interface TryscorerFormSummary {
   player: string;
   team: string | null;
@@ -5032,6 +5041,8 @@ function MarketSection({
 }) {
   const [tryscorerValueByGroup, setTryscorerValueByGroup] = useState<Record<string, number>>({});
   const [collapsedTryscorerGroups, setCollapsedTryscorerGroups] = useState<Record<string, boolean>>({});
+  const [tryscorerSortKey, setTryscorerSortKey] = useState<TryscorerSortKey>("betRating");
+  const [tryscorerSortDirection, setTryscorerSortDirection] = useState<TryscorerSortDirection>("best");
   const [mobileBetSlip, setMobileBetSlip] = useState<MobileBetSlip | null>(null);
   const [selectedTryscorerProfile, setSelectedTryscorerProfile] = useState<TryscorerProfileSelection | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -5166,9 +5177,44 @@ function MarketSection({
             const blurPremiumColumns = !canAccessPremium && showModelColumns;
             const collapsed = group.market === "Tryscorer" && collapsedTryscorerGroups[group.key] === true;
             const selectedTryscorerValue = tryscorerValueByGroup[group.key] ?? 1;
-            const visibleOutcomes = group.market === "Tryscorer"
+            const filteredOutcomes = group.market === "Tryscorer"
               ? group.outcomes.filter((row) => row.bestValueComputed === selectedTryscorerValue)
               : group.outcomes;
+            const effectiveTryscorerSortKey = canAccessPremium ? tryscorerSortKey : "odds";
+            const sortMetric = (row: OutcomeRow, sortKey: TryscorerSortKey): number | null => {
+              const betRowKey = `${group.date}|${group.match}|${group.market}|${row.result}|${row.bestValueComputed ?? ""}`;
+              const oddsValue = oddsOverrides[betRowKey] ?? row.bestPriceComputed;
+              if (sortKey === "odds") return oddsValue;
+              const implied = impliedProbability(oddsValue);
+              const modelProbability = showModelColumns ? modelPercentToProbability(row.bestModelComputed) : null;
+              const edgePp = modelProbability != null && implied != null ? (modelProbability - implied) * 100 : null;
+              if (sortKey === "edge") return edgePp;
+              if (edgePp == null) return null;
+              const marketSignals = buildMarketSignals(row, group.marketPctFromBest);
+              return calculateBetScore({
+                edgePp,
+                eventDate: group.date,
+                todayIso,
+                liquidityScore: marketSignals.liquidityScore,
+                efficiencyScore: marketSignals.efficiencyScore,
+                disagreementScore: marketSignals.disagreementScore,
+              });
+            };
+            const visibleOutcomes = group.market === "Tryscorer"
+              ? [...filteredOutcomes].sort((left, right) => {
+                  const leftValue = sortMetric(left, effectiveTryscorerSortKey);
+                  const rightValue = sortMetric(right, effectiveTryscorerSortKey);
+                  if (leftValue == null && rightValue == null) return left.result.localeCompare(right.result);
+                  if (leftValue == null) return 1;
+                  if (rightValue == null) return -1;
+                  const comparison = effectiveTryscorerSortKey === "odds"
+                    ? leftValue - rightValue
+                    : rightValue - leftValue;
+                  return tryscorerSortDirection === "best"
+                    ? comparison || left.result.localeCompare(right.result)
+                    : -comparison || left.result.localeCompare(right.result);
+                })
+              : filteredOutcomes;
             const visibleBookieColumns = BETTING_BOOKIE_COLUMNS.filter((bookie) =>
               visibleOutcomes.some((row) => row.bookieOffers[bookie] != null)
             );
@@ -5221,28 +5267,63 @@ function MarketSection({
                   </div>
                 </div>
                 {group.market === "Tryscorer" ? (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {[1, 2, 3].map((value) => {
-                      const active = selectedTryscorerValue === value;
-                      const hasRows = group.outcomes.some((row) => row.bestValueComputed === value);
-                      return (
-                        <button
-                          key={`${group.key}-try-${value}`}
-                          type="button"
-                          disabled={!hasRows}
-                          onClick={() => setTryscorerValueByGroup((current) => ({ ...current, [group.key]: value }))}
-                          className={`rounded-md border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition-colors ${
-                            active
-                              ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
-                              : hasRows
-                                ? "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
-                                : "cursor-not-allowed border-nrl-border bg-nrl-panel-2 text-nrl-muted opacity-45"
-                          }`}
-                        >
-                          {value}+
-                        </button>
-                      );
-                    })}
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {[1, 2, 3].map((value) => {
+                        const active = selectedTryscorerValue === value;
+                        const hasRows = group.outcomes.some((row) => row.bestValueComputed === value);
+                        return (
+                          <button
+                            key={`${group.key}-try-${value}`}
+                            type="button"
+                            disabled={!hasRows}
+                            onClick={() => setTryscorerValueByGroup((current) => ({ ...current, [group.key]: value }))}
+                            className={`rounded-md border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+                              active
+                                ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-300"
+                                : hasRows
+                                  ? "cursor-pointer border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
+                                  : "cursor-not-allowed border-nrl-border bg-nrl-panel-2 text-nrl-muted opacity-45"
+                            }`}
+                          >
+                            {value}+
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center gap-1.5 rounded-lg border border-nrl-border bg-nrl-panel-2 p-1">
+                      <span className="px-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Sort</span>
+                      {TRYS_CORER_SORT_OPTIONS.map((option) => {
+                        const active = tryscorerSortKey === option.key;
+                        const disabled = !canAccessPremium && option.key !== "odds";
+                        return (
+                          <button
+                            key={`${group.key}-sort-${option.key}`}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => setTryscorerSortKey(option.key)}
+                            className={`rounded-md px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] transition-colors ${
+                              active && !disabled
+                                ? "bg-nrl-accent text-nrl-bg"
+                                : disabled
+                                  ? "cursor-not-allowed text-nrl-muted opacity-45"
+                                  : "text-nrl-muted hover:bg-white/[0.04] hover:text-nrl-text"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        aria-label={tryscorerSortDirection === "best" ? "Sort worst to best" : "Sort best to worst"}
+                        title={tryscorerSortDirection === "best" ? "Best to worst" : "Worst to best"}
+                        onClick={() => setTryscorerSortDirection((current) => current === "best" ? "worst" : "best")}
+                        className="grid h-6 w-6 place-items-center rounded-md border border-nrl-border text-[11px] font-black text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+                      >
+                        {tryscorerSortDirection === "best" ? "↓" : "↑"}
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 

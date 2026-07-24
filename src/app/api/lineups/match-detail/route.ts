@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
-import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
+import { getServerPremiumAccess, getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { fetchLineupsForRound } from "@/lib/lineups/nrl-lineups"
 import { fetchLineupPlayerAverageSources, fetchLineupsMatchDetailSummary } from "@/lib/supabase/queries"
 import type { LineupMatch } from "@/lib/lineups/nrl-lineups"
@@ -69,6 +69,19 @@ function stripFantasyProjections(match: LineupMatch): LineupMatch {
   }
 }
 
+function stripPremiumTryscorerOdds(detail: Awaited<ReturnType<typeof fetchLineupsMatchDetailSummary>>): Awaited<ReturnType<typeof fetchLineupsMatchDetailSummary>> {
+  if (!detail) return detail
+  return {
+    ...detail,
+    tryscorerOdds: Object.fromEntries(
+      Object.entries(detail.tryscorerOdds).map(([key, odds]) => [
+        key,
+        { ...odds, modelProbability: null },
+      ])
+    ),
+  }
+}
+
 function mergeHydratedMatch(base: LineupMatch | null, hydrated: LineupMatch | null): LineupMatch | null {
   if (!base) return hydrated
   if (!hydrated) return base
@@ -113,7 +126,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { userId } = await auth()
-    const hasProAccess = await getServerProPlotAccess(userId)
+    const [hasProAccess, hasPremiumAccess] = await Promise.all([
+      getServerProPlotAccess(userId),
+      getServerPremiumAccess(userId),
+    ])
     const detail = competition === "nrl"
       ? await fetchLineupsMatchDetailSummary(year, round, matchId)
       : null
@@ -167,14 +183,12 @@ export async function POST(request: NextRequest) {
       : fallbackDetail
     if (!responseDetail) return NextResponse.json({ detail: null }, { status: 404 })
 
-    return NextResponse.json({
-      detail: hasProAccess
-        ? responseDetail
-        : {
-            ...responseDetail,
-            match: stripFantasyProjections(responseDetail.match),
-          },
-    })
+    const accessFilteredDetail = {
+      ...(hasPremiumAccess ? responseDetail : stripPremiumTryscorerOdds(responseDetail)),
+      match: hasProAccess ? responseDetail.match : stripFantasyProjections(responseDetail.match),
+    }
+
+    return NextResponse.json({ detail: accessFilteredDetail })
   } catch (error) {
     console.error("Error fetching lineup match detail:", error)
     return NextResponse.json({ detail: null }, { status: 500 })

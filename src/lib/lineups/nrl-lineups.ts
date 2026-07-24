@@ -110,6 +110,7 @@ export interface LineupTryscorerOdds {
   player: string
   bestBookie: string | null
   bestPrice: number | null
+  modelProbability?: number | null
 }
 
 export interface LineupSportsbetOdds {
@@ -1296,10 +1297,33 @@ export async function fetchUpcomingTryscorerOdds(): Promise<Record<string, Lineu
 
     if (error || !data) return {}
 
+    const modelProbabilities = new Map<string, number>()
+    const dates = (data as unknown as RawRow[])
+      .map((row) => rowDateKey(row.Date))
+      .filter((date) => date >= today)
+    const maxDate = dates.length > 0 ? dates.reduce((max, date) => date > max ? date : max, today) : today
+    const { data: predictionData, error: predictionError } = await createServerSupabaseClient("nrl")
+      .from("tryscorer_predictions")
+      .select("match_date,player,anytime_prob,updated_at")
+      .gte("match_date", today)
+      .lte("match_date", maxDate)
+
+    if (!predictionError && predictionData) {
+      for (const row of predictionData as unknown as RawRow[]) {
+        const date = rowDateKey(row.match_date)
+        const player = text(row.player)
+        const probability = numberOrNull(row.anytime_prob)
+        if (!date || !player || probability == null) continue
+        const normalisedProbability = probability > 1 ? probability / 100 : probability
+        modelProbabilities.set(`${date}|${normaliseKey(player)}`, Math.min(Math.max(normalisedProbability, 0), 1))
+      }
+    }
+
     const odds = new Map<string, LineupTryscorerOdds>()
     for (const row of data as unknown as RawRow[]) {
       const player = text(row.Result)
       const bestPrice = numberOrNull(row["Best Price"])
+      const date = rowDateKey(row.Date)
       if (!player || bestPrice == null) continue
 
       const key = normaliseKey(player)
@@ -1310,6 +1334,7 @@ export async function fetchUpcomingTryscorerOdds(): Promise<Record<string, Lineu
         player,
         bestBookie: nullableText(row["Best Bookie"]),
         bestPrice,
+        modelProbability: modelProbabilities.get(`${date}|${key}`) ?? null,
       })
     }
 

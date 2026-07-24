@@ -39,6 +39,7 @@ interface LineupsDashboardProps {
   matchPredictions?: Record<string, LineupMatchPrediction>
   tryChartsByTeam: Record<string, StatsinsiderTryChart>
   canAccessFantasyProjections: boolean
+  canAccessPremiumBetting: boolean
   summaryDiagnostic?: string | null
 }
 
@@ -56,7 +57,7 @@ interface LineupMatchDetailData {
 
 type Slot = "FB" | "LW" | "LC" | "RW" | "RC" | "FE" | "HLF" | "LK" | "L2R" | "R2R" | "HK" | "PR"
 type Orientation = "landscape" | "portrait"
-type DisplayMode = "fantasy" | "odds" | AverageStatKey
+type DisplayMode = "fantasy" | "odds" | "edge" | "betRating" | AverageStatKey
 type StatsSource = "nrl2026" | "origin2026" | "originLifetime"
 type LineupDetailView = "lineup" | "stats" | "insights"
 type PlayerStatsSelection = {
@@ -139,6 +140,8 @@ const BOOKIE_LOGOS: Record<string, string> = {
 
 const DISPLAY_MODES: { key: DisplayMode; label: string; shortLabel: string }[] = [
   { key: "odds", label: "Best Odds", shortLabel: "Odds" },
+  { key: "edge", label: "Edge", shortLabel: "Edge" },
+  { key: "betRating", label: "Bet Rating", shortLabel: "Bet Rating" },
   { key: "fantasy", label: "Fantasy Projection", shortLabel: "Proj" },
   { key: "Tries", label: "Try Scoring Avg", shortLabel: "Tries" },
   { key: "Try Assists", label: "Try Assists Avg", shortLabel: "TA" },
@@ -162,7 +165,7 @@ const STATS_SOURCES: { key: StatsSource; label: string }[] = [
 ]
 
 function isAverageDisplayMode(mode: DisplayMode): mode is AverageStatKey {
-  return mode !== "odds" && mode !== "fantasy"
+  return mode !== "odds" && mode !== "fantasy" && mode !== "edge" && mode !== "betRating"
 }
 
 function displayModeShortLabel(mode: DisplayMode): string {
@@ -758,12 +761,85 @@ function formatAverage(value: number | null | undefined, mode: AverageStatKey): 
   return value.toFixed(1)
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function tryScorerEdge(odds: LineupTryscorerOdds | null | undefined): number | null {
+  if (odds?.bestPrice == null || odds.bestPrice <= 1 || odds.modelProbability == null) return null
+  return (odds.modelProbability - (1 / odds.bestPrice)) * 100
+}
+
+function betScoreStarValue(scoreOutOfTen: number): number {
+  if (scoreOutOfTen >= 8) return 3
+  if (scoreOutOfTen >= 6) return 2.5 + ((scoreOutOfTen - 6) / 2) * 0.5
+  if (scoreOutOfTen >= 4) return 2 + ((scoreOutOfTen - 4) / 2) * 0.5
+  if (scoreOutOfTen >= 2) return 1 + ((scoreOutOfTen - 2) / 2)
+  return scoreOutOfTen / 2
+}
+
+function betScoreStarColor(rating: number): string {
+  if (rating <= 1) {
+    const progress = clamp(rating, 0, 1)
+    return `hsl(${Math.round(progress * 28)} 88% 62%)`
+  }
+  if (rating <= 2) {
+    const progress = clamp(rating - 1, 0, 1)
+    return `hsl(${Math.round(28 + progress * 22)} 90% 62%)`
+  }
+  const progress = clamp(rating - 2, 0, 1)
+  const saturation = Math.round(36 + progress * 56)
+  const lightness = Math.round(44 + progress * 8)
+  return `hsl(148 ${saturation}% ${lightness}%)`
+}
+
+function lineupBetScore(edgePp: number | null): number | null {
+  if (edgePp == null) return null
+  const edgeCurve = 1 / (1 + Math.exp(-edgePp / (edgePp < 0 ? 3.2 : 5.5)))
+  return edgePp < 0
+    ? clamp(0.42 * (edgeCurve / 0.5), 0, 0.42)
+    : clamp(0.42 + (((edgeCurve - 0.5) / 0.5) * 0.58), 0.42, 1)
+}
+
+function BetScoreStars({ score, compact }: { score: number | null; compact: boolean }) {
+  const scoreOutOfTen = score == null ? null : clamp(score, 0, 1) * 10
+  const rating = scoreOutOfTen == null ? 0 : clamp(betScoreStarValue(scoreOutOfTen), 0, 3)
+  const color = scoreOutOfTen == null ? "rgb(148 163 184)" : betScoreStarColor(rating)
+  const label = scoreOutOfTen == null ? "No rating" : `${rating.toFixed(1)} out of 3 stars, ${scoreOutOfTen.toFixed(1)} out of 10`
+
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 leading-none ${compact ? "text-[11px]" : "text-[13px]"}`}
+      style={{ color }}
+      aria-label={label}
+      title={label}
+    >
+      {[0, 1, 2].map((index) => {
+        const fill = clamp(rating - index, 0, 1)
+        return (
+          <span key={index} className="relative inline-grid h-[1em] w-[1em]" aria-hidden="true">
+            <svg viewBox="0 0 24 24" className="h-[1em] w-[1em] opacity-25">
+              <path d="M12 3.2 14.8 8.9 21.1 9.8 16.6 14.2 17.7 20.5 12 17.5 6.3 20.5 7.4 14.2 2.9 9.8 9.2 8.9 12 3.2Z" fill="currentColor" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+            </svg>
+            <span className="absolute inset-0 overflow-hidden" style={{ width: `${fill * 100}%` }}>
+              <svg viewBox="0 0 24 24" className="h-[1em] w-[1em]">
+                <path d="M12 3.2 14.8 8.9 21.1 9.8 16.6 14.2 17.7 20.5 12 17.5 6.3 20.5 7.4 14.2 2.9 9.8 9.2 8.9 12 3.2Z" fill="currentColor" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
 function PlayerMetric({
   player,
   displayMode,
   tryscorerOdds,
   playerAverages,
   canAccessFantasyProjections,
+  canAccessPremiumBetting,
   compact,
 }: {
   player: LineupPlayer
@@ -771,6 +847,7 @@ function PlayerMetric({
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   canAccessFantasyProjections: boolean
+  canAccessPremiumBetting: boolean
   compact: boolean
 }) {
   const playerKey = normaliseKey(player.player)
@@ -800,6 +877,25 @@ function PlayerMetric({
       </div>
     ) : (
       <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    )
+  }
+
+  if (displayMode === "edge") {
+    if (!canAccessPremiumBetting) return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    const edge = tryScorerEdge(tryscorerOdds[playerKey])
+    return (
+      <div className={`${textClass} font-semibold leading-tight ${edge != null && edge < 0 ? "text-red-200" : "text-emerald-100/90"}`}>
+        {edge == null ? "-" : `${edge >= 0 ? "+" : ""}${edge.toFixed(1)}%`}
+      </div>
+    )
+  }
+
+  if (displayMode === "betRating") {
+    if (!canAccessPremiumBetting) return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    return (
+      <div className="mt-0.5 flex justify-center">
+        <BetScoreStars score={lineupBetScore(tryScorerEdge(tryscorerOdds[playerKey]))} compact={compact} />
+      </div>
     )
   }
 
@@ -1815,6 +1911,7 @@ function PitchPlayer({
   tryscorerOdds,
   playerAverages,
   canAccessFantasyProjections,
+  canAccessPremiumBetting,
   showPlayerMetric,
   showLiveIndicators,
   liveMatch,
@@ -1830,6 +1927,7 @@ function PitchPlayer({
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   canAccessFantasyProjections: boolean
+  canAccessPremiumBetting: boolean
   showPlayerMetric: boolean
   showLiveIndicators: boolean
   liveMatch: LineupLiveMatch | null
@@ -1875,6 +1973,7 @@ function PitchPlayer({
           tryscorerOdds={tryscorerOdds}
           playerAverages={playerAverages}
           canAccessFantasyProjections={canAccessFantasyProjections}
+          canAccessPremiumBetting={canAccessPremiumBetting}
           compact={compact}
         />
       ) : null}
@@ -1930,6 +2029,7 @@ function Pitch({
   tryscorerOdds,
   playerAverages,
   canAccessFantasyProjections,
+  canAccessPremiumBetting,
   liveMatch,
   positionPpmBaselines,
   showLiveIndicators,
@@ -1948,6 +2048,7 @@ function Pitch({
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   canAccessFantasyProjections: boolean
+  canAccessPremiumBetting: boolean
   liveMatch: LineupLiveMatch | null
   positionPpmBaselines: Record<string, number>
   showLiveIndicators: boolean
@@ -1975,6 +2076,7 @@ function Pitch({
             statsSource={statsSource}
             onStatsSourceChange={onStatsSourceChange}
             selectedCompetition={selectedCompetition}
+            canAccessPremiumBetting={canAccessPremiumBetting}
             showStatsSourceControl={showStatsSourceControl}
             compact={orientation === "portrait"}
           />
@@ -1995,6 +2097,7 @@ function Pitch({
             tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
             canAccessFantasyProjections={canAccessFantasyProjections}
+            canAccessPremiumBetting={canAccessPremiumBetting}
             showPlayerMetric={showPregameMetrics}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
@@ -2018,6 +2121,7 @@ function Pitch({
             tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
             canAccessFantasyProjections={canAccessFantasyProjections}
+            canAccessPremiumBetting={canAccessPremiumBetting}
             showPlayerMetric={showPregameMetrics}
             showLiveIndicators={showLiveIndicators}
             liveMatch={liveMatch}
@@ -2926,6 +3030,7 @@ function DisplayModeControl({
   statsSource,
   onStatsSourceChange,
   selectedCompetition,
+  canAccessPremiumBetting,
   showStatsSourceControl,
   compact = false,
 }: {
@@ -2934,12 +3039,13 @@ function DisplayModeControl({
   statsSource: StatsSource
   onStatsSourceChange: (source: StatsSource) => void
   selectedCompetition: LineupCompetition
+  canAccessPremiumBetting: boolean
   showStatsSourceControl: boolean
   compact?: boolean
 }) {
   const statsSourceOptions = STATS_SOURCES.filter((source) => source.key !== "nrl2026")
   const displayModes = selectedCompetition === "nrl"
-    ? DISPLAY_MODES
+    ? DISPLAY_MODES.filter((mode) => canAccessPremiumBetting || (mode.key !== "edge" && mode.key !== "betRating"))
     : DISPLAY_MODES.filter((mode) => isAverageDisplayMode(mode.key))
 
   return (
@@ -2989,6 +3095,7 @@ function LineupCard({
   onStatsSourceChange,
   selectedCompetition,
   canAccessFantasyProjections,
+  canAccessPremiumBetting,
   matchPrediction,
   detail,
   detailStatus,
@@ -3005,6 +3112,7 @@ function LineupCard({
   onStatsSourceChange: (source: StatsSource) => void
   selectedCompetition: LineupCompetition
   canAccessFantasyProjections: boolean
+  canAccessPremiumBetting: boolean
   matchPrediction: LineupMatchPrediction | null
   detail: LineupMatchDetailData | null
   detailStatus: "idle" | "loading" | "loaded" | "error"
@@ -3289,6 +3397,7 @@ function LineupCard({
               tryscorerOdds={tryscorerOdds}
               playerAverages={playerAverages}
               canAccessFantasyProjections={canAccessFantasyProjections}
+              canAccessPremiumBetting={canAccessPremiumBetting}
               liveMatch={displayLiveMatch}
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
@@ -3308,6 +3417,7 @@ function LineupCard({
               tryscorerOdds={tryscorerOdds}
               playerAverages={playerAverages}
               canAccessFantasyProjections={canAccessFantasyProjections}
+              canAccessPremiumBetting={canAccessPremiumBetting}
               liveMatch={displayLiveMatch}
               positionPpmBaselines={positionPpmBaselines}
               showLiveIndicators={showLiveIndicators}
@@ -3416,6 +3526,7 @@ export function LineupsDashboard({
   matchPredictions = {},
   tryChartsByTeam,
   canAccessFantasyProjections,
+  canAccessPremiumBetting,
   summaryDiagnostic,
 }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("Line Breaks")
@@ -3564,6 +3675,7 @@ export function LineupsDashboard({
                   onStatsSourceChange={setStatsSource}
                   selectedCompetition={selectedCompetition}
                   canAccessFantasyProjections={canAccessFantasyProjections}
+                  canAccessPremiumBetting={canAccessPremiumBetting}
                   matchPrediction={matchPredictions[match.matchId] ?? null}
                   detail={matchDetails[match.matchId]?.detail ?? null}
                   detailStatus={matchDetails[match.matchId]?.status ?? "idle"}

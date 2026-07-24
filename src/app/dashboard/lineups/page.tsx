@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { LineupsDashboard } from "@/components/views/lineups-dashboard"
-import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
+import { getServerPremiumAccess, getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import {
   fetchLineupRoundOptions,
   fetchLineupYearOptions,
@@ -227,7 +227,10 @@ function parseYear(value: string | undefined): number | null {
 export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const params = await searchParams
   const { userId } = await auth()
-  const hasProAccess = await getServerProPlotAccess(userId)
+  const [hasProAccess, hasPremiumAccess] = await Promise.all([
+    getServerProPlotAccess(userId),
+    getServerPremiumAccess(userId),
+  ])
   const currentYear = currentYearInBrisbane()
   const selectedCompetition = parseCompetition(params.competition)
   const fetchedYearOptions = await withFallback(fetchLineupYearOptions(selectedCompetition), [], "Lineups year options")
@@ -349,6 +352,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       matchPredictions={matchPredictions}
       tryChartsByTeam={tryChartsByTeam}
       canAccessFantasyProjections={hasProAccess}
+      canAccessPremiumBetting={hasPremiumAccess}
       summaryDiagnostic={summaryDiagnostic}
     />
   )

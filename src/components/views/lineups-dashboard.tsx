@@ -158,6 +158,25 @@ const DISPLAY_MODES: { key: DisplayMode; label: string; shortLabel: string }[] =
   { key: "Offloads", label: "Offloads Avg", shortLabel: "OFF" },
 ]
 
+const BET_SCORE_ZERO_EDGE = 0.3
+const BET_SCORE_POSITIVE_EDGE_RANGE = 0.58
+const BET_SCORE_EDGE_CURVE_STEEPNESS_PP = 2.2
+const BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP = 3.4
+const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN = 0.72
+const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX = 1
+const BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION = 0.35
+const SUSPICIOUS_EDGE_THRESHOLD_PP = 6
+const SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP = 10
+const LINEUP_BET_RATING_LIQUIDITY_SCORE = 0.5 + 0.35
+const LINEUP_BET_RATING_EFFICIENCY_SCORE = 0.5 + LINEUP_BET_RATING_LIQUIDITY_SCORE * 0.35
+const LINEUP_BET_RATING_DISAGREEMENT_SCORE = 0
+const LINEUP_BET_RATING_WEIGHTS = {
+  liquidity: 0.18,
+  efficiency: 0.12,
+  disagreement: 0.08,
+  timing: 0.14,
+}
+
 const STATS_SOURCES: { key: StatsSource; label: string }[] = [
   { key: "nrl2026", label: "2026 NRL" },
   { key: "origin2026", label: "2026 Origin" },
@@ -770,6 +789,23 @@ function tryScorerEdge(odds: LineupTryscorerOdds | null | undefined): number | n
   return (odds.modelProbability - (1 / odds.bestPrice)) * 100
 }
 
+function isoDateDiffDays(fromIso: string, toIso: string): number | null {
+  const fromMs = Date.parse(`${fromIso}T00:00:00`)
+  const toMs = Date.parse(`${toIso}T00:00:00`)
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null
+  return Math.round((toMs - fromMs) / (24 * 60 * 60 * 1000))
+}
+
+function eventProximityScore(eventDate: string, todayIso: string): number {
+  const daysUntil = isoDateDiffDays(todayIso, eventDate)
+  if (daysUntil == null) return 0.72
+  if (daysUntil <= 0) return 0.3
+  if (daysUntil === 1) return 0.5
+  if (daysUntil === 2) return 0.68
+  if (daysUntil === 3) return 0.84
+  return 1
+}
+
 function betScoreStarValue(scoreOutOfTen: number): number {
   if (scoreOutOfTen >= 8) return 3
   if (scoreOutOfTen >= 6) return 2.5 + ((scoreOutOfTen - 6) / 2) * 0.5
@@ -793,12 +829,50 @@ function betScoreStarColor(rating: number): string {
   return `hsl(148 ${saturation}% ${lightness}%)`
 }
 
-function lineupBetScore(edgePp: number | null): number | null {
+function todayIsoInBrisbane(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date())
+}
+
+function lineupBetScore(edgePp: number | null, eventDate: string): number | null {
   if (edgePp == null) return null
-  const edgeCurve = 1 / (1 + Math.exp(-edgePp / (edgePp < 0 ? 3.2 : 5.5)))
-  return edgePp < 0
-    ? clamp(0.42 * (edgeCurve / 0.5), 0, 0.42)
-    : clamp(0.42 + (((edgeCurve - 0.5) / 0.5) * 0.58), 0.42, 1)
+  const timingScore = eventProximityScore(eventDate, todayIsoInBrisbane())
+  const contextWeight =
+    LINEUP_BET_RATING_WEIGHTS.liquidity +
+    LINEUP_BET_RATING_WEIGHTS.efficiency +
+    LINEUP_BET_RATING_WEIGHTS.disagreement +
+    LINEUP_BET_RATING_WEIGHTS.timing
+  const contextScore = contextWeight > 0 ? (
+    (LINEUP_BET_RATING_LIQUIDITY_SCORE * LINEUP_BET_RATING_WEIGHTS.liquidity) +
+    (LINEUP_BET_RATING_EFFICIENCY_SCORE * LINEUP_BET_RATING_WEIGHTS.efficiency) +
+    (LINEUP_BET_RATING_DISAGREEMENT_SCORE * LINEUP_BET_RATING_WEIGHTS.disagreement) +
+    (timingScore * LINEUP_BET_RATING_WEIGHTS.timing)
+  ) / contextWeight : 0.5
+  const edgeCurve = 1 / (1 + Math.exp(-edgePp / (
+    edgePp < 0 ? BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP : BET_SCORE_EDGE_CURVE_STEEPNESS_PP
+  )))
+  const edgeScore = edgePp < 0
+    ? BET_SCORE_ZERO_EDGE * (edgeCurve / 0.5)
+    : BET_SCORE_ZERO_EDGE + (((edgeCurve - 0.5) / 0.5) * BET_SCORE_POSITIVE_EDGE_RANGE)
+  const contextAdjustment = (contextScore - 0.5) * 0.08
+  const baseScore = edgePp <= 0
+    ? clamp(edgeScore + Math.min(contextAdjustment, 0), 0, BET_SCORE_ZERO_EDGE)
+    : clamp(edgeScore + contextAdjustment, BET_SCORE_ZERO_EDGE, 1)
+  if (edgePp <= SUSPICIOUS_EDGE_THRESHOLD_PP) return baseScore
+
+  const decayProtection = clamp(
+    (LINEUP_BET_RATING_EFFICIENCY_SCORE - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN) /
+      (BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN),
+    0,
+    1
+  )
+  const maxDecay = 0.65 - (decayProtection * BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION)
+  const decay = clamp((edgePp - SUSPICIOUS_EDGE_THRESHOLD_PP) / SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP, 0, maxDecay)
+  return clamp(baseScore * (1 - decay), 0, 1)
 }
 
 function BetScoreStars({ score, compact }: { score: number | null; compact: boolean }) {
@@ -836,6 +910,7 @@ function BetScoreStars({ score, compact }: { score: number | null; compact: bool
 function PlayerMetric({
   player,
   displayMode,
+  matchDate,
   tryscorerOdds,
   playerAverages,
   canAccessFantasyProjections,
@@ -844,6 +919,7 @@ function PlayerMetric({
 }: {
   player: LineupPlayer
   displayMode: DisplayMode
+  matchDate: string
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   canAccessFantasyProjections: boolean
@@ -894,7 +970,7 @@ function PlayerMetric({
     if (!canAccessPremiumBetting) return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
     return (
       <div className="mt-0.5 flex justify-center">
-        <BetScoreStars score={lineupBetScore(tryScorerEdge(tryscorerOdds[playerKey]))} compact={compact} />
+        <BetScoreStars score={lineupBetScore(tryScorerEdge(tryscorerOdds[playerKey]), matchDate)} compact={compact} />
       </div>
     )
   }
@@ -1908,6 +1984,7 @@ function PitchPlayer({
   side,
   orientation,
   displayMode,
+  matchDate,
   tryscorerOdds,
   playerAverages,
   canAccessFantasyProjections,
@@ -1924,6 +2001,7 @@ function PitchPlayer({
   side: "home" | "away"
   orientation: Orientation
   displayMode: DisplayMode
+  matchDate: string
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   playerAverages: Record<string, Record<AverageStatKey, number>>
   canAccessFantasyProjections: boolean
@@ -1970,6 +2048,7 @@ function PitchPlayer({
         <PlayerMetric
           player={player}
           displayMode={displayMode}
+          matchDate={matchDate}
           tryscorerOdds={tryscorerOdds}
           playerAverages={playerAverages}
           canAccessFantasyProjections={canAccessFantasyProjections}
@@ -2022,6 +2101,7 @@ function Pitch({
   awayPlayers,
   orientation,
   displayMode,
+  matchDate,
   onDisplayModeChange,
   statsSource,
   onStatsSourceChange,
@@ -2041,6 +2121,7 @@ function Pitch({
   awayPlayers: LineupPlayer[]
   orientation: Orientation
   displayMode: DisplayMode
+  matchDate: string
   onDisplayModeChange: (mode: DisplayMode) => void
   statsSource: StatsSource
   onStatsSourceChange: (source: StatsSource) => void
@@ -2094,6 +2175,7 @@ function Pitch({
             side="home"
             orientation={orientation}
             displayMode={displayMode}
+            matchDate={matchDate}
             tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
             canAccessFantasyProjections={canAccessFantasyProjections}
@@ -2118,6 +2200,7 @@ function Pitch({
             side="away"
             orientation={orientation}
             displayMode={displayMode}
+            matchDate={matchDate}
             tryscorerOdds={tryscorerOdds}
             playerAverages={playerAverages}
             canAccessFantasyProjections={canAccessFantasyProjections}
@@ -3390,6 +3473,7 @@ function LineupCard({
               awayPlayers={awayPlayers}
               orientation="portrait"
               displayMode={displayMode}
+              matchDate={detailMatch.matchDate}
               onDisplayModeChange={onDisplayModeChange}
               statsSource={statsSource}
               onStatsSourceChange={onStatsSourceChange}
@@ -3410,6 +3494,7 @@ function LineupCard({
               awayPlayers={awayPlayers}
               orientation="landscape"
               displayMode={displayMode}
+              matchDate={detailMatch.matchDate}
               onDisplayModeChange={onDisplayModeChange}
               statsSource={statsSource}
               onStatsSourceChange={onStatsSourceChange}

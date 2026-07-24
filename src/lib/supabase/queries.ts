@@ -3646,6 +3646,65 @@ async function fetchLineupPlayerTryHistoryForKeys(playerKeys: string[]): Promise
   );
 }
 
+async function enrichLineupTryscorerOddsWithPredictions(
+  match: LineupMatch,
+  tryscorerOdds: Record<string, LineupTryscorerOdds>
+): Promise<Record<string, LineupTryscorerOdds>> {
+  const date = toIsoDate(match.matchDate);
+  if (!date || Object.keys(tryscorerOdds).length === 0) return tryscorerOdds;
+
+  const rows = Object.values(tryscorerOdds).map<BettingOddsRow>((odds) => ({
+    table: "NRL Tryscorers",
+    market: "Tryscorer",
+    date,
+    match: match.match,
+    result: odds.player,
+    value: 1,
+    model: null,
+    bestBookie: odds.bestBookie,
+    bestPrice: odds.bestPrice,
+    marketPercentage: null,
+    Sportsbet: null,
+    Pointsbet: null,
+    Unibet: null,
+    Palmerbet: null,
+    Betright: null,
+    Betr: null,
+  }));
+  const predictionRows = await fetchTryscorerPredictionRowsFromSupabase(rows).catch((error) => {
+    console.warn("Unable to enrich lineup tryscorer odds with prediction rows.", error);
+    return [];
+  });
+  const lookup = buildTryscorerPredictionLookup(predictionRows);
+
+  return Object.fromEntries(
+    Object.entries(tryscorerOdds).map(([key, odds]) => {
+      const enriched = applyTryscorerPredictionModelToRow(
+        {
+          table: "NRL Tryscorers",
+          market: "Tryscorer",
+          date,
+          match: match.match,
+          result: odds.player,
+          value: 1,
+          model: null,
+          bestBookie: odds.bestBookie,
+          bestPrice: odds.bestPrice,
+          marketPercentage: null,
+          Sportsbet: null,
+          Pointsbet: null,
+          Unibet: null,
+          Palmerbet: null,
+          Betright: null,
+          Betr: null,
+        },
+        lookup
+      );
+      return [key, { ...odds, modelProbability: enriched.model == null ? null : enriched.model / 100 }];
+    })
+  );
+}
+
 export async function fetchLineupsMatchDetailSummary(
   year: number,
   round: string,
@@ -3684,11 +3743,12 @@ export async function fetchLineupsMatchDetailSummary(
     const matchStats = jsonRecord<LineupMatchStats>(row.match_stats)[matchId] ?? null;
     const playerAverageSources = await fetchLineupPlayerAverageSources(match);
     const summaryPlayerAverages = filterRecordByKeys(jsonRecord<Record<string, number>>(row.player_averages), playerKeys);
+    const tryscorerOdds = filterRecordByKeys(jsonRecord<LineupTryscorerOdds>(row.tryscorer_odds), playerKeys);
 
     return {
       match,
       matchStats,
-      tryscorerOdds: filterRecordByKeys(jsonRecord<LineupTryscorerOdds>(row.tryscorer_odds), playerKeys),
+      tryscorerOdds: await enrichLineupTryscorerOddsWithPredictions(match, tryscorerOdds),
       sportsbetOdds: Object.fromEntries(
         Object.entries(sportsbetOdds).filter(([key, odds]) =>
           key.includes(String(match.matchDate ?? "").slice(0, 10)) ||

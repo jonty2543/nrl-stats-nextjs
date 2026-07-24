@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
+import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
 import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
 import type {
   LineupCasualtyOut,
@@ -167,9 +168,6 @@ const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX = 1
 const BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION = 0.35
 const SUSPICIOUS_EDGE_THRESHOLD_PP = 6
 const SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP = 10
-const LINEUP_BET_RATING_LIQUIDITY_SCORE = 0.5 + 0.35
-const LINEUP_BET_RATING_EFFICIENCY_SCORE = 0.5 + LINEUP_BET_RATING_LIQUIDITY_SCORE * 0.35
-const LINEUP_BET_RATING_DISAGREEMENT_SCORE = 0
 const LINEUP_BET_RATING_WEIGHTS = {
   liquidity: 0.18,
   efficiency: 0.12,
@@ -806,6 +804,32 @@ function eventProximityScore(eventDate: string, todayIso: string): number {
   return 1
 }
 
+function lineupMarketSignals(odds: LineupTryscorerOdds | null | undefined) {
+  const prices = BETTING_BOOKIE_COLUMNS
+    .map((bookie) => odds?.bookiePrices?.[bookie])
+    .filter((price): price is number => price != null && Number.isFinite(price) && price > 1)
+  const bestPrice = odds?.bestPrice ?? null
+  const lowerPrices = bestPrice == null
+    ? []
+    : prices.filter((price) => price < bestPrice - 1e-9)
+  const averageLowerPrice = lowerPrices.length > 0
+    ? lowerPrices.reduce((sum, price) => sum + price, 0) / lowerPrices.length
+    : null
+  const marketDisagreementPct = bestPrice != null && averageLowerPrice != null && averageLowerPrice > 0
+    ? ((bestPrice / averageLowerPrice) - 1) * 100
+    : null
+  const liquidityScore = clamp(prices.length / BETTING_BOOKIE_COLUMNS.length, 0, 1)
+  const efficiencyScore = clamp(0.5 + liquidityScore * 0.35, 0, 1)
+  const lowerBookConsensusScore = prices.length > 1 ? clamp(lowerPrices.length / (prices.length - 1), 0, 1) : 0
+  const disagreementScore = clamp((marketDisagreementPct ?? 0) / 14, 0, 1) * (0.35 + (lowerBookConsensusScore * 0.65))
+
+  return {
+    liquidityScore,
+    efficiencyScore,
+    disagreementScore,
+  }
+}
+
 function betScoreStarValue(scoreOutOfTen: number): number {
   if (scoreOutOfTen >= 8) return 3
   if (scoreOutOfTen >= 6) return 2.5 + ((scoreOutOfTen - 6) / 2) * 0.5
@@ -838,8 +862,9 @@ function todayIsoInBrisbane(): string {
   }).format(new Date())
 }
 
-function lineupBetScore(edgePp: number | null, eventDate: string): number | null {
+function lineupBetScore(edgePp: number | null, eventDate: string, odds: LineupTryscorerOdds | null | undefined): number | null {
   if (edgePp == null) return null
+  const marketSignals = lineupMarketSignals(odds)
   const timingScore = eventProximityScore(eventDate, todayIsoInBrisbane())
   const contextWeight =
     LINEUP_BET_RATING_WEIGHTS.liquidity +
@@ -847,9 +872,9 @@ function lineupBetScore(edgePp: number | null, eventDate: string): number | null
     LINEUP_BET_RATING_WEIGHTS.disagreement +
     LINEUP_BET_RATING_WEIGHTS.timing
   const contextScore = contextWeight > 0 ? (
-    (LINEUP_BET_RATING_LIQUIDITY_SCORE * LINEUP_BET_RATING_WEIGHTS.liquidity) +
-    (LINEUP_BET_RATING_EFFICIENCY_SCORE * LINEUP_BET_RATING_WEIGHTS.efficiency) +
-    (LINEUP_BET_RATING_DISAGREEMENT_SCORE * LINEUP_BET_RATING_WEIGHTS.disagreement) +
+    (marketSignals.liquidityScore * LINEUP_BET_RATING_WEIGHTS.liquidity) +
+    (marketSignals.efficiencyScore * LINEUP_BET_RATING_WEIGHTS.efficiency) +
+    (marketSignals.disagreementScore * LINEUP_BET_RATING_WEIGHTS.disagreement) +
     (timingScore * LINEUP_BET_RATING_WEIGHTS.timing)
   ) / contextWeight : 0.5
   const edgeCurve = 1 / (1 + Math.exp(-edgePp / (
@@ -865,7 +890,7 @@ function lineupBetScore(edgePp: number | null, eventDate: string): number | null
   if (edgePp <= SUSPICIOUS_EDGE_THRESHOLD_PP) return baseScore
 
   const decayProtection = clamp(
-    (LINEUP_BET_RATING_EFFICIENCY_SCORE - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN) /
+    (marketSignals.efficiencyScore - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN) /
       (BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN),
     0,
     1
@@ -968,9 +993,10 @@ function PlayerMetric({
 
   if (displayMode === "betRating") {
     if (!canAccessPremiumBetting) return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    const odds = tryscorerOdds[playerKey]
     return (
       <div className="mt-0.5 flex justify-center">
-        <BetScoreStars score={lineupBetScore(tryScorerEdge(tryscorerOdds[playerKey]), matchDate)} compact={compact} />
+        <BetScoreStars score={lineupBetScore(tryScorerEdge(odds), matchDate, odds)} compact={compact} />
       </div>
     )
   }

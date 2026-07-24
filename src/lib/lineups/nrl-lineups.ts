@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/client"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import type { Draw2026Row } from "@/lib/draw/types"
+import type { BettingBookie } from "@/lib/betting/types"
 
 export type LineupSide = "left" | "right" | "middle" | "spine" | "bench" | "unknown"
 export type LineupCompetition = "nrl" | "origin"
@@ -111,6 +112,7 @@ export interface LineupTryscorerOdds {
   bestBookie: string | null
   bestPrice: number | null
   modelProbability?: number | null
+  bookiePrices?: Partial<Record<BettingBookie, number | null>>
 }
 
 export interface LineupSportsbetOdds {

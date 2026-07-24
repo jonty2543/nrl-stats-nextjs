@@ -3298,7 +3298,7 @@ function LineupCard({
               : "max-w-4xl grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(0,1fr)] sm:gap-5"
           }`}
         >
-          <div className="min-w-0 justify-self-center">
+          <div className={`min-w-0 justify-self-center ${showSplitScore ? "-translate-x-2 sm:translate-x-0" : ""}`}>
             <TeamBadge team={detailMatch.homeTeam} teamLogos={teamLogos} />
           </div>
           {showSplitScore ? (
@@ -3312,7 +3312,7 @@ function LineupCard({
           ) : (
             <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} />
           )}
-          <div className="min-w-0 justify-self-center">
+          <div className={`min-w-0 justify-self-center ${showSplitScore ? "translate-x-2 sm:translate-x-0" : ""}`}>
             <TeamBadge team={detailMatch.awayTeam} teamLogos={teamLogos} />
           </div>
         </div>

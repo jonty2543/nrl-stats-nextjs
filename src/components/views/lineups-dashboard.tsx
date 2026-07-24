@@ -1051,7 +1051,7 @@ function weatherConditionEmoji(condition: string): string {
 function ScoreNumber({ value, align, isWinner, lift = false }: { value: number | null; align: "left" | "right"; isWinner: boolean; lift?: boolean }) {
   return (
     <div
-      className={`min-w-[1.55rem] text-[1.7rem] leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-5xl lg:text-6xl ${
+      className={`min-w-[1.35rem] text-[1.5rem] leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-5xl lg:text-6xl ${
         isWinner ? "font-black" : "font-normal"
       } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
@@ -3412,7 +3412,7 @@ function LineupCard({
           </div>
           {showSplitScore ? (
             <div className="relative col-start-2 h-[5rem] sm:contents">
-              <div className={`absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 grid-cols-[2.5rem_8rem_2.5rem] items-center justify-center gap-x-3 sm:static sm:contents sm:translate-x-0 ${showLiveCardHeader ? "-translate-y-[62%] sm:-translate-y-0" : "-translate-y-1/2 sm:translate-y-0"}`}>
+              <div className={`absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 grid-cols-[2.1rem_7rem_2.1rem] items-center justify-center gap-x-2 sm:static sm:contents sm:translate-x-0 ${showLiveCardHeader ? "-translate-y-[62%] sm:-translate-y-0" : "-translate-y-1/2 sm:translate-y-0"}`}>
                 <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} lift={showLiveCardHeader} />
                 <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore lift={showLiveCardHeader} />
                 <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} lift={showLiveCardHeader} />

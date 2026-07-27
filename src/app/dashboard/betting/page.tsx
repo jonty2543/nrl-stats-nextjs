@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 import { BettingDashboard } from "@/components/views/betting-dashboard";
 import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
-import { fetchBettingOddsSnapshot, fetchBettingOddsSnapshotFromRawTables, fetchBettingPageSummary, fetchPlayerImages } from "@/lib/supabase/queries";
+import { fetchBettingOddsSnapshot, fetchBettingOddsSnapshotFromRawTables, fetchBettingPageSummary, fetchPlayerImages, fetchTeamLogos } from "@/lib/supabase/queries";
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types";
 import type { BettingSummaryGame } from "@/lib/supabase/queries";
 
@@ -278,11 +278,12 @@ function buildTeamFormByMatchKey(games: BettingSummaryGame[]): Record<string, st
 
 export default async function BettingPage() {
   const { userId } = await auth();
-  const [snapshot, canAccessPremium, bettingSummary, playerImages, localhostRequest] = await Promise.all([
+  const [snapshot, canAccessPremium, bettingSummary, playerImages, teamLogos, localhostRequest] = await Promise.all([
     fetchBettingOddsSnapshot(),
     getServerPremiumAccess(userId),
     fetchBettingPageSummary(),
     fetchPlayerImages(),
+    fetchTeamLogos(),
     isLocalhostRequest(),
   ]);
   const lineupsFilteredSnapshot = filterTryscorersToLineups(
@@ -309,7 +310,7 @@ export default async function BettingPage() {
       showPastMarkets={localhostSnapshot?.showPastMarkets ?? false}
       playerImages={playerImages}
       playerTeamsByName={bettingSummary.playerTeamsByName}
-      teamLogos={bettingSummary.teamLogos}
+      teamLogos={{ ...teamLogos, ...bettingSummary.teamLogos }}
       tryscorerFormByPlayer={bettingSummary.tryscorerFormByPlayer}
       tryscorerLastFiveVsOpponentByMatch={bettingSummary.tryscorerLastFiveVsOpponentByMatch}
       tryscorerKickoffsByMatch={bettingSummary.tryscorerKickoffsByMatch}

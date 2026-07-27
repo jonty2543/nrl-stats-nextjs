@@ -344,6 +344,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
       liveMatches={initialLiveMatches}
       weatherForecasts={{}}
       yearOptions={yearOptions}
+      roundOptions={initialRoundOptions}
       selectedRound={selectedRound}
       selectedYear={selectedYear}
       selectedCompetition={selectedCompetition}

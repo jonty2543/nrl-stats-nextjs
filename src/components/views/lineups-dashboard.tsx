@@ -18,6 +18,7 @@ import type {
   LineupMatchStats,
   LineupPlayer,
   LineupRecentResult,
+  LineupRoundOption,
   LineupSportsbetOdds,
   LineupTeam,
   LineupTeamMatchStats,
@@ -32,6 +33,7 @@ interface LineupsDashboardProps {
   liveMatches: Record<string, LineupLiveMatch>
   weatherForecasts: Record<string, LineupWeatherForecast>
   yearOptions: LineupYearOption[]
+  roundOptions: LineupRoundOption[]
   selectedRound: string
   selectedYear: number
   selectedCompetition: LineupCompetition
@@ -3253,7 +3255,7 @@ function LineupCard({
   const hasLineupData = homePlayers.length > 0 || awayPlayers.length > 0
   const isFixtureOnly = detailMatch.matchId.startsWith("draw-2026-") && !hasLineupData && matchStats == null
   const [selectedPlayer, setSelectedPlayer] = useState<LineupPlayer | null>(null)
-  const [detailView, setDetailView] = useState<LineupDetailView>("lineup")
+  const [detailView, setDetailView] = useState<LineupDetailView | null>(null)
   const isLive = hasMatchStarted(displayLiveMatch)
   const hasOpenedHashTargetRef = useRef(false)
   const hasResultScore = detailMatch.homeScore != null || detailMatch.awayScore != null
@@ -3264,10 +3266,14 @@ function LineupCard({
   const showLiveCardHeader = isMatchLive(displayLiveMatch)
   const showPregameContent = !isLive && !hasResultScore
   const showStatsSourceControl = selectedCompetition === "origin"
-  const availableDetailViews: LineupDetailView[] = showPregameContent
-    ? ["lineup", "insights", "stats"]
-    : ["lineup", "stats"]
-  const activeDetailView = availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
+  const availableDetailViews: LineupDetailView[] = hasLineupData
+    ? showPregameContent
+      ? ["lineup", "insights", "stats"]
+      : ["lineup", "stats"]
+    : showPregameContent
+      ? ["insights", "stats"]
+      : ["stats"]
+  const activeDetailView = detailView && availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
   const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
   const homeTryChart = tryChartsByTeam[statsinsiderTeamCode(detailMatch.homeTeam) ?? ""] ?? null
   const awayTryChart = tryChartsByTeam[statsinsiderTeamCode(detailMatch.awayTeam) ?? ""] ?? null
@@ -3576,10 +3582,14 @@ function LineupCard({
 
 function LineupSelectors({
   yearOptions,
+  roundOptions,
+  selectedRound,
   selectedYear,
   selectedCompetition,
 }: {
   yearOptions: LineupYearOption[]
+  roundOptions: LineupRoundOption[]
+  selectedRound: string
   selectedYear: number
   selectedCompetition: LineupCompetition
 }) {
@@ -3620,6 +3630,29 @@ function LineupSelectors({
           </select>
         </label>
       ) : null}
+      {roundOptions.length > 0 ? (
+        <label className="block w-40 sm:w-48">
+          <span className="sr-only">Select round</span>
+          <select
+            value={selectedRound}
+            onChange={(event) => {
+              const params = new URLSearchParams({
+                year: String(selectedYear),
+                round: event.target.value,
+              })
+              if (selectedCompetition === "origin") params.set("competition", "origin")
+              window.location.href = `/dashboard/lineups?${params.toString()}`
+            }}
+            className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
+          >
+            {roundOptions.map((round) => (
+              <option key={round.value} value={round.value}>
+                {round.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
     </div>
   )
 }
@@ -3630,6 +3663,7 @@ export function LineupsDashboard({
   liveMatches: initialLiveMatches,
   weatherForecasts: initialWeatherForecasts,
   yearOptions,
+  roundOptions,
   selectedRound,
   selectedYear,
   selectedCompetition,
@@ -3765,7 +3799,13 @@ export function LineupsDashboard({
           {summaryDiagnostic}
         </div>
       ) : null}
-      <LineupSelectors yearOptions={yearOptions} selectedYear={selectedYear} selectedCompetition={selectedCompetition} />
+      <LineupSelectors
+        yearOptions={yearOptions}
+        roundOptions={roundOptions}
+        selectedRound={selectedRound}
+        selectedYear={selectedYear}
+        selectedCompetition={selectedCompetition}
+      />
       {matches.length > 0 ? (
         <div className="space-y-11">
           {matchDateGroups.map((group) => (

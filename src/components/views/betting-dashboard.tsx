@@ -470,6 +470,26 @@ function hasAnnouncedLineupsForGroup(group: EventGroup, lineupPlayersByMatch: Re
   return lookupKeys.some((key) => hasLineupPlayers(lineupPlayersByMatch[key]));
 }
 
+function teamListsAnnouncementMs(matchDate: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(matchDate);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const dayOfMonth = Number(match[3]);
+  const date = new Date(Date.UTC(year, monthIndex, dayOfMonth));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== monthIndex ||
+    date.getUTCDate() !== dayOfMonth
+  ) return null;
+
+  const daysSinceTuesday = (date.getUTCDay() - 2 + 7) % 7;
+  date.setUTCDate(date.getUTCDate() - daysSinceTuesday);
+  date.setUTCHours(6, 0, 0, 0); // 4:00 pm in Australia/Brisbane (UTC+10).
+  return date.getTime();
+}
+
 function kickoffSortMs(group: Pick<EventGroup, "date" | "match">, kickoffsByMatch: Record<string, string>): number {
   const kickoffKey = buildMatchKickoffKey(group.date, group.match);
   const kickoff = kickoffKey ? kickoffsByMatch[kickoffKey] : null;
@@ -2300,6 +2320,11 @@ export function BettingDashboard({
   const [tourStepIndex, setTourStepIndex] = useState<number | null>(null);
   const [tourTargetRect, setTourTargetRect] = useState<DOMRect | null>(null);
   const [signedOutGuideNudgeDismissed, setSignedOutGuideNudgeDismissed] = useState(false);
+  const [teamListStatusNowMs, setTeamListStatusNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setTeamListStatusNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
   const playerTeamsByName = useMemo(() => {
     const out = new Map<string, string>();
     for (const [key, team] of Object.entries(playerTeamsByNameProp)) {
@@ -2352,8 +2377,13 @@ export function BettingDashboard({
       : selectedMarket === "Total"
       ? totalGroups
         : tryscorerGroups;
-  const showTeamListsAccuracyNote = selectedMarketGroups.length > 0 &&
-    selectedMarketGroups.every((group) => !hasAnnouncedLineupsForGroup(group, lineupPlayersByMatch));
+  const hasTeamListsInModel = selectedMarketGroups.some((group) =>
+    hasAnnouncedLineupsForGroup(group, lineupPlayersByMatch)
+  );
+  const teamListsAnnouncementPassed = selectedMarketGroups.some((group) => {
+    const announcementMs = teamListsAnnouncementMs(group.date);
+    return announcementMs != null && teamListStatusNowMs >= announcementMs;
+  });
   const bestBets = useMemo(
     () => buildBestBets({
       groups: [...h2hGroups, ...lineGroups, ...totalGroups, ...tryscorerGroups],
@@ -3629,10 +3659,6 @@ export function BettingDashboard({
               </button>
             </div>
 
-            <div className="mt-4 rounded-md border border-white/10 bg-[#0e1530] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
-              Single bets only for now
-            </div>
-
             {manualBetType === "single" ? (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1">
@@ -3823,10 +3849,20 @@ export function BettingDashboard({
         }`}
       >
         <MarketTabsRail orderedMarkets={orderedMarkets} selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
-        {showTeamListsAccuracyNote ? (
-          <div className="rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
-            Note: edge and ratings are more accurate once team lists have been announced.
-          </div>
+        {selectedMarketGroups.length > 0 ? (
+          hasTeamListsInModel ? (
+            <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-[10px] font-semibold text-emerald-300 sm:text-xs">
+              <span aria-hidden="true">🟢</span> Team lists processed by model.
+            </div>
+          ) : teamListsAnnouncementPassed ? (
+            <div className="rounded-lg border border-orange-400/30 bg-orange-400/[0.06] px-3 py-2 text-[10px] font-semibold text-orange-300 sm:text-xs">
+              <span aria-hidden="true">🟠</span> Team list info will be processed by the model shortly.
+            </div>
+          ) : (
+            <div className="rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
+              Note: edge and ratings are more accurate once team lists have been announced.
+            </div>
+          )
         ) : null}
         <section className="min-w-0">
           <MarketSection
@@ -5981,10 +6017,6 @@ function MarketSection({
               >
                 ×
               </button>
-            </div>
-
-            <div className="mt-4 rounded-md border border-white/8 bg-[#0e1530] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted">
-              Single bets only for now
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">

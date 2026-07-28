@@ -5328,28 +5328,20 @@ function MarketSection({
                       })}
                     </div>
                     <div className="flex items-center gap-1.5 rounded-lg border border-nrl-border bg-nrl-panel-2 p-1">
-                      <span className="px-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Sort</span>
-                      {TRYS_CORER_SORT_OPTIONS.map((option) => {
-                        const active = tryscorerSortKey === option.key;
-                        const disabled = !canAccessPremium && option.key !== "odds";
-                        return (
-                          <button
-                            key={`${group.key}-sort-${option.key}`}
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => setTryscorerSortKey(option.key)}
-                            className={`rounded-md px-2 py-1 text-[10px] font-black uppercase tracking-[0.08em] transition-colors ${
-                              active && !disabled
-                                ? "bg-nrl-accent text-nrl-bg"
-                                : disabled
-                                  ? "cursor-not-allowed text-nrl-muted opacity-45"
-                                  : "text-nrl-muted hover:bg-white/[0.04] hover:text-nrl-text"
-                            }`}
-                          >
-                            {option.label}
-                          </button>
-                        );
-                      })}
+                      <label className="flex items-center gap-1.5">
+                        <span className="px-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-muted">Sort</span>
+                        <select
+                          value={canAccessPremium ? tryscorerSortKey : "odds"}
+                          onChange={(event) => setTryscorerSortKey(event.target.value as TryscorerSortKey)}
+                          className="h-6 rounded-md border border-nrl-border bg-nrl-panel px-2 text-[10px] font-black uppercase tracking-[0.08em] text-nrl-text outline-none transition-colors hover:border-emerald-300/40 focus:border-nrl-accent"
+                        >
+                          {TRYS_CORER_SORT_OPTIONS.map((option) => (
+                            <option key={`${group.key}-sort-${option.key}`} value={option.key} disabled={!canAccessPremium && option.key !== "odds"}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                       <button
                         type="button"
                         aria-label={tryscorerSortDirection === "best" ? "Sort worst to best" : "Sort best to worst"}
@@ -5653,16 +5645,16 @@ function MarketSection({
                   <table className={`${group.market === "Tryscorer" ? "w-auto min-w-max lg:w-full lg:min-w-[1100px]" : "w-full min-w-[1000px]"} border-collapse text-xs`}>
                     <thead>
                       <tr className="border-b border-nrl-border text-left text-nrl-muted">
-                        <th className={`${group.market === "Tryscorer" ? "whitespace-nowrap pr-3 lg:w-[245px]" : "pr-3"} py-2 font-semibold`}>Outcome</th>
+                        <th className={`${group.market === "Tryscorer" ? "whitespace-nowrap pr-3 lg:w-[220px]" : "pr-3"} py-2 font-semibold`}>Outcome</th>
                         {visibleBookieColumns.map((bookie) => (
                           <th
                             key={`${group.key}-head-${bookie}`}
-                            className="py-2 pr-3 font-semibold"
+                            className={`${group.market === "Tryscorer" ? "pr-2" : "pr-3"} py-2 font-semibold`}
                           >
                             <BookieLogo bookie={bookie} />
                           </th>
                         ))}
-                        <th className="py-2 pr-3 font-semibold">Best</th>
+                        <th className={`${group.market === "Tryscorer" ? "pr-8" : "pr-3"} py-2 font-semibold`}>Best</th>
                         <th className="py-2 pr-3 font-semibold">Implied</th>
                         {showModelColumns ? (
                           <>
@@ -5839,7 +5831,7 @@ function MarketSection({
                               return (
                                 <td
                                   key={`${group.key}-${row.result}-${bookie}`}
-                                  className={`py-2 pr-3 ${isBest ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
+                                  className={`py-2 ${group.market === "Tryscorer" ? "pr-2" : "pr-3"} ${isBest ? "font-semibold text-nrl-accent" : "text-nrl-text"}`}
                                 >
                                   {offer == null ? "-" : (
                                     <div className="leading-tight">
@@ -5854,7 +5846,7 @@ function MarketSection({
                                 </td>
                               );
                             })}
-                            <td className="py-2 pr-3 text-nrl-text">
+                            <td className={`${group.market === "Tryscorer" ? "pr-8" : "pr-3"} py-2 text-nrl-text`}>
                               <div className="flex items-center gap-2">
                                 <div className="leading-tight">
                                   <div>{formatPrice(row.bestPriceComputed)}</div>

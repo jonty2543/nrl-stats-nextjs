@@ -222,6 +222,7 @@ BASE_PLAYER_COLUMNS = {
     'match_date',
     'mins_played',
     'number',
+    'position',
     'all_runs',
     'passes_to_run_ratio',
     'tackle_efficiency',
@@ -320,7 +321,7 @@ def fetch_player_stats_for_years(years, configs, batch=500):
     return pd.concat(frames, ignore_index=True)
 
 
-def load_and_process_data(configs, player_data, stat_mode='production'):
+def load_and_process_data(configs, player_data, stat_mode='production', recent_games=None):
     print(f"Processing {stat_mode.replace('_', ' ')} player stats...")
     
     # Filter for relevant years
@@ -336,8 +337,11 @@ def load_and_process_data(configs, player_data, stat_mode='production'):
     # Extract year
     player_df['year'] = pd.to_datetime(player_df['match_date']).dt.year
 
-    # Map positions
-    player_df['position'] = player_df['number'].apply(f.map_position)
+    # Prefer the recorded position; retain number as a fallback for legacy rows.
+    player_df['position'] = player_df.apply(
+        lambda row: f.map_position(row.get('position'), row.get('number')),
+        axis=1,
+    )
 
     if stat_mode == 'team_share':
         required_stats = sorted({
@@ -351,6 +355,15 @@ def load_and_process_data(configs, player_data, stat_mode='production'):
         for stat in required_stats:
             denominator = team_totals[stat].replace(0, np.nan)
             player_df[f'{stat}_team_share'] = (player_df[stat] / denominator * 100).fillna(0)
+
+    if recent_games:
+        player_df = (
+            player_df
+            .sort_values('match_date')
+            .groupby(['player', 'year', 'position'], group_keys=False)
+            .tail(recent_games)
+            .copy()
+        )
     
     # Calculate per_80 stats
     num_cols = player_df.select_dtypes('number').columns
@@ -395,7 +408,7 @@ def load_and_process_data(configs, player_data, stat_mode='production'):
 
 # --- Model Training ---
 
-def train_models(training_agg, configs):
+def train_models(training_agg, configs, game_window=None):
     models = {}
     
     print("\n====== TRAINING MODELS (GLOBAL) ======")
@@ -405,7 +418,8 @@ def train_models(training_agg, configs):
         
         # Filter data
         df = training_agg[training_agg['position'] == config.name].copy()
-        df = df[df['games'] >= config.min_games]
+        minimum_games = min(config.min_games, game_window) if game_window else config.min_games
+        df = df[df['games'] >= minimum_games]
         
         # Special exclusion for 2nd Row
         if config.name == '2nd Row':
@@ -586,7 +600,7 @@ def upsert_player_archetypes(records):
         )
     print(f"Upserted {len(records)} rows to nrl.{ARCHETYPE_TABLE}.")
 
-def generate_outputs(training_agg, models, configs, plot_suffix=""):
+def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="production", game_window=None):
     full_cluster_data_export = {}
     player_archetype_records = []
     
@@ -617,7 +631,8 @@ def generate_outputs(training_agg, models, configs, plot_suffix=""):
             
             # Filter data
             df = year_data[year_data['position'] == config.name].copy()
-            df = df[df['games'] >= config.min_games]
+            minimum_games = min(config.min_games, game_window) if game_window else config.min_games
+            df = df[df['games'] >= minimum_games]
             
             if config.name == '2nd Row':
                 df = df[df['player'] != 'Chris Randall']
@@ -673,7 +688,7 @@ def generate_outputs(training_agg, models, configs, plot_suffix=""):
             export_name = export_position_name(config)
             
             position_data = {
-                "stat_mode": "team_share" if plot_suffix else "production",
+                "stat_mode": stat_mode,
                 "archetypes": [],
                 "pc_axes": {
                     "pc1": {"name": config.pc_names[0], "features": config.features1},
@@ -1214,6 +1229,14 @@ def generate_outputs(training_agg, models, configs, plot_suffix=""):
         
     return full_cluster_data_export, player_archetype_records
 
+
+def save_cluster_exports(data, file_stem, variable_name):
+    with open(f'{file_stem}.json', 'w') as output_file:
+        json.dump(data, output_file, indent=4)
+    with open(f'{file_stem}.js', 'w') as output_file:
+        output_file.write(f"const {variable_name} = {json.dumps(data, indent=4)};")
+    print(f"Exported {file_stem}.json and {file_stem}.js")
+
 # --- Main Execution ---
 
 if __name__ == "__main__":
@@ -1228,14 +1251,8 @@ if __name__ == "__main__":
     # 3. Generate Outputs (Per Year)
     full_data, player_archetype_records = generate_outputs(training_agg, models, POSITION_CONFIGS)
     
-    # 4. Save JSON
-    with open('nrl_cluster_data.json', 'w') as output_file:
-        json.dump(full_data, output_file, indent=4)
-    print("\nExported cluster data to nrl_cluster_data.json")
-
-    with open('nrl_cluster_data.js', 'w') as output_file:
-        output_file.write(f"const clusterData = {json.dumps(full_data, indent=4)};")
-    print("Exported cluster data to nrl_cluster_data.js")
+    # 4. Save JSON and browser data
+    save_cluster_exports(full_data, 'nrl_cluster_data', 'clusterData')
 
     # 5. Upsert player-level archetype outputs
     if os.getenv("SKIP_ARCHETYPE_UPSERT") == "1":
@@ -1252,12 +1269,48 @@ if __name__ == "__main__":
         team_share_models,
         team_share_configs,
         plot_suffix="team_share",
+        stat_mode="team_share",
     )
+    save_cluster_exports(team_share_data, 'nrl_cluster_data_team_share', 'clusterDataTeamShare')
 
-    with open('nrl_cluster_data_team_share.json', 'w') as output_file:
-        json.dump(team_share_data, output_file, indent=4)
-    print("\nExported team-share cluster data to nrl_cluster_data_team_share.json")
+    # 7. Generate last-five and last-ten qualifying-game views.
+    for game_window in (5, 10):
+        window_label = f'l{game_window}'
+        variable_suffix = f'L{game_window}'
 
-    with open('nrl_cluster_data_team_share.js', 'w') as output_file:
-        output_file.write(f"const clusterDataTeamShare = {json.dumps(team_share_data, indent=4)};")
-    print("Exported team-share cluster data to nrl_cluster_data_team_share.js")
+        window_training_agg = load_and_process_data(
+            POSITION_CONFIGS,
+            player_data,
+            stat_mode='production',
+            recent_games=game_window,
+        )
+        window_models = train_models(window_training_agg, POSITION_CONFIGS, game_window=game_window)
+        window_data, _ = generate_outputs(
+            window_training_agg,
+            window_models,
+            POSITION_CONFIGS,
+            plot_suffix=window_label,
+            game_window=game_window,
+        )
+        save_cluster_exports(window_data, f'nrl_cluster_data_{window_label}', f'clusterData{variable_suffix}')
+
+        window_team_share_agg = load_and_process_data(
+            team_share_configs,
+            player_data,
+            stat_mode='team_share',
+            recent_games=game_window,
+        )
+        window_team_share_models = train_models(window_team_share_agg, team_share_configs, game_window=game_window)
+        window_team_share_data, _ = generate_outputs(
+            window_team_share_agg,
+            window_team_share_models,
+            team_share_configs,
+            plot_suffix=f'team_share_{window_label}',
+            stat_mode='team_share',
+            game_window=game_window,
+        )
+        save_cluster_exports(
+            window_team_share_data,
+            f'nrl_cluster_data_team_share_{window_label}',
+            f'clusterDataTeamShare{variable_suffix}',
+        )

@@ -1,4 +1,5 @@
 (function () {
+  const isCurrentSeasonWindow = /_(?:l5|l10)(?:_|\.html)/i.test(window.location.pathname);
   const state = {
     activeYearIndex: 0,
     droppedDimension: null,
@@ -346,8 +347,8 @@
   }
 
   function updateYearButtons() {
-    document.querySelectorAll(".year-toggle-btn").forEach((button, index) => {
-      const isActive = index === state.activeYearIndex;
+    document.querySelectorAll(".year-toggle-btn").forEach((button) => {
+      const isActive = Number(button.dataset.yearIndex) === state.activeYearIndex;
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
@@ -378,10 +379,15 @@
     const controls = document.createElement("div");
     controls.id = "year-toggle";
 
-    yearMenu.buttons.forEach((yearButton, index) => {
+    const availableYearButtons = yearMenu.buttons
+      .map((yearButton, index) => ({ yearButton, index }))
+      .filter(({ yearButton }) => !isCurrentSeasonWindow || String(yearButton.label) === "2026");
+
+    availableYearButtons.forEach(({ yearButton, index }) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "year-toggle-btn";
+      button.dataset.yearIndex = String(index);
       button.textContent = yearButton.label;
       button.setAttribute("aria-pressed", index === state.activeYearIndex ? "true" : "false");
       button.addEventListener("click", () => applyYearFilter(index, yearButton));
@@ -389,6 +395,11 @@
     });
 
     getControlBar(wrapper).appendChild(controls);
+    if (isCurrentSeasonWindow && availableYearButtons.length) {
+      const currentSeason = availableYearButtons[0];
+      applyYearFilter(currentSeason.index, currentSeason.yearButton);
+      return;
+    }
     updateYearButtons();
   }
 

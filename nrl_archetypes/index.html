@@ -104,8 +104,38 @@
         .mode-toggle {
             display: flex;
             gap: 0.5rem;
-            margin-bottom: 1rem;
             flex-wrap: wrap;
+        }
+
+        .control-frame {
+            display: inline-flex;
+            width: fit-content;
+            max-width: 100%;
+            align-items: center;
+            gap: 0.35rem;
+            margin-bottom: 1rem;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            background: rgba(17, 24, 50, 0.72);
+            padding: 0.25rem;
+        }
+
+        .control-frame .mode-toggle {
+            flex-wrap: nowrap;
+            gap: 0.2rem;
+        }
+
+        .control-frame .mode-btn {
+            border-color: transparent;
+            white-space: nowrap;
+        }
+
+        .control-divider {
+            width: 1px;
+            height: 1.5rem;
+            flex: 0 0 1px;
+            background: var(--border-color);
         }
 
         .mode-btn {
@@ -597,9 +627,17 @@
             </div>
         </div>
 
-        <div class="mode-toggle" id="modeToggle">
-            <button class="mode-btn active" data-mode="production">Production</button>
-            <button class="mode-btn" data-mode="teamShare">Team Share</button>
+        <div class="control-frame">
+            <div class="mode-toggle" id="modeToggle">
+                <button class="mode-btn active" data-mode="production">Production</button>
+                <button class="mode-btn" data-mode="teamShare">Team Share</button>
+            </div>
+            <span class="control-divider" aria-hidden="true"></span>
+            <div class="mode-toggle" id="windowToggle" aria-label="Qualifying game window">
+                <button class="mode-btn active" data-window="all">All</button>
+                <button class="mode-btn" data-window="l5">L5</button>
+                <button class="mode-btn" data-window="l10">L10</button>
+            </div>
         </div>
 
         <div class="tabs" id="positionTabs">
@@ -642,6 +680,10 @@
 
     <script src="nrl_cluster_data.js"></script>
     <script src="nrl_cluster_data_team_share.js"></script>
+    <script src="nrl_cluster_data_l5.js"></script>
+    <script src="nrl_cluster_data_l10.js"></script>
+    <script src="nrl_cluster_data_team_share_l5.js"></script>
+    <script src="nrl_cluster_data_team_share_l10.js"></script>
     <script>
 
         // DOM Elements
@@ -649,6 +691,7 @@
         const plotContainer = document.getElementById('plotContainer');
         const archetypeList = document.getElementById('archetypeList');
         const modeToggle = document.getElementById('modeToggle');
+        const windowToggle = document.getElementById('windowToggle');
         const rankingsCard = document.getElementById('rankingsCard');
         const rankingsHeader = document.getElementById('rankingsHeader');
         const rankingsYearSelect = document.getElementById('rankingsYearSelect');
@@ -657,6 +700,7 @@
         let currentPosition = null;
         let currentYear = 'All';
         let currentMode = 'production';
+        let currentWindow = 'all';
         let rankingsOpen = false;
         let rankingsYear = 'All';
         let rankingsRequestId = 0;
@@ -664,11 +708,20 @@
         const rankingYearOptions = ['All', '2023', '2024', '2025', '2026'];
 
         function getActiveClusterData() {
-            return currentMode === 'teamShare' && typeof clusterDataTeamShare !== 'undefined' ? clusterDataTeamShare : clusterData;
+            if (currentMode === 'teamShare') {
+                if (currentWindow === 'l5' && typeof clusterDataTeamShareL5 !== 'undefined') return clusterDataTeamShareL5;
+                if (currentWindow === 'l10' && typeof clusterDataTeamShareL10 !== 'undefined') return clusterDataTeamShareL10;
+                return clusterDataTeamShare;
+            }
+            if (currentWindow === 'l5' && typeof clusterDataL5 !== 'undefined') return clusterDataL5;
+            if (currentWindow === 'l10' && typeof clusterDataL10 !== 'undefined') return clusterDataL10;
+            return clusterData;
         }
 
         function getPlotSuffix() {
-            return currentMode === 'teamShare' ? '_team_share' : '';
+            const modeSuffix = currentMode === 'teamShare' ? '_team_share' : '';
+            const windowSuffix = currentWindow === 'all' ? '' : `_${currentWindow}`;
+            return `${modeSuffix}${windowSuffix}`;
         }
 
         // Initialize
@@ -688,6 +741,10 @@
                 btn.onclick = () => selectMode(btn.dataset.mode);
             });
 
+            windowToggle.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.onclick = () => selectWindow(btn.dataset.window);
+            });
+
             rankingsHeader.onclick = () => {
                 rankingsOpen = !rankingsOpen;
                 if (currentPosition) renderArchetypes(currentPosition);
@@ -695,6 +752,10 @@
 
             rankingsYearSelect.onchange = (event) => {
                 rankingsYear = event.target.value;
+                if (currentWindow !== 'all' && rankingsYear !== '2026') {
+                    selectWindow('all');
+                    return;
+                }
                 if (currentPosition) renderArchetypes(currentPosition);
             };
 
@@ -724,6 +785,25 @@
 
             modeToggle.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
+
+            const activeYearData = getActiveClusterData()[currentYear];
+            const selectedPosition = activeYearData[currentPosition] ? currentPosition : Object.keys(activeYearData)[0];
+            currentPosition = null;
+            selectPosition(selectedPosition);
+        }
+
+        function selectWindow(windowName) {
+            if (currentWindow === windowName) return;
+            currentWindow = windowName;
+            if (windowName !== 'all') {
+                rankingsYear = '2026';
+                rankingsYearSelect.value = rankingsYear;
+            }
+            rankingsRequestId++;
+
+            windowToggle.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.window === windowName);
             });
 
             const activeYearData = getActiveClusterData()[currentYear];
@@ -776,6 +856,9 @@
             const modeDescription = currentMode === 'teamShare'
                 ? 'Team Share mode uses each player game stat as a percentage of their team total for that same game, then averages those shares by player-season.'
                 : 'Production mode uses the player production stats directly.';
+            const windowDescription = currentWindow === 'all'
+                ? 'All qualifying games in the season are included.'
+                : `Only each player’s latest ${currentWindow === 'l5' ? 'five' : 'ten'} qualifying games from 2026 are included.`;
 
             updateRankingsCard(position, data);
 
@@ -784,7 +867,7 @@
                     <div class="archetype-name" style="color: #fff">Analysis Dimensions</div>
                 </div>
                 <div class="description">
-                    ${modeDescription}<br><br>
+                    ${modeDescription} ${windowDescription}<br><br>
                     Clusters are defined by 3 key dimensions:
                     <ul class="features-list" style="margin-top: 0.5rem">
                         <li class="feature-item">
@@ -903,7 +986,7 @@
         }
 
         async function loadRankings(position) {
-            const cacheKey = `${currentMode}:${position}`;
+            const cacheKey = `${currentMode}:${currentWindow}:${position}`;
             if (rankingsCache[cacheKey]) return rankingsCache[cacheKey];
 
             const plotFile = `nrl_cluster_plot_${position.toLowerCase().replace(' ', '_')}${getPlotSuffix()}_all.html`;

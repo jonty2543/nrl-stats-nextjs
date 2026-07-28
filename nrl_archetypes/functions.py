@@ -535,7 +535,26 @@ def fetch_all(table, batch=1000):
         i += batch
     return pd.DataFrame(out)
 
-def map_position(n):
+def map_position(position, number=None):
+    key = str(position or '').strip().upper()
+    if key in {'FB', 'FULLBACK', 'FULL BACK'}:
+        return 'Fullback'
+    if key in {'WG', 'W', 'WING', 'WINGER'}:
+        return 'Winger'
+    if key in {'CE', 'C', 'CTR', 'CENTRE', 'CENTER'}:
+        return 'Centre'
+    if key in {'FE', 'FIVE-EIGHTH', 'FIVE EIGHTH', 'HB', 'HLF', 'HALFBACK', 'HALF'}:
+        return 'Half'
+    if key in {'HK', 'HOK', 'HOOKER'}:
+        return 'Hooker'
+    if key in {'SR', '2RF', '2ND ROW', '2ND-ROW', 'SECOND ROW', 'SECOND-ROW', 'EDG', 'EDGE'}:
+        return '2nd Row'
+    if key in {'PR', 'PROP', 'LK', 'LOCK', 'MID', 'MIDDLE'}:
+        return 'Middle'
+    if key in {'INTERCHANGE', 'REPLACEMENT', 'RESERVE'}:
+        return 'Interchange'
+
+    n = position if number is None and isinstance(position, (int, float)) else number
     if n == 1:
         return 'Fullback'
     elif n in {2, 5}:
@@ -554,4 +573,3 @@ def map_position(n):
         return 'Interchange'
     else:
         return 'Interchange'
-

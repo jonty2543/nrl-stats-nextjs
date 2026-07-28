@@ -13,8 +13,6 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 const APP_FONT_STACK = "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-const DASHBOARD_BACKGROUND_IMAGE =
-  "radial-gradient(circle at top left, rgba(92, 108, 220, 0.18), transparent 36%), radial-gradient(circle at 72% 18%, rgba(70, 92, 180, 0.08), transparent 28%), radial-gradient(circle at bottom right, rgba(58, 84, 176, 0.16), transparent 34%), linear-gradient(180deg, #111733 0%, #10162f 48%, #0f142b 100%)";
 const ARCHETYPES_ARTICLE_TITLE = "NRL Archetypes: Understanding Player Roles Beyond Position";
 const ARCHETYPES_ARTICLE_SLUG = "nrl-archetypes-understanding-player-roles-beyond-position";
 const ARTICLES_PATH = "/dashboard/articles";
@@ -100,7 +98,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
     .replaceAll("--card-bg: #151E3F;", "--card-bg: #161c32;")
     .replaceAll("--border-color: #2A3B6E;", "--border-color: #2a3356;")
     .replace(
-      /<div class="ml-explanation" id="mlDropdown">[\s\S]*?<\/div>\s*(?=<div class="mode-toggle" id="modeToggle">|<div class="tabs" id="positionTabs">)/,
+      /<div class="ml-explanation" id="mlDropdown">[\s\S]*?<\/div>\s*(?=<div class="control-frame">|<div class="mode-toggle" id="modeToggle">|<div class="tabs" id="positionTabs">)/,
       buildArchetypesArticleLink(articleLink)
     )
     .replace(
@@ -108,11 +106,17 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
       `
         html,
         body {
-            background-color: #111733;
-            background-image: ${DASHBOARD_BACKGROUND_IMAGE};
-            background-repeat: no-repeat;
-            background-size: cover;
             font-family: ${APP_FONT_STACK};
+        }
+
+        html {
+            background-color: #111733 !important;
+            background-repeat: no-repeat !important;
+        }
+
+        body {
+            background-color: #111733 !important;
+            background-repeat: no-repeat !important;
         }
 
         body::before,
@@ -159,11 +163,31 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
 
         .mode-btn,
         .tab-btn {
-            padding: 0.5rem 0.9rem;
-            font-size: 0.78rem;
+            padding: 0.38rem 0.68rem;
+            font-size: 0.68rem;
             font-weight: 800;
             text-transform: uppercase;
             background-color: transparent;
+        }
+
+        .control-frame {
+            gap: 0.2rem;
+            padding: 0.18rem;
+        }
+
+        .control-frame .mode-btn {
+            padding: 0.34rem 0.58rem;
+            font-size: 0.62rem;
+            letter-spacing: 0.1em;
+        }
+
+        .control-divider {
+            height: 1.15rem;
+        }
+
+        .tabs {
+            gap: 0.4rem;
+            margin-bottom: 1rem;
         }
 
         .mode-btn.active,
@@ -187,13 +211,18 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
             }
 
             .tabs {
-                gap: 0.55rem;
+                gap: 0.32rem;
             }
 
             .mode-btn,
             .tab-btn {
-                padding: 0.42rem 0.72rem;
-                font-size: 0.68rem;
+                padding: 0.32rem 0.56rem;
+                font-size: 0.6rem;
+            }
+
+            .control-frame .mode-btn {
+                padding: 0.3rem 0.5rem;
+                font-size: 0.58rem;
             }
         }
 
@@ -212,15 +241,8 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
 
         .plot-container iframe {
             display: block;
-            background-color: #111733;
-            background-image: ${DASHBOARD_BACKGROUND_IMAGE};
-            background-repeat: no-repeat;
-            background-size: cover;
+            background: #111733 !important;
             color-scheme: dark;
-            opacity: 0;
-        }
-
-        .plot-container iframe.is-loaded {
             opacity: 1;
         }
 
@@ -340,12 +362,41 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
         }
     </style>
     <script>
-        document.addEventListener("load", function (event) {
-            if (event.target instanceof HTMLIFrameElement && event.target.closest(".plot-container")) {
-                event.target.classList.add("is-loaded");
+        function syncArchetypesBackground() {
+            try {
+                if (window.parent === window || !window.frameElement) return;
+                const parentBodyStyle = window.parent.getComputedStyle(window.parent.document.body);
+                const frameRect = window.frameElement.getBoundingClientRect();
+                [document.documentElement, document.body].filter(Boolean).forEach(function (layer) {
+                    layer.style.setProperty('background-color', parentBodyStyle.backgroundColor, 'important');
+                    layer.style.setProperty('background-image', parentBodyStyle.backgroundImage, 'important');
+                    layer.style.setProperty('background-size', window.parent.innerWidth + 'px ' + window.parent.innerHeight + 'px', 'important');
+                    layer.style.setProperty('background-position', (-frameRect.left) + 'px ' + (-frameRect.top) + 'px', 'important');
+                    layer.style.setProperty('background-repeat', 'no-repeat', 'important');
+                    layer.style.setProperty('background-attachment', 'fixed', 'important');
+                });
+            } catch (_) {
+                document.documentElement.style.setProperty('background-color', '#111733', 'important');
             }
+        }
+        syncArchetypesBackground();
+        document.addEventListener('DOMContentLoaded', syncArchetypesBackground, { once: true });
+        window.addEventListener('resize', syncArchetypesBackground, { passive: true });
+        window.parent.addEventListener('scroll', syncArchetypesBackground, { passive: true });
+        document.addEventListener('load', function (event) {
+            const frame = event.target;
+            if (!(frame instanceof HTMLIFrameElement) || !frame.closest('.plot-container')) return;
+            frame.style.opacity = '0.99';
+            frame.style.transform = 'translateZ(0)';
+            window.requestAnimationFrame(function () {
+                window.requestAnimationFrame(function () {
+                    frame.style.opacity = '1';
+                    frame.style.transform = 'none';
+                });
+            });
         }, true);
-    </script>`
+    </script>
+    `
     );
 }
 
@@ -392,10 +443,8 @@ function stylePlotHtml(html: string): string {
                 html,
                 body,
                 #plotly-wrapper {
-                    background-color: #111733;
-                    background-image: ${DASHBOARD_BACKGROUND_IMAGE};
-                    background-repeat: no-repeat;
-                    background-size: cover;
+                    background-color: #111733 !important;
+                    background-image: none !important;
                     font-family: ${APP_FONT_STACK};
                 }
 

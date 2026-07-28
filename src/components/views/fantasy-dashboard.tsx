@@ -539,6 +539,7 @@ const GAME_LOG_COLLAPSED_BASE_UPSIDE_MAX_HEIGHT_PX = 356
 const ALL_PLAYERS_STATS_YEAR = "2026"
 const ALL_PLAYERS_PREVIEW_LIMIT = 20
 const ALL_PLAYERS_INITIAL_PREVIEW_LIMIT = 6
+const ALL_PLAYERS_MOBILE_BATCH_SIZE = 40
 const ALL_PLAYERS_VIRTUALIZE_THRESHOLD = 80
 const ALL_PLAYERS_TABLE_ROW_HEIGHT_PX = 56
 
@@ -3552,6 +3553,8 @@ export function FantasyDashboard({
   const [showAllPlayersCardTags, setShowAllPlayersCardTags] = useState(false)
   const [showAllPlayersCardStats, setShowAllPlayersCardStats] = useState(false)
   const [showAllPlayersTradeRatings, setShowAllPlayersTradeRatings] = useState(false)
+  const [allPlayersMobileVisibleCount, setAllPlayersMobileVisibleCount] = useState(ALL_PLAYERS_MOBILE_BATCH_SIZE)
+  const allPlayersMobileLoadMoreRef = useRef<HTMLButtonElement | null>(null)
   const deferredShowAllPlayersTradeRatings = useDeferredValue(showAllPlayersTradeRatings)
   const renderAllPlayersTradeRatings = showAllPlayersTradeRatings && deferredShowAllPlayersTradeRatings
   const [showAllPlayersTradeRatingInfo, setShowAllPlayersTradeRatingInfo] = useState(false)
@@ -3578,6 +3581,16 @@ export function FantasyDashboard({
   const [tradeSuggestorNotes, setTradeSuggestorNotes] = useState("")
   const [tradeSuggestorResult, setTradeSuggestorResult] = useState<string | null>(null)
   const [tradeSuggestorError, setTradeSuggestorError] = useState<string | null>(null)
+
+  const handleShowAllPlayersCardStatsChange = useCallback((checked: boolean) => {
+    setAllPlayersMobileVisibleCount(ALL_PLAYERS_MOBILE_BATCH_SIZE)
+    setShowAllPlayersCardStats(checked)
+  }, [])
+
+  const handleShowAllPlayersTradeRatingsChange = useCallback((checked: boolean) => {
+    setAllPlayersMobileVisibleCount(ALL_PLAYERS_MOBILE_BATCH_SIZE)
+    setShowAllPlayersTradeRatings(checked)
+  }, [])
   const [isTradeSuggestorUploading, setIsTradeSuggestorUploading] = useState<TradeScreenshotSlot | null>(null)
   const [isTradeSuggestorSubmitting, setIsTradeSuggestorSubmitting] = useState(false)
   const [hasRequestedAllPlayersStats, setHasRequestedAllPlayersStats] = useState(false)
@@ -5183,9 +5196,36 @@ export function FantasyDashboard({
     () =>
       isAllPlayersPreview && !hasExpandedAllPlayersPreviewRows
         ? sortedAllPlayersTableRows.slice(0, ALL_PLAYERS_INITIAL_PREVIEW_LIMIT)
-        : sortedAllPlayersTableRows,
-    [hasExpandedAllPlayersPreviewRows, isAllPlayersPreview, sortedAllPlayersTableRows]
+        : hasLoadedFullAllPlayersRows
+          ? sortedAllPlayersTableRows.slice(0, allPlayersMobileVisibleCount)
+          : sortedAllPlayersTableRows,
+    [
+      allPlayersMobileVisibleCount,
+      hasExpandedAllPlayersPreviewRows,
+      hasLoadedFullAllPlayersRows,
+      isAllPlayersPreview,
+      sortedAllPlayersTableRows,
+    ]
   )
+
+  useEffect(() => {
+    if (!hasLoadedFullAllPlayersRows || allPlayersMobileVisibleCount >= sortedAllPlayersTableRows.length) return
+    const target = allPlayersMobileLoadMoreRef.current
+    if (!target || typeof IntersectionObserver === "undefined") return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        setAllPlayersMobileVisibleCount((current) =>
+          Math.min(current + ALL_PLAYERS_MOBILE_BATCH_SIZE, sortedAllPlayersTableRows.length)
+        )
+      },
+      { rootMargin: "400px 0px" }
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [allPlayersMobileVisibleCount, hasLoadedFullAllPlayersRows, sortedAllPlayersTableRows.length])
+
   const shouldVirtualizeAllPlayersRows =
     hasLoadedFullAllPlayersRows && sortedAllPlayersTableRows.length > ALL_PLAYERS_VIRTUALIZE_THRESHOLD
   const desktopAllPlayersVirtualRows = useVirtualRows(
@@ -6608,7 +6648,7 @@ export function FantasyDashboard({
                     <input
                       type="checkbox"
                       checked={showAllPlayersCardStats}
-                      onChange={(event) => setShowAllPlayersCardStats(event.target.checked)}
+                      onChange={(event) => handleShowAllPlayersCardStatsChange(event.target.checked)}
                       className="sr-only"
                     />
                     <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersCardStats ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
@@ -6621,7 +6661,7 @@ export function FantasyDashboard({
                       <input
                         type="checkbox"
                         checked={showAllPlayersTradeRatings}
-                        onChange={(event) => setShowAllPlayersTradeRatings(event.target.checked)}
+                        onChange={(event) => handleShowAllPlayersTradeRatingsChange(event.target.checked)}
                         className="sr-only"
                       />
                       <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersTradeRatings ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
@@ -6686,7 +6726,7 @@ export function FantasyDashboard({
                     <input
                       type="checkbox"
                       checked={showAllPlayersTradeRatings}
-                      onChange={(event) => setShowAllPlayersTradeRatings(event.target.checked)}
+                      onChange={(event) => handleShowAllPlayersTradeRatingsChange(event.target.checked)}
                       className="sr-only"
                     />
                     <span className={`relative h-3.5 w-6 rounded-full border transition-colors ${showAllPlayersTradeRatings ? "border-nrl-accent/40 bg-nrl-accent/20" : "border-nrl-border bg-nrl-panel"}`}>
@@ -6885,7 +6925,8 @@ export function FantasyDashboard({
                   : `No ${ALL_PLAYERS_STATS_YEAR} player stats available.`}
               </div>
             ) : (
-              visibleAllPlayersCardRows.map((row) => {
+              <>
+                {visibleAllPlayersCardRows.map((row) => {
                 const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
                 const shouldBuildTradeRatingCardStats =
                   renderAllPlayersTradeRatings || isAllPlayersTradeRatingSortKey(allPlayersSortDisplayColumn)
@@ -7064,8 +7105,9 @@ export function FantasyDashboard({
                     onFocus={() => prefetchPlayerRoute(row.player.name)}
                     onMouseEnter={() => prefetchPlayerRoute(row.player.name)}
                     onTouchStart={() => prefetchPlayerRoute(row.player.name)}
-	                    className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-3 text-left transition-colors hover:border-white/25 hover:bg-[#17213d]"
-	                  >
+                    className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-3 text-left transition-colors hover:border-white/25 hover:bg-[#17213d]"
+                    style={{ contentVisibility: "auto", containIntrinsicSize: "128px" } as CSSProperties}
+                  >
 	                    <div className="flex w-full items-start justify-between gap-3">
                       <div className="flex min-w-0 flex-1 items-start gap-2.5">
                         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-[11px] text-nrl-muted">
@@ -7190,7 +7232,20 @@ export function FantasyDashboard({
 	                    ) : null}
                   </button>
                 )
-              })
+                })}
+                {hasLoadedFullAllPlayersRows && visibleAllPlayersCardRows.length < sortedAllPlayersTableRows.length ? (
+                  <button
+                    ref={allPlayersMobileLoadMoreRef}
+                    type="button"
+                    onClick={() => setAllPlayersMobileVisibleCount((current) =>
+                      Math.min(current + ALL_PLAYERS_MOBILE_BATCH_SIZE, sortedAllPlayersTableRows.length)
+                    )}
+                    className="min-h-10 rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-nrl-accent transition-colors hover:border-nrl-accent"
+                  >
+                    Load more players ({sortedAllPlayersTableRows.length - visibleAllPlayersCardRows.length} remaining)
+                  </button>
+                ) : null}
+              </>
             )}
           </div>
           <div

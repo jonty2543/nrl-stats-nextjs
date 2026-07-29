@@ -1170,12 +1170,33 @@ function useVirtualRows(count: number, estimatedRowHeight: number, overscan: num
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [viewportHeight, setViewportHeight] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
+  const latestScrollTopRef = useRef(0)
+  const scrollFrameRef = useRef<number | null>(null)
 
   const onScroll = useCallback(() => {
     const container = containerRef.current
     if (!container) return
-    setScrollTop(container.scrollTop)
-  }, [])
+    latestScrollTopRef.current = container.scrollTop
+    if (scrollFrameRef.current !== null) return
+
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null
+      const nextScrollTop = latestScrollTopRef.current
+      const nextRow = Math.floor(nextScrollTop / estimatedRowHeight)
+      startTransition(() => {
+        setScrollTop((currentScrollTop) =>
+          Math.floor(currentScrollTop / estimatedRowHeight) === nextRow ? currentScrollTop : nextScrollTop
+        )
+      })
+    })
+  }, [estimatedRowHeight])
+
+  useEffect(
+    () => () => {
+      if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current)
+    },
+    []
+  )
 
   useLayoutEffect(() => {
     if (!enabled) return
@@ -3973,14 +3994,34 @@ export function FantasyDashboard({
     },
     [playerRouteBasePath, showAllPlayersOnly]
   )
+  const prefetchedPlayerRoutesRef = useRef(new Set<string>())
+  const playerRoutePrefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prefetchPlayerRoute = useCallback(
     (name: string) => {
       const href = playerRouteHref(name)
-      if (!href) return
+      if (!href || prefetchedPlayerRoutesRef.current.has(href)) return
+      prefetchedPlayerRoutesRef.current.add(href)
       router.prefetch(href)
     },
     [playerRouteHref, router]
   )
+  const cancelPlayerRoutePrefetch = useCallback(() => {
+    if (playerRoutePrefetchTimeoutRef.current === null) return
+    clearTimeout(playerRoutePrefetchTimeoutRef.current)
+    playerRoutePrefetchTimeoutRef.current = null
+  }, [])
+  const schedulePlayerRoutePrefetch = useCallback(
+    (name: string) => {
+      cancelPlayerRoutePrefetch()
+      playerRoutePrefetchTimeoutRef.current = setTimeout(() => {
+        playerRoutePrefetchTimeoutRef.current = null
+        prefetchPlayerRoute(name)
+      }, 150)
+    },
+    [cancelPlayerRoutePrefetch, prefetchPlayerRoute]
+  )
+
+  useEffect(() => cancelPlayerRoutePrefetch, [cancelPlayerRoutePrefetch])
 
   const loadTeammateLookupRows = useCallback(async (years: string[]) => {
     if (!hasLoginAccess) {
@@ -6619,7 +6660,7 @@ export function FantasyDashboard({
             activeTourStep?.target === "player-list" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""
           }`}
         >
-          {lineupsProjections?.source !== "lineups" ? (
+          {lineupsProjections?.source === "lineup_unaware" ? (
             <div className="border-b border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
               Note: ratings and projections are less accurate before team lists are announced.
             </div>
@@ -7103,8 +7144,8 @@ export function FantasyDashboard({
                     type="button"
                     onClick={() => navigateToPlayer(row.player.name)}
                     onFocus={() => prefetchPlayerRoute(row.player.name)}
-                    onMouseEnter={() => prefetchPlayerRoute(row.player.name)}
-                    onTouchStart={() => prefetchPlayerRoute(row.player.name)}
+                    onMouseEnter={() => schedulePlayerRoutePrefetch(row.player.name)}
+                    onMouseLeave={cancelPlayerRoutePrefetch}
                     className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-3 text-left transition-colors hover:border-white/25 hover:bg-[#17213d]"
                     style={{ contentVisibility: "auto", containIntrinsicSize: "128px" } as CSSProperties}
                   >
@@ -7311,7 +7352,8 @@ export function FantasyDashboard({
                         key={row.player.id}
                         onClick={() => navigateToPlayer(row.player.name)}
                         onFocus={() => prefetchPlayerRoute(row.player.name)}
-                        onMouseEnter={() => prefetchPlayerRoute(row.player.name)}
+                        onMouseEnter={() => schedulePlayerRoutePrefetch(row.player.name)}
+                        onMouseLeave={cancelPlayerRoutePrefetch}
                         className="h-14 cursor-pointer border-b border-nrl-border/60"
                       >
                         <td className="sticky left-0 z-[1] w-13 min-w-13 max-w-13 border-r border-nrl-border bg-nrl-panel px-1 py-2 sm:w-15 sm:min-w-15 sm:max-w-15">

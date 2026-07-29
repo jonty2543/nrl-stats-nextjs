@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 export interface TeamQuadrantPoint {
   id: string;
@@ -46,10 +46,16 @@ interface TeamQuadrantScatterProps {
   rSquared?: number | null;
 }
 
-const WIDTH = 900;
-const HEIGHT = 610;
-const MARGIN = { top: 54, right: 34, bottom: 128, left: 82 };
-const POINT_OVERFLOW = 23;
+const DESKTOP_LAYOUT = {
+  width: 900,
+  height: 610,
+  margin: { top: 54, right: 34, bottom: 128, left: 82 },
+} as const;
+const MOBILE_LAYOUT = {
+  width: 700,
+  height: 820,
+  margin: { top: 72, right: 28, bottom: 148, left: 112 },
+} as const;
 const ZOOM_LEVELS = [1, 1.35, 1.75, 2.25, 3] as const;
 
 interface PlotDragState {
@@ -112,7 +118,15 @@ export function TeamQuadrantScatter({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [zoomState, setZoomState] = useState({ pointsKey: "", index: 0, panX: 0, panY: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const dragState = useRef<PlotDragState | null>(null);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const pointsKey = useMemo(() => points.map((point) => point.id).join("|"), [points]);
   const zoomIndex = zoomState.pointsKey === pointsKey ? zoomState.index : 0;
   const panX = zoomState.pointsKey === pointsKey ? zoomState.panX : 0;
@@ -144,15 +158,17 @@ export function TeamQuadrantScatter({
     return <div className="grid min-h-96 place-items-center text-sm text-nrl-muted">{emptyMessage}</div>;
   }
 
-  const plotWidth = WIDTH - MARGIN.left - MARGIN.right;
-  const plotHeight = HEIGHT - MARGIN.top - MARGIN.bottom;
+  const { width, height, margin } = isMobile ? MOBILE_LAYOUT : DESKTOP_LAYOUT;
+  const pointOverflow = isMobile ? 31 : 23;
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
   const xDomain = zoomDomain(chart.xDomain, chart.xMean + panX, zoom);
   const yDomain = zoomDomain(chart.yDomain, chart.yMean + panY, zoom);
   const xScale = (value: number) => {
     const ratio = (value - xDomain[0]) / (xDomain[1] - xDomain[0]);
-    return MARGIN.left + (xHigherIsBetter ? ratio : 1 - ratio) * plotWidth;
+    return margin.left + (xHigherIsBetter ? ratio : 1 - ratio) * plotWidth;
   };
-  const yScale = (value: number) => MARGIN.top + ((yDomain[1] - value) / (yDomain[1] - yDomain[0])) * plotHeight;
+  const yScale = (value: number) => margin.top + ((yDomain[1] - value) / (yDomain[1] - yDomain[0])) * plotHeight;
   const hovered = points.find((point) => point.id === hoveredId) ?? null;
   const hoveredX = hovered ? xScale(hovered.xValue) : 0;
   const hoveredY = hovered ? yScale(hovered.yValue) : 0;
@@ -178,11 +194,11 @@ export function TeamQuadrantScatter({
   const startPan = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (zoomIndex === 0) return;
     const bounds = event.currentTarget.getBoundingClientRect();
-    const viewBoxScaleX = WIDTH / bounds.width;
-    const viewBoxScaleY = HEIGHT / bounds.height;
+    const viewBoxScaleX = width / bounds.width;
+    const viewBoxScaleY = height / bounds.height;
     const pointerX = (event.clientX - bounds.left) * viewBoxScaleX;
     const pointerY = (event.clientY - bounds.top) * viewBoxScaleY;
-    if (pointerX < MARGIN.left || pointerX > MARGIN.left + plotWidth || pointerY < MARGIN.top || pointerY > MARGIN.top + plotHeight) return;
+    if (pointerX < margin.left || pointerX > margin.left + plotWidth || pointerY < margin.top || pointerY > margin.top + plotHeight) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     dragState.current = {
       pointerId: event.pointerId,
@@ -232,7 +248,7 @@ export function TeamQuadrantScatter({
   ) => (
     <>
       <text x={x} y={y} textAnchor={anchor}>{labels[0]}</text>
-      <text x={x} y={y + 14} textAnchor={anchor}>{labels[1]}</text>
+      <text x={x} y={y + (isMobile ? 22 : 14)} textAnchor={anchor}>{labels[1]}</text>
     </>
   );
 
@@ -247,7 +263,7 @@ export function TeamQuadrantScatter({
       </div>
       <svg
         className={`h-auto w-full ${zoomIndex > 0 ? isDragging ? "cursor-grabbing" : "cursor-grab" : ""}`}
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label={ariaLabel}
         onPointerDown={startPan}
@@ -257,18 +273,18 @@ export function TeamQuadrantScatter({
         style={{ touchAction: zoomIndex > 0 ? "none" : "auto" }}
       >
         <defs>
-          <clipPath id="quadrant-data-area"><rect x={MARGIN.left} y={MARGIN.top} width={plotWidth} height={plotHeight} rx="8" /></clipPath>
-          <clipPath id="quadrant-point-area"><rect x={MARGIN.left - POINT_OVERFLOW} y={MARGIN.top - POINT_OVERFLOW} width={plotWidth + POINT_OVERFLOW * 2} height={plotHeight + POINT_OVERFLOW * 2} /></clipPath>
+          <clipPath id="quadrant-data-area"><rect x={margin.left} y={margin.top} width={plotWidth} height={plotHeight} rx="8" /></clipPath>
+          <clipPath id="quadrant-point-area"><rect x={margin.left - pointOverflow} y={margin.top - pointOverflow} width={plotWidth + pointOverflow * 2} height={plotHeight + pointOverflow * 2} /></clipPath>
         </defs>
-        <rect x={MARGIN.left} y={MARGIN.top} width={plotWidth} height={plotHeight} rx="8" fill="var(--color-nrl-bg)" />
+        <rect x={margin.left} y={margin.top} width={plotWidth} height={plotHeight} rx="8" fill="var(--color-nrl-bg)" />
 
         {ticks(xDomain[0], xDomain[1]).map((tick) => {
           const x = xScale(tick);
-          return <g key={`x-${tick}`}><line x1={x} y1={MARGIN.top} x2={x} y2={MARGIN.top + plotHeight} stroke="var(--color-nrl-border)" opacity="0.45" /><text x={x} y={MARGIN.top + plotHeight + 24} textAnchor="middle" fill="var(--color-nrl-muted)" className="text-[12px] lg:text-[8px]">{tick.toFixed(xValueDecimals)}{xValueSuffix}</text></g>;
+          return <g key={`x-${tick}`}><line x1={x} y1={margin.top} x2={x} y2={margin.top + plotHeight} stroke="var(--color-nrl-border)" opacity="0.45" /><text x={x} y={margin.top + plotHeight + (isMobile ? 34 : 24)} textAnchor="middle" fill="var(--color-nrl-muted)" className="text-[20px] sm:text-[12px] lg:text-[8px]">{tick.toFixed(xValueDecimals)}{xValueSuffix}</text></g>;
         })}
         {ticks(yDomain[0], yDomain[1]).map((tick) => {
           const y = yScale(tick);
-          return <g key={`y-${tick}`}><line x1={MARGIN.left} y1={y} x2={MARGIN.left + plotWidth} y2={y} stroke="var(--color-nrl-border)" opacity="0.45" /><text x={MARGIN.left - 14} y={y + 4} textAnchor="end" fill="var(--color-nrl-muted)" className="text-[12px] lg:text-[8px]">{tick.toFixed(yValueDecimals)}{yValueSuffix}</text></g>;
+          return <g key={`y-${tick}`}><line x1={margin.left} y1={y} x2={margin.left + plotWidth} y2={y} stroke="var(--color-nrl-border)" opacity="0.45" /><text x={margin.left - (isMobile ? 18 : 14)} y={y + (isMobile ? 7 : 4)} textAnchor="end" fill="var(--color-nrl-muted)" className="text-[20px] sm:text-[12px] lg:text-[8px]">{tick.toFixed(yValueDecimals)}{yValueSuffix}</text></g>;
         })}
 
         <g clipPath="url(#quadrant-data-area)">
@@ -276,18 +292,18 @@ export function TeamQuadrantScatter({
             <line x1={xScale(Math.max(xDomain[0], yDomain[0]))} y1={yScale(Math.max(xDomain[0], yDomain[0]))} x2={xScale(Math.min(xDomain[1], yDomain[1]))} y2={yScale(Math.min(xDomain[1], yDomain[1]))} stroke="#a7b0cd" strokeWidth="2" opacity="0.85" />
           ) : (
             <>
-              <line x1={xScale(chart.xMean)} y1={MARGIN.top} x2={xScale(chart.xMean)} y2={MARGIN.top + plotHeight} stroke="#7890c8" strokeWidth="1.5" opacity="0.8" />
-              <line x1={MARGIN.left} y1={yScale(chart.yMean)} x2={MARGIN.left + plotWidth} y2={yScale(chart.yMean)} stroke="#7890c8" strokeWidth="1.5" opacity="0.8" />
+              <line x1={xScale(chart.xMean)} y1={margin.top} x2={xScale(chart.xMean)} y2={margin.top + plotHeight} stroke="#7890c8" strokeWidth="1.5" opacity="0.8" />
+              <line x1={margin.left} y1={yScale(chart.yMean)} x2={margin.left + plotWidth} y2={yScale(chart.yMean)} stroke="#7890c8" strokeWidth="1.5" opacity="0.8" />
             </>
           )}
         </g>
 
         {!comparisonLine ? (
-          <g fill="var(--color-nrl-text)" fontWeight="800" opacity="0.78" className="text-[13px] lg:text-[9px]">
-            {quadrantText(quadrants.topLeft, MARGIN.left + 16, MARGIN.top - 24)}
-            {quadrantText(quadrants.topRight, MARGIN.left + plotWidth - 16, MARGIN.top - 24, "end")}
-            {quadrantText(quadrants.bottomLeft, MARGIN.left + 16, MARGIN.top + plotHeight + 50)}
-            {quadrantText(quadrants.bottomRight, MARGIN.left + plotWidth - 16, MARGIN.top + plotHeight + 50, "end")}
+          <g fill="var(--color-nrl-text)" fontWeight="800" opacity="0.78" className="text-[14px] sm:text-[13px] lg:text-[9px]">
+            {quadrantText(quadrants.topLeft, margin.left + 16, margin.top - (isMobile ? 34 : 24))}
+            {quadrantText(quadrants.topRight, margin.left + plotWidth - 16, margin.top - (isMobile ? 34 : 24), "end")}
+            {quadrantText(quadrants.bottomLeft, margin.left + 16, margin.top + plotHeight + (isMobile ? 58 : 50))}
+            {quadrantText(quadrants.bottomRight, margin.left + plotWidth - 16, margin.top + plotHeight + (isMobile ? 58 : 50), "end")}
           </g>
         ) : null}
 
@@ -303,7 +319,9 @@ export function TeamQuadrantScatter({
               : "#79dbe3";
           const imageUrl = pointImages?.[point.id] ?? (showTeamLogos ? logoFor(point.team, teamLogos) : null);
           const active = point.id === hoveredId;
-          const radius = imageUrl ? active ? 20 : 17 : active ? 8 : 5.5;
+          const radius = imageUrl
+            ? isMobile ? active ? 29 : 24 : active ? 20 : 17
+            : isMobile ? active ? 12 : 8 : active ? 8 : 5.5;
           const clipId = `plot-point-image-${pointIndex}`;
           return (
             <g key={point.id} tabIndex={0} role="button" aria-label={`${point.team}: ${xMetricLabel.toLowerCase()} ${point.xValue.toFixed(xValueDecimals)}${xValueSuffix}, ${yMetricLabel.toLowerCase()} ${point.yValue.toFixed(yValueDecimals)}${yValueSuffix}`} onMouseEnter={() => setHoveredId(point.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(point.id)} onBlur={() => setHoveredId(null)} className="cursor-pointer outline-none">
@@ -314,16 +332,16 @@ export function TeamQuadrantScatter({
           );
         })}</g>
 
-        <text x={MARGIN.left + plotWidth / 2} y={HEIGHT - 20} textAnchor="middle" fill="var(--color-nrl-text)" fontWeight="900" className="text-[15px] lg:text-[10px]">{xAxisLabel}</text>
-        <text transform={`translate(22 ${MARGIN.top + plotHeight / 2}) rotate(-90)`} textAnchor="middle" fill="var(--color-nrl-text)" fontWeight="900" className="text-[15px] lg:text-[10px]">{yAxisLabel}</text>
+        <text x={margin.left + plotWidth / 2} y={height - (isMobile ? 24 : 20)} textAnchor="middle" fill="var(--color-nrl-text)" fontWeight="900" className="text-[15px] sm:text-[15px] lg:text-[10px]">{xAxisLabel}</text>
+        <text transform={`translate(${isMobile ? 24 : 22} ${margin.top + plotHeight / 2}) rotate(-90)`} textAnchor="middle" fill="var(--color-nrl-text)" fontWeight="900" className="text-[15px] sm:text-[15px] lg:text-[10px]">{yAxisLabel}</text>
       </svg>
 
       {hovered ? (
         <div
           className="pointer-events-none absolute z-10 w-52 max-w-[calc(100%_-_1rem)] rounded-lg border border-nrl-accent/50 bg-nrl-panel px-3 py-2 text-xs shadow-xl lg:text-[10px]"
           style={{
-            left: `clamp(0.5rem, calc(${(hoveredX / WIDTH) * 100}% ${hoveredX > WIDTH / 2 ? "- 14rem" : "+ 1rem"}), calc(100% - 13.5rem))`,
-            top: `clamp(0.5rem, calc(${(hoveredY / HEIGHT) * 100}% ${hoveredY > HEIGHT / 2 ? "- 6rem" : "+ 1rem"}), calc(100% - 5.5rem))`,
+            left: `clamp(0.5rem, calc(${(hoveredX / width) * 100}% ${hoveredX > width / 2 ? "- 14rem" : "+ 1rem"}), calc(100% - 13.5rem))`,
+            top: `clamp(0.5rem, calc(${(hoveredY / height) * 100}% ${hoveredY > height / 2 ? "- 6rem" : "+ 1rem"}), calc(100% - 5.5rem))`,
           }}
         >
           <div className="font-black text-nrl-text">{hovered.team}{hovered.opponent ? ` · ${hovered.roundLabel} vs ${hovered.opponent}` : ` · ${hovered.year}`}</div>

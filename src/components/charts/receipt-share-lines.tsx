@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TEAM_SHARE_POSITION_GROUPS, type TeamShareMetric, type TeamShareSeries } from "@/lib/data/receipt-share";
 
 interface ReceiptShareLinesProps {
@@ -14,9 +14,8 @@ const COLORS = [
   "#fb7185", "#34d399", "#f59e0b", "#60a5fa", "#f472b6",
 ] as const;
 
-const WIDTH = 900;
-const HEIGHT = 500;
-const MARGIN = { top: 28, right: 30, bottom: 68, left: 72 };
+const DESKTOP_LAYOUT = { width: 900, height: 500, margin: { top: 28, right: 30, bottom: 68, left: 72 } } as const;
+const MOBILE_LAYOUT = { width: 700, height: 700, margin: { top: 36, right: 28, bottom: 96, left: 108 } } as const;
 
 function teamColor(index: number): string {
   return COLORS[index % COLORS.length];
@@ -24,6 +23,14 @@ function teamColor(index: number): string {
 
 export function ReceiptShareLines({ series, metric }: ReceiptShareLinesProps) {
   const [hoveredTeam, setHoveredTeam] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const chart = useMemo(() => {
     const ranks = new Map<string, number>();
     for (const group of TEAM_SHARE_POSITION_GROUPS) {
@@ -40,28 +47,29 @@ export function ReceiptShareLines({ series, metric }: ReceiptShareLinesProps) {
     return <div className="grid min-h-96 place-items-center text-sm text-nrl-muted">Loading team shares…</div>;
   }
 
-  const plotWidth = WIDTH - MARGIN.left - MARGIN.right;
-  const plotHeight = HEIGHT - MARGIN.top - MARGIN.bottom;
-  const xScale = (index: number) => MARGIN.left + (index / (TEAM_SHARE_POSITION_GROUPS.length - 1)) * plotWidth;
-  const yScale = (value: number) => MARGIN.top + plotHeight - (Math.min(value, chart.yMax) / chart.yMax) * plotHeight;
+  const { width, height, margin } = isMobile ? MOBILE_LAYOUT : DESKTOP_LAYOUT;
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const xScale = (index: number) => margin.left + (index / (TEAM_SHARE_POSITION_GROUPS.length - 1)) * plotWidth;
+  const yScale = (value: number) => margin.top + plotHeight - (Math.min(value, chart.yMax) / chart.yMax) * plotHeight;
   const hovered = series.find((team) => team.team === hoveredTeam) ?? null;
 
   return (
     <div>
-      <div className="flex min-h-10 items-center px-2 text-[10px] text-nrl-muted">
+      <div className="flex min-h-10 items-center px-2 text-xs text-nrl-muted sm:text-[10px]">
         {hovered ? (
           <div><span className="font-black text-nrl-text">{hovered.team}</span></div>
         ) : null}
       </div>
 
-      <svg className="h-auto w-full" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={`Average starter ${metric.toLowerCase()} share by position for all teams`}>
-        <rect x={MARGIN.left} y={MARGIN.top} width={plotWidth} height={plotHeight} rx="8" fill="var(--color-nrl-bg)" />
+      <svg className="h-auto w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Average starter ${metric.toLowerCase()} share by position for all teams`}>
+        <rect x={margin.left} y={margin.top} width={plotWidth} height={plotHeight} rx="8" fill="var(--color-nrl-bg)" />
         {chart.ticks.map((tick) => {
           const y = yScale(tick);
           return (
             <g key={tick}>
-              <line x1={MARGIN.left} y1={y} x2={MARGIN.left + plotWidth} y2={y} stroke="var(--color-nrl-border)" opacity="0.45" />
-              <text x={MARGIN.left - 12} y={y + 4} textAnchor="end" fill="var(--color-nrl-muted)" fontSize="12">{tick.toFixed(0)}%</text>
+              <line x1={margin.left} y1={y} x2={margin.left + plotWidth} y2={y} stroke="var(--color-nrl-border)" opacity="0.45" />
+              <text x={margin.left - 12} y={y + (isMobile ? 7 : 4)} textAnchor="end" fill="var(--color-nrl-muted)" fontSize={isMobile ? 19 : 12}>{tick.toFixed(0)}%</text>
             </g>
           );
         })}
@@ -69,8 +77,8 @@ export function ReceiptShareLines({ series, metric }: ReceiptShareLinesProps) {
           const x = xScale(index);
           return (
             <g key={group}>
-              <line x1={x} y1={MARGIN.top} x2={x} y2={MARGIN.top + plotHeight} stroke="var(--color-nrl-border)" opacity="0.25" />
-              <text x={x} y={MARGIN.top + plotHeight + 28} textAnchor="middle" fill="var(--color-nrl-text)" fontSize="13" fontWeight="800">{group}</text>
+              <line x1={x} y1={margin.top} x2={x} y2={margin.top + plotHeight} stroke="var(--color-nrl-border)" opacity="0.25" />
+              <text x={x} y={margin.top + plotHeight + (isMobile ? 38 : 28)} textAnchor="middle" fill="var(--color-nrl-text)" fontSize={isMobile ? 18 : 13} fontWeight="800">{group}</text>
             </g>
           );
         })}
@@ -93,15 +101,15 @@ export function ReceiptShareLines({ series, metric }: ReceiptShareLinesProps) {
               className="cursor-pointer outline-none"
               opacity={dimmed ? 0.12 : active ? 1 : 0.68}
             >
-              <path d={path} fill="none" stroke={color} strokeWidth={active ? 4 : 2} strokeLinejoin="round" strokeLinecap="round" />
+              <path d={path} fill="none" stroke={color} strokeWidth={isMobile ? active ? 5 : 2.5 : active ? 4 : 2} strokeLinejoin="round" strokeLinecap="round" />
               {TEAM_SHARE_POSITION_GROUPS.map((group, index) => {
                 const x = xScale(index);
                 const y = yScale(team.values[group]);
                 return (
                   <g key={group}>
-                    <circle cx={x} cy={y} r={active ? 5 : 3.5} fill={color} stroke="var(--color-nrl-bg)" strokeWidth="1.5" />
+                    <circle cx={x} cy={y} r={isMobile ? active ? 8 : 5.5 : active ? 5 : 3.5} fill={color} stroke="var(--color-nrl-bg)" strokeWidth="1.5" />
                     {active ? (
-                      <text x={x} y={y < MARGIN.top + 24 ? y + 20 : y - 11} textAnchor="middle" fill={color} fontSize="13" fontWeight="900">#{chart.ranks.get(`${team.team}|${group}`)}</text>
+                      <text x={x} y={y < margin.top + 30 ? y + (isMobile ? 28 : 20) : y - (isMobile ? 16 : 11)} textAnchor="middle" fill={color} fontSize={isMobile ? 18 : 13} fontWeight="900">#{chart.ranks.get(`${team.team}|${group}`)}</text>
                     ) : null}
                   </g>
                 );
@@ -110,7 +118,7 @@ export function ReceiptShareLines({ series, metric }: ReceiptShareLinesProps) {
           );
         })}
 
-        <text transform={`translate(20 ${MARGIN.top + plotHeight / 2}) rotate(-90)`} textAnchor="middle" fill="var(--color-nrl-text)" fontSize="15" fontWeight="900">AVERAGE {metric.toUpperCase()} SHARE · %</text>
+        <text transform={`translate(${isMobile ? 24 : 20} ${margin.top + plotHeight / 2}) rotate(-90)`} textAnchor="middle" fill="var(--color-nrl-text)" fontSize="15" fontWeight="900">AVERAGE {metric.toUpperCase()} SHARE · %</text>
       </svg>
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 px-2 pb-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -122,7 +130,7 @@ export function ReceiptShareLines({ series, metric }: ReceiptShareLinesProps) {
             onMouseLeave={() => setHoveredTeam(null)}
             onFocus={() => setHoveredTeam(team.team)}
             onBlur={() => setHoveredTeam(null)}
-            className={`flex min-w-0 items-center gap-1.5 text-left text-[9px] transition-opacity ${hoveredTeam && hoveredTeam !== team.team ? "opacity-30" : "opacity-100"}`}
+            className={`flex min-w-0 items-center gap-1.5 text-left text-[11px] transition-opacity sm:text-[9px] ${hoveredTeam && hoveredTeam !== team.team ? "opacity-30" : "opacity-100"}`}
           >
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: teamColor(index) }} />
             <span className="truncate text-nrl-muted">{team.team}</span>

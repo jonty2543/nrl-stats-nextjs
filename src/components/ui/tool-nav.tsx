@@ -7,9 +7,9 @@ import { useEffect, useState } from "react";
 
 const tools = [
   { label: "Home", href: "/" },
-  { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "Betting", href: "/dashboard/betting" },
   { label: "Stats", href: "/dashboard/archetypes" },
+  { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "Lineups", href: "/dashboard/lineups" },
   { label: "NRL AI", href: "/dashboard/ai" },
   { label: "Articles", href: "/dashboard/articles" },

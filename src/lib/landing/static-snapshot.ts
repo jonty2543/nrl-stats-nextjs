@@ -59,7 +59,7 @@ function fantasyPlayer(
     totalPoints: null,
     tog: null,
     be: null,
-    pricedAt: cost != null ? cost / 12725 : null,
+    pricedAt: cost != null ? cost / 12293 : null,
     isBye: false,
     locked: false,
     priceHistory: {},

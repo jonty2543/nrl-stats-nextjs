@@ -206,7 +206,7 @@ function parseFantasyPlayer(raw) {
     totalPoints: toNum(raw.stats?.total_points),
     tog: toNum(raw.stats?.tog),
     be: toInt(raw.stats?.be) ?? toInt(raw.stats?.break_even) ?? toInt(raw.stats?.breakeven),
-    pricedAt: cost != null ? cost / 12725 : null,
+    pricedAt: cost != null ? cost / 12293 : null,
     scoreHistory,
   };
 }

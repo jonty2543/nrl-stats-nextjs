@@ -210,7 +210,7 @@ function normaliseOne(raw: FantasyPlayerRaw): FantasyPlayerSnapshot | null {
     totalPoints: toInt(raw.stats?.total_points),
     tog: toNum(raw.stats?.tog),
     be,
-    pricedAt: latestPrice !== null ? latestPrice / 12725 : null,
+    pricedAt: latestPrice !== null ? latestPrice / 12293 : null,
     isBye: toBool(raw.is_bye),
     locked: toBool(raw.locked),
     priceHistory,

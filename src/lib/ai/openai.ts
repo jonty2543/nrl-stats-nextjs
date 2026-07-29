@@ -85,7 +85,7 @@ Rules:
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
 - For fantasy trade advice from screenshots, also use draw/upcoming fixture context where available so the answer accounts for who each player/team faces next and whether they are home or away.
 - In NRL Fantasy major bye rounds 13, 16, and 19, only the starting 13 scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
-- In fantasy snapshot data, "priced at" means the fantasy points average implied by the player's current price, calculated as price / 12725. For "projection vs priced at", compare projection or projected average against pricedAt.
+- In fantasy snapshot data, "priced at" means the fantasy points average implied by the player's current price, calculated as price / 12293. For "projection vs priced at", compare projection or projected average against pricedAt.
 - For fantasy ranking questions about "projection vs priced at" or "projection minus priced at", use get_fantasy_snapshot with sortBy="projection_vs_priced_at_desc" and requireOwnershipRise=false.
 - In fantasy snapshot data, exclude locked players only when the user is asking for actionable buy/trade targets right now. For general rankings and value lists, include locked players.
 - Use get_player_stats and get_team_stats to retrieve bounded rows, summaries, totals, and season summaries, then compute the requested comparison or split from those outputs.
@@ -159,7 +159,7 @@ Rules:
 - For fantasy sell or transfer-out questions, use get_fantasy_snapshot with sortBy="ownership_delta_asc" and requireOwnershipRise=false.
 - For fantasy trade advice from screenshots, also use draw/upcoming fixture context where available so the answer accounts for who each player/team faces next and whether they are home or away.
 - In NRL Fantasy major bye rounds 13, 16, and 19, only the starting 13 scorers count. When giving trade advice before those rounds, warn when a buy target misses the next major bye round and be conscious of building toward enough playable players in those rounds without destroying the user’s 17-player scoring side in ordinary rounds.
-- In fantasy snapshot data, "priced at" means the fantasy points average implied by the player's current price, calculated as price / 12725. For "projection vs priced at", compare projection or projected average against pricedAt.
+- In fantasy snapshot data, "priced at" means the fantasy points average implied by the player's current price, calculated as price / 12293. For "projection vs priced at", compare projection or projected average against pricedAt.
 - For fantasy ranking questions about "projection vs priced at" or "projection minus priced at", use get_fantasy_snapshot with sortBy="projection_vs_priced_at_desc" and requireOwnershipRise=false.
 - In fantasy snapshot data, exclude locked players only when the user is asking for actionable buy/trade targets right now. For general rankings and value lists, include locked players.
 - For fantasy stat rankings like points per game, prefer rank_players_by_stat.
@@ -204,7 +204,7 @@ function buildAiReferenceCatalog(): string {
     "Aggregation guidance: user wording matters. 'Total' means sum across rows. 'Average' or 'per game' means mean across rows.",
     "Presentation guidance: for average, per-game, or rate questions, report the requested rate and sample size. Do not add totals unless the user asked for them.",
     "User-facing style: keep final answers plain and non-technical. Do not mention schemas, tool names, dataset names, ignored fields, server-side expressions, or query internals.",
-    'Fantasy snapshot field guide: "price" is current cost in dollars. "pricedAt" is the fantasy points average implied by the current price (price / 12725).',
+    'Fantasy snapshot field guide: "price" is current cost in dollars. "pricedAt" is the fantasy points average implied by the current price (price / 12293).',
     `Teams: ${TEAMS.join(", ")}`,
     "Aliases: Fantasy is the player game-log Fantasy stat and maps to underlying player_stats.total_points.",
     `Player stats: ${PLAYER_STATS.join(", ")}`,

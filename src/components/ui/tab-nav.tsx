@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const tabs = [
   { label: "Archetypes", href: "/dashboard/archetypes" },
+  { label: "Plots", href: "/dashboard/plots" },
   { label: "Rankings", href: "/dashboard/rankings" },
   { label: "Players", href: "/dashboard/players" },
   { label: "Teams", href: "/dashboard/teams" },
@@ -22,6 +23,7 @@ export function TabNav() {
     pathname.startsWith("/dashboard/players") ||
     pathname.startsWith("/dashboard/teams") ||
     pathname.startsWith("/dashboard/archetypes") ||
+    pathname.startsWith("/dashboard/plots") ||
     pathname.startsWith("/dashboard/leaders");
 
   useEffect(() => {
@@ -51,8 +53,8 @@ export function TabNav() {
               aria-current={active ? "page" : undefined}
               className={`cursor-pointer whitespace-nowrap rounded border px-3.5 py-2.5 text-xs font-extrabold leading-none transition-colors ${
                 active
-                  ? "border-[#10f08b] bg-[#10f08b] text-[#06121f]"
-                  : "border-[#323a5c] bg-[#111733] text-white/90 hover:border-[#465077] hover:bg-[#151c3d] hover:text-white"
+                  ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                  : "border-nrl-border bg-nrl-panel text-nrl-muted hover:text-nrl-text"
               }`}
             >
               {tab.label}

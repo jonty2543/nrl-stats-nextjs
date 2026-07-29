@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/lineups/match-detail(.*)",
   "/api/lineups/supplemental(.*)",
   "/api/player-stats(.*)",
+  "/api/team-stats(.*)",
   "/api/stripe/checkout(.*)",
   "/api/stripe/portal(.*)",
   "/api/stripe/webhook(.*)",

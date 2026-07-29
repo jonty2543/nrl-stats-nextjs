@@ -6,6 +6,7 @@ import {
   FINALS_LABEL_MAP,
 } from "@/lib/data/constants";
 import type { PlayerStat, Match, TeamStat, TeammateLookupRow } from "@/lib/data/types";
+import type { PostMatchTeamMetric } from "@/lib/data/post-match-team-metrics";
 import type { PlayerTryHistory } from "@/lib/lineups/matchup-insights";
 import type {
   LineupCasualtyOut,
@@ -1774,7 +1775,7 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
           { revalidate: DAILY_REVALIDATE_SECONDS }
         )();
   const localServerCache =
-    process.env.NODE_ENV !== "production"
+    process.env.NODE_ENV !== "production" && !hasLiveSeason
       ? await readPlayerStatsServerCache(normalizedArg)
       : null;
 
@@ -1959,6 +1960,63 @@ export async function fetchTeamStats(years?: string[]): Promise<TeamStat[]> {
   )
 
   return fetchCached()
+}
+
+function mapPostMatchTeamMetric(row: Record<string, unknown>): PostMatchTeamMetric {
+  const textOrNull = (value: unknown) => value == null || value === "" ? null : String(value);
+  return {
+    url: String(row.url ?? ""),
+    team: String(row.team ?? ""),
+    matchDate: String(row.match_date ?? ""),
+    season: Math.trunc(toFiniteNumber(row.season) ?? 0),
+    round: textOrNull(row.round),
+    opponentTeam: textOrNull(row.opponent_team),
+    isHome: typeof row.is_home === "boolean" ? row.is_home : null,
+    actualPoints: toFiniteNumber(row.actual_points),
+    opponentActualPoints: toFiniteNumber(row.opponent_actual_points),
+    xpoints: toFiniteNumber(row.xpoints),
+    opponentXpoints: toFiniteNumber(row.opponent_xpoints),
+    xpointsMargin: toFiniteNumber(row.xpoints_margin),
+    finishingDelta: toFiniteNumber(row.finishing_delta),
+    contactDisruptionsPer100Runs: toFiniteNumber(row.contact_disruptions_per_100_runs),
+    expectedLineBreaksAllowed: toFiniteNumber(row.expected_line_breaks_allowed),
+    actualLineBreaksAllowed: toFiniteNumber(row.actual_line_breaks_allowed),
+    lineBreaksPrevented: toFiniteNumber(row.line_breaks_prevented),
+    coverDefenseRating: toFiniteNumber(row.cover_defense_rating),
+    xpointsModelVersion: textOrNull(row.xpoints_model_version),
+    coverModelVersion: textOrNull(row.cover_model_version),
+    pipelineVersion: textOrNull(row.pipeline_version),
+    sourceUpdatedAt: textOrNull(row.source_updated_at),
+    calculatedAt: String(row.calculated_at ?? ""),
+    inputHash: textOrNull(row.input_hash),
+  };
+}
+
+export async function fetchPostMatchTeamMetricsFromSupabase(years?: string[]): Promise<PostMatchTeamMetric[]> {
+  const rows = await fetchAllRows<Record<string, unknown>>("post_match_team_metrics", { years });
+  return rows
+    .map(mapPostMatchTeamMetric)
+    .filter((row) => row.url && row.team && row.season > 0)
+    .sort((left, right) => right.matchDate.localeCompare(left.matchDate) || left.team.localeCompare(right.team));
+}
+
+export async function fetchPostMatchTeamMetrics(years?: string[]): Promise<PostMatchTeamMetric[]> {
+  const normalizedYears = (years ?? []).filter(Boolean).sort();
+  const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
+  const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
+  const hasLiveSeason = includesCurrentBrisbaneYear(normalizedArg);
+
+  if (process.env.NODE_ENV !== "production") {
+    return fetchPostMatchTeamMetricsFromSupabase(normalizedArg);
+  }
+
+  const fetchCached = unstable_cache(
+    async () => fetchPostMatchTeamMetricsFromSupabase(normalizedArg),
+    ["post-match-team-metrics-v1", key],
+    { revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS }
+  );
+
+  return fetchCached();
 }
 
 export async function fetchTeammateLookupRowsFromSupabase(

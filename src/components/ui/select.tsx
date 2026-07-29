@@ -8,12 +8,14 @@ interface SelectProps {
   options: SelectOption[];
   onChange: (value: string) => void;
   disabled?: boolean;
+  hideLabel?: boolean;
+  compact?: boolean;
 }
 
-export function Select({ label, value, options, onChange, disabled = false }: SelectProps) {
+export function Select({ label, value, options, onChange, disabled = false, hideLabel = false, compact = false }: SelectProps) {
   return (
     <div className="flex flex-col gap-0.5">
-      <label className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">
+      <label className={hideLabel ? "sr-only" : "text-[8px] font-semibold uppercase tracking-wide text-nrl-muted"}>
         {label}
       </label>
       <div className="relative">
@@ -21,7 +23,7 @@ export function Select({ label, value, options, onChange, disabled = false }: Se
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          className="h-[34px] w-full appearance-none rounded-md border border-nrl-border bg-nrl-panel-2 py-0 pl-3 pr-8 text-[10px] leading-normal text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className={`${compact ? "h-8 pl-2.5 pr-7" : "h-[34px] pl-3 pr-8"} w-full appearance-none rounded-md border border-nrl-border bg-nrl-panel-2 py-0 text-[10px] leading-normal text-nrl-text outline-none focus:border-nrl-accent disabled:cursor-not-allowed disabled:opacity-50`}
         >
           {options.map((opt, index) => {
             const option = typeof opt === "string" ? { value: opt, label: opt } : opt
@@ -32,7 +34,7 @@ export function Select({ label, value, options, onChange, disabled = false }: Se
             )
           })}
         </select>
-        <span className="pointer-events-none absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-b border-r border-nrl-text" />
+        <span className={`pointer-events-none absolute ${compact ? "right-2.5" : "right-3"} top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-b border-r border-nrl-text`} />
       </div>
     </div>
   );

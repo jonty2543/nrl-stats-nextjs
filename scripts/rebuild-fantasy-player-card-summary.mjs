@@ -373,8 +373,13 @@ async function fetchBettingTryscorerFormRows(supabase, year) {
   const rows = await fetchAllRows(
     supabase,
     "player_stats",
-    "player,team,position,match_date,round,tries",
-    (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`)
+    "player,team,position,match_date,round,tries,mins_played",
+    (query) => query
+      .gte("match_date", `${year}-01-01`)
+      .lt("match_date", `${year + 1}-01-01`)
+      .order("match_date", { ascending: true })
+      .order("match", { ascending: true })
+      .order("player", { ascending: true })
   );
   return rows
     .map((row) => ({
@@ -384,8 +389,9 @@ async function fetchBettingTryscorerFormRows(supabase, year) {
       matchDate: typeof row.match_date === "string" ? row.match_date : "",
       round: Number.parseInt(String(row.round ?? "").match(/\d+/)?.[0] ?? "0", 10),
       tries: toNum(row.tries) ?? 0,
+      minutes: minutesToNumber(row.mins_played),
     }))
-    .filter((row) => row.player && row.matchDate);
+    .filter((row) => row.player && row.matchDate && (row.minutes ?? 0) > 0);
 }
 
 function currentYearInBrisbane() {

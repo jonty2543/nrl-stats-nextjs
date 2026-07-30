@@ -388,6 +388,8 @@ interface FetchOptions {
   dateTo?: string;
   /** Optional projection columns for Supabase select(...) */
   columns?: string;
+  /** Stable ordering required when a result can span multiple range pages. */
+  orderBy?: string[];
 }
 
 function sleep(ms: number): Promise<void> {
@@ -502,6 +504,10 @@ async function fetchAllRows<T extends Record<string, unknown>>(
       query = query
         .gte("match_date", `${minYear}-01-01`)
         .lt("match_date", `${maxYear + 1}-01-01`);
+    }
+
+    for (const column of options?.orderBy ?? []) {
+      query = query.order(column, { ascending: true });
     }
 
     const { data, error } = await fetchSupabasePage(`Supabase fetch ${table}`, () =>
@@ -1727,13 +1733,18 @@ async function fetchPlayerStatsRowsFromSupabase(
 ): Promise<Record<string, unknown>[]> {
   const normalizedYears = normalizeYearFilters(years);
   if (normalizedYears.length === 0) {
-    return fetchAllRows<Record<string, unknown>>("player_stats");
+    return fetchAllRows<Record<string, unknown>>("player_stats", {
+      orderBy: ["match_date", "team", "player", "created_at"],
+    });
   }
 
   const rows: Record<string, unknown>[] = [];
   for (const year of normalizedYears) {
     try {
-      rows.push(...(await fetchAllRows<Record<string, unknown>>("player_stats", { years: [year] })));
+      rows.push(...(await fetchAllRows<Record<string, unknown>>("player_stats", {
+        years: [year],
+        orderBy: ["match_date", "team", "player", "created_at"],
+      })));
       continue;
     } catch (error) {
       if (!isStatementTimeoutError(error)) throw error;
@@ -1741,7 +1752,10 @@ async function fetchPlayerStatsRowsFromSupabase(
     }
 
     for (const range of monthRangesForYear(year)) {
-      rows.push(...(await fetchAllRows<Record<string, unknown>>("player_stats", range)));
+      rows.push(...(await fetchAllRows<Record<string, unknown>>("player_stats", {
+        ...range,
+        orderBy: ["match_date", "team", "player", "created_at"],
+      })));
     }
   }
 
@@ -1789,7 +1803,7 @@ export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> 
 
   const fetchCached = unstable_cache(
     async () => fetchPlayerStatsFromSupabase(normalizedArg),
-    ["player-stats-v1", key],
+    ["player-stats-v2", key],
     { revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS }
   );
 

@@ -88,10 +88,15 @@ def build_middle_label_map(cluster_centroids):
     label_map = {i: 'Standard Middle' for i in range(len(cluster_centroids))}
     ball_playing_cluster = int(np.argmax(cluster_centroids[:, 0]))
     impact_candidates = [i for i in range(len(cluster_centroids)) if i != ball_playing_cluster]
-    impact_cluster = max(impact_candidates, key=lambda i: cluster_centroids[i, 1])
+    impact_clusters = sorted(
+        impact_candidates,
+        key=lambda i: cluster_centroids[i, 1],
+        reverse=True,
+    )[:2]
 
     label_map[ball_playing_cluster] = 'Ball Playing Middle'
-    label_map[impact_cluster] = 'Impact Middle'
+    for cluster_id in impact_clusters:
+        label_map[cluster_id] = 'Impact Middle'
     return label_map
 
 POSITION_CONFIGS = [
@@ -1284,10 +1289,10 @@ if __name__ == "__main__":
             stat_mode='production',
             recent_games=game_window,
         )
-        window_models = train_models(window_training_agg, POSITION_CONFIGS, game_window=game_window)
+        # Keep the All player-year feature space and cluster centroids fixed.
         window_data, _ = generate_outputs(
             window_training_agg,
-            window_models,
+            models,
             POSITION_CONFIGS,
             plot_suffix=window_label,
             game_window=game_window,
@@ -1300,10 +1305,10 @@ if __name__ == "__main__":
             stat_mode='team_share',
             recent_games=game_window,
         )
-        window_team_share_models = train_models(window_team_share_agg, team_share_configs, game_window=game_window)
+        # Team-share windows likewise reuse the All team-share model.
         window_team_share_data, _ = generate_outputs(
             window_team_share_agg,
-            window_team_share_models,
+            team_share_models,
             team_share_configs,
             plot_suffix=f'team_share_{window_label}',
             stat_mode='team_share',

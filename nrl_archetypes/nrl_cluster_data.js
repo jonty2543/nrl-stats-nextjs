@@ -334,13 +334,13 @@ const clusterData = {
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 16,
+                    "count": 60,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 194,
+                    "count": 150,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

@@ -10,7 +10,6 @@ const tabs = [
   { label: "Rankings", href: "/dashboard/rankings" },
   { label: "Players", href: "/dashboard/players" },
   { label: "Teams", href: "/dashboard/teams" },
-  { label: "Leaders", href: "/dashboard/leaders" },
 ];
 
 export function TabNav() {
@@ -23,8 +22,7 @@ export function TabNav() {
     pathname.startsWith("/dashboard/players") ||
     pathname.startsWith("/dashboard/teams") ||
     pathname.startsWith("/dashboard/archetypes") ||
-    pathname.startsWith("/dashboard/plots") ||
-    pathname.startsWith("/dashboard/leaders");
+    pathname.startsWith("/dashboard/plots");
 
   useEffect(() => {
     if (!inStatsSection) return;
@@ -38,10 +36,10 @@ export function TabNav() {
   }
 
   return (
-    <div className="-mx-1 mt-4 flex overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:justify-center sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
+    <div className="-mx-1 mt-4 flex overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
       <nav
         aria-label="Stats sections"
-        className="flex min-w-max gap-2 sm:inline-flex"
+        className="flex w-max min-w-full justify-between gap-2"
       >
         {tabs.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);

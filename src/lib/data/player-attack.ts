@@ -38,7 +38,7 @@ export type PlayerAttackComparisonStat = (typeof PLAYER_ATTACK_COMPARISON_STATS)
 export const PLAYER_ATTACK_STAT_COMPARISON_STATS: readonly PlayerAttackComparisonStat[] = PLAYER_ATTACK_COMPARISON_STATS.filter(
   (stat) => stat !== "Receipts" && stat !== "Runs" && stat !== "Passes"
 );
-export type PlayerAttackComparisonMode = "per-game" | "team-proportion";
+export type PlayerAttackComparisonMode = "per-game" | "team-proportion" | "totals";
 export type HalvesPairingSort = "ascending" | "descending";
 export type PlayerGameWindow = 5 | 10 | null;
 
@@ -297,14 +297,20 @@ export function buildPlayerAttackComparisonPoints(
     if (qualifyingRows.length < 5) continue;
 
     const isPer80 = BACK_POSITIONS.has(position);
-    const comparisonX = qualifyingRows.reduce((sum, row) => {
+    const comparisonXTotal = qualifyingRows.reduce((sum, row) => {
       const value = finite(row[xField]);
       return sum + (isPer80 ? value * (80 / finite(row["Mins Played"])) : value);
-    }, 0) / qualifyingRows.length;
-    const comparisonY = qualifyingRows.reduce((sum, row) => {
+    }, 0);
+    const comparisonYTotal = qualifyingRows.reduce((sum, row) => {
       const value = finite(row[yField]);
       return sum + (isPer80 ? value * (80 / finite(row["Mins Played"])) : value);
-    }, 0) / qualifyingRows.length;
+    }, 0);
+    const comparisonX = mode === "totals"
+      ? qualifyingRows.reduce((sum, row) => sum + finite(row[xField]), 0)
+      : comparisonXTotal / qualifyingRows.length;
+    const comparisonY = mode === "totals"
+      ? qualifyingRows.reduce((sum, row) => sum + finite(row[yField]), 0)
+      : comparisonYTotal / qualifyingRows.length;
     const xShares = qualifyingRows.flatMap((row) => {
       const teamTotal = teamGameTotals.get(teamGameKey(row))?.x ?? 0;
       return teamTotal > 0 ? [(finite(row[xField]) / teamTotal) * 100] : [];

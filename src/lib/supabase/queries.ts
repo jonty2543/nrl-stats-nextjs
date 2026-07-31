@@ -6,7 +6,11 @@ import {
   FINALS_LABEL_MAP,
 } from "@/lib/data/constants";
 import type { PlayerStat, Match, TeamStat, TeammateLookupRow } from "@/lib/data/types";
-import type { PostMatchTeamMetric } from "@/lib/data/post-match-team-metrics";
+import type {
+  PostMatchRdrMetric,
+  PostMatchTeamMetric,
+  PostMatchTeamMetricWithRdr,
+} from "@/lib/data/post-match-team-metrics";
 import type { PlayerTryHistory } from "@/lib/lineups/matchup-insights";
 import type {
   LineupCasualtyOut,
@@ -1976,6 +1980,67 @@ export async function fetchTeamStats(years?: string[]): Promise<TeamStat[]> {
   return fetchCached()
 }
 
+const POST_MATCH_TEAM_METRIC_COLUMNS = [
+  "url",
+  "team",
+  "match_date",
+  "season",
+  "round",
+  "opponent_team",
+  "is_home",
+  "actual_points",
+  "opponent_actual_points",
+  "xpoints",
+  "opponent_xpoints",
+  "xpoints_margin",
+  "finishing_delta",
+  "contact_disruptions_per_100_runs",
+  "expected_line_breaks_allowed",
+  "actual_line_breaks_allowed",
+  "line_breaks_prevented",
+  "cover_defense_rating",
+  "ruck_dominance_rating",
+  "xpoints_model_version",
+  "cover_model_version",
+  "rdr_model_version",
+  "pipeline_version",
+  "source_updated_at",
+  "calculated_at",
+  "input_hash",
+].join(",");
+
+const POST_MATCH_RDR_METRIC_COLUMNS = [
+  "url",
+  "team",
+  "middle_runs",
+  "edge_runs",
+  "spine_runs",
+  "outside_back_runs",
+  "bench_runs",
+  "unclassified_runs",
+  "position_runs_total",
+  "position_runs_difference",
+  "hit_up_share",
+  "opponent_pcm_allowed_per_run_pre_match",
+  "opponent_ptb_allowed_pre_match",
+  "actual_post_contact_metres",
+  "expected_post_contact_metres",
+  "post_contact_metres_above_expected",
+  "pcm_above_expected_per_100_runs",
+  "actual_play_the_ball_speed",
+  "expected_play_the_ball_speed",
+  "play_the_ball_speed_above_expected",
+  "ruck_dominance_rating",
+  "model_version",
+  "source_updated_at",
+  "calculated_at",
+  "input_hash",
+].join(",");
+
+function postMatchMetricKey(url: string, team: string): string {
+  return `${url}::${team}`;
+}
+
 function mapPostMatchTeamMetric(row: Record<string, unknown>): PostMatchTeamMetric {
   const textOrNull = (value: unknown) => value == null || value === "" ? null : String(value);
   return {
@@ -1997,8 +2062,10 @@ function mapPostMatchTeamMetric(row: Record<string, unknown>): PostMatchTeamMetr
     actualLineBreaksAllowed: toFiniteNumber(row.actual_line_breaks_allowed),
     lineBreaksPrevented: toFiniteNumber(row.line_breaks_prevented),
     coverDefenseRating: toFiniteNumber(row.cover_defense_rating),
+    ruckDominanceRating: toFiniteNumber(row.ruck_dominance_rating),
     xpointsModelVersion: textOrNull(row.xpoints_model_version),
     coverModelVersion: textOrNull(row.cover_model_version),
+    rdrModelVersion: textOrNull(row.rdr_model_version),
     pipelineVersion: textOrNull(row.pipeline_version),
     sourceUpdatedAt: textOrNull(row.source_updated_at),
     calculatedAt: String(row.calculated_at ?? ""),
@@ -2006,12 +2073,120 @@ function mapPostMatchTeamMetric(row: Record<string, unknown>): PostMatchTeamMetr
   };
 }
 
+function mapPostMatchRdrMetric(row: Record<string, unknown>): PostMatchRdrMetric {
+  const textOrNull = (value: unknown) => value == null || value === "" ? null : String(value);
+  return {
+    url: String(row.url ?? ""),
+    team: String(row.team ?? ""),
+    middleRuns: toFiniteNumber(row.middle_runs),
+    edgeRuns: toFiniteNumber(row.edge_runs),
+    spineRuns: toFiniteNumber(row.spine_runs),
+    outsideBackRuns: toFiniteNumber(row.outside_back_runs),
+    benchRuns: toFiniteNumber(row.bench_runs),
+    unclassifiedRuns: toFiniteNumber(row.unclassified_runs),
+    positionRunsTotal: toFiniteNumber(row.position_runs_total),
+    positionRunsDifference: toFiniteNumber(row.position_runs_difference),
+    hitUpShare: toFiniteNumber(row.hit_up_share),
+    opponentPcmAllowedPerRunPreMatch: toFiniteNumber(row.opponent_pcm_allowed_per_run_pre_match),
+    opponentPtbAllowedPreMatch: toFiniteNumber(row.opponent_ptb_allowed_pre_match),
+    actualPostContactMetres: toFiniteNumber(row.actual_post_contact_metres),
+    expectedPostContactMetres: toFiniteNumber(row.expected_post_contact_metres),
+    postContactMetresAboveExpected: toFiniteNumber(row.post_contact_metres_above_expected),
+    pcmAboveExpectedPer100Runs: toFiniteNumber(row.pcm_above_expected_per_100_runs),
+    actualPlayTheBallSpeed: toFiniteNumber(row.actual_play_the_ball_speed),
+    expectedPlayTheBallSpeed: toFiniteNumber(row.expected_play_the_ball_speed),
+    playTheBallSpeedAboveExpected: toFiniteNumber(row.play_the_ball_speed_above_expected),
+    ruckDominanceRating: toFiniteNumber(row.ruck_dominance_rating),
+    modelVersion: textOrNull(row.model_version),
+    sourceUpdatedAt: textOrNull(row.source_updated_at),
+    calculatedAt: textOrNull(row.calculated_at),
+    inputHash: textOrNull(row.input_hash),
+  };
+}
+
+async function fetchPostMatchRdrRowsForHeadlines(
+  headlines: PostMatchTeamMetric[]
+): Promise<Record<string, unknown>[]> {
+  const urls = [...new Set(headlines.map((row) => row.url).filter(Boolean))];
+  if (urls.length === 0) return [];
+
+  const supabase = createServerSupabaseClient();
+  const rows: Record<string, unknown>[] = [];
+  const urlBatchSize = 100;
+
+  for (let batchStart = 0; batchStart < urls.length; batchStart += urlBatchSize) {
+    const urlBatch = urls.slice(batchStart, batchStart + urlBatchSize);
+    let rangeStart = 0;
+
+    while (true) {
+      const rangeEnd = rangeStart + PAGE_SIZE - 1;
+      const { data, error } = await fetchSupabasePage("Supabase fetch post_match_rdr_metrics", () =>
+        supabase
+          .from("post_match_rdr_metrics")
+          .select(POST_MATCH_RDR_METRIC_COLUMNS)
+          .in("url", urlBatch)
+          .range(rangeStart, rangeEnd)
+      );
+
+      if (error) throw new Error(`Supabase fetch post_match_rdr_metrics: ${error.message}`);
+      const page = (data ?? []) as unknown as Record<string, unknown>[];
+      rows.push(...page);
+      if (page.length < PAGE_SIZE) break;
+      rangeStart += PAGE_SIZE;
+    }
+  }
+
+  return rows;
+}
+
 export async function fetchPostMatchTeamMetricsFromSupabase(years?: string[]): Promise<PostMatchTeamMetric[]> {
-  const rows = await fetchAllRows<Record<string, unknown>>("post_match_team_metrics", { years });
+  const rows = await fetchAllRows<Record<string, unknown>>("post_match_team_metrics", {
+    years,
+    columns: POST_MATCH_TEAM_METRIC_COLUMNS,
+  });
   return rows
     .map(mapPostMatchTeamMetric)
     .filter((row) => row.url && row.team && row.season > 0)
     .sort((left, right) => right.matchDate.localeCompare(left.matchDate) || left.team.localeCompare(right.team));
+}
+
+export async function fetchPostMatchTeamMetricsWithRdrFromSupabase(
+  years?: string[]
+): Promise<PostMatchTeamMetricWithRdr[]> {
+  const headlineRows = await fetchPostMatchTeamMetricsFromSupabase(years);
+  const detailRows = await fetchPostMatchRdrRowsForHeadlines(headlineRows);
+  const detailByCompositeKey = new Map(
+    detailRows
+      .map(mapPostMatchRdrMetric)
+      .filter((row) => row.url && row.team)
+      .map((row) => [postMatchMetricKey(row.url, row.team), row] as const)
+  );
+
+  return headlineRows.map((headline) => ({
+    ...headline,
+    rdr: detailByCompositeKey.get(postMatchMetricKey(headline.url, headline.team)) ?? null,
+  }));
+}
+
+export async function fetchPostMatchTeamMetricsWithRdr(
+  years?: string[]
+): Promise<PostMatchTeamMetricWithRdr[]> {
+  const normalizedYears = (years ?? []).filter(Boolean).sort();
+  const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
+  const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
+  const hasLiveSeason = includesCurrentBrisbaneYear(normalizedArg);
+
+  if (process.env.NODE_ENV !== "production") {
+    return fetchPostMatchTeamMetricsWithRdrFromSupabase(normalizedArg);
+  }
+
+  const fetchCached = unstable_cache(
+    async () => fetchPostMatchTeamMetricsWithRdrFromSupabase(normalizedArg),
+    ["post-match-team-metrics-with-rdr-v1", key],
+    { revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS }
+  );
+
+  return fetchCached();
 }
 
 export async function fetchPostMatchTeamMetrics(years?: string[]): Promise<PostMatchTeamMetric[]> {

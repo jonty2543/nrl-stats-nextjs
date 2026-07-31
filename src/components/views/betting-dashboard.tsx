@@ -244,6 +244,9 @@ const BET_SCORE_ZERO_EDGE = 0.3;
 const BET_SCORE_POSITIVE_EDGE_RANGE = 0.58;
 const BET_SCORE_EDGE_CURVE_STEEPNESS_PP = 2.2;
 const BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP = 3.4;
+const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN = 0.72;
+const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX = 1;
+const BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION = 0.35;
 const SUSPICIOUS_EDGE_WARNING_COPY =
   "If the model has an edge > 6% on the market, this may be suspicious and suggest the market knows something the model doesn't";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
@@ -1911,7 +1914,14 @@ function calculateBetScore({
     : clamp(edgeScore + contextAdjustment, BET_SCORE_ZERO_EDGE, 1);
   if (edgePp <= SUSPICIOUS_EDGE_THRESHOLD_PP) return baseScore;
 
-  const decay = clamp((edgePp - SUSPICIOUS_EDGE_THRESHOLD_PP) / SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP, 0, 0.65);
+  const decayProtection = clamp(
+    (efficiencyScore - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN) /
+      (BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN),
+    0,
+    1
+  );
+  const maxDecay = 0.65 - (decayProtection * BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION);
+  const decay = clamp((edgePp - SUSPICIOUS_EDGE_THRESHOLD_PP) / SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP, 0, maxDecay);
   return clamp(baseScore * (1 - decay), 0, 1);
 }
 

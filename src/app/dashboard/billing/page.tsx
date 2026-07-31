@@ -198,7 +198,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
 
               <PlanCard
                 title="Pro"
-                badge="Best for fantasy"
+                badge="Best for fantasy and stats"
                 price="$5"
                 suffix="/month"
                 className="order-1 lg:order-2"
@@ -207,6 +207,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                   "Everything in Free",
                   "Fantasy projections and breakevens",
                   "All plots unlocked in Fantasy and Stats",
+                  "Stats models, including xPoints and cover defense",
                   "Fantasy trade ratings",
                   "New features as they release",
                   formatAiQuota("pro"),

@@ -282,7 +282,7 @@ function positionGroup(value: string): string {
   if (["WFB"].includes(key)) return "Winger"
   if (["CE", "C", "CTR", "CENTRE", "CENTER"].includes(key)) return "Centre"
   if (["FE", "FIVE-EIGHTH", "FIVE EIGHTH", "HB", "HLF", "HALFBACK", "HALF"].includes(key)) return "Half"
-  if (["SR", "2RF", "EDG", "SECOND ROW", "SECOND-ROW", "EDGE"].includes(key)) return "Edge"
+  if (["SR", "2RF", "EDG", "2ND ROW", "2ND-ROW", "SECOND ROW", "SECOND-ROW", "EDGE"].includes(key)) return "Edge"
   if (["PR", "PROP", "LK", "LOCK", "MID", "MIDDLE"].includes(key)) return "Middle"
   if (["HK", "HOK", "HOOKER"].includes(key)) return "Hooker"
   return ""

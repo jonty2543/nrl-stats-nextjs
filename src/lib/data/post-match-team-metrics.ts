@@ -19,12 +19,46 @@ export interface PostMatchTeamMetric {
   actualLineBreaksAllowed: number | null;
   lineBreaksPrevented: number | null;
   coverDefenseRating: number | null;
+  ruckDominanceRating: number | null;
   xpointsModelVersion: string | null;
   coverModelVersion: string | null;
+  rdrModelVersion: string | null;
   pipelineVersion: string | null;
   sourceUpdatedAt: string | null;
   calculatedAt: string;
   inputHash: string | null;
+}
+
+export interface PostMatchRdrMetric {
+  url: string;
+  team: string;
+  middleRuns: number | null;
+  edgeRuns: number | null;
+  spineRuns: number | null;
+  outsideBackRuns: number | null;
+  benchRuns: number | null;
+  unclassifiedRuns: number | null;
+  positionRunsTotal: number | null;
+  positionRunsDifference: number | null;
+  hitUpShare: number | null;
+  opponentPcmAllowedPerRunPreMatch: number | null;
+  opponentPtbAllowedPreMatch: number | null;
+  actualPostContactMetres: number | null;
+  expectedPostContactMetres: number | null;
+  postContactMetresAboveExpected: number | null;
+  pcmAboveExpectedPer100Runs: number | null;
+  actualPlayTheBallSpeed: number | null;
+  expectedPlayTheBallSpeed: number | null;
+  playTheBallSpeedAboveExpected: number | null;
+  ruckDominanceRating: number | null;
+  modelVersion: string | null;
+  sourceUpdatedAt: string | null;
+  calculatedAt: string | null;
+  inputHash: string | null;
+}
+
+export interface PostMatchTeamMetricWithRdr extends PostMatchTeamMetric {
+  rdr: PostMatchRdrMetric | null;
 }
 
 export interface XPointsPlotPoint {

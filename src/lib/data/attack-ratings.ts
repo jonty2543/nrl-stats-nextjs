@@ -22,6 +22,24 @@ export const TEAM_ATTACK_COMPARISON_STATS = [
 ] as const;
 export type TeamAttackComparisonStat = (typeof TEAM_ATTACK_COMPARISON_STATS)[number];
 
+export const TEAM_DEFENCE_CONCEDED_STATS = [
+  "Disruptions",
+  "Line breaks",
+  "Run metres per run",
+  "Tries",
+  "Points",
+  "Run metres",
+  "Post-contact metres",
+  "Try assists",
+  "Offloads",
+  "Tackle breaks",
+  "Line break assists",
+  "Kicks",
+  "Kicking metres",
+  "Forced drop outs",
+] as const satisfies readonly TeamAttackComparisonStat[];
+export type TeamDefenceConcededStat = (typeof TEAM_DEFENCE_CONCEDED_STATS)[number];
+
 export const TEAM_ATTACK_EFFICIENCY_BASE_STATS = ["Receipts", "Runs", "Passes", "Kicks"] as const;
 export type TeamAttackEfficiencyBaseStat = (typeof TEAM_ATTACK_EFFICIENCY_BASE_STATS)[number];
 
@@ -203,4 +221,25 @@ export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode,
       totals,
     };
   }).sort((left, right) => left.team.localeCompare(right.team));
+}
+
+export function buildConcededRatingPoints(rows: TeamStat[], mode: DefencePlotMode, gameWindow: 5 | 10 | null = null): AttackRatingPoint[] {
+  const rowByMatchup = new Map(rows.map((row) => [
+    `${row.Year}|${row.Round}|${row.Date}|${normalise(row.Team)}|${normalise(row.Opponent ?? "")}`,
+    row,
+  ]));
+  const concededRows = rows.flatMap((defendingRow): TeamStat[] => {
+    if (!defendingRow.Opponent) return [];
+    const opponentRow = rowByMatchup.get(
+      `${defendingRow.Year}|${defendingRow.Round}|${defendingRow.Date}|${normalise(defendingRow.Opponent)}|${normalise(defendingRow.Team)}`
+    );
+    if (!opponentRow) return [];
+    return [{
+      ...opponentRow,
+      Team: defendingRow.Team,
+      Opponent: defendingRow.Opponent,
+    }];
+  });
+
+  return buildAttackRatingPoints(concededRows, mode, gameWindow);
 }

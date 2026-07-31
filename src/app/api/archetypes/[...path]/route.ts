@@ -98,7 +98,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
     .replaceAll("--card-bg: #151E3F;", "--card-bg: #161c32;")
     .replaceAll("--border-color: #2A3B6E;", "--border-color: #2a3356;")
     .replace(
-      /<div class="ml-explanation" id="mlDropdown">[\s\S]*?<\/div>\s*(?=<div class="control-frame">|<div class="mode-toggle" id="modeToggle">|<div class="tabs" id="positionTabs">)/,
+      /<div class="ml-explanation" id="mlDropdown">[\s\S]*?<\/div>\s*(?=<div class="controls-row">|<div class="control-frame">|<div class="mode-toggle" id="modeToggle">|<div class="tabs" id="positionTabs">)/,
       buildArchetypesArticleLink(articleLink)
     )
     .replace(

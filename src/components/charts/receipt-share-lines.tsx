@@ -14,7 +14,7 @@ const COLORS = [
   "#fb7185", "#34d399", "#f59e0b", "#60a5fa", "#f472b6",
 ] as const;
 
-const DESKTOP_LAYOUT = { width: 900, height: 500, margin: { top: 28, right: 30, bottom: 68, left: 72 } } as const;
+const DESKTOP_LAYOUT = { width: 900, height: 475, margin: { top: 28, right: 30, bottom: 68, left: 72 } } as const;
 const MOBILE_LAYOUT = { width: 700, height: 700, margin: { top: 36, right: 28, bottom: 96, left: 108 } } as const;
 
 function teamColor(index: number): string {
@@ -105,11 +105,17 @@ export function ReceiptShareLines({ series, metric }: ReceiptShareLinesProps) {
               {TEAM_SHARE_POSITION_GROUPS.map((group, index) => {
                 const x = xScale(index);
                 const y = yScale(team.values[group]);
+                const rankLabelY = y < margin.top + 36 ? y + (isMobile ? 34 : 26) : y - (isMobile ? 24 : 18);
+                const rankBadgeWidth = isMobile ? 44 : 32;
+                const rankBadgeHeight = isMobile ? 28 : 20;
                 return (
                   <g key={group}>
                     <circle cx={x} cy={y} r={isMobile ? active ? 8 : 5.5 : active ? 5 : 3.5} fill={color} stroke="var(--color-nrl-bg)" strokeWidth="1.5" />
                     {active ? (
-                      <text x={x} y={y < margin.top + 30 ? y + (isMobile ? 28 : 20) : y - (isMobile ? 16 : 11)} textAnchor="middle" fill={color} fontSize={isMobile ? 18 : 13} fontWeight="900">#{chart.ranks.get(`${team.team}|${group}`)}</text>
+                      <g aria-hidden="true">
+                        <rect x={x - rankBadgeWidth / 2} y={rankLabelY - rankBadgeHeight + (isMobile ? 6 : 4)} width={rankBadgeWidth} height={rankBadgeHeight} rx={rankBadgeHeight / 2} fill="var(--color-nrl-bg)" stroke={color} strokeWidth={isMobile ? 2 : 1.5} />
+                        <text x={x} y={rankLabelY} textAnchor="middle" fill={color} fontSize={isMobile ? 18 : 13} fontWeight="900">#{chart.ranks.get(`${team.team}|${group}`)}</text>
+                      </g>
                     ) : null}
                   </g>
                 );

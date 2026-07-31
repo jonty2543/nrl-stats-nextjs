@@ -48,7 +48,7 @@ interface TeamQuadrantScatterProps {
 
 const DESKTOP_LAYOUT = {
   width: 900,
-  height: 610,
+  height: 580,
   margin: { top: 54, right: 34, bottom: 128, left: 82 },
 } as const;
 const MOBILE_LAYOUT = {
@@ -84,6 +84,13 @@ function ticks(min: number, max: number, count = 5): number[] {
   return Array.from({ length: count }, (_, index) => min + ((max - min) * index) / (count - 1));
 }
 
+function dataPadding(values: number[], flatFallback: number): number {
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const range = maximum - minimum;
+  return range > 0 ? range * 0.1 : Math.max(Math.abs(minimum) * 0.1, flatFallback);
+}
+
 function zoomDomain(domain: [number, number], center: number, zoom: number): [number, number] {
   if (zoom <= 1) return domain;
   const width = (domain[1] - domain[0]) / zoom;
@@ -116,6 +123,7 @@ export function TeamQuadrantScatter({
   rSquared = null,
 }: TeamQuadrantScatterProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [zoomState, setZoomState] = useState({ pointsKey: "", index: 0, panX: 0, panY: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -128,6 +136,14 @@ export function TeamQuadrantScatter({
     return () => query.removeEventListener("change", update);
   }, []);
   const pointsKey = useMemo(() => points.map((point) => point.id).join("|"), [points]);
+  const pointGroups = useMemo(() => {
+    const groups = new Map<string, TeamQuadrantPoint[]>();
+    points.forEach((point) => {
+      const key = `${point.xValue}\u0000${point.yValue}`;
+      groups.set(key, [...(groups.get(key) ?? []), point]);
+    });
+    return [...groups.entries()].map(([key, groupedPoints]) => ({ key, points: groupedPoints }));
+  }, [points]);
   const zoomIndex = zoomState.pointsKey === pointsKey ? zoomState.index : 0;
   const panX = zoomState.pointsKey === pointsKey ? zoomState.panX : 0;
   const panY = zoomState.pointsKey === pointsKey ? zoomState.panY : 0;
@@ -138,11 +154,11 @@ export function TeamQuadrantScatter({
     const yValues = points.map((point) => point.yValue);
     const xMean = mean(xValues);
     const yMean = mean(yValues);
-    const xPadding = Math.max((Math.max(...xValues) - Math.min(...xValues)) * 0.1, minXPadding);
-    const yPadding = Math.max((Math.max(...yValues) - Math.min(...yValues)) * 0.1, minYPadding);
+    const xPadding = dataPadding(xValues, minXPadding);
+    const yPadding = dataPadding(yValues, minYPadding);
     if (comparisonLine) {
       const combined = [...xValues, ...yValues];
-      const padding = Math.max((Math.max(...combined) - Math.min(...combined)) * 0.1, minXPadding, minYPadding);
+      const padding = dataPadding(combined, Math.max(minXPadding, minYPadding));
       const domain = [Math.max(0, Math.min(...combined) - padding), Math.max(...combined) + padding] as [number, number];
       return { xMean, yMean, xDomain: domain, yDomain: domain };
     }
@@ -169,12 +185,18 @@ export function TeamQuadrantScatter({
     return margin.left + (xHigherIsBetter ? ratio : 1 - ratio) * plotWidth;
   };
   const yScale = (value: number) => margin.top + ((yDomain[1] - value) / (yDomain[1] - yDomain[0])) * plotHeight;
-  const hovered = points.find((point) => point.id === hoveredId) ?? null;
+  const hoveredGroup = pointGroups.find((group) => group.points.some((point) => point.id === hoveredId)) ?? null;
+  const hovered = hoveredGroup?.points.length === 1 ? hoveredGroup.points[0] : null;
+  const selectedGroup = pointGroups.find((group) => group.key === selectedGroupKey && group.points.length > 1) ?? null;
+  const selectedGroupPoint = selectedGroup?.points[0] ?? null;
   const hoveredX = hovered ? xScale(hovered.xValue) : 0;
   const hoveredY = hovered ? yScale(hovered.yValue) : 0;
+  const selectedGroupX = selectedGroupPoint ? xScale(selectedGroupPoint.xValue) : 0;
+  const selectedGroupY = selectedGroupPoint ? yScale(selectedGroupPoint.yValue) : 0;
   const showTeamLogos = useLogos && points.length <= 20;
   const changeZoom = (nextIndex: number) => {
     setHoveredId(null);
+    setSelectedGroupKey(null);
     const index = Math.max(0, Math.min(nextIndex, ZOOM_LEVELS.length - 1));
     if (index === 0) {
       setZoomState({ pointsKey, index, panX: 0, panY: 0 });
@@ -266,7 +288,10 @@ export function TeamQuadrantScatter({
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label={ariaLabel}
-        onPointerDown={startPan}
+        onPointerDown={(event) => {
+          setSelectedGroupKey(null);
+          startPan(event);
+        }}
         onPointerMove={movePan}
         onPointerUp={endPan}
         onPointerCancel={endPan}
@@ -307,7 +332,8 @@ export function TeamQuadrantScatter({
           </g>
         ) : null}
 
-        <g clipPath="url(#quadrant-point-area)">{points.map((point, pointIndex) => {
+        <g clipPath="url(#quadrant-point-area)">{pointGroups.map((group, pointIndex) => {
+          const point = group.points[0];
           const x = xScale(point.xValue);
           const y = yScale(point.yValue);
           const isRight = xHigherIsBetter ? point.xValue >= chart.xMean : point.xValue <= chart.xMean;
@@ -317,17 +343,44 @@ export function TeamQuadrantScatter({
             : colorByQuadrant
               ? isTop && isRight ? "#10f08b" : !isTop && !isRight ? "#ff5364" : "#4f9cff"
               : "#79dbe3";
-          const imageUrl = pointImages?.[point.id] ?? (showTeamLogos ? logoFor(point.team, teamLogos) : null);
-          const active = point.id === hoveredId;
+          const isGroup = group.points.length > 1;
+          const imageUrl = isGroup ? null : pointImages?.[point.id] ?? (showTeamLogos ? logoFor(point.team, teamLogos) : null);
+          const active = point.id === hoveredId || group.key === selectedGroupKey;
           const radius = imageUrl
             ? isMobile ? active ? 29 : 24 : active ? 20 : 17
-            : isMobile ? active ? 12 : 8 : active ? 8 : 5.5;
+            : isGroup
+              ? isMobile ? active ? 28 : 25 : active ? 20 : 17
+              : isMobile ? active ? 12 : 8 : active ? 8 : 5.5;
           const clipId = `plot-point-image-${pointIndex}`;
+          const groupLabel = pointImages ? "players" : "points";
           return (
-            <g key={point.id} tabIndex={0} role="button" aria-label={`${point.team}: ${xMetricLabel.toLowerCase()} ${point.xValue.toFixed(xValueDecimals)}${xValueSuffix}, ${yMetricLabel.toLowerCase()} ${point.yValue.toFixed(yValueDecimals)}${yValueSuffix}`} onMouseEnter={() => setHoveredId(point.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(point.id)} onBlur={() => setHoveredId(null)} className="cursor-pointer outline-none">
+            <g
+              key={group.key}
+              tabIndex={0}
+              role="button"
+              aria-expanded={isGroup ? group.key === selectedGroupKey : undefined}
+              aria-label={isGroup
+                ? `${group.points.length} overlapping ${groupLabel}. Select to view.`
+                : `${point.team}: ${xMetricLabel.toLowerCase()} ${point.xValue.toFixed(xValueDecimals)}${xValueSuffix}, ${yMetricLabel.toLowerCase()} ${point.yValue.toFixed(yValueDecimals)}${yValueSuffix}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => {
+                if (isGroup) setSelectedGroupKey((current) => current === group.key ? null : group.key);
+              }}
+              onKeyDown={(event) => {
+                if (!isGroup || (event.key !== "Enter" && event.key !== " ")) return;
+                event.preventDefault();
+                setSelectedGroupKey((current) => current === group.key ? null : group.key);
+              }}
+              onMouseEnter={() => setHoveredId(point.id)}
+              onMouseLeave={() => setHoveredId(null)}
+              onFocus={() => setHoveredId(point.id)}
+              onBlur={() => setHoveredId(null)}
+              className="cursor-pointer outline-none"
+            >
               {imageUrl ? <defs><clipPath id={clipId}><circle cx={x} cy={y} r={radius - 1.5} /></clipPath></defs> : null}
               <circle cx={x} cy={y} r={radius} fill={imageUrl ? "var(--color-nrl-panel)" : pointColor} stroke={pointColor} strokeWidth={active ? 3 : 1.5} opacity={active ? 1 : 0.78} />
               {imageUrl ? <image href={imageUrl} x={x - radius} y={y - radius} width={radius * 2} height={radius * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} pointerEvents="none" /> : null}
+              {isGroup ? <text x={x} y={y + (isMobile ? 7 : 4)} textAnchor="middle" fill="var(--color-nrl-bg)" fontSize={isMobile ? 18 : 12} fontWeight="950" pointerEvents="none">+{group.points.length}</text> : null}
             </g>
           );
         })}</g>
@@ -336,7 +389,7 @@ export function TeamQuadrantScatter({
         <text transform={`translate(${isMobile ? 24 : 22} ${margin.top + plotHeight / 2}) rotate(-90)`} textAnchor="middle" fill="var(--color-nrl-text)" fontWeight="900" className="text-[15px] sm:text-[15px] lg:text-[10px]">{yAxisLabel}</text>
       </svg>
 
-      {hovered ? (
+      {hovered && !selectedGroup ? (
         <div
           className="pointer-events-none absolute z-10 w-52 max-w-[calc(100%_-_1rem)] rounded-lg border border-nrl-accent/50 bg-nrl-panel px-3 py-2 text-xs shadow-xl lg:text-[10px]"
           style={{
@@ -348,6 +401,29 @@ export function TeamQuadrantScatter({
           <div className="mt-1 text-nrl-muted">{xMetricLabel} {hovered.xValue.toFixed(xValueDecimals)}{xValueSuffix} · {yMetricLabel} {hovered.yValue.toFixed(yValueDecimals)}{yValueSuffix}</div>
           <div className="text-nrl-muted">
             {pointImages ? `${hovered.games} games` : <>{hovered.detail}{hovered.games > 1 ? ` · ${hovered.games} games` : ""}</>}
+          </div>
+        </div>
+      ) : null}
+      {selectedGroup && selectedGroupPoint ? (
+        <div
+          className="absolute z-20 w-64 max-w-[calc(100%_-_1rem)] rounded-lg border border-nrl-accent/50 bg-nrl-panel px-3 py-2 text-xs shadow-xl lg:text-[10px]"
+          style={{
+            left: `clamp(0.5rem, calc(${(selectedGroupX / width) * 100}% ${selectedGroupX > width / 2 ? "- 17rem" : "+ 1rem"}), calc(100% - 16.5rem))`,
+            top: `clamp(0.5rem, calc(${(selectedGroupY / height) * 100}% ${selectedGroupY > height / 2 ? "- 9rem" : "+ 1rem"}), calc(100% - 8.5rem))`,
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-black text-nrl-text">{selectedGroup.points.length} overlapping {pointImages ? "players" : "points"}</div>
+            <button type="button" onClick={() => setSelectedGroupKey(null)} aria-label="Close overlapping points" className="text-sm font-black text-nrl-muted hover:text-nrl-text">×</button>
+          </div>
+          <div className="mt-1 text-nrl-muted">{xMetricLabel} {selectedGroupPoint.xValue.toFixed(xValueDecimals)}{xValueSuffix} · {yMetricLabel} {selectedGroupPoint.yValue.toFixed(yValueDecimals)}{yValueSuffix}</div>
+          <div className="mt-2 divide-y divide-nrl-border">
+            {selectedGroup.points.map((point) => (
+              <div key={point.id} className="py-1.5">
+                <div className="font-bold text-nrl-text">{point.team}</div>
+                <div className="text-nrl-muted">{point.detail}{point.games > 1 ? ` · ${point.games} games` : ""}</div>
+              </div>
+            ))}
           </div>
         </div>
       ) : null}

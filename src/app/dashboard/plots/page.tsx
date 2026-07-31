@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { PlotsDashboard } from "@/components/views/plots-dashboard";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
-import { fetchAvailableYears, fetchPlayerImages, fetchPostMatchTeamMetrics, fetchTeamLogos, fetchTeamStats, type PlayerImageRecord } from "@/lib/supabase/queries";
+import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats, fetchPostMatchTeamMetrics, fetchTeamLogos, fetchTeamStats, type PlayerImageRecord } from "@/lib/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -35,12 +35,13 @@ export default async function PlotsPage() {
   );
   const yearOptions = unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1);
   const initialYear = yearOptions[0] ?? "";
-  const [initialData, initialPostMatchMetrics] = initialYear
+  const [initialData, initialPlayerData, initialPostMatchMetrics] = initialYear
     ? await Promise.all([
         fetchTeamStats([initialYear]),
+        fetchPlayerStats([initialYear]),
         canAccessProSeason ? fetchPostMatchTeamMetrics([initialYear]) : Promise.resolve([]),
       ])
-    : [[], []];
+    : [[], [], []];
 
-  return <PlotsDashboard initialData={initialData} initialPostMatchMetrics={initialPostMatchMetrics} availableYears={yearOptions} initialYear={initialYear} teamLogos={teamLogos} playerFaceImages={buildPlayerFaceImages(playerImages)} canAccessModelPlots={canAccessProSeason} />;
+  return <PlotsDashboard initialData={initialData} initialPlayerData={initialPlayerData} initialPostMatchMetrics={initialPostMatchMetrics} availableYears={yearOptions} initialYear={initialYear} teamLogos={teamLogos} playerFaceImages={buildPlayerFaceImages(playerImages)} canAccessModelPlots={canAccessProSeason} />;
 }

@@ -139,6 +139,7 @@ type HalvesPairingSortLabel = (typeof HALVES_PAIRING_SORT_OPTIONS)[number];
 
 interface PlotsDashboardProps {
   initialData: TeamStat[];
+  initialPlayerData: PlayerStat[];
   initialPostMatchMetrics: PostMatchTeamMetric[];
   availableYears: string[];
   initialYear: string;
@@ -213,8 +214,8 @@ function ModelPlotLock({ plotName }: { plotName: string }) {
   );
 }
 
-export function PlotsDashboard({ initialData, initialPostMatchMetrics, availableYears, initialYear, teamLogos, playerFaceImages, canAccessModelPlots }: PlotsDashboardProps) {
-  const [entity, setEntity] = useState("Teams");
+export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatchMetrics, availableYears, initialYear, teamLogos, playerFaceImages, canAccessModelPlots }: PlotsDashboardProps) {
+  const [entity, setEntity] = useState("Players");
   const [teamSection, setTeamSection] = useState<TeamSection>("Defense");
   const [playerSection, setPlayerSection] = useState<PlayerSection>("Attack");
   const [playerAttackPlot, setPlayerAttackPlot] = useState<PlayerAttackPlot>("Efficiency");
@@ -236,12 +237,12 @@ export function PlotsDashboard({ initialData, initialPostMatchMetrics, available
   const [teamEfficiencyBaseMetric, setTeamEfficiencyBaseMetric] = useState<TeamAttackEfficiencyBaseStat>("Runs");
   const [teamEfficiencyOutputMetric, setTeamEfficiencyOutputMetric] = useState<TeamAttackEfficiencyOutputStat>("Run metres");
   const [defencePlot, setDefencePlot] = useState<DefencePlot>("Contact vs cover defence");
-  const [teamShareMetric, setTeamShareMetric] = useState<TeamShareMetric>("Receipts");
+  const [teamShareMetric, setTeamShareMetric] = useState<TeamShareMetric>("Runs");
   const [mode, setMode] = useState<DefencePlotMode>("season");
   const [year, setYear] = useState(initialYear);
   const [rowsByYear, setRowsByYear] = useState<Record<string, TeamStat[]>>({ [initialYear]: initialData });
   const [postMatchMetricsByYear, setPostMatchMetricsByYear] = useState<Record<string, PostMatchTeamMetric[]>>({ [initialYear]: initialPostMatchMetrics });
-  const [playerRowsByYear, setPlayerRowsByYear] = useState<Record<string, PlayerStat[]>>({});
+  const [playerRowsByYear, setPlayerRowsByYear] = useState<Record<string, PlayerStat[]>>({ [initialYear]: initialPlayerData });
   const [loading, setLoading] = useState(false);
   const currentRows = useMemo(() => rowsByYear[year] ?? [], [rowsByYear, year]);
   const currentPostMatchMetrics = useMemo(() => postMatchMetricsByYear[year] ?? [], [postMatchMetricsByYear, year]);

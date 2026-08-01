@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 const tools = [
   { label: "Home", href: "/" },
   { label: "Betting", href: "/dashboard/betting" },
-  { label: "Stats", href: "/dashboard/archetypes" },
+  { label: "Stats", href: "/dashboard/plots" },
   { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "Lineups", href: "/dashboard/lineups" },
   { label: "NRL AI", href: "/dashboard/ai" },
@@ -30,7 +30,8 @@ export function ToolNav({ className }: ToolNavProps) {
     pathname.startsWith("/dashboard/rankings") ||
     pathname.startsWith("/dashboard/players") ||
     pathname.startsWith("/dashboard/teams") ||
-    pathname.startsWith("/dashboard/archetypes");
+    pathname.startsWith("/dashboard/archetypes") ||
+    pathname.startsWith("/dashboard/plots");
   const displayedPendingArticleCount = isLoaded && userId ? pendingArticleCount : 0;
 
   useEffect(() => {
@@ -72,7 +73,7 @@ export function ToolNav({ className }: ToolNavProps) {
           {tools.map((tool) => {
             const active = tool.href === "/"
               ? pathname === "/"
-              : tool.href === "/dashboard/archetypes"
+              : tool.href === "/dashboard/plots"
                 ? isStatsRoute
                 : pathname === tool.href || pathname.startsWith(`${tool.href}/`);
 

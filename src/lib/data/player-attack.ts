@@ -204,6 +204,10 @@ function latestQualifyingRows(rows: PlayerStat[], gameWindow: PlayerGameWindow):
   return sorted.length >= gameWindow ? sorted.slice(-gameWindow) : [];
 }
 
+function minimumQualifyingGames(gameWindow: PlayerGameWindow): number {
+  return gameWindow ?? 5;
+}
+
 export function buildPlayerAttackPoints(
   rows: PlayerStat[],
   position: PlayerAttackPosition,
@@ -227,7 +231,7 @@ export function buildPlayerAttackPoints(
       ? positionRows
       : positionRows.filter((row) => finite(row["Mins Played"]) >= usualMinutes * 0.6);
     const qualifyingRows = latestQualifyingRows(positionQualifyingRows, gameWindow);
-    if (qualifyingRows.length < 5) continue;
+    if (qualifyingRows.length < minimumQualifyingGames(gameWindow)) continue;
 
     const baseField = EFFICIENCY_BASE_FIELDS[baseMetric];
     const outputField = EFFICIENCY_OUTPUT_FIELDS[outputMetric];
@@ -294,7 +298,7 @@ export function buildPlayerAttackComparisonPoints(
       ? positionQualifyingRows.filter((row) => finite(row["Mins Played"]) >= 40)
       : positionQualifyingRows;
     const qualifyingRows = latestQualifyingRows(modeQualifyingRows, gameWindow);
-    if (qualifyingRows.length < 5) continue;
+    if (qualifyingRows.length < minimumQualifyingGames(gameWindow)) continue;
 
     const isPer80 = BACK_POSITIONS.has(position);
     const comparisonXTotal = qualifyingRows.reduce((sum, row) => {
@@ -392,7 +396,7 @@ export function buildHalvesPairingPoints(
     const samples = gameWindow === null
       ? sortedSamples
       : sortedSamples.length >= gameWindow ? sortedSamples.slice(-gameWindow) : [];
-    if (samples.length < 5) return [];
+    if (samples.length < minimumQualifyingGames(gameWindow)) return [];
     const playerAValue = samples.reduce((sum, sample) => sum + sample.playerAValue, 0);
     const playerBValue = samples.reduce((sum, sample) => sum + sample.playerBValue, 0);
     const playerAHalfbackGames = samples.filter((sample) => sample.playerAIsHalfback).length;
@@ -444,7 +448,7 @@ export function buildPlayerDefencePoints(
       ? positionRows
       : positionRows.filter((row) => finite(row["Mins Played"]) >= usualMinutes * 0.6);
     const qualifyingRows = latestQualifyingRows(positionQualifyingRows, gameWindow);
-    if (qualifyingRows.length < 5) continue;
+    if (qualifyingRows.length < minimumQualifyingGames(gameWindow)) continue;
 
     const tacklesValue = qualifyingRows.reduce((sum, row) => {
       const tackles = finite(row["Tackles Made"]);

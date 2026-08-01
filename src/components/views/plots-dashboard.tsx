@@ -807,11 +807,11 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                     <span aria-label="Loading season" role="status" className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/25 border-t-nrl-accent" />
                   </div>
                 ) : null}
-                <HalvesPairingBars pairings={halvesPairings} stat={halvesPairingStat} playerFaceImages={playerFaceImages} />
+                <HalvesPairingBars pairings={halvesPairings} stat={halvesPairingStat} playerFaceImages={playerFaceImages} minimumGames={gameWindow ?? 5} />
               </div>
               {playerInfoOpen ? (
                 <div id="player-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-3">
-                  <div><span className="font-black text-nrl-text">Pairing sample</span><br />The recorded five-eighth and halfback from the same team-game, with both playing at least 60 minutes. Jersey 6 and 7 are used only when position data is unavailable. A pairing needs at least five qualifying shared games in the selected season.</div>
+                  <div><span className="font-black text-nrl-text">Pairing sample</span><br />The recorded five-eighth and halfback from the same team-game, with both playing at least 60 minutes. Jersey 6 and 7 are used only when position data is unavailable. A pairing needs at least {gameWindow ?? 5} qualifying shared games in the selected season.</div>
                   <div><span className="font-black text-nrl-text">Contribution split</span><br />Each player&apos;s selected-stat total across shared games is divided by the pair&apos;s combined total. The most common halfback is blue on the left; the most common five-eighth is green on the right.</div>
                   <div><span className="font-black text-nrl-text">Sorting</span><br />Ascending puts the most uneven pairings first. Descending puts the pairings closest to a 50/50 split first.</div>
                   <div><span className="font-black text-nrl-text">Game window</span><br />{gameWindow === null ? "All qualifying shared games are included." : `L${gameWindow} uses each pairing's latest ${gameWindow} qualifying shared games from 2026 and requires that full sample.`}</div>
@@ -847,7 +847,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                   teamLogos={{}}
                   useLogos={false}
                   pointImages={playerPointImages}
-                  emptyMessage={`No ${playerPosition.toLowerCase()} have five qualifying games this season.`}
+                  emptyMessage={`No ${playerPosition.toLowerCase()} have ${gameWindow ?? 5} qualifying games this season.`}
                   ariaLabel={playerSection === "Defense"
                     ? `${playerPosition} tackles against tackle efficiency scatter plot`
                     : isPlayerEfficiency
@@ -879,7 +879,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
               </div>
               {playerInfoOpen ? (
                 <div id="player-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-2">
-                  <div><span className="font-black text-nrl-text">Position sample</span><br />{playerPosition} with at least five qualifying games in position. Recorded positions are used, with jersey number only used when position data is unavailable.</div>
+                  <div><span className="font-black text-nrl-text">Position sample</span><br />{playerPosition} with at least {gameWindow ?? 5} qualifying games in position. Recorded positions are used, with jersey number only used when position data is unavailable.</div>
                   <div><span className="font-black text-nrl-text">Game window</span><br />{gameWindow === null ? "All qualifying games are included." : `L${gameWindow} uses each player's latest ${gameWindow} qualifying games from 2026 and requires that full sample.`}</div>
                   <div><span className="font-black text-nrl-text">Minutes adjustment</span><br />{
                     playerSection === "Defense"
@@ -966,7 +966,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
               {isTeamEfficiency ? <div className="w-32 shrink-0"><Select label="Measurable stat" hideLabel compact value={activeTeamEfficiencyOutputMetric} options={[...TEAM_ATTACK_EFFICIENCY_OUTPUT_STATS]} onChange={(value) => isTeamDefenceEfficiency ? setTeamDefenceEfficiencyOutputMetric(value as TeamAttackEfficiencyOutputStat) : setTeamEfficiencyOutputMetric(value as TeamAttackEfficiencyOutputStat)} /></div> : null}
               {isTeamAttackEfficiency ? <VolumeAxisToggle checked={teamEfficiencyShowsVolume} onChange={(checked) => setTeamEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
               {isTeamDefenceEfficiency ? <VolumeAxisToggle checked={teamDefenceEfficiencyShowsVolume} onChange={(checked) => setTeamDefenceEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
-              {!isOther || isRuckDominancePlot ? <div className="w-24 shrink-0"><Select label="Aggregation" hideLabel compact value={mode === "season" ? "Season" : "Team games"} options={["Season", "Team games"]} onChange={(value) => setMode(value === "Season" ? "season" : "games")} /></div> : null}
+              {!isOther || isRuckDominancePlot ? <div className="w-24 shrink-0"><Select label="Aggregation" hideLabel compact value={mode === "season" ? "Team" : "Games"} options={["Team", "Games"]} onChange={(value) => setMode(value === "Team" ? "season" : "games")} /></div> : null}
               {isOther && !isRuckDominancePlot ? <div className="w-28 shrink-0"><Select label="Stat" hideLabel compact value={teamShareMetric} options={[...TEAM_SHARE_METRICS]} onChange={(value) => setTeamShareMetric(value as TeamShareMetric)} /></div> : null}
               <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} />
               <div className="w-20 shrink-0"><Select label="Season" hideLabel compact value={year} options={availableYears} onChange={(value) => void changeYear(value)} /></div>

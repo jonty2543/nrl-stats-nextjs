@@ -7,6 +7,7 @@ interface HalvesPairingBarsProps {
   pairings: HalvesPairingPoint[];
   stat: PlayerAttackComparisonStat;
   playerFaceImages: Record<string, string>;
+  minimumGames: number;
 }
 
 const LEFT_COLOR = "#4f9cff";
@@ -28,9 +29,9 @@ function totalLabel(value: number): string {
   return Math.round(value).toLocaleString("en-AU");
 }
 
-export function HalvesPairingBars({ pairings, stat, playerFaceImages }: HalvesPairingBarsProps) {
+export function HalvesPairingBars({ pairings, stat, playerFaceImages, minimumGames }: HalvesPairingBarsProps) {
   if (pairings.length === 0) {
-    return <div className="grid min-h-72 place-items-center px-4 text-center text-sm font-black text-nrl-muted">No halves pairings have five shared games with a recorded {stat.toLowerCase()} total.</div>;
+    return <div className="grid min-h-72 place-items-center px-4 text-center text-sm font-black text-nrl-muted">No halves pairings have {minimumGames} shared games with a recorded {stat.toLowerCase()} total.</div>;
   }
 
   return (

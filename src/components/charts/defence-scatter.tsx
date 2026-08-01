@@ -589,8 +589,9 @@ export function TeamQuadrantScatter({
               : "#79dbe3";
           const isGroup = group.points.length > 1;
           const imageUrl = isGroup ? null : pointImages?.[point.id] ?? (showTeamLogos ? logoFor(point.team, teamLogos) : null);
+          const isPlayerPoint = Boolean(pointImages) && !isGroup;
           const active = group.points.some((groupedPoint) => groupedPoint.id === hoveredId || groupedPoint.id === selectedPointId) || group.key === selectedGroupKey;
-          const radius = imageUrl
+          const radius = imageUrl || isPlayerPoint
             ? isMobile ? active ? 29 : 24 : active ? 20 : 17
             : isGroup
               ? isMobile ? active ? 28 : 25 : active ? 20 : 17
@@ -635,9 +636,15 @@ export function TeamQuadrantScatter({
               onBlur={() => setHoveredId(null)}
               className="cursor-pointer outline-none"
             >
-              {imageUrl ? <defs><clipPath id={clipId}><circle cx={x} cy={y} r={radius - 1.5} /></clipPath></defs> : null}
-              <circle cx={x} cy={y} r={radius} fill={imageUrl ? "var(--color-nrl-panel)" : pointColor} stroke={pointColor} strokeWidth={active ? 3 : 1.5} opacity={active ? 1 : 0.78} />
-              {imageUrl ? <image href={imageUrl} x={x - radius} y={y - radius} width={radius * 2} height={radius * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} pointerEvents="none" /> : null}
+              {imageUrl || isPlayerPoint ? <defs><clipPath id={clipId}><circle cx={x} cy={y} r={radius - 1.5} /></clipPath></defs> : null}
+              <circle cx={x} cy={y} r={radius} fill={imageUrl ? "var(--color-nrl-panel)" : isPlayerPoint ? "#596273" : pointColor} stroke={pointColor} strokeWidth={active ? 3 : 1.5} opacity={active ? 1 : 0.78} />
+              {isPlayerPoint ? (
+                <g clipPath={`url(#${clipId})`} pointerEvents="none" fill="#b7becb">
+                  <circle cx={x} cy={y - radius * 0.3} r={radius * 0.27} />
+                  <ellipse cx={x} cy={y + radius * 0.55} rx={radius * 0.62} ry={radius * 0.52} />
+                </g>
+              ) : null}
+              {imageUrl ? <image href={imageUrl} x={x - radius} y={y - radius} width={radius * 2} height={radius * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} pointerEvents="none" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
               {isGroup ? <text x={x} y={y + (isMobile ? 7 : 4)} textAnchor="middle" fill="var(--color-nrl-bg)" fontSize={isMobile ? 18 : 12} fontWeight="950" pointerEvents="none">+{group.points.length}</text> : null}
             </g>
           );
@@ -658,7 +665,7 @@ export function TeamQuadrantScatter({
 
       {activePoint && !selectedGroup ? (
         <div
-          className={`${selectedPoint ? "z-20" : "pointer-events-none z-10"} absolute w-52 max-w-[calc(100%_-_1rem)] rounded-lg border border-nrl-accent/50 bg-nrl-panel px-3 py-2 text-xs shadow-xl lg:text-[10px]`}
+          className={`${selectedPoint ? "z-20" : "pointer-events-none z-10"} absolute w-52 max-w-[calc(100%_-_1rem)] rounded-lg border border-nrl-accent/50 bg-nrl-panel/80 px-3 py-2 text-xs shadow-xl lg:text-[10px]`}
           style={{
             left: `clamp(0.5rem, calc(${(activePointX / width) * 100}% ${activePointX > width / 2 ? "- 14rem" : "+ 1rem"}), calc(100% - 13.5rem))`,
             top: `clamp(0.5rem, calc(${(activePointY / height) * 100}% ${activePointY > height / 2 ? "- 6rem" : "+ 1rem"}), calc(100% - 5.5rem))`,
@@ -676,7 +683,7 @@ export function TeamQuadrantScatter({
       ) : null}
       {selectedGroup ? (
         <div
-          className="absolute z-20 w-64 max-w-[calc(100%_-_1rem)] rounded-lg border border-nrl-accent/50 bg-nrl-panel px-3 py-2 text-xs shadow-xl lg:text-[10px]"
+          className="absolute z-20 w-64 max-w-[calc(100%_-_1rem)] rounded-lg border border-nrl-accent/50 bg-nrl-panel/80 px-3 py-2 text-xs shadow-xl lg:text-[10px]"
           style={{
             left: `clamp(0.5rem, calc(${(selectedGroupX / width) * 100}% ${selectedGroupX > width / 2 ? "- 17rem" : "+ 1rem"}), calc(100% - 16.5rem))`,
             top: `clamp(0.5rem, calc(${(selectedGroupY / height) * 100}% ${selectedGroupY > height / 2 ? "- 9rem" : "+ 1rem"}), calc(100% - 8.5rem))`,

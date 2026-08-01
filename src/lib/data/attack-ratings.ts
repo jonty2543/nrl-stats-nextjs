@@ -7,6 +7,11 @@ export const TEAM_ATTACK_COMPARISON_STATS = [
   "Run metres per run",
   "Tries",
   "Points",
+  "Possession",
+  "Time in possession",
+  "Runs",
+  "Passes",
+  "Receipts",
   "Run metres",
   "Post-contact metres",
   "Try assists",
@@ -31,6 +36,11 @@ export const TEAM_DEFENCE_CONCEDED_STATS = [
   "Run metres per run",
   "Tries",
   "Points",
+  "Possession",
+  "Time in possession",
+  "Runs",
+  "Passes",
+  "Receipts",
   "Run metres",
   "Post-contact metres",
   "Try assists",
@@ -70,6 +80,8 @@ export type TeamAttackEfficiencyOutputStat = (typeof TEAM_ATTACK_EFFICIENCY_OUTP
 
 export const TEAM_ATTACK_TOTAL_STATS = [
   "Points",
+  "Possession",
+  "Time in possession",
   "Receipts",
   "Runs",
   "Passes",
@@ -143,6 +155,8 @@ function attackTotals(row: TeamStat): Record<TeamAttackTotalStat, number> {
   const offloads = finite(row.Offloads);
   return {
     Points: finite(row.Points),
+    Possession: finite(row["Possession %"]),
+    "Time in possession": finite(row["Time In Possession"]),
     Receipts: finite(row.Receipts),
     Runs: finite(row["All Runs"]),
     Passes: finite(row.Passes),

@@ -35,9 +35,7 @@ export const PLAYER_ATTACK_COMPARISON_STATS = [
 export type PlayerEfficiencyBaseMetric = (typeof PLAYER_EFFICIENCY_BASE_METRICS)[number];
 export type PlayerEfficiencyOutputMetric = (typeof PLAYER_EFFICIENCY_OUTPUT_METRICS)[number];
 export type PlayerAttackComparisonStat = (typeof PLAYER_ATTACK_COMPARISON_STATS)[number];
-export const PLAYER_ATTACK_STAT_COMPARISON_STATS: readonly PlayerAttackComparisonStat[] = PLAYER_ATTACK_COMPARISON_STATS.filter(
-  (stat) => stat !== "Receipts" && stat !== "Runs" && stat !== "Passes"
-);
+export const PLAYER_ATTACK_STAT_COMPARISON_STATS: readonly PlayerAttackComparisonStat[] = PLAYER_ATTACK_COMPARISON_STATS;
 export type PlayerAttackComparisonMode = "per-game" | "team-proportion" | "totals";
 export type HalvesPairingSort = "ascending" | "descending";
 export type PlayerGameWindow = 3 | 5 | 10 | null;

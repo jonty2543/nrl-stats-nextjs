@@ -62,7 +62,7 @@ function emptyValues(): Record<TeamSharePositionGroup, number> {
 export function buildTeamShareSeries(
   rows: PlayerStat[],
   metric: TeamShareMetric,
-  gameWindow: 5 | 10 | null = null
+  gameWindow: 3 | 5 | 10 | null = null
 ): TeamShareSeries[] {
   const field = METRIC_FIELDS[metric];
   const games = new Map<string, PlayerStat[]>();

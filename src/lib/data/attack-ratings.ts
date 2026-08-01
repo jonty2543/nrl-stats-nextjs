@@ -126,7 +126,7 @@ function roundOrder(label: string): number {
   return match ? Number(match[0]) : 0;
 }
 
-function latestTeamGames(points: AttackRatingPoint[], gameWindow: 5 | 10 | null): AttackRatingPoint[] {
+function latestTeamGames(points: AttackRatingPoint[], gameWindow: 3 | 5 | 10 | null): AttackRatingPoint[] {
   if (gameWindow === null) return points;
   const groups = new Map<string, AttackRatingPoint[]>();
   for (const point of points) {
@@ -164,7 +164,7 @@ function attackTotals(row: TeamStat): Record<TeamAttackTotalStat, number> {
   };
 }
 
-export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode, gameWindow: 5 | 10 | null = null): AttackRatingPoint[] {
+export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode, gameWindow: 3 | 5 | 10 | null = null): AttackRatingPoint[] {
   const allGames = rows.flatMap((row): AttackRatingPoint[] => {
     const totals = attackTotals(row);
     const runs = totals.Runs;
@@ -244,7 +244,7 @@ export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode,
   }).sort((left, right) => left.team.localeCompare(right.team));
 }
 
-export function buildConcededRatingPoints(rows: TeamStat[], mode: DefencePlotMode, gameWindow: 5 | 10 | null = null): AttackRatingPoint[] {
+export function buildConcededRatingPoints(rows: TeamStat[], mode: DefencePlotMode, gameWindow: 3 | 5 | 10 | null = null): AttackRatingPoint[] {
   const rowByMatchup = new Map(rows.map((row) => [
     `${row.Year}|${row.Round}|${row.Date}|${normalise(row.Team)}|${normalise(row.Opponent ?? "")}`,
     row,

@@ -101,7 +101,7 @@ function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1);
 }
 
-function latestTeamMetrics<T extends PostMatchTeamMetric>(metrics: T[], gameWindow: 5 | 10 | null): T[] {
+function latestTeamMetrics<T extends PostMatchTeamMetric>(metrics: T[], gameWindow: 3 | 5 | 10 | null): T[] {
   if (gameWindow === null) return metrics;
   const groups = new Map<string, T[]>();
   for (const metric of metrics) {
@@ -122,7 +122,7 @@ export function buildTeamPostMatchStatPoints(
   metrics: PostMatchTeamMetricWithRdr[],
   mode: DefencePlotMode,
   perspective: XPointsPerspective,
-  gameWindow: 5 | 10 | null = null
+  gameWindow: 3 | 5 | 10 | null = null
 ): TeamPostMatchStatPoint[] {
   const metricByMatchTeam = new Map(metrics.map((metric) => [
     `${metric.url}|${normalise(metric.team)}`,
@@ -190,7 +190,7 @@ export function buildXPointsPlotPoints(
   metrics: PostMatchTeamMetric[],
   mode: DefencePlotMode,
   perspective: XPointsPerspective,
-  gameWindow: 5 | 10 | null = null
+  gameWindow: 3 | 5 | 10 | null = null
 ): XPointsPlotPoint[] {
   const games = latestTeamMetrics(metrics, gameWindow).flatMap((metric): XPointsPlotPoint[] => {
     const expected = perspective === "attack" ? metric.xpoints : metric.opponentXpoints;

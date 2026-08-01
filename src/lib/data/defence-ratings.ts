@@ -49,7 +49,7 @@ function roundOrder(label: string): number {
   return match ? Number(match[0]) : 0;
 }
 
-function latestDefenceGames<T extends Pick<DefenceRatingPoint, "team" | "year" | "roundLabel">>(points: T[], gameWindow: 5 | 10 | null): T[] {
+function latestDefenceGames<T extends Pick<DefenceRatingPoint, "team" | "year" | "roundLabel">>(points: T[], gameWindow: 3 | 5 | 10 | null): T[] {
   if (gameWindow === null) return points;
   const groups = new Map<string, T[]>();
   for (const point of points) {
@@ -173,7 +173,7 @@ function standardise(points: RawDefencePoint[]): DefenceRatingPoint[] {
 function buildDefenceRatingPointsFromMetrics(
   metrics: PostMatchTeamMetric[],
   mode: DefencePlotMode,
-  gameWindow: 5 | 10 | null
+  gameWindow: 3 | 5 | 10 | null
 ): DefenceRatingPoint[] {
   const allGames = metrics.flatMap((metric): DefenceRatingPoint[] => {
     if (metric.contactDisruptionsPer100Runs == null || metric.coverDefenseRating == null) return [];
@@ -218,7 +218,7 @@ export function buildDefenceRatingPoints(
   rows: TeamStat[],
   mode: DefencePlotMode,
   metrics: PostMatchTeamMetric[] = [],
-  gameWindow: 5 | 10 | null = null
+  gameWindow: 3 | 5 | 10 | null = null
 ): DefenceRatingPoint[] {
   const sourcedPoints = buildDefenceRatingPointsFromMetrics(metrics, mode, gameWindow);
   if (sourcedPoints.length > 0) return sourcedPoints;

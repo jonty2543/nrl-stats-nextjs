@@ -43,7 +43,7 @@ function comparisonQuadrants(xStat: string, yStat: string, suffix = "", xHigherO
 function GameWindowButtons({ value, onChange }: { value: PlayerGameWindow; onChange: (value: PlayerGameWindow) => void }) {
   return (
     <div className="flex shrink-0 rounded-md border border-nrl-border bg-nrl-panel-2 p-0.5" aria-label="Qualifying game window">
-      {([{ label: "All", value: null }, { label: "L5", value: 5 }, { label: "L10", value: 10 }] as const).map((option) => (
+      {([{ label: "All", value: null }, { label: "L3", value: 3 }, { label: "L5", value: 5 }, { label: "L10", value: 10 }] as const).map((option) => (
         <button
           key={option.label}
           type="button"
@@ -55,6 +55,23 @@ function GameWindowButtons({ value, onChange }: { value: PlayerGameWindow; onCha
         </button>
       ))}
     </div>
+  );
+}
+
+function VolumeAxisToggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 text-[9px] font-black uppercase tracking-wide text-nrl-muted transition-colors hover:text-nrl-text">
+      <span>Volume axis</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="sr-only"
+      />
+      <span aria-hidden="true" className={`grid h-4 w-4 place-items-center rounded-full border text-[10px] leading-none ${checked ? "border-nrl-accent bg-nrl-accent text-[#07111f]" : "border-nrl-muted/70 bg-transparent"}`}>
+        {checked ? "✓" : ""}
+      </span>
+    </label>
   );
 }
 
@@ -181,17 +198,17 @@ const XPOINTS_QUADRANTS: QuadrantLabels = {
 };
 
 const PLAYER_EFFICIENCY_QUADRANTS: QuadrantLabels = {
-  topLeft: ["LOWER VOLUME", "HIGH EFFICIENCY"],
-  topRight: ["HIGH VOLUME", "HIGH EFFICIENCY"],
-  bottomLeft: ["LOWER VOLUME", "LOW EFFICIENCY"],
-  bottomRight: ["HIGH VOLUME", "LOW EFFICIENCY"],
+  topLeft: ["LOW EFFICIENCY", "HIGH VOLUME"],
+  topRight: ["HIGH EFFICIENCY", "HIGH VOLUME"],
+  bottomLeft: ["LOW EFFICIENCY", "LOWER VOLUME"],
+  bottomRight: ["HIGH EFFICIENCY", "LOWER VOLUME"],
 };
 
 const DEFENSIVE_EFFICIENCY_QUADRANTS: QuadrantLabels = {
-  topLeft: ["LOWER VOLUME", "LOW EFFICIENCY"],
-  topRight: ["HIGH VOLUME", "LOW EFFICIENCY"],
-  bottomLeft: ["LOWER VOLUME", "HIGH EFFICIENCY"],
-  bottomRight: ["HIGH VOLUME", "HIGH EFFICIENCY"],
+  topLeft: ["LOW EFFICIENCY", "HIGH VOLUME"],
+  topRight: ["HIGH EFFICIENCY", "HIGH VOLUME"],
+  bottomLeft: ["LOW EFFICIENCY", "LOWER VOLUME"],
+  bottomRight: ["HIGH EFFICIENCY", "LOWER VOLUME"],
 };
 
 const PLAYER_TACKLE_QUADRANTS: QuadrantLabels = {
@@ -204,6 +221,7 @@ const PLAYER_TACKLE_QUADRANTS: QuadrantLabels = {
 type TeamSection = "Attack" | "Defense" | "Other";
 type AttackPlot = "Stats" | "Efficiency" | "xPoints vs actual points";
 type DefencePlot = "Contact vs cover defence" | "Stats Conceded" | "Defensive Efficiency" | "Actual points conceded vs xPoints conceded";
+type EfficiencyView = "Efficiency" | "Volume axis";
 type TeamOtherPlot = "Team Share by Position" | "Ruck Dominance Rating";
 type PlayerAttackPlot = "Stats" | "Efficiency" | "Team Proportion";
 type PlayerSection = "Attack" | "Defense" | "Other";
@@ -302,6 +320,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const [playerAttackPlot, setPlayerAttackPlot] = useState<PlayerAttackPlot>("Stats");
   const [playerEfficiencyBaseMetric, setPlayerEfficiencyBaseMetric] = useState<PlayerEfficiencyBaseMetric>("Runs");
   const [playerEfficiencyOutputMetric, setPlayerEfficiencyOutputMetric] = useState<PlayerEfficiencyOutputMetric>("Run metres");
+  const [playerEfficiencyView, setPlayerEfficiencyView] = useState<EfficiencyView>("Efficiency");
   const [playerComparisonXStat, setPlayerComparisonXStat] = useState<PlayerAttackComparisonStat>("Run metres");
   const [playerComparisonYStat, setPlayerComparisonYStat] = useState<OptionalPlayerComparisonStat>("None");
   const [playerStatsAggregation, setPlayerStatsAggregation] = useState<PlayerStatsAggregation>("Per game");
@@ -318,10 +337,12 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const [teamAttackYStat, setTeamAttackYStat] = useState<OptionalTeamAttackComparisonStat>("None");
   const [teamEfficiencyBaseMetric, setTeamEfficiencyBaseMetric] = useState<TeamAttackEfficiencyBaseStat>("Runs");
   const [teamEfficiencyOutputMetric, setTeamEfficiencyOutputMetric] = useState<TeamAttackEfficiencyOutputStat>("Run metres");
+  const [teamEfficiencyView, setTeamEfficiencyView] = useState<EfficiencyView>("Efficiency");
   const [teamDefenceXStat, setTeamDefenceXStat] = useState<TeamDefenceConcededStat>("Run metres");
   const [teamDefenceYStat, setTeamDefenceYStat] = useState<OptionalTeamDefenceComparisonStat>("None");
   const [teamDefenceEfficiencyBaseMetric, setTeamDefenceEfficiencyBaseMetric] = useState<TeamAttackEfficiencyBaseStat>("Runs");
   const [teamDefenceEfficiencyOutputMetric, setTeamDefenceEfficiencyOutputMetric] = useState<TeamAttackEfficiencyOutputStat>("Run metres");
+  const [teamDefenceEfficiencyView, setTeamDefenceEfficiencyView] = useState<EfficiencyView>("Efficiency");
   const [defencePlot, setDefencePlot] = useState<DefencePlot>("Contact vs cover defence");
   const [teamOtherPlot, setTeamOtherPlot] = useState<TeamOtherPlot>("Team Share by Position");
   const [teamShareMetric, setTeamShareMetric] = useState<TeamShareMetric>("Runs");
@@ -341,9 +362,11 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const isOther = teamSection === "Other";
   const isAttackXPoints = isAttack && attackPlot === "xPoints vs actual points";
   const isTeamAttackEfficiency = isAttack && attackPlot === "Efficiency";
+  const teamEfficiencyShowsVolume = isTeamAttackEfficiency && teamEfficiencyView === "Volume axis";
   const isTeamAttackStatComparison = isAttack && attackPlot === "Stats";
   const isTeamDefenceStatsConceded = isDefense && defencePlot === "Stats Conceded";
   const isTeamDefenceEfficiency = isDefense && defencePlot === "Defensive Efficiency";
+  const teamDefenceEfficiencyShowsVolume = isTeamDefenceEfficiency && teamDefenceEfficiencyView === "Volume axis";
   const isRuckDominancePlot = isOther && teamOtherPlot === "Ruck Dominance Rating";
   const isTeamStatsComparison = isTeamAttackStatComparison || isTeamDefenceStatsConceded;
   const isTeamEfficiency = isTeamAttackEfficiency || isTeamDefenceEfficiency;
@@ -358,7 +381,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const teamAttackQuadrants = useMemo(() => comparisonQuadrants(teamAttackXStat, effectiveTeamAttackYStat, "", teamAttackXHigherIsBetter), [effectiveTeamAttackYStat, teamAttackXHigherIsBetter, teamAttackXStat]);
   const activeTeamXStat = isTeamDefenceStatsConceded ? teamDefenceXStat : teamAttackXStat;
   const activeTeamYStat = isTeamDefenceStatsConceded ? teamDefenceYStat : teamAttackYStat;
-  const isTeamSingleStat = isRuckDominancePlot || (isTeamStatsComparison && activeTeamYStat === "None");
+  const isTeamSingleStat = isRuckDominancePlot || (isTeamAttackEfficiency && !teamEfficiencyShowsVolume) || (isTeamDefenceEfficiency && !teamDefenceEfficiencyShowsVolume) || (isTeamStatsComparison && activeTeamYStat === "None");
   const effectiveTeamYStat = activeTeamYStat === "None" ? activeTeamXStat : activeTeamYStat;
   const activeTeamXMeta = TEAM_ATTACK_STAT_META[activeTeamXStat];
   const activeTeamYMeta = TEAM_ATTACK_STAT_META[effectiveTeamYStat];
@@ -376,6 +399,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const activeTeamYDisplayName = isTeamDefenceStatsConceded ? defenceStatLabel(effectiveTeamYStat as TeamDefenceConcededStat) : effectiveTeamYStat;
   const activeTeamEfficiencyBaseMetric = isTeamDefenceEfficiency ? teamDefenceEfficiencyBaseMetric : teamEfficiencyBaseMetric;
   const activeTeamEfficiencyOutputMetric = isTeamDefenceEfficiency ? teamDefenceEfficiencyOutputMetric : teamEfficiencyOutputMetric;
+  const activeTeamEfficiencyShowsVolume = isTeamDefenceEfficiency ? teamDefenceEfficiencyShowsVolume : teamEfficiencyShowsVolume;
   const teamDefenceQuadrants = useMemo(() => comparisonQuadrants(teamDefenceXStat, teamDefenceYStat === "None" ? teamDefenceXStat : teamDefenceYStat, "", activeTeamXHigherIsBetter), [activeTeamXHigherIsBetter, teamDefenceXStat, teamDefenceYStat]);
   const teamEfficiencyUnit = TEAM_EFFICIENCY_BASE_UNITS[activeTeamEfficiencyBaseMetric];
   const teamEfficiencyYDecimals = activeTeamEfficiencyOutputMetric.includes("metres")
@@ -383,11 +407,12 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
     : (["Tries", "Try assists", "Line breaks", "Line break assists", "Forced drop outs"] as TeamAttackEfficiencyOutputStat[]).includes(activeTeamEfficiencyOutputMetric) ? 3 : 2;
   const playerUsesPer80 = (PLAYER_BACK_POSITIONS as readonly PlayerAttackPosition[]).includes(playerPosition);
   const isPlayerEfficiency = playerAttackPlot === "Efficiency";
+  const playerEfficiencyShowsVolume = isPlayerEfficiency && playerEfficiencyView === "Volume axis";
   const isPlayerTeamProportion = playerAttackPlot === "Team Proportion";
   const isPlayerStatsTotals = playerAttackPlot === "Stats" && playerStatsAggregation === "Totals";
   const activePlayerComparisonXStat = isPlayerTeamProportion ? playerTeamProportionXStat : playerComparisonXStat;
   const activePlayerComparisonYStat = isPlayerTeamProportion ? playerTeamProportionYStat : playerComparisonYStat;
-  const isPlayerSingleStat = playerSection === "Attack" && !isPlayerEfficiency && activePlayerComparisonYStat === "None";
+  const isPlayerSingleStat = playerSection === "Attack" && ((isPlayerEfficiency && !playerEfficiencyShowsVolume) || (!isPlayerEfficiency && activePlayerComparisonYStat === "None"));
   const effectivePlayerComparisonYStat = activePlayerComparisonYStat === "None" ? activePlayerComparisonXStat : activePlayerComparisonYStat;
   const playerComparisonXHigherIsBetter = !LOWER_IS_BETTER_STATS.has(activePlayerComparisonXStat);
   const playerComparisonYHigherIsBetter = !LOWER_IS_BETTER_STATS.has(effectivePlayerComparisonYStat);
@@ -459,10 +484,10 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
     roundLabel: "",
     opponent: null,
     games: point.games,
-    xValue: point.volumeValue,
-    yValue: point.efficiencyValue,
+    xValue: point.efficiencyValue,
+    yValue: playerEfficiencyShowsVolume ? point.volumeValue : point.efficiencyValue,
     detail: `${point.team} · ${point.averageMinutes.toFixed(1)} avg mins${point.isPer80 ? "" : ` · ${point.usualMinutes.toFixed(1)} usual mins`}`,
-  })), [playerAttackData, year]);
+  })), [playerAttackData, playerEfficiencyShowsVolume, year]);
   const playerAttackComparisonPoints = useMemo<TeamQuadrantPoint[]>(() => playerAttackComparisonData.map((point) => ({
     id: point.id,
     team: point.player,
@@ -508,8 +533,9 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
         };
         const efficiencyBase = point.totals[TEAM_EFFICIENCY_BASE_TOTALS[activeTeamEfficiencyBaseMetric]];
         const efficiencyOutput = point.totals[activeTeamEfficiencyOutputMetric];
-        const xValue = isTeamEfficiency ? efficiencyBase / point.games : activeTeamXMeta.value(statsPoint);
-        const yValue = isTeamEfficiency ? efficiencyBase > 0 ? efficiencyOutput / efficiencyBase : 0 : activeTeamYMeta.value(statsPoint);
+        const efficiencyValue = efficiencyBase > 0 ? efficiencyOutput / efficiencyBase : 0;
+        const xValue = isTeamEfficiency ? efficiencyValue : activeTeamXMeta.value(statsPoint);
+        const yValue = isTeamEfficiency && activeTeamEfficiencyShowsVolume ? efficiencyBase / point.games : isTeamEfficiency ? efficiencyValue : activeTeamYMeta.value(statsPoint);
         if (xValue === null || yValue === null) return [];
         return [{
           id: point.id,
@@ -548,14 +574,20 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
       yValue: point.coverRating,
       detail: `Expected LB ${point.expectedLineBreaks.toFixed(1)} · Allowed ${point.actualLineBreaks.toFixed(1)}`,
     }));
-  }, [activeTeamEfficiencyBaseMetric, activeTeamEfficiencyOutputMetric, activeTeamXMeta, activeTeamYMeta, attackPoints, concededPoints, defencePoints, isAttack, isRuckDominancePlot, isTeamDefenceEfficiency, isTeamDefenceStatsConceded, isTeamEfficiency, teamModelStats.attack, teamModelStats.defense]);
+  }, [activeTeamEfficiencyBaseMetric, activeTeamEfficiencyOutputMetric, activeTeamEfficiencyShowsVolume, activeTeamXMeta, activeTeamYMeta, attackPoints, concededPoints, defencePoints, isAttack, isRuckDominancePlot, isTeamDefenceEfficiency, isTeamDefenceStatsConceded, isTeamEfficiency, teamModelStats.attack, teamModelStats.defense]);
   const plottedTeamPoints = isXPoints ? xPointsScatterPoints : points;
   const teamScatterAriaLabel = isAttackXPoints
     ? "Expected points against actual points scatter plot"
     : isDefenseXPoints
       ? "Actual points conceded against expected points conceded scatter plot"
-      : isTeamEfficiency
-        ? `${activeTeamEfficiencyBaseMetric} volume against ${activeTeamEfficiencyOutputMetric} per ${teamEfficiencyUnit} ${isTeamDefenceEfficiency ? "defensive" : "attacking"} efficiency scatter plot`
+      : isTeamDefenceEfficiency
+        ? teamDefenceEfficiencyShowsVolume
+          ? `${activeTeamEfficiencyOutputMetric} conceded per ${teamEfficiencyUnit} against ${activeTeamEfficiencyBaseMetric} volume defensive efficiency scatter plot`
+          : `${activeTeamEfficiencyOutputMetric} conceded per ${teamEfficiencyUnit} defensive efficiency dot plot`
+      : isTeamAttackEfficiency
+        ? teamEfficiencyShowsVolume
+          ? `${activeTeamEfficiencyOutputMetric} per ${teamEfficiencyUnit} against ${activeTeamEfficiencyBaseMetric} volume attacking efficiency scatter plot`
+          : `${activeTeamEfficiencyOutputMetric} per ${teamEfficiencyUnit} attacking efficiency dot plot`
         : isRuckDominancePlot
           ? "Ruck Dominance Rating dot plot"
         : isTeamSingleStat
@@ -569,10 +601,10 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
     ? mode === "season" ? "AVERAGE XPOINTS PER GAME →" : "XPOINTS →"
     : isDefenseXPoints
       ? mode === "season" ? "AVERAGE ACTUAL POINTS CONCEDED PER GAME →" : "ACTUAL POINTS CONCEDED →"
-      : isTeamEfficiency
-        ? isTeamDefenceEfficiency
-          ? `${activeTeamEfficiencyBaseMetric.toUpperCase()} FACED PER GAME · MORE →`
-          : `${activeTeamEfficiencyBaseMetric.toUpperCase()} PER GAME · MORE →`
+      : isTeamDefenceEfficiency
+        ? `${activeTeamEfficiencyOutputMetric.toUpperCase()} CONCEDED PER ${teamEfficiencyUnit.toUpperCase()} · BETTER →`
+      : isTeamAttackEfficiency
+        ? `${activeTeamEfficiencyOutputMetric.toUpperCase()} PER ${teamEfficiencyUnit.toUpperCase()} · BETTER →`
         : isRuckDominancePlot
           ? "RUCK DOMINANCE RATING · BETTER →"
         : isTeamDefenceStatsConceded
@@ -587,7 +619,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
       : isTeamSingleStat
         ? ""
         : isTeamEfficiency
-        ? `${activeTeamEfficiencyOutputMetric.toUpperCase()} ${isTeamDefenceEfficiency ? "CONCEDED " : ""}PER ${teamEfficiencyUnit.toUpperCase()} · BETTER ${isTeamDefenceEfficiency ? "↓" : "↑"}`
+        ? `${activeTeamEfficiencyBaseMetric.toUpperCase()} ${isTeamDefenceEfficiency ? "FACED " : ""}PER GAME · MORE ↑`
         : isRuckDominancePlot
           ? "Ruck Dominance Rating"
         : isTeamDefenceStatsConceded
@@ -599,8 +631,10 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
     ? "xPoints"
     : isDefenseXPoints
       ? "Actual conceded"
-      : isTeamEfficiency
-        ? `${activeTeamEfficiencyBaseMetric}${isTeamDefenceEfficiency ? " faced" : ""}/game`
+      : isTeamDefenceEfficiency
+        ? `${activeTeamEfficiencyOutputMetric} conceded/${teamEfficiencyUnit}`
+      : isTeamAttackEfficiency
+        ? `${activeTeamEfficiencyOutputMetric}/${teamEfficiencyUnit}`
         : isTeamDefenceStatsConceded
           ? activeTeamXDisplayName
           : isAttack ? teamAttackXMeta.metricLabel : "Contact";
@@ -611,7 +645,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
       : isTeamSingleStat
         ? ""
         : isTeamEfficiency
-        ? `${activeTeamEfficiencyOutputMetric}${isTeamDefenceEfficiency ? " conceded" : ""}/${teamEfficiencyUnit}`
+        ? `${activeTeamEfficiencyBaseMetric}${isTeamDefenceEfficiency ? " faced" : ""}/game`
         : isTeamDefenceStatsConceded
           ? activeTeamYDisplayName
           : isAttack ? teamAttackYMeta.metricLabel : "Cover";
@@ -792,6 +826,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                   <InfoCircleButton open={playerInfoOpen} onClick={() => setPlayerInfoOpen((current) => !current)} controls="player-plot-info" />
                   {playerSection === "Attack" && isPlayerEfficiency ? <div className="w-24"><Select label="Efficiency metric" hideLabel compact value={playerEfficiencyBaseMetric} options={[...PLAYER_EFFICIENCY_BASE_METRICS]} onChange={(value) => setPlayerEfficiencyBaseMetric(value as PlayerEfficiencyBaseMetric)} /></div> : null}
                   {playerSection === "Attack" && isPlayerEfficiency ? <div className="w-36"><Select label="Measurable stat" hideLabel compact value={playerEfficiencyOutputMetric} options={[...PLAYER_EFFICIENCY_OUTPUT_METRICS]} onChange={(value) => setPlayerEfficiencyOutputMetric(value as PlayerEfficiencyOutputMetric)} /></div> : null}
+                  {playerSection === "Attack" && isPlayerEfficiency ? <VolumeAxisToggle checked={playerEfficiencyShowsVolume} onChange={(checked) => setPlayerEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
                   {playerSection === "Attack" && !isPlayerEfficiency ? <div className="w-32"><Select label="X axis stat" hideLabel compact value={activePlayerComparisonXStat} options={[...(isPlayerTeamProportion ? PLAYER_ATTACK_COMPARISON_STATS : PLAYER_ATTACK_STAT_COMPARISON_STATS)]} onChange={(value) => isPlayerTeamProportion ? setPlayerTeamProportionXStat(value as PlayerAttackComparisonStat) : setPlayerComparisonXStat(value as PlayerAttackComparisonStat)} /></div> : null}
                   {playerSection === "Attack" && !isPlayerEfficiency ? <div className="w-32"><Select label="Y axis stat" hideLabel compact value={activePlayerComparisonYStat} options={isPlayerTeamProportion ? ["None", ...PLAYER_ATTACK_COMPARISON_STATS] : ["None", ...PLAYER_ATTACK_STAT_COMPARISON_STATS]} onChange={(value) => isPlayerTeamProportion ? setPlayerTeamProportionYStat(value as OptionalPlayerComparisonStat) : setPlayerComparisonYStat(value as OptionalPlayerComparisonStat)} /></div> : null}
                   <div className="w-24"><Select label="Position" hideLabel compact value={playerPosition} options={[...PLAYER_ATTACK_POSITIONS]} onChange={(value) => setPlayerPosition(value as PlayerAttackPosition)} /></div>
@@ -807,7 +842,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                   </div>
                 ) : null}
                 <TeamQuadrantScatter
-                  key={`${playerSection}-${playerAttackPlot}-${playerStatsAggregation}-${playerEfficiencyBaseMetric}-${playerEfficiencyOutputMetric}-${activePlayerComparisonXStat}-${activePlayerComparisonYStat}-${playerPosition}-${year}`}
+                  key={`${playerSection}-${playerAttackPlot}-${playerStatsAggregation}-${playerEfficiencyBaseMetric}-${playerEfficiencyOutputMetric}-${playerEfficiencyView}-${activePlayerComparisonXStat}-${activePlayerComparisonYStat}-${playerPosition}-${year}`}
                   points={playerSection === "Defense" ? playerDefencePoints : isPlayerEfficiency ? playerAttackPoints : playerAttackComparisonPoints}
                   teamLogos={{}}
                   useLogos={false}
@@ -816,27 +851,29 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                   ariaLabel={playerSection === "Defense"
                     ? `${playerPosition} tackles against tackle efficiency scatter plot`
                     : isPlayerEfficiency
-                      ? `${playerPosition} ${playerEfficiencyBaseMetric.toLowerCase()} volume against ${playerEfficiencyOutputMetric.toLowerCase()} per ${playerEfficiencyUnit} efficiency scatter plot`
+                      ? playerEfficiencyShowsVolume
+                        ? `${playerPosition} ${playerEfficiencyOutputMetric.toLowerCase()} per ${playerEfficiencyUnit} efficiency against ${playerEfficiencyBaseMetric.toLowerCase()} volume scatter plot`
+                        : `${playerPosition} ${playerEfficiencyOutputMetric.toLowerCase()} per ${playerEfficiencyUnit} efficiency dot plot`
                       : isPlayerSingleStat
                         ? `${playerPosition} ${activePlayerComparisonXStat.toLowerCase()} ${isPlayerTeamProportion ? "team proportion" : isPlayerStatsTotals ? "totals" : playerUsesPer80 ? "per 80 minutes" : "per qualifying game"} dot plot`
                         : `${playerPosition} ${activePlayerComparisonXStat.toLowerCase()} against ${effectivePlayerComparisonYStat.toLowerCase()} ${isPlayerTeamProportion ? "team proportion" : isPlayerStatsTotals ? "totals" : playerUsesPer80 ? "per 80 minutes" : "per qualifying game"} scatter plot`}
                   xAxisLabel={playerSection === "Defense"
                     ? playerUsesPer80 ? "TACKLES PER 80 MINUTES · MORE →" : "TACKLES PER QUALIFYING GAME · MORE →"
                     : isPlayerEfficiency
-                      ? `${playerEfficiencyBaseMetric.toUpperCase()} PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"} · MORE →`
+                      ? `${playerEfficiencyOutputMetric.toUpperCase()} PER ${playerEfficiencyUnit.toUpperCase()} · BETTER →`
                       : `${activePlayerComparisonXStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} →`}
-                  yAxisLabel={playerSection === "Defense" ? "TACKLE EFFICIENCY · BETTER ↑" : isPlayerEfficiency ? `${playerEfficiencyOutputMetric.toUpperCase()} PER ${playerEfficiencyUnit.toUpperCase()} · BETTER ↑` : isPlayerSingleStat ? "" : `${effectivePlayerComparisonYStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} ↑`}
-                  xMetricLabel={playerSection === "Defense" ? playerUsesPer80 ? "Tackles/80" : "Tackles/game" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric}/${playerUsesPer80 ? "80" : "game"}` : `${activePlayerComparisonXStat}${isPlayerTeamProportion ? " share" : isPlayerStatsTotals ? " total" : playerUsesPer80 ? "/80" : "/game"}`}
-                  yMetricLabel={playerSection === "Defense" ? "Tackle efficiency" : isPlayerEfficiency ? `${playerEfficiencyOutputMetric}/${playerEfficiencyUnit}` : isPlayerSingleStat ? "" : `${effectivePlayerComparisonYStat}${isPlayerTeamProportion ? " share" : isPlayerStatsTotals ? " total" : playerUsesPer80 ? "/80" : "/game"}`}
+                  yAxisLabel={playerSection === "Defense" ? "TACKLE EFFICIENCY · BETTER ↑" : isPlayerSingleStat ? "" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric.toUpperCase()} PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"} · MORE ↑` : `${effectivePlayerComparisonYStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} ↑`}
+                  xMetricLabel={playerSection === "Defense" ? playerUsesPer80 ? "Tackles/80" : "Tackles/game" : isPlayerEfficiency ? `${playerEfficiencyOutputMetric}/${playerEfficiencyUnit}` : `${activePlayerComparisonXStat}${isPlayerTeamProportion ? " share" : isPlayerStatsTotals ? " total" : playerUsesPer80 ? "/80" : "/game"}`}
+                  yMetricLabel={playerSection === "Defense" ? "Tackle efficiency" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric}/${playerUsesPer80 ? "80" : "game"}` : isPlayerSingleStat ? "" : `${effectivePlayerComparisonYStat}${isPlayerTeamProportion ? " share" : isPlayerStatsTotals ? " total" : playerUsesPer80 ? "/80" : "/game"}`}
                   xValueSuffix={isPlayerTeamProportion ? "%" : ""}
                   yValueSuffix={playerSection === "Defense" || isPlayerTeamProportion ? "%" : ""}
-                  xValueDecimals={isPlayerStatsTotals ? 0 : 1}
-                  yValueDecimals={playerSection === "Defense" ? 1 : isPlayerEfficiency ? playerEfficiencyYDecimals : isPlayerStatsTotals ? 0 : 1}
+                  xValueDecimals={isPlayerEfficiency ? playerEfficiencyYDecimals : isPlayerStatsTotals ? 0 : 1}
+                  yValueDecimals={playerSection === "Defense" ? 1 : isPlayerEfficiency ? 1 : isPlayerStatsTotals ? 0 : 1}
                   xHigherIsBetter={playerSection !== "Attack" || isPlayerEfficiency || playerComparisonXHigherIsBetter}
                   yHigherIsBetter={playerSection !== "Attack" || isPlayerEfficiency || playerComparisonYHigherIsBetter}
                   quadrants={playerSection === "Defense" ? PLAYER_TACKLE_QUADRANTS : isPlayerEfficiency ? PLAYER_EFFICIENCY_QUADRANTS : playerComparisonQuadrants}
-                  minXPadding={isPlayerTeamProportion ? 0.5 : 1}
-                  minYPadding={playerSection === "Defense" ? 2 : isPlayerEfficiency ? playerEfficiencyMinYPadding : isPlayerTeamProportion ? 0.5 : 1}
+                  minXPadding={isPlayerEfficiency ? playerEfficiencyMinYPadding : isPlayerTeamProportion ? 0.5 : 1}
+                  minYPadding={playerSection === "Defense" ? 2 : isPlayerEfficiency && playerEfficiencyShowsVolume ? 1 : isPlayerEfficiency ? playerEfficiencyMinYPadding : isPlayerTeamProportion ? 0.5 : 1}
                   singleAxis={isPlayerSingleStat}
                 />
               </div>
@@ -848,7 +885,9 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                     playerSection === "Defense"
                       ? "Backs are normalised to tackles per 80 minutes; tackle efficiency is averaged across qualifying games. Forwards exclude games below 60% of the player's median minutes in that position."
                       : isPlayerEfficiency
-                        ? `${playerEfficiencyBaseMetric} are normalised per 80 minutes for backs and per qualifying game for forwards. Efficiency is total ${playerEfficiencyOutputMetric.toLowerCase()} divided by total ${playerEfficiencyBaseMetric.toLowerCase()}. Forwards exclude games below 60% of the player's median minutes in that position.`
+                        ? playerEfficiencyShowsVolume
+                          ? `${playerEfficiencyBaseMetric} are normalised per 80 minutes for backs and per qualifying game for forwards. Efficiency is total ${playerEfficiencyOutputMetric.toLowerCase()} divided by total ${playerEfficiencyBaseMetric.toLowerCase()}. Forwards exclude games below 60% of the player's median minutes in that position.`
+                          : `Efficiency is total ${playerEfficiencyOutputMetric.toLowerCase()} divided by total ${playerEfficiencyBaseMetric.toLowerCase()}. Enable Volume axis to compare it with ${playerEfficiencyBaseMetric.toLowerCase()} per ${playerUsesPer80 ? "80 minutes" : "qualifying game"}. Forwards exclude games below 60% of the player's median minutes in that position.`
                         : isPlayerTeamProportion
                           ? isPlayerSingleStat
                             ? `For each qualifying appearance of at least 40 minutes, the player's ${activePlayerComparisonXStat.toLowerCase()} are divided by their team's total from that same game. The game-level percentages are then averaged. Games where the team recorded zero are excluded. Forwards also exclude games below 60% of the player's median minutes in that position.`
@@ -925,6 +964,8 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
               {isTeamStatsComparison ? <div className="w-36 shrink-0"><Select label="Y axis stat" hideLabel compact value={activeTeamYStat} options={["None", ...teamStatSelectOptions(isTeamDefenceStatsConceded ? TEAM_DEFENCE_CONCEDED_STATS : TEAM_ATTACK_COMPARISON_STATS, canAccessModelPlots)]} onChange={(value) => { if (isTeamDefenceStatsConceded) setTeamDefenceYStat(value as OptionalTeamDefenceComparisonStat); else setTeamAttackYStat(value as OptionalTeamAttackComparisonStat); refreshSelectedTeamModelStat(value); }} /></div> : null}
               {isTeamEfficiency ? <div className="w-24 shrink-0"><Select label="Efficiency metric" hideLabel compact value={activeTeamEfficiencyBaseMetric} options={[...TEAM_ATTACK_EFFICIENCY_BASE_STATS]} onChange={(value) => isTeamDefenceEfficiency ? setTeamDefenceEfficiencyBaseMetric(value as TeamAttackEfficiencyBaseStat) : setTeamEfficiencyBaseMetric(value as TeamAttackEfficiencyBaseStat)} /></div> : null}
               {isTeamEfficiency ? <div className="w-32 shrink-0"><Select label="Measurable stat" hideLabel compact value={activeTeamEfficiencyOutputMetric} options={[...TEAM_ATTACK_EFFICIENCY_OUTPUT_STATS]} onChange={(value) => isTeamDefenceEfficiency ? setTeamDefenceEfficiencyOutputMetric(value as TeamAttackEfficiencyOutputStat) : setTeamEfficiencyOutputMetric(value as TeamAttackEfficiencyOutputStat)} /></div> : null}
+              {isTeamAttackEfficiency ? <VolumeAxisToggle checked={teamEfficiencyShowsVolume} onChange={(checked) => setTeamEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
+              {isTeamDefenceEfficiency ? <VolumeAxisToggle checked={teamDefenceEfficiencyShowsVolume} onChange={(checked) => setTeamDefenceEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
               {!isOther || isRuckDominancePlot ? <div className="w-24 shrink-0"><Select label="Aggregation" hideLabel compact value={mode === "season" ? "Season" : "Team games"} options={["Season", "Team games"]} onChange={(value) => setMode(value === "Season" ? "season" : "games")} /></div> : null}
               {isOther && !isRuckDominancePlot ? <div className="w-28 shrink-0"><Select label="Stat" hideLabel compact value={teamShareMetric} options={[...TEAM_SHARE_METRICS]} onChange={(value) => setTeamShareMetric(value as TeamShareMetric)} /></div> : null}
               <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} />
@@ -951,16 +992,16 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                 yAxisLabel={teamYAxisLabel}
                 xMetricLabel={teamXMetricLabel}
                 yMetricLabel={teamYMetricLabel}
-                xValueDecimals={isTeamStatsComparison && activeTeamXStat === "PTB" ? 2 : 1}
-                yValueDecimals={isTeamStatsComparison && effectiveTeamYStat === "PTB" ? 2 : isTeamEfficiency ? teamEfficiencyYDecimals : 1}
+                xValueDecimals={isTeamEfficiency ? teamEfficiencyYDecimals : isTeamStatsComparison && activeTeamXStat === "PTB" ? 2 : 1}
+                yValueDecimals={isTeamStatsComparison && effectiveTeamYStat === "PTB" ? 2 : 1}
                 comparisonLine={isXPoints}
                 rSquared={teamGameRSquared}
                 colorByQuadrant={isAttack || isTeamDefenceStatsConceded || isTeamDefenceEfficiency}
-                xHigherIsBetter={isXPoints || isRuckDominancePlot || isTeamEfficiency || (isTeamStatsComparison && activeTeamXHigherIsBetter)}
-                yHigherIsBetter={isXPoints || isTeamEfficiency ? !isTeamDefenceEfficiency : isTeamStatsComparison ? activeTeamYHigherIsBetter : true}
+                xHigherIsBetter={isXPoints || isRuckDominancePlot || isTeamAttackEfficiency || (isTeamStatsComparison && activeTeamXHigherIsBetter)}
+                yHigherIsBetter={isTeamStatsComparison ? activeTeamYHigherIsBetter : true}
                 quadrants={isXPoints ? XPOINTS_QUADRANTS : isTeamDefenceEfficiency ? DEFENSIVE_EFFICIENCY_QUADRANTS : isTeamAttackEfficiency ? PLAYER_EFFICIENCY_QUADRANTS : isTeamDefenceStatsConceded ? teamDefenceQuadrants : isAttack ? teamAttackQuadrants : DEFENCE_QUADRANTS}
-                minXPadding={isXPoints ? 2 : isTeamEfficiency ? 1 : isTeamStatsComparison ? activeTeamXMeta.minPadding : 2}
-                minYPadding={isXPoints ? 2 : isTeamEfficiency ? activeTeamEfficiencyOutputMetric.includes("metres") ? 0.2 : 0.01 : isTeamStatsComparison ? activeTeamYMeta.minPadding : 3}
+                minXPadding={isXPoints ? 2 : isTeamEfficiency ? activeTeamEfficiencyOutputMetric.includes("metres") ? 0.2 : 0.01 : isTeamStatsComparison ? activeTeamXMeta.minPadding : 2}
+                minYPadding={isXPoints ? 2 : isTeamEfficiency && activeTeamEfficiencyShowsVolume ? 1 : isTeamEfficiency ? activeTeamEfficiencyOutputMetric.includes("metres") ? 0.2 : 0.01 : isTeamStatsComparison ? activeTeamYMeta.minPadding : 3}
                 singleAxis={isTeamSingleStat}
                 singleAxisStackLimit={mode === "games" ? 20 : 8}
               />
@@ -987,11 +1028,15 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
               </>
             ) : isAttack ? (
               isTeamAttackEfficiency ? (
-                <>
-                  <div><span className="font-black text-nrl-text">Volume</span><br />The horizontal axis is average team {teamEfficiencyBaseMetric.toLowerCase()} per game.</div>
-                  <div><span className="font-black text-nrl-text">Efficiency</span><br />Total {teamEfficiencyOutputMetric.toLowerCase()} divided by total {teamEfficiencyBaseMetric.toLowerCase()} in the selected sample.</div>
-                  <div><span className="font-black text-nrl-text">Profiles</span><br />League averages split teams by attacking volume and efficiency.</div>
-                </>
+                teamEfficiencyShowsVolume ? (
+                  <>
+                    <div><span className="font-black text-nrl-text">Efficiency</span><br />The horizontal axis is total {teamEfficiencyOutputMetric.toLowerCase()} divided by total {teamEfficiencyBaseMetric.toLowerCase()} in the selected sample.</div>
+                    <div><span className="font-black text-nrl-text">Volume</span><br />The vertical axis is average team {teamEfficiencyBaseMetric.toLowerCase()} per game.</div>
+                    <div><span className="font-black text-nrl-text">Profiles</span><br />League averages split teams by attacking volume and efficiency.</div>
+                  </>
+                ) : (
+                  <div><span className="font-black text-nrl-text">Efficiency</span><br />Total {teamEfficiencyOutputMetric.toLowerCase()} divided by total {teamEfficiencyBaseMetric.toLowerCase()} in the selected sample. Enable Volume axis to compare efficiency with team volume per game.</div>
+                )
               ) : isTeamSingleStat ? (
                 <>
                   <div><span className="font-black text-nrl-text">{activeTeamXStat}{isTeamDefenceStatsConceded ? " conceded" : ""}</span><br />{isTeamDefenceStatsConceded ? activeTeamXMeta.description.replace("Average", "Average opponent") : activeTeamXMeta.description} {isTeamDefenceStatsConceded || !teamAttackXHigherIsBetter ? "Lower" : "Higher"} is better.</div>
@@ -1004,11 +1049,15 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                 </>
               )
             ) : isTeamDefenceEfficiency ? (
-              <>
-                <div><span className="font-black text-nrl-text">Volume faced</span><br />The horizontal axis is average opponent {activeTeamEfficiencyBaseMetric.toLowerCase()} per game against each defense.</div>
-                <div><span className="font-black text-nrl-text">Defensive efficiency</span><br />Total opponent {activeTeamEfficiencyOutputMetric.toLowerCase()} divided by total opponent {activeTeamEfficiencyBaseMetric.toLowerCase()} in the selected sample. Lower is better.</div>
-                <div><span className="font-black text-nrl-text">Profiles</span><br />League averages split teams by opponent volume and defensive efficiency.</div>
-              </>
+              teamDefenceEfficiencyShowsVolume ? (
+                <>
+                  <div><span className="font-black text-nrl-text">Defensive efficiency</span><br />The horizontal axis is total opponent {activeTeamEfficiencyOutputMetric.toLowerCase()} divided by total opponent {activeTeamEfficiencyBaseMetric.toLowerCase()} in the selected sample. Lower is better.</div>
+                  <div><span className="font-black text-nrl-text">Volume faced</span><br />The vertical axis is average opponent {activeTeamEfficiencyBaseMetric.toLowerCase()} per game against each defense.</div>
+                  <div><span className="font-black text-nrl-text">Profiles</span><br />League averages split teams by opponent volume and defensive efficiency.</div>
+                </>
+              ) : (
+                <div><span className="font-black text-nrl-text">Defensive efficiency</span><br />Total opponent {activeTeamEfficiencyOutputMetric.toLowerCase()} divided by total opponent {activeTeamEfficiencyBaseMetric.toLowerCase()} in the selected sample. Lower is better. Enable Volume axis to compare efficiency with opponent volume per game.</div>
+              )
             ) : isTeamDefenceStatsConceded && isTeamSingleStat ? (
               <>
                 <div><span className="font-black text-nrl-text">{activeTeamXDisplayName}</span><br />{DEFENSIVE_RATING_STATS.has(activeTeamXStat) ? activeTeamXMeta.description : activeTeamXMeta.description.replace("Average", "Average opponent")} {activeTeamXHigherIsBetter ? "Higher" : "Lower"} is better.</div>

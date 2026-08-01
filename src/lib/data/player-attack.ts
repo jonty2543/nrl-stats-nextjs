@@ -40,7 +40,7 @@ export const PLAYER_ATTACK_STAT_COMPARISON_STATS: readonly PlayerAttackCompariso
 );
 export type PlayerAttackComparisonMode = "per-game" | "team-proportion" | "totals";
 export type HalvesPairingSort = "ascending" | "descending";
-export type PlayerGameWindow = 5 | 10 | null;
+export type PlayerGameWindow = 3 | 5 | 10 | null;
 
 export interface PlayerAttackPoint {
   id: string;

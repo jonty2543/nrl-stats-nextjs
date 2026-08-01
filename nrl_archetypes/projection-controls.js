@@ -1,5 +1,5 @@
 (function () {
-  const isCurrentSeasonWindow = /_(?:l5|l10)(?:_|\.html)/i.test(window.location.pathname);
+  const isCurrentSeasonWindow = /_(?:l3|l5|l10)(?:_|\.html)/i.test(window.location.pathname);
   const state = {
     activeYearIndex: 0,
     droppedDimension: null,

@@ -669,6 +669,7 @@
                 <span class="control-divider" aria-hidden="true"></span>
                 <div class="mode-toggle" id="windowToggle" aria-label="Qualifying game window">
                     <button class="mode-btn active" data-window="all">All</button>
+                    <button class="mode-btn" data-window="l3">L3</button>
                     <button class="mode-btn" data-window="l5">L5</button>
                     <button class="mode-btn" data-window="l10">L10</button>
                 </div>
@@ -715,8 +716,10 @@
 
     <script src="nrl_cluster_data.js"></script>
     <script src="nrl_cluster_data_team_share.js"></script>
+    <script src="nrl_cluster_data_l3.js"></script>
     <script src="nrl_cluster_data_l5.js"></script>
     <script src="nrl_cluster_data_l10.js"></script>
+    <script src="nrl_cluster_data_team_share_l3.js"></script>
     <script src="nrl_cluster_data_team_share_l5.js"></script>
     <script src="nrl_cluster_data_team_share_l10.js"></script>
     <script>
@@ -745,10 +748,12 @@
 
         function getActiveClusterData() {
             if (currentMode === 'teamShare') {
+                if (currentWindow === 'l3' && typeof clusterDataTeamShareL3 !== 'undefined') return clusterDataTeamShareL3;
                 if (currentWindow === 'l5' && typeof clusterDataTeamShareL5 !== 'undefined') return clusterDataTeamShareL5;
                 if (currentWindow === 'l10' && typeof clusterDataTeamShareL10 !== 'undefined') return clusterDataTeamShareL10;
                 return clusterDataTeamShare;
             }
+            if (currentWindow === 'l3' && typeof clusterDataL3 !== 'undefined') return clusterDataL3;
             if (currentWindow === 'l5' && typeof clusterDataL5 !== 'undefined') return clusterDataL5;
             if (currentWindow === 'l10' && typeof clusterDataL10 !== 'undefined') return clusterDataL10;
             return clusterData;
@@ -912,7 +917,7 @@
                 : 'Production mode uses the player production stats directly.';
             const windowDescription = currentWindow === 'all'
                 ? 'All qualifying games in the season are included.'
-                : `Only each player’s latest ${currentWindow === 'l5' ? 'five' : 'ten'} qualifying games from 2026 are included.`;
+                : `Only each player’s latest ${{ l3: 'three', l5: 'five', l10: 'ten' }[currentWindow]} qualifying games from 2026 are included.`;
 
             updateRankingsCard(position, data);
 

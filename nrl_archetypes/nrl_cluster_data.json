@@ -6,7 +6,7 @@
                 {
                     "id": 0,
                     "name": "Ball Running Fullback",
-                    "count": 14,
+                    "count": 15,
                     "description": "Fullbacks who are quick and able to break the defensive line, and opt for game breaking runs over tough carries."
                 },
                 {
@@ -18,7 +18,7 @@
                 {
                     "id": 2,
                     "name": "Workhorse Fullback",
-                    "count": 30,
+                    "count": 29,
                     "description": "High-effort players who are always around the ball. They rack up high run metres and support plays."
                 },
                 {
@@ -114,7 +114,7 @@
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 40,
+                    "count": 41,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
@@ -126,13 +126,13 @@
                 {
                     "id": 2,
                     "name": "Support Centre",
-                    "count": 73,
+                    "count": 74,
                     "description": "These players are less involved with ball in hand and may play other roles for the team."
                 },
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 44,
+                    "count": 42,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],
@@ -274,25 +274,25 @@
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 32,
+                    "count": 33,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 57,
+                    "count": 63,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 33,
+                    "count": 35,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 61,
+                    "count": 52,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -334,13 +334,13 @@
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 106,
+                    "count": 71,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 100,
+                    "count": 135,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

@@ -1278,8 +1278,8 @@ if __name__ == "__main__":
     )
     save_cluster_exports(team_share_data, 'nrl_cluster_data_team_share', 'clusterDataTeamShare')
 
-    # 7. Generate last-five and last-ten qualifying-game views.
-    for game_window in (5, 10):
+    # 7. Generate recent qualifying-game views.
+    for game_window in (3, 5, 10):
         window_label = f'l{game_window}'
         variable_suffix = f'L{game_window}'
 

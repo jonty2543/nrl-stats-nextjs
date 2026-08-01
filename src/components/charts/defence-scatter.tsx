@@ -46,6 +46,7 @@ interface TeamQuadrantScatterProps {
   rSquared?: number | null;
   singleAxis?: boolean;
   singleAxisStackLimit?: number;
+  showQuadrantLabels?: boolean;
 }
 
 const DESKTOP_LAYOUT = {
@@ -108,6 +109,15 @@ function integerTicks(min: number, max: number, count: number): number[] {
   if (end <= start) return [Math.round((min + max) / 2)];
   const tickCount = Math.min(count, end - start + 1);
   return [...new Set(ticks(start, end, tickCount).map(Math.round))];
+}
+
+function preferredTicks(min: number, max: number, count = 5): number[] {
+  const integerCount = Math.floor(max) - Math.ceil(min) + 1;
+  return integerCount >= 3 ? integerTicks(min, max, count) : ticks(min, max, count);
+}
+
+function formatTick(value: number, decimals: number): string {
+  return value.toFixed(Number.isInteger(value) ? 0 : decimals);
 }
 
 function dataPadding(values: number[], flatFallback: number): number {
@@ -266,6 +276,7 @@ export function TeamQuadrantScatter({
   rSquared = null,
   singleAxis = false,
   singleAxisStackLimit = MAX_SINGLE_AXIS_STACK_SIZE,
+  showQuadrantLabels = false,
 }: TeamQuadrantScatterProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
@@ -338,7 +349,8 @@ export function TeamQuadrantScatter({
   const xScaleWidth = singleAxis ? xPlotWidth - pointOverflow * 2 : xPlotWidth;
   const xDomain = zoomDomain(chart.xDomain, chart.xMean + panX, zoom);
   const yDomain = singleAxis ? chart.yDomain : zoomDomain(chart.yDomain, chart.yMean + panY, zoom);
-  const xTicks = singleAxis ? integerTicks(xDomain[0], xDomain[1], isMobile ? 2 : 3) : ticks(xDomain[0], xDomain[1]);
+  const xTicks = singleAxis ? integerTicks(xDomain[0], xDomain[1], isMobile ? 2 : 3) : preferredTicks(xDomain[0], xDomain[1]);
+  const yTicks = singleAxis ? [] : preferredTicks(yDomain[0], yDomain[1]);
   const xScale = (value: number) => {
     const ratio = (value - xDomain[0]) / (xDomain[1] - xDomain[0]);
     return xScaleLeft + (xHigherIsBetter ? ratio : 1 - ratio) * xScaleWidth;
@@ -547,11 +559,11 @@ export function TeamQuadrantScatter({
 
         {xTicks.map((tick) => {
           const x = xScale(tick);
-          return <g key={`x-${tick}`}><line x1={x} y1={margin.top} x2={x} y2={margin.top + plotHeight} stroke="var(--color-nrl-border)" opacity="0.45" /><text x={x} y={singleAxis ? singleAxisHeatBarY - (isMobile ? 7 : 5) : margin.top + plotHeight + (isMobile ? 34 : 24)} textAnchor="middle" fill="var(--color-nrl-muted)" className="text-[20px] sm:text-[12px] lg:text-[8px]">{singleAxis ? tick.toFixed(0) : `${tick.toFixed(xValueDecimals)}${xValueSuffix}`}</text></g>;
+          return <g key={`x-${tick}`}><line x1={x} y1={margin.top} x2={x} y2={margin.top + plotHeight} stroke="var(--color-nrl-border)" opacity="0.45" /><text x={x} y={singleAxis ? singleAxisHeatBarY - (isMobile ? 7 : 5) : margin.top + plotHeight + (isMobile ? 34 : 24)} textAnchor="middle" fill="var(--color-nrl-muted)" className="text-[20px] sm:text-[12px] lg:text-[8px]">{singleAxis ? tick.toFixed(0) : `${formatTick(tick, xValueDecimals)}${xValueSuffix}`}</text></g>;
         })}
-        {!singleAxis ? ticks(yDomain[0], yDomain[1]).map((tick) => {
+        {!singleAxis ? yTicks.map((tick) => {
           const y = yScale(tick);
-          return <g key={`y-${tick}`}><line x1={margin.left} y1={y} x2={margin.left + plotWidth} y2={y} stroke="var(--color-nrl-border)" opacity="0.45" /><text x={margin.left - (isMobile ? 18 : 14)} y={y + (isMobile ? 7 : 4)} textAnchor="end" fill="var(--color-nrl-muted)" className="text-[20px] sm:text-[12px] lg:text-[8px]">{tick.toFixed(yValueDecimals)}{yValueSuffix}</text></g>;
+          return <g key={`y-${tick}`}><line x1={margin.left} y1={y} x2={margin.left + plotWidth} y2={y} stroke="var(--color-nrl-border)" opacity="0.45" /><text x={margin.left - (isMobile ? 18 : 14)} y={y + (isMobile ? 7 : 4)} textAnchor="end" fill="var(--color-nrl-muted)" className="text-[20px] sm:text-[12px] lg:text-[8px]">{formatTick(tick, yValueDecimals)}{yValueSuffix}</text></g>;
         }) : null}
 
         <g clipPath="url(#quadrant-data-area)">
@@ -565,7 +577,7 @@ export function TeamQuadrantScatter({
           )}
         </g>
 
-        {!comparisonLine && !singleAxis ? (
+        {showQuadrantLabels && !comparisonLine && !singleAxis ? (
           <g fill="var(--color-nrl-text)" fontWeight="800" opacity="0.78" className="text-[14px] sm:text-[13px] lg:text-[9px]">
             {quadrantText(quadrants.topLeft, margin.left + 16, margin.top - (isMobile ? 34 : 24))}
             {quadrantText(quadrants.topRight, margin.left + plotWidth - 16, margin.top - (isMobile ? 34 : 24), "end")}
@@ -659,7 +671,7 @@ export function TeamQuadrantScatter({
           </g>
         ) : null}
 
-        <text x={xPlotLeft + xPlotWidth / 2} y={height - (isMobile ? 24 : 20)} textAnchor="middle" fill="var(--color-nrl-text)" fontWeight="900" className="text-[15px] sm:text-[15px] lg:text-[10px]">{xAxisLabel}</text>
+        <text x={xPlotLeft + xPlotWidth / 2} y={height - (isMobile ? 32 : 28)} textAnchor="middle" fill="var(--color-nrl-text)" fontWeight="900" className="text-[15px] sm:text-[15px] lg:text-[10px]">{xAxisLabel}</text>
         {!singleAxis ? <text transform={`translate(${isMobile ? 24 : 22} ${margin.top + plotHeight / 2}) rotate(-90)`} textAnchor="middle" fill="var(--color-nrl-text)" fontWeight="900" className="text-[15px] sm:text-[15px] lg:text-[10px]">{yAxisLabel}</text> : null}
       </svg>
 

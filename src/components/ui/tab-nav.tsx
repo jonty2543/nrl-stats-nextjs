@@ -39,7 +39,7 @@ export function TabNav() {
     <div className="-mx-1 mt-4 flex overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:mx-0 sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
       <nav
         aria-label="Stats sections"
-        className="flex w-max min-w-full justify-between gap-2"
+        className="flex w-max min-w-full justify-between gap-2 lg:justify-center lg:gap-3"
       >
         {tabs.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);

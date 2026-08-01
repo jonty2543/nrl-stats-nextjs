@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { PlotsDashboard } from "@/components/views/plots-dashboard";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
-import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats, fetchPostMatchTeamMetrics, fetchTeamLogos, fetchTeamStats, type PlayerImageRecord } from "@/lib/supabase/queries";
+import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats, fetchPostMatchTeamMetricsWithRdr, fetchTeamLogos, fetchTeamStats, type PlayerImageRecord } from "@/lib/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,7 @@ export default async function PlotsPage() {
     ? await Promise.all([
         fetchTeamStats([initialYear]),
         fetchPlayerStats([initialYear]),
-        canAccessProSeason ? fetchPostMatchTeamMetrics([initialYear]) : Promise.resolve([]),
+        canAccessProSeason ? fetchPostMatchTeamMetricsWithRdr([initialYear]) : Promise.resolve([]),
       ])
     : [[], [], []];
 

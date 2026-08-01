@@ -19,6 +19,8 @@ export interface PostMatchTeamMetric {
   actualLineBreaksAllowed: number | null;
   lineBreaksPrevented: number | null;
   coverDefenseRating: number | null;
+  attackingRuckRating: number | null;
+  defensiveRuckRating: number | null;
   ruckDominanceRating: number | null;
   xpointsModelVersion: string | null;
   coverModelVersion: string | null;
@@ -50,6 +52,8 @@ export interface PostMatchRdrMetric {
   actualPlayTheBallSpeed: number | null;
   expectedPlayTheBallSpeed: number | null;
   playTheBallSpeedAboveExpected: number | null;
+  attackingRuckRating: number | null;
+  defensiveRuckRating: number | null;
   ruckDominanceRating: number | null;
   modelVersion: string | null;
   sourceUpdatedAt: string | null;
@@ -73,6 +77,20 @@ export interface XPointsPlotPoint {
   performanceDelta: number;
 }
 
+export interface TeamPostMatchStatPoint {
+  team: string;
+  year: string;
+  roundLabel: string;
+  opponent: string | null;
+  games: number;
+  attackingRuckRating: number | null;
+  defensiveRuckRating: number | null;
+  ruckDominanceRating: number | null;
+  ptbRating: number | null;
+  contactRating: number | null;
+  coverRating: number | null;
+}
+
 export type XPointsPerspective = "attack" | "defense";
 
 function normalise(value: string): string {
@@ -83,9 +101,9 @@ function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1);
 }
 
-function latestTeamMetrics(metrics: PostMatchTeamMetric[], gameWindow: 5 | 10 | null): PostMatchTeamMetric[] {
+function latestTeamMetrics<T extends PostMatchTeamMetric>(metrics: T[], gameWindow: 5 | 10 | null): T[] {
   if (gameWindow === null) return metrics;
-  const groups = new Map<string, PostMatchTeamMetric[]>();
+  const groups = new Map<string, T[]>();
   for (const metric of metrics) {
     const key = `${metric.season}|${normalise(metric.team)}`;
     groups.set(key, [...(groups.get(key) ?? []), metric]);
@@ -93,6 +111,79 @@ function latestTeamMetrics(metrics: PostMatchTeamMetric[], gameWindow: 5 | 10 | 
   return [...groups.values()].flatMap((teamMetrics) =>
     [...teamMetrics].sort((left, right) => left.matchDate.localeCompare(right.matchDate)).slice(-gameWindow)
   );
+}
+
+function nullableMean(values: Array<number | null>): number | null {
+  const present = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  return present.length > 0 ? mean(present) : null;
+}
+
+export function buildTeamPostMatchStatPoints(
+  metrics: PostMatchTeamMetricWithRdr[],
+  mode: DefencePlotMode,
+  perspective: XPointsPerspective,
+  gameWindow: 5 | 10 | null = null
+): TeamPostMatchStatPoint[] {
+  const metricByMatchTeam = new Map(metrics.map((metric) => [
+    `${metric.url}|${normalise(metric.team)}`,
+    metric,
+  ]));
+  const games = latestTeamMetrics(metrics, gameWindow).map((metric): TeamPostMatchStatPoint => {
+    const opponentMetric = metric.opponentTeam
+      ? metricByMatchTeam.get(`${metric.url}|${normalise(metric.opponentTeam)}`) ?? null
+      : null;
+    const attackingMetric = perspective === "attack"
+      ? metric
+      : opponentMetric;
+    // Legacy RDR rows predate the split ratings: own dominance represents attack,
+    // while the inverse of the opponent's dominance represents defense.
+    const attackingRuckRating = metric.attackingRuckRating
+      ?? metric.rdr?.attackingRuckRating
+      ?? metric.ruckDominanceRating
+      ?? metric.rdr?.ruckDominanceRating
+      ?? null;
+    const opponentRuckRating = opponentMetric?.attackingRuckRating
+      ?? opponentMetric?.rdr?.attackingRuckRating
+      ?? opponentMetric?.ruckDominanceRating
+      ?? opponentMetric?.rdr?.ruckDominanceRating
+      ?? null;
+    return {
+      team: metric.team,
+      year: String(metric.season),
+      roundLabel: metric.round ?? "Match",
+      opponent: metric.opponentTeam,
+      games: 1,
+      attackingRuckRating,
+      defensiveRuckRating: metric.defensiveRuckRating
+        ?? metric.rdr?.defensiveRuckRating
+        ?? (opponentRuckRating === null ? null : 100 - opponentRuckRating),
+      ruckDominanceRating: metric.ruckDominanceRating ?? metric.rdr?.ruckDominanceRating ?? null,
+      ptbRating: attackingMetric?.rdr?.playTheBallSpeedAboveExpected ?? null,
+      contactRating: perspective === "defense" ? metric.contactDisruptionsPer100Runs : null,
+      coverRating: perspective === "defense" ? metric.coverDefenseRating : null,
+    };
+  });
+
+  if (mode === "games") return games;
+
+  const groups = new Map<string, TeamPostMatchStatPoint[]>();
+  for (const point of games) {
+    const key = `${point.year}|${normalise(point.team)}`;
+    groups.set(key, [...(groups.get(key) ?? []), point]);
+  }
+  return [...groups.values()].map((points) => ({
+    team: points[0].team,
+    year: points[0].year,
+    roundLabel: "Season",
+    opponent: null,
+    games: points.length,
+    attackingRuckRating: nullableMean(points.map((point) => point.attackingRuckRating)),
+    defensiveRuckRating: nullableMean(points.map((point) => point.defensiveRuckRating)),
+    ruckDominanceRating: nullableMean(points.map((point) => point.ruckDominanceRating)),
+    ptbRating: nullableMean(points.map((point) => point.ptbRating)),
+    contactRating: nullableMean(points.map((point) => point.contactRating)),
+    coverRating: nullableMean(points.map((point) => point.coverRating)),
+  }));
 }
 
 export function buildXPointsPlotPoints(

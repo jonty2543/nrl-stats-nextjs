@@ -16,6 +16,9 @@ export const TEAM_ATTACK_COMPARISON_STATS = [
   "Kicks",
   "Kicking metres",
   "Forced drop outs",
+  "PTB",
+  "Attacking Ruck Rating",
+  "PTB Rating",
   "Missed tackles",
   "Penalties",
   "Errors",
@@ -37,7 +40,12 @@ export const TEAM_DEFENCE_CONCEDED_STATS = [
   "Kicks",
   "Kicking metres",
   "Forced drop outs",
-] as const satisfies readonly TeamAttackComparisonStat[];
+  "PTB",
+  "Defensive Ruck Rating",
+  "PTB Rating",
+  "Contact Rating",
+  "Cover Rating",
+] as const;
 export type TeamDefenceConcededStat = (typeof TEAM_DEFENCE_CONCEDED_STATS)[number];
 
 export const TEAM_ATTACK_EFFICIENCY_BASE_STATS = ["Receipts", "Runs", "Passes", "Kicks"] as const;
@@ -99,6 +107,8 @@ export interface AttackRatingPoint {
   runMetres: number;
   tries: number;
   runs: number;
+  ptb: number;
+  playTheBalls: number;
   totals: Record<TeamAttackTotalStat, number>;
 }
 
@@ -163,6 +173,8 @@ export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode,
     const lineBreaks = totals["Line breaks"];
     const runMetres = totals["Run metres"];
     const tries = totals.Tries;
+    const ptb = finite(row["Average Play The Ball Speed"]);
+    const playTheBalls = finite(row["Play The Ball"]);
     return [{
       id: `${row.Year}-${row.Date}-${row.Team}`,
       team: row.Team,
@@ -179,6 +191,8 @@ export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode,
       runMetres,
       tries,
       runs,
+      ptb,
+      playTheBalls,
       totals,
     }];
   });
@@ -198,6 +212,11 @@ export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode,
     const lineBreaks = points.reduce((sum, point) => sum + point.lineBreaks, 0);
     const runMetres = points.reduce((sum, point) => sum + point.runMetres, 0);
     const tries = points.reduce((sum, point) => sum + point.tries, 0);
+    const playTheBalls = points.reduce((sum, point) => sum + point.playTheBalls, 0);
+    const availablePtbValues = points.map((point) => point.ptb).filter((value) => value > 0);
+    const ptb = playTheBalls > 0
+      ? points.reduce((sum, point) => sum + point.ptb * point.playTheBalls, 0) / playTheBalls
+      : availablePtbValues.reduce((sum, value) => sum + value, 0) / Math.max(availablePtbValues.length, 1);
     const totals = Object.fromEntries(TEAM_ATTACK_TOTAL_STATS.map((stat) => [
       stat,
       points.reduce((sum, point) => sum + point.totals[stat], 0),
@@ -218,6 +237,8 @@ export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode,
       runMetres,
       tries,
       runs,
+      ptb,
+      playTheBalls,
       totals,
     };
   }).sort((left, right) => left.team.localeCompare(right.team));

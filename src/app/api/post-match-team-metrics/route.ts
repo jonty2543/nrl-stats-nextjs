@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
 import { isAccessibleSeason } from "@/lib/access/season-access";
-import { fetchAvailableYears, fetchPostMatchTeamMetrics } from "@/lib/supabase/queries";
+import { fetchAvailableYears, fetchPostMatchTeamMetricsWithRdr } from "@/lib/supabase/queries";
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       : (await fetchAvailableYears()).filter((year) => isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason));
 
     if (allowedYears.length === 0) return NextResponse.json([]);
-    return NextResponse.json(await fetchPostMatchTeamMetrics(allowedYears));
+    return NextResponse.json(await fetchPostMatchTeamMetricsWithRdr(allowedYears));
   } catch (error) {
     console.error("Error fetching post-match team metrics:", error);
     return NextResponse.json({ error: "Failed to fetch post-match team metrics" }, { status: 500 });

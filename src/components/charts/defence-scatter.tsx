@@ -45,6 +45,7 @@ interface TeamQuadrantScatterProps {
   comparisonLine?: boolean;
   rSquared?: number | null;
   singleAxis?: boolean;
+  singleAxisStackLimit?: number;
 }
 
 const DESKTOP_LAYOUT = {
@@ -88,6 +89,11 @@ function normalise(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function formatRoundLabel(value: string): string {
+  const label = value.trim();
+  return /^\d+$/.test(label) ? `Rd${label}` : label;
+}
+
 function logoFor(team: string, logos: Record<string, string>): string | null {
   return logos[team] ?? logos[normalise(team)] ?? logos[team.toLowerCase()] ?? null;
 }
@@ -109,6 +115,11 @@ function dataPadding(values: number[], flatFallback: number): number {
   const maximum = Math.max(...values);
   const range = maximum - minimum;
   return range > 0 ? range * 0.1 : Math.max(Math.abs(minimum) * 0.1, flatFallback);
+}
+
+function paddedMinimum(values: number[], padding: number): number {
+  const minimum = Math.min(...values);
+  return minimum < 0 ? minimum - padding : Math.max(0, minimum - padding);
 }
 
 function interpolateRgb(start: [number, number, number], end: [number, number, number], ratio: number): string {
@@ -169,7 +180,8 @@ function groupNearbyPoints(
 function stackNearbyPoints(
   points: TeamQuadrantPoint[],
   xScale: (value: number) => number,
-  overlapDistance: number
+  overlapDistance: number,
+  stackLimit: number
 ): PointGroup[] {
   const stacks: Array<{ anchorX: number; anchorValue: number; points: TeamQuadrantPoint[] }> = [];
   const sortedPoints = [...points].sort((left, right) => xScale(left.xValue) - xScale(right.xValue));
@@ -190,12 +202,12 @@ function stackNearbyPoints(
 
   return stacks.flatMap(({ anchorValue: stackXValue, points: stack }) => {
     const orderedStack = [...stack].sort((left, right) => right.xValue - left.xValue || left.team.localeCompare(right.team));
-    const hasRemainder = orderedStack.length > MAX_SINGLE_AXIS_STACK_SIZE;
+    const hasRemainder = orderedStack.length > stackLimit;
     const visiblePoints = hasRemainder
-      ? orderedStack.slice(0, MAX_SINGLE_AXIS_STACK_SIZE - 1)
+      ? orderedStack.slice(0, stackLimit - 1)
       : orderedStack;
     const remainder = hasRemainder
-      ? orderedStack.slice(MAX_SINGLE_AXIS_STACK_SIZE - 1)
+      ? orderedStack.slice(stackLimit - 1)
       : [];
     const stackSize = visiblePoints.length + (remainder.length > 0 ? 1 : 0);
     const groups = visiblePoints.map((point, stackIndex): PointGroup => ({
@@ -253,6 +265,7 @@ export function TeamQuadrantScatter({
   comparisonLine = false,
   rSquared = null,
   singleAxis = false,
+  singleAxisStackLimit = MAX_SINGLE_AXIS_STACK_SIZE,
 }: TeamQuadrantScatterProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
@@ -298,16 +311,16 @@ export function TeamQuadrantScatter({
     if (comparisonLine) {
       const combined = [...xValues, ...yValues];
       const padding = dataPadding(combined, Math.max(minXPadding, minYPadding));
-      const domain = [Math.max(0, Math.min(...combined) - padding), Math.max(...combined) + padding] as [number, number];
+      const domain = [paddedMinimum(combined, padding), Math.max(...combined) + padding] as [number, number];
       return { xMean, yMean, xDomain: domain, yDomain: domain };
     }
     return {
       xMean,
       yMean,
-      xDomain: [Math.max(0, Math.min(...xValues) - xPadding), Math.max(...xValues) + xPadding] as [number, number],
+      xDomain: [paddedMinimum(xValues, xPadding), Math.max(...xValues) + xPadding] as [number, number],
       yDomain: singleAxis
         ? [-1, 1] as [number, number]
-        : [Math.max(0, Math.min(...yValues) - yPadding), Math.max(...yValues) + yPadding] as [number, number],
+        : [paddedMinimum(yValues, yPadding), Math.max(...yValues) + yPadding] as [number, number],
     };
   }, [comparisonLine, minXPadding, minYPadding, points, singleAxis]);
 
@@ -333,11 +346,11 @@ export function TeamQuadrantScatter({
   const showTeamLogos = useLogos && points.length <= 20;
   const usesLargeMarkers = Boolean(pointImages) || showTeamLogos;
   const singleAxisGroups = singleAxis
-    ? stackNearbyPoints(points, xScale, usesLargeMarkers ? isMobile ? 56 : 38 : isMobile ? 24 : 14)
+    ? stackNearbyPoints(points, xScale, usesLargeMarkers ? isMobile ? 56 : 38 : isMobile ? 24 : 14, singleAxisStackLimit)
     : [];
   const maxStackSize = Math.max(1, ...singleAxisGroups.map((group) => group.stackSize ?? 1));
-  const stackGap = isMobile ? 58 : 42;
-  const stackPadding = isMobile ? 34 : 24;
+  const stackGap = usesLargeMarkers ? isMobile ? 58 : 42 : isMobile ? 28 : 20;
+  const stackPadding = usesLargeMarkers ? isMobile ? 34 : 24 : isMobile ? 20 : 14;
   const plotHeight = singleAxis
     ? stackPadding * 2 + (maxStackSize - 1) * stackGap
     : layout.height - margin.top - margin.bottom;
@@ -498,7 +511,7 @@ export function TeamQuadrantScatter({
               {searchResults.length > 0 ? searchResults.map((point) => (
                 <button key={point.id} type="button" onClick={() => selectSearchResult(point)} className="block w-full rounded px-2 py-2 text-left text-xs transition-colors hover:bg-white/5">
                   <span className="block font-bold text-nrl-text">{point.team}</span>
-                  <span className="block truncate text-[10px] text-nrl-muted">{point.opponent ? `${point.roundLabel} vs ${point.opponent}` : point.detail}</span>
+                  <span className="block truncate text-[10px] text-nrl-muted">{point.opponent ? `${formatRoundLabel(point.roundLabel)} vs ${point.opponent}` : point.detail}</span>
                 </button>
               )) : <div className="px-2 py-3 text-center text-xs text-nrl-muted">No matching {searchEntityLabel}.</div>}
             </div>
@@ -652,7 +665,7 @@ export function TeamQuadrantScatter({
           }}
         >
           <div className="flex items-start justify-between gap-2">
-            <div className="font-black text-nrl-text">{activePoint.team}{activePoint.opponent ? ` · ${activePoint.roundLabel} vs ${activePoint.opponent}` : ` · ${activePoint.year}`}</div>
+            <div className="font-black text-nrl-text">{activePoint.team}{activePoint.opponent ? ` · ${formatRoundLabel(activePoint.roundLabel)} vs ${activePoint.opponent}` : ` · ${activePoint.year}`}</div>
             {selectedPoint ? <button type="button" onClick={() => setSelectedPointId(null)} aria-label="Close selected point" className="text-sm font-black text-nrl-muted hover:text-nrl-text">×</button> : null}
           </div>
           <div className="mt-1 text-nrl-muted">{xMetricLabel} {activePoint.xValue.toFixed(xValueDecimals)}{xValueSuffix}{singleAxis ? "" : ` · ${yMetricLabel} ${activePoint.yValue.toFixed(yValueDecimals)}${yValueSuffix}`}</div>

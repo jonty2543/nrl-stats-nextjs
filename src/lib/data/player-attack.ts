@@ -5,7 +5,25 @@ export const PLAYER_ATTACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halv
 export type PlayerAttackPosition = (typeof PLAYER_ATTACK_POSITIONS)[number];
 export const PLAYER_BACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halves"] as const satisfies readonly PlayerAttackPosition[];
 export const PLAYER_EFFICIENCY_BASE_METRICS = ["Receipts", "Runs", "Passes"] as const;
-export const PLAYER_EFFICIENCY_OUTPUT_METRICS = ["Run metres", "Tries", "Try assists", "Offloads", "Tackle breaks", "Line break assists", "Post-contact metres"] as const;
+export const PLAYER_EFFICIENCY_OUTPUT_METRICS = [
+  "Run metres",
+  "Post-contact metres",
+  "Kick return metres",
+  "Dummy half run metres",
+  "Kicking metres",
+  "Points",
+  "Tries",
+  "Try assists",
+  "Line breaks",
+  "Line break assists",
+  "Offloads",
+  "Tackle breaks",
+  "Line engaged runs",
+  "Hit ups",
+  "Dummy half runs",
+  "Kicks",
+  "Forced drop outs",
+] as const;
 export const PLAYER_ATTACK_COMPARISON_STATS = [
   "Receipts",
   "Runs",
@@ -99,12 +117,22 @@ const EFFICIENCY_BASE_FIELDS: Record<PlayerEfficiencyBaseMetric, keyof PlayerSta
 
 const EFFICIENCY_OUTPUT_FIELDS: Record<PlayerEfficiencyOutputMetric, keyof PlayerStat> = {
   "Run metres": "All Run Metres",
+  "Post-contact metres": "Post Contact Metres",
+  "Kick return metres": "Kick Return Metres",
+  "Dummy half run metres": "Dummy Half Run Metres",
+  "Kicking metres": "Kicking Metres",
+  Points: "Points",
   Tries: "Tries",
   "Try assists": "Try Assists",
+  "Line breaks": "Line Breaks",
+  "Line break assists": "Line Break Assists",
   Offloads: "Offloads",
   "Tackle breaks": "Tackle Breaks",
-  "Line break assists": "Line Break Assists",
-  "Post-contact metres": "Post Contact Metres",
+  "Line engaged runs": "Line Engaged Runs",
+  "Hit ups": "Hit Ups",
+  "Dummy half runs": "Dummy Half Runs",
+  Kicks: "Kicks",
+  "Forced drop outs": "Forced Drop Outs",
 };
 
 const ATTACK_COMPARISON_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerStat> = {

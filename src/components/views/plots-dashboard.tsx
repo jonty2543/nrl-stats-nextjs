@@ -464,7 +464,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const playerEfficiencyMinYPadding = playerEfficiencyOutputMetric.includes("metres") ? 0.2 : 0.01;
   const playerEfficiencyYDecimals = playerEfficiencyOutputMetric.includes("metres")
     ? 1
-    : (["Tries", "Try assists", "Line break assists"] as PlayerEfficiencyOutputMetric[]).includes(playerEfficiencyOutputMetric) ? 3 : 2;
+    : (["Tries", "Try assists", "Line breaks", "Line break assists", "Forced drop outs"] as PlayerEfficiencyOutputMetric[]).includes(playerEfficiencyOutputMetric) ? 3 : 2;
   const teamShareSeries = useMemo(
     () => buildTeamShareSeries(playerRowsByYear[year] ?? [], teamShareMetric, gameWindow),
     [gameWindow, playerRowsByYear, teamShareMetric, year]

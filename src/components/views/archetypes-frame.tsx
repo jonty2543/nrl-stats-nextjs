@@ -1,25 +1,25 @@
 "use client";
 
+import { useState } from "react";
+
 export function ArchetypesFrame() {
-  const repaintFrame = (frame: HTMLIFrameElement) => {
-    frame.style.opacity = "0.99";
-    frame.style.transform = "translateZ(0)";
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        frame.style.opacity = "1";
-        frame.style.transform = "none";
-      });
-    });
-  };
+  const [isReady, setIsReady] = useState(false);
 
   return (
-    <section className="min-h-0 bg-transparent">
+    <section
+      aria-busy={!isReady}
+      className="relative min-h-0 bg-[#111733]"
+    >
       <iframe
         src="/api/archetypes/index.html"
         title="NRL player archetypes"
-        onLoad={(event) => repaintFrame(event.currentTarget)}
-        className="block h-[calc(100vh-14.5rem)] min-h-[720px] w-full border-0"
-        style={{ colorScheme: "dark", backgroundColor: "#111733" }}
+        onLoad={() => window.requestAnimationFrame(() => setIsReady(true))}
+        className="block h-[calc(100vh-14.5rem)] min-h-[720px] w-full border-0 transition-opacity duration-150"
+        style={{
+          colorScheme: "dark",
+          backgroundColor: "#111733",
+          opacity: isReady ? 1 : 0,
+        }}
       />
     </section>
   );

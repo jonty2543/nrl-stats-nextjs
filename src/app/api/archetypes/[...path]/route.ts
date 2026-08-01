@@ -240,9 +240,16 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink): strin
         }
 
         .plot-container iframe {
+            position: absolute;
+            inset: 0;
             display: block;
             background: #111733 !important;
             color-scheme: dark;
+            opacity: 0;
+            transition: opacity 120ms ease-out;
+        }
+
+        .plot-container iframe.is-ready {
             opacity: 1;
         }
 

@@ -739,6 +739,7 @@
         let rankingsOpen = false;
         let rankingsYear = 'All';
         let rankingsRequestId = 0;
+        let plotRequestId = 0;
         const rankingsCache = {};
         const rankingYearOptions = ['All', '2023', '2024', '2025', '2026'];
 
@@ -864,7 +865,25 @@
 
             // Update Plot
             const plotFile = `nrl_cluster_plot_${position.toLowerCase().replace(' ', '_')}${getPlotSuffix()}_all.html`;
-            plotContainer.innerHTML = `<iframe src="${plotFile}" title="${position} Clusters"></iframe>`;
+            const requestId = ++plotRequestId;
+            const nextFrame = document.createElement('iframe');
+            nextFrame.src = plotFile;
+            nextFrame.title = `${position} Clusters`;
+
+            plotContainer.querySelectorAll('iframe:not(.is-ready)').forEach(frame => frame.remove());
+            nextFrame.onload = () => {
+                if (requestId !== plotRequestId) {
+                    nextFrame.remove();
+                    return;
+                }
+
+                nextFrame.onload = null;
+                Array.from(plotContainer.children).forEach(child => {
+                    if (child !== nextFrame) child.remove();
+                });
+                requestAnimationFrame(() => nextFrame.classList.add('is-ready'));
+            };
+            plotContainer.appendChild(nextFrame);
 
             // Update Archetypes
             renderArchetypes(position);

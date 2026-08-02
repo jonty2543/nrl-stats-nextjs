@@ -24,7 +24,7 @@ ARCHETYPE_TABLE = "player_archetypes"
 UPSERT_BATCH_SIZE = 500
 
 class PositionConfig:
-    def __init__(self, name, features1, features2, features3, pc_names, n_clusters, labels, descriptions, min_games=5, profiles=None):
+    def __init__(self, name, features1, features2, features3, pc_names, n_clusters, labels, descriptions, min_games=5, profiles=None, assign_to_profiles=False):
         self.name = name
         self.features1 = features1
         self.features2 = features2
@@ -35,6 +35,7 @@ class PositionConfig:
         self.descriptions = descriptions
         self.min_games = min_games
         self.profiles = profiles or {}
+        self.assign_to_profiles = assign_to_profiles
 
 # Define Profiles (Ideal Centroids)
 PROFILES_FULLBACK = {
@@ -132,7 +133,8 @@ POSITION_CONFIGS = [
             "High involvement wingers who are strong in contact, often taking carries out of their own end."
         ],
         min_games=5,
-        profiles=PROFILES_WINGER
+        profiles=PROFILES_WINGER,
+        assign_to_profiles=True,
     ),
     PositionConfig(
         name='Centre',
@@ -266,6 +268,7 @@ def build_team_share_configs(configs):
             descriptions=config.descriptions,
             min_games=config.min_games,
             profiles=config.profiles,
+            assign_to_profiles=config.assign_to_profiles,
         ))
     return share_configs
 
@@ -462,16 +465,30 @@ def train_models(training_agg, configs, game_window=None):
                 'features': features
             }
             
-        # 4. Determine Label Mapping (Dynamic Assignment)
-        # We need to predict clusters for the training data to get centroids
-        df['cluster'] = kmeans.predict(X_scaled)
-        
-        # Calculate centroids in PC space (using the global PCAs)
+        # 4. Calculate the training rows in the visible PC space.
         for pc_key, pc_data in pcas.items():
             X_sub = df[pc_data['features']].fillna(0)
             X_sub_scaled = pc_data['scaler'].transform(X_sub)
             df[pc_key] = pc_data['model'].transform(X_sub_scaled)
-            
+
+        profile_scaler = None
+        profile_matrix = None
+        profile_labels = None
+        if config.assign_to_profiles:
+            active_profiles = {k: v for k, v in config.profiles.items() if k in config.labels}
+            profile_labels = list(active_profiles.keys())
+            profile_matrix = np.array(list(active_profiles.values()))
+            if len(profile_labels) != config.n_clusters:
+                raise ValueError(f"{config.name} requires one profile per cluster")
+
+            profile_scaler = StandardScaler()
+            pc_values = df[['pc1', 'pc2', 'pc3']].to_numpy()
+            pc_values_scaled = profile_scaler.fit_transform(pc_values)
+            df['cluster'] = cdist(pc_values_scaled, profile_matrix, metric='euclidean').argmin(axis=1)
+        else:
+            df['cluster'] = kmeans.predict(X_scaled)
+
+        # Calculate centroids in PC space for reporting and label matching.
         cluster_centroids = []
         for i in range(config.n_clusters):
             cluster_data = df[df['cluster'] == i]
@@ -486,7 +503,12 @@ def train_models(training_agg, configs, game_window=None):
         # Match with profiles
         label_map = {} # Cluster ID -> Label Name
         
-        if config.name == 'Middle':
+        if config.assign_to_profiles:
+            label_map = {i: label for i, label in enumerate(profile_labels)}
+            print("  Label Mapping:")
+            for cid, label in label_map.items():
+                print(f"    Profile {cid} -> {label}")
+        elif config.name == 'Middle':
             label_map = build_middle_label_map(cluster_centroids)
             print("  Label Mapping:")
             for cid, label in label_map.items():
@@ -523,7 +545,10 @@ def train_models(training_agg, configs, game_window=None):
             'kmeans': kmeans,
             'pcas': pcas,
             'label_map': label_map,
-            'centroids': cluster_centroids
+            'centroids': cluster_centroids,
+            'assignment': 'profiles' if config.assign_to_profiles else 'kmeans',
+            'profile_scaler': profile_scaler,
+            'profile_matrix': profile_matrix,
         }
         
     return models
@@ -646,15 +671,25 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                 print(f"  No players for {config.name} in {year}")
                 continue
                 
-            # Transform Features
+            # Transform features and calculate the visible PC coordinates first.
             all_features = list(set(config.features1 + config.features2 + config.features3))
             X = df[all_features].fillna(0)
             X_scaled = model_data['scaler'].transform(X)
-            
-            # Predict Clusters
-            df['cluster'] = model_data['kmeans'].predict(X_scaled)
 
-            distances = model_data['kmeans'].transform(X_scaled)
+            for pc_key, pc_info in model_data['pcas'].items():
+                X_sub = df[pc_info['features']].fillna(0)
+                X_sub_scaled = pc_info['scaler'].transform(X_sub)
+                df[pc_key] = pc_info['model'].transform(X_sub_scaled)
+
+            if model_data['assignment'] == 'profiles':
+                pc_values = df[['pc1', 'pc2', 'pc3']].to_numpy()
+                pc_values_scaled = model_data['profile_scaler'].transform(pc_values)
+                distances = cdist(pc_values_scaled, model_data['profile_matrix'], metric='euclidean')
+                df['cluster'] = distances.argmin(axis=1)
+            else:
+                df['cluster'] = model_data['kmeans'].predict(X_scaled)
+                distances = model_data['kmeans'].transform(X_scaled)
+
             assigned_clusters = df['cluster'].to_numpy(dtype=int)
             nearest_distances = distances[np.arange(len(df)), assigned_clusters]
             second_distances = np.partition(distances, 1, axis=1)[:, 1] if config.n_clusters > 1 else np.full(len(df), np.nan)
@@ -671,12 +706,6 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
             # Map Labels
             df['cluster_name'] = df['cluster'].map(model_data['label_map'])
             
-            # Calculate PCs
-            for pc_key, pc_info in model_data['pcas'].items():
-                X_sub = df[pc_info['features']].fillna(0)
-                X_sub_scaled = pc_info['scaler'].transform(X_sub)
-                df[pc_key] = pc_info['model'].transform(X_sub_scaled)
-
             percentile_features = sorted(all_features)
             percentile_df = df.groupby('year')[percentile_features].rank(pct=True, method='average') * 100
             for feature in percentile_features:

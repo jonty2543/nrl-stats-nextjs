@@ -67,19 +67,19 @@ const clusterDataTeamShare = {
                 {
                     "id": 0,
                     "name": "Support Winger",
-                    "count": 77,
+                    "count": 88,
                     "description": "These wingers tend to be less involved in the game, perhaps due to lack of skill or opportunity."
                 },
                 {
                     "id": 1,
                     "name": "Finisher Winger",
-                    "count": 69,
+                    "count": 62,
                     "description": "Wingers who are specialist try scorers, often with great positional awareness and speed."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 72,
+                    "count": 68,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],

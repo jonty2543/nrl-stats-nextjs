@@ -55,6 +55,7 @@ export type PlayerEfficiencyOutputMetric = (typeof PLAYER_EFFICIENCY_OUTPUT_METR
 export type PlayerAttackComparisonStat = (typeof PLAYER_ATTACK_COMPARISON_STATS)[number];
 export const PLAYER_ATTACK_STAT_COMPARISON_STATS: readonly PlayerAttackComparisonStat[] = PLAYER_ATTACK_COMPARISON_STATS;
 export type PlayerAttackComparisonMode = "per-game" | "team-proportion" | "totals";
+export type PlayerPlotMode = "players" | "games";
 export type HalvesPairingSort = "ascending" | "descending";
 export type PlayerGameWindow = 3 | 5 | 10 | null;
 
@@ -69,6 +70,8 @@ export interface PlayerAttackPoint {
   averageMinutes: number;
   usualMinutes: number;
   isPer80: boolean;
+  roundLabel: string;
+  opponent: string | null;
 }
 
 export interface PlayerDefencePoint {
@@ -82,6 +85,8 @@ export interface PlayerDefencePoint {
   averageMinutes: number;
   usualMinutes: number;
   isPer80: boolean;
+  roundLabel: string;
+  opponent: string | null;
 }
 
 export interface PlayerAttackComparisonPoint {
@@ -92,6 +97,8 @@ export interface PlayerAttackComparisonPoint {
   games: number;
   xValue: number;
   yValue: number;
+  roundLabel: string;
+  opponent: string | null;
 }
 
 export interface HalvesPairingPoint {
@@ -239,7 +246,8 @@ export function buildPlayerAttackPoints(
   position: PlayerAttackPosition,
   baseMetric: PlayerEfficiencyBaseMetric,
   outputMetric: PlayerEfficiencyOutputMetric,
-  gameWindow: PlayerGameWindow = null
+  gameWindow: PlayerGameWindow = null,
+  plotMode: PlayerPlotMode = "players"
 ): PlayerAttackPoint[] {
   const players = new Map<string, PlayerStat[]>();
   for (const row of rows) {
@@ -261,6 +269,28 @@ export function buildPlayerAttackPoints(
 
     const baseField = EFFICIENCY_BASE_FIELDS[baseMetric];
     const outputField = EFFICIENCY_OUTPUT_FIELDS[outputMetric];
+    if (plotMode === "games") {
+      for (const row of qualifyingRows) {
+        const base = finite(row[baseField]);
+        if (base <= 0) continue;
+        const minutes = finite(row["Mins Played"]);
+        points.push({
+          id: `${player}|${row.Year}|${row.Round_Label || row.Round}|${row.Team}|attack`,
+          player,
+          team: String(row.Team ?? ""),
+          position,
+          games: 1,
+          volumeValue: isPer80 ? base * (80 / minutes) : base,
+          efficiencyValue: finite(row[outputField]) / base,
+          averageMinutes: minutes,
+          usualMinutes,
+          isPer80,
+          roundLabel: String(row.Round_Label || row.Round),
+          opponent: row.Opponent,
+        });
+      }
+      continue;
+    }
     const totalBase = qualifyingRows.reduce((sum, row) => sum + finite(row[baseField]), 0);
     if (totalBase <= 0) continue;
     const totalOutput = qualifyingRows.reduce((sum, row) => sum + finite(row[outputField]), 0);
@@ -280,6 +310,8 @@ export function buildPlayerAttackPoints(
       averageMinutes: qualifyingRows.reduce((sum, row) => sum + finite(row["Mins Played"]), 0) / qualifyingRows.length,
       usualMinutes,
       isPer80,
+      roundLabel: "Season",
+      opponent: null,
     });
   }
 
@@ -292,7 +324,8 @@ export function buildPlayerAttackComparisonPoints(
   xStat: PlayerAttackComparisonStat,
   yStat: PlayerAttackComparisonStat,
   mode: PlayerAttackComparisonMode,
-  gameWindow: PlayerGameWindow = null
+  gameWindow: PlayerGameWindow = null,
+  plotMode: PlayerPlotMode = "players"
 ): PlayerAttackComparisonPoint[] {
   const xField = ATTACK_COMPARISON_FIELDS[xStat];
   const yField = ATTACK_COMPARISON_FIELDS[yStat];
@@ -352,6 +385,29 @@ export function buildPlayerAttackComparisonPoints(
     const averageXShare = xShares.reduce((sum, share) => sum + share, 0) / Math.max(xShares.length, 1);
     const averageYShare = yShares.reduce((sum, share) => sum + share, 0) / Math.max(yShares.length, 1);
 
+    if (plotMode === "games") {
+      for (const row of qualifyingRows) {
+        const minutes = finite(row["Mins Played"]);
+        const xTeamTotal = teamGameTotals.get(teamGameKey(row))?.x ?? 0;
+        const yTeamTotal = teamGameTotals.get(teamGameKey(row))?.y ?? 0;
+        if (mode === "team-proportion" && (xTeamTotal <= 0 || yTeamTotal <= 0)) continue;
+        const xValue = finite(row[xField]);
+        const yValue = finite(row[yField]);
+        points.push({
+          id: `${player}|${row.Year}|${row.Round_Label || row.Round}|${row.Team}|${mode}|${xStat}|${yStat}`,
+          player,
+          team: String(row.Team ?? ""),
+          position,
+          games: 1,
+          xValue: mode === "team-proportion" ? (xValue / xTeamTotal) * 100 : isPer80 ? xValue * (80 / minutes) : xValue,
+          yValue: mode === "team-proportion" ? (yValue / yTeamTotal) * 100 : isPer80 ? yValue * (80 / minutes) : yValue,
+          roundLabel: String(row.Round_Label || row.Round),
+          opponent: row.Opponent,
+        });
+      }
+      continue;
+    }
+
     points.push({
       id: `${player}|${position}|${mode}|${xStat}|${yStat}`,
       player,
@@ -360,6 +416,8 @@ export function buildPlayerAttackComparisonPoints(
       games: qualifyingRows.length,
       xValue: mode === "team-proportion" ? averageXShare : comparisonX,
       yValue: mode === "team-proportion" ? averageYShare : comparisonY,
+      roundLabel: "Season",
+      opponent: null,
     });
   }
 
@@ -456,7 +514,8 @@ export function buildHalvesPairingPoints(
 export function buildPlayerDefencePoints(
   rows: PlayerStat[],
   position: PlayerAttackPosition,
-  gameWindow: PlayerGameWindow = null
+  gameWindow: PlayerGameWindow = null,
+  plotMode: PlayerPlotMode = "players"
 ): PlayerDefencePoint[] {
   const players = new Map<string, PlayerStat[]>();
   for (const row of rows) {
@@ -476,6 +535,28 @@ export function buildPlayerDefencePoints(
     const qualifyingRows = latestQualifyingRows(positionQualifyingRows, gameWindow);
     if (qualifyingRows.length < minimumQualifyingGames(gameWindow)) continue;
 
+    if (plotMode === "games") {
+      for (const row of qualifyingRows) {
+        const minutes = finite(row["Mins Played"]);
+        const tackles = finite(row["Tackles Made"]);
+        points.push({
+          id: `${player}|${row.Year}|${row.Round_Label || row.Round}|${row.Team}|defence`,
+          player,
+          team: String(row.Team ?? ""),
+          position,
+          games: 1,
+          tacklesValue: isPer80 ? tackles * (80 / minutes) : tackles,
+          tackleEfficiency: finite(row["Tackle Efficiency"]),
+          averageMinutes: minutes,
+          usualMinutes,
+          isPer80,
+          roundLabel: String(row.Round_Label || row.Round),
+          opponent: row.Opponent,
+        });
+      }
+      continue;
+    }
+
     const tacklesValue = qualifyingRows.reduce((sum, row) => {
       const tackles = finite(row["Tackles Made"]);
       return sum + (isPer80 ? tackles * (80 / finite(row["Mins Played"])) : tackles);
@@ -493,6 +574,8 @@ export function buildPlayerDefencePoints(
       averageMinutes: qualifyingRows.reduce((sum, row) => sum + finite(row["Mins Played"]), 0) / qualifyingRows.length,
       usualMinutes,
       isPer80,
+      roundLabel: "Season",
+      opponent: null,
     });
   }
 

@@ -6,7 +6,7 @@ import type { PlayerStat, TeamStat } from "@/lib/data/types";
 import { buildAttackRatingPoints, buildConcededRatingPoints, TEAM_ATTACK_COMPARISON_STATS, TEAM_ATTACK_EFFICIENCY_BASE_STATS, TEAM_ATTACK_EFFICIENCY_OUTPUT_STATS, TEAM_DEFENCE_CONCEDED_STATS, type AttackRatingPoint, type TeamAttackComparisonStat, type TeamAttackEfficiencyBaseStat, type TeamAttackEfficiencyOutputStat, type TeamAttackTotalStat, type TeamDefenceConcededStat } from "@/lib/data/attack-ratings";
 import { buildDefenceRatingPoints, type DefencePlotMode } from "@/lib/data/defence-ratings";
 import { buildTeamShareSeries, TEAM_SHARE_METRICS, type TeamShareMetric } from "@/lib/data/receipt-share";
-import { buildHalvesPairingPoints, buildPlayerAttackComparisonPoints, buildPlayerAttackPoints, buildPlayerDefencePoints, PLAYER_ATTACK_COMPARISON_STATS, PLAYER_ATTACK_POSITIONS, PLAYER_ATTACK_STAT_COMPARISON_STATS, PLAYER_BACK_POSITIONS, PLAYER_EFFICIENCY_BASE_METRICS, PLAYER_EFFICIENCY_OUTPUT_METRICS, type HalvesPairingSort, type PlayerAttackComparisonStat, type PlayerAttackPosition, type PlayerEfficiencyBaseMetric, type PlayerEfficiencyOutputMetric, type PlayerGameWindow } from "@/lib/data/player-attack";
+import { buildHalvesPairingPoints, buildPlayerAttackComparisonPoints, buildPlayerAttackPoints, buildPlayerDefencePoints, PLAYER_ATTACK_COMPARISON_STATS, PLAYER_ATTACK_POSITIONS, PLAYER_ATTACK_STAT_COMPARISON_STATS, PLAYER_BACK_POSITIONS, PLAYER_EFFICIENCY_BASE_METRICS, PLAYER_EFFICIENCY_OUTPUT_METRICS, type HalvesPairingSort, type PlayerAttackComparisonStat, type PlayerAttackPosition, type PlayerEfficiencyBaseMetric, type PlayerEfficiencyOutputMetric, type PlayerGameWindow, type PlayerPlotMode } from "@/lib/data/player-attack";
 import { buildTeamPostMatchStatPoints, buildXPointsPlotPoints, type PostMatchTeamMetricWithRdr, type TeamPostMatchStatPoint } from "@/lib/data/post-match-team-metrics";
 import type { QuadrantLabels, TeamQuadrantPoint } from "@/components/charts/defence-scatter";
 import { HalvesPairingBars } from "@/components/charts/halves-pairing-bars";
@@ -354,6 +354,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const [halvesPairingStat, setHalvesPairingStat] = useState<PlayerAttackComparisonStat>("Kicking metres");
   const [halvesPairingSort, setHalvesPairingSort] = useState<HalvesPairingSort>("ascending");
   const [playerPosition, setPlayerPosition] = useState<PlayerAttackPosition>("Fullbacks");
+  const [playerPlotMode, setPlayerPlotMode] = useState<PlayerPlotMode>("players");
   const [gameWindow, setGameWindow] = useState<PlayerGameWindow>(null);
   const [playerInfoOpen, setPlayerInfoOpen] = useState(false);
   const [teamInfoOpen, setTeamInfoOpen] = useState(false);
@@ -449,7 +450,8 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const isPlayerEfficiency = playerAttackPlot === "Efficiency";
   const playerEfficiencyShowsVolume = isPlayerEfficiency && playerEfficiencyView === "Volume axis";
   const isPlayerTeamProportion = playerAttackPlot === "Team Proportion";
-  const isPlayerStatsTotals = playerAttackPlot === "Stats" && playerStatsAggregation === "Totals";
+  const isPlayerGameMode = playerPlotMode === "games";
+  const isPlayerStatsTotals = !isPlayerGameMode && playerAttackPlot === "Stats" && playerStatsAggregation === "Totals";
   const activePlayerComparisonXStat = isPlayerTeamProportion ? playerTeamProportionXStat : playerComparisonXStat;
   const activePlayerComparisonYStat = isPlayerTeamProportion ? playerTeamProportionYStat : playerComparisonYStat;
   const isPlayerSingleStat = playerSection === "Attack" && ((isPlayerEfficiency && !playerEfficiencyShowsVolume) || (!isPlayerEfficiency && activePlayerComparisonYStat === "None"));
@@ -495,8 +497,8 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
     ])),
   }), [currentPostMatchMetrics, gameWindow, mode]);
   const playerAttackData = useMemo(
-    () => buildPlayerAttackPoints(playerRowsByYear[year] ?? [], playerPosition, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, gameWindow),
-    [gameWindow, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, playerPosition, playerRowsByYear, year]
+    () => buildPlayerAttackPoints(playerRowsByYear[year] ?? [], playerPosition, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, gameWindow, playerPlotMode),
+    [gameWindow, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, playerPlotMode, playerPosition, playerRowsByYear, year]
   );
   const playerAttackComparisonData = useMemo(
     () => buildPlayerAttackComparisonPoints(
@@ -505,13 +507,14 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
       activePlayerComparisonXStat,
       effectivePlayerComparisonYStat,
       isPlayerTeamProportion ? "team-proportion" : isPlayerStatsTotals ? "totals" : "per-game",
-      gameWindow
+      gameWindow,
+      playerPlotMode
     ),
-    [activePlayerComparisonXStat, effectivePlayerComparisonYStat, gameWindow, isPlayerStatsTotals, isPlayerTeamProportion, playerPosition, playerRowsByYear, year]
+    [activePlayerComparisonXStat, effectivePlayerComparisonYStat, gameWindow, isPlayerStatsTotals, isPlayerTeamProportion, playerPlotMode, playerPosition, playerRowsByYear, year]
   );
   const playerDefenceData = useMemo(
-    () => buildPlayerDefencePoints(playerRowsByYear[year] ?? [], playerPosition, gameWindow),
-    [gameWindow, playerPosition, playerRowsByYear, year]
+    () => buildPlayerDefencePoints(playerRowsByYear[year] ?? [], playerPosition, gameWindow, playerPlotMode),
+    [gameWindow, playerPlotMode, playerPosition, playerRowsByYear, year]
   );
   const halvesPairings = useMemo(
     () => buildHalvesPairingPoints(playerRowsByYear[year] ?? [], halvesPairingStat, halvesPairingSort, gameWindow),
@@ -521,19 +524,19 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
     id: point.id,
     team: point.player,
     year,
-    roundLabel: "",
-    opponent: null,
+    roundLabel: point.roundLabel,
+    opponent: point.opponent,
     games: point.games,
     xValue: point.efficiencyValue,
     yValue: playerEfficiencyShowsVolume ? point.volumeValue : point.efficiencyValue,
-    detail: `${point.team} · ${point.averageMinutes.toFixed(1)} avg mins${point.isPer80 ? "" : ` · ${point.usualMinutes.toFixed(1)} usual mins`}`,
-  })), [playerAttackData, playerEfficiencyShowsVolume, year]);
+    detail: isPlayerGameMode ? `${point.team} · ${point.averageMinutes.toFixed(0)} mins` : `${point.team} · ${point.averageMinutes.toFixed(1)} avg mins${point.isPer80 ? "" : ` · ${point.usualMinutes.toFixed(1)} usual mins`}`,
+  })), [isPlayerGameMode, playerAttackData, playerEfficiencyShowsVolume, year]);
   const playerAttackComparisonPoints = useMemo<TeamQuadrantPoint[]>(() => playerAttackComparisonData.map((point) => ({
     id: point.id,
     team: point.player,
     year,
-    roundLabel: "",
-    opponent: null,
+    roundLabel: point.roundLabel,
+    opponent: point.opponent,
     games: point.games,
     xValue: point.xValue,
     yValue: point.yValue,
@@ -543,13 +546,13 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
     id: point.id,
     team: point.player,
     year,
-    roundLabel: "",
-    opponent: null,
+    roundLabel: point.roundLabel,
+    opponent: point.opponent,
     games: point.games,
     xValue: point.tacklesValue,
     yValue: point.tackleEfficiency,
-    detail: `${point.team} · ${point.averageMinutes.toFixed(1)} avg mins${point.isPer80 ? "" : ` · ${point.usualMinutes.toFixed(1)} usual mins`}`,
-  })), [playerDefenceData, year]);
+    detail: isPlayerGameMode ? `${point.team} · ${point.averageMinutes.toFixed(0)} mins` : `${point.team} · ${point.averageMinutes.toFixed(1)} avg mins${point.isPer80 ? "" : ` · ${point.usualMinutes.toFixed(1)} usual mins`}`,
+  })), [isPlayerGameMode, playerDefenceData, year]);
   const playerPointImages = useMemo(() => Object.fromEntries(
     [...playerAttackData, ...playerAttackComparisonData, ...playerDefenceData].flatMap((point) => {
       const image = playerFaceImages[normalisePlayerName(point.player)];
@@ -900,8 +903,9 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                   {playerSection === "Attack" && !isPlayerEfficiency ? <div className="w-32"><Select label="X axis stat" hideLabel compact value={activePlayerComparisonXStat} options={[...(isPlayerTeamProportion ? PLAYER_ATTACK_COMPARISON_STATS : PLAYER_ATTACK_STAT_COMPARISON_STATS)]} onChange={(value) => isPlayerTeamProportion ? setPlayerTeamProportionXStat(value as PlayerAttackComparisonStat) : setPlayerComparisonXStat(value as PlayerAttackComparisonStat)} /></div> : null}
                   {playerSection === "Attack" && !isPlayerEfficiency ? <div className="w-32"><Select label="Y axis stat" hideLabel compact value={activePlayerComparisonYStat} options={isPlayerTeamProportion ? ["None", ...PLAYER_ATTACK_COMPARISON_STATS] : ["None", ...PLAYER_ATTACK_STAT_COMPARISON_STATS]} onChange={(value) => isPlayerTeamProportion ? setPlayerTeamProportionYStat(value as OptionalPlayerComparisonStat) : setPlayerComparisonYStat(value as OptionalPlayerComparisonStat)} /></div> : null}
                   <div className="w-24"><Select label="Position" hideLabel compact value={playerPosition} options={[...PLAYER_ATTACK_POSITIONS]} onChange={(value) => setPlayerPosition(value as PlayerAttackPosition)} /></div>
+                  <div className="w-24 shrink-0"><Select label="Aggregation" hideLabel compact value={isPlayerGameMode ? "Games" : "Player"} options={["Player", "Games"]} onChange={(value) => setPlayerPlotMode(value === "Games" ? "games" : "players")} /></div>
                   <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} />
-                  {playerSection === "Attack" && playerAttackPlot === "Stats" ? <PillRadio options={["Per game", "Totals"]} value={playerStatsAggregation} onChange={(value) => setPlayerStatsAggregation(value as PlayerStatsAggregation)} /> : null}
+                  {playerSection === "Attack" && playerAttackPlot === "Stats" && !isPlayerGameMode ? <PillRadio options={["Per game", "Totals"]} value={playerStatsAggregation} onChange={(value) => setPlayerStatsAggregation(value as PlayerStatsAggregation)} /> : null}
                   <div className="w-20"><Select label="Season" hideLabel compact value={year} options={availableYears} onChange={(value) => void changeYear(value)} /></div>
                 </div>
               </div>
@@ -912,11 +916,12 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                   </div>
                 ) : null}
                 <TeamQuadrantScatter
-                  key={`${playerSection}-${playerAttackPlot}-${playerStatsAggregation}-${playerEfficiencyBaseMetric}-${playerEfficiencyOutputMetric}-${playerEfficiencyView}-${activePlayerComparisonXStat}-${activePlayerComparisonYStat}-${playerPosition}-${year}`}
+                  key={`${playerSection}-${playerAttackPlot}-${playerPlotMode}-${playerStatsAggregation}-${playerEfficiencyBaseMetric}-${playerEfficiencyOutputMetric}-${playerEfficiencyView}-${activePlayerComparisonXStat}-${activePlayerComparisonYStat}-${playerPosition}-${year}`}
                   points={playerSection === "Defense" ? playerDefencePoints : isPlayerEfficiency ? playerAttackPoints : playerAttackComparisonPoints}
                   teamLogos={{}}
                   useLogos={false}
-                  pointImages={playerPointImages}
+                  pointImages={isPlayerGameMode ? undefined : playerPointImages}
+                  searchEntityLabel="players"
                   emptyMessage={`No ${playerPosition.toLowerCase()} have ${gameWindow ?? 5} qualifying games this season.`}
                   ariaLabel={playerSection === "Defense"
                     ? `${playerPosition} tackles against tackle efficiency scatter plot`
@@ -950,9 +955,18 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
               {playerInfoOpen ? (
                 <div id="player-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-2">
                   <div><span className="font-black text-nrl-text">Position sample</span><br />{playerPosition} with at least {gameWindow ?? 5} qualifying games in position. Recorded positions are used, with jersey number only used when position data is unavailable.</div>
-                  <div><span className="font-black text-nrl-text">Game window</span><br />{gameWindow === null ? "All qualifying games are included." : `L${gameWindow} uses each player's latest ${gameWindow} qualifying games from 2026 and requires that full sample.`}</div>
+                  <div><span className="font-black text-nrl-text">Player / Games</span><br />Player mode combines each player&apos;s qualifying sample into one point. Games mode shows every game from that same sample as its own point.</div>
+                  <div><span className="font-black text-nrl-text">Game window</span><br />{gameWindow === null ? "All qualifying games are included for players with at least five appearances." : `L${gameWindow} uses each player's latest ${gameWindow} qualifying games from 2026 and requires that full sample.`}</div>
                   <div><span className="font-black text-nrl-text">Minutes adjustment</span><br />{
-                    playerSection === "Defense"
+                    isPlayerGameMode
+                      ? playerSection === "Defense"
+                        ? "Each point shows that game's tackle efficiency, with tackles normalised per 80 minutes for backs. Forwards exclude games below 60% of the player's median minutes in that position."
+                        : isPlayerEfficiency
+                          ? `Each point shows that game's ${playerEfficiencyOutputMetric.toLowerCase()} divided by ${playerEfficiencyBaseMetric.toLowerCase()}. Volume is normalised per 80 minutes for backs and uses the game total for forwards.`
+                          : isPlayerTeamProportion
+                            ? "Each point shows the player's selected-stat share of their team's total in that game. Appearances below 40 minutes are excluded."
+                            : "Each point shows that game's selected stats, normalised per 80 minutes for backs and using the game total for forwards."
+                    : playerSection === "Defense"
                       ? "Backs are normalised to tackles per 80 minutes; tackle efficiency is averaged across qualifying games. Forwards exclude games below 60% of the player's median minutes in that position."
                       : isPlayerEfficiency
                         ? playerEfficiencyShowsVolume
@@ -1077,7 +1091,6 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                 minXPadding={isXPoints ? 2 : isForVsAgainstPlot ? teamForMeta.minPadding : isTeamEfficiency ? activeTeamEfficiencyOutputMetric.includes("metres") ? 0.2 : 0.01 : isTeamStatsComparison ? activeTeamXMeta.minPadding : 2}
                 minYPadding={isXPoints ? 2 : isForVsAgainstPlot ? teamAgainstMeta.minPadding : isTeamEfficiency && activeTeamEfficiencyShowsVolume ? 1 : isTeamEfficiency ? activeTeamEfficiencyOutputMetric.includes("metres") ? 0.2 : 0.01 : isTeamStatsComparison ? activeTeamYMeta.minPadding : 3}
                 singleAxis={isTeamSingleStat}
-                singleAxisStackLimit={mode === "games" ? 20 : 8}
               />
             )}
           </div>

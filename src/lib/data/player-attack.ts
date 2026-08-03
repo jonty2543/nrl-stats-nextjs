@@ -238,7 +238,7 @@ function latestQualifyingRows(rows: PlayerStat[], gameWindow: PlayerGameWindow):
 }
 
 function minimumQualifyingGames(gameWindow: PlayerGameWindow): number {
-  return gameWindow ?? 5;
+  return gameWindow ?? 4;
 }
 
 export function buildPlayerAttackPoints(

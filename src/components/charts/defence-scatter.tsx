@@ -263,6 +263,7 @@ export function TeamQuadrantScatter({
   const [zoomState, setZoomState] = useState({ pointsKey: "", index: 0, panX: 0, panY: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [failedImageUrls, setFailedImageUrls] = useState<Set<string>>(() => new Set());
   const dragState = useRef<PlotDragState | null>(null);
   useEffect(() => {
     const query = window.matchMedia("(max-width: 639px)");
@@ -594,7 +595,8 @@ export function TeamQuadrantScatter({
               ? isTop && isRight ? "#10f08b" : !isTop && !isRight ? "#ff5364" : "#4f9cff"
               : "#79dbe3";
           const isGroup = group.points.length > 1;
-          const imageUrl = isGroup ? null : pointImages?.[point.id] ?? (showTeamLogos ? logoFor(point.team, teamLogos) : null);
+          const candidateImageUrl = isGroup ? null : pointImages?.[point.id] ?? (showTeamLogos ? logoFor(point.team, teamLogos) : null);
+          const imageUrl = candidateImageUrl && !failedImageUrls.has(candidateImageUrl) ? candidateImageUrl : null;
           const isPlayerPoint = Boolean(pointImages) && !isGroup;
           const active = group.points.some((groupedPoint) => groupedPoint.id === hoveredId || groupedPoint.id === selectedPointId) || group.key === selectedGroupKey;
           const isHorizontalEdge = singleAxis && (Math.abs(x - leftEdgeStackX) < 0.5 || Math.abs(x - rightEdgeStackX) < 0.5);
@@ -654,13 +656,13 @@ export function TeamQuadrantScatter({
               {!imageUrl && !isPlayerPoint ? <circle cx={x} cy={y} r={hitRadius} fill="transparent" /> : null}
               {imageUrl || isPlayerPoint ? <defs><clipPath id={clipId}><circle cx={x} cy={y} r={radius - 1.5} /></clipPath></defs> : null}
               <circle cx={x} cy={y} r={radius} fill={imageUrl ? "var(--color-nrl-panel)" : isPlayerPoint ? "#596273" : pointColor} stroke={pointColor} strokeWidth={active ? 3 : 1.5} opacity={active ? 1 : 0.78} />
-              {isPlayerPoint ? (
+              {isPlayerPoint && !imageUrl ? (
                 <g clipPath={`url(#${clipId})`} pointerEvents="none" fill="#b7becb">
                   <circle cx={x} cy={y - radius * 0.3} r={radius * 0.27} />
                   <ellipse cx={x} cy={y + radius * 0.55} rx={radius * 0.62} ry={radius * 0.52} />
                 </g>
               ) : null}
-              {imageUrl ? <image href={imageUrl} x={x - radius} y={y - radius} width={radius * 2} height={radius * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} pointerEvents="none" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
+              {imageUrl ? <image href={imageUrl} x={x - radius} y={y - radius} width={radius * 2} height={radius * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} pointerEvents="none" onError={() => setFailedImageUrls((current) => new Set(current).add(imageUrl))} /> : null}
               {isGroup ? <text x={x} y={y + (isMobile ? 3.5 : 2.75)} textAnchor="middle" fill="var(--color-nrl-bg)" fontSize={isMobile ? 9 : 7} fontWeight="950" pointerEvents="none">+{group.points.length}</text> : null}
             </g>
           );

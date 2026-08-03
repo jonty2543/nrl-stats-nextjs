@@ -881,11 +881,11 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                     <span aria-label="Loading season" role="status" className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/25 border-t-nrl-accent" />
                   </div>
                 ) : null}
-                <HalvesPairingBars pairings={halvesPairings} stat={halvesPairingStat} playerFaceImages={playerFaceImages} minimumGames={gameWindow ?? 5} />
+                <HalvesPairingBars pairings={halvesPairings} stat={halvesPairingStat} playerFaceImages={playerFaceImages} minimumGames={gameWindow ?? 4} />
               </div>
               {playerInfoOpen ? (
                 <div id="player-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-3">
-                  <div><span className="font-black text-nrl-text">Pairing sample</span><br />The recorded five-eighth and halfback from the same team-game, with both playing at least 60 minutes. Jersey 6 and 7 are used only when position data is unavailable. A pairing needs at least {gameWindow ?? 5} qualifying shared games in the selected season.</div>
+                  <div><span className="font-black text-nrl-text">Pairing sample</span><br />The recorded five-eighth and halfback from the same team-game, with both playing at least 60 minutes. Jersey 6 and 7 are used only when position data is unavailable. A pairing needs at least {gameWindow ?? 4} qualifying shared games in the selected season.</div>
                   <div><span className="font-black text-nrl-text">Contribution split</span><br />Each player&apos;s selected-stat total across shared games is divided by the pair&apos;s combined total. The most common halfback is blue on the left; the most common five-eighth is green on the right.</div>
                   <div><span className="font-black text-nrl-text">Sorting</span><br />Ascending puts the most uneven pairings first. Descending puts the pairings closest to a 50/50 split first.</div>
                   <div><span className="font-black text-nrl-text">Game window</span><br />{gameWindow === null ? "All qualifying shared games are included." : `L${gameWindow} uses each pairing's latest ${gameWindow} qualifying shared games from 2026 and requires that full sample.`}</div>
@@ -922,7 +922,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                   useLogos={false}
                   pointImages={isPlayerGameMode ? undefined : playerPointImages}
                   searchEntityLabel="players"
-                  emptyMessage={`No ${playerPosition.toLowerCase()} have ${gameWindow ?? 5} qualifying games this season.`}
+                  emptyMessage={`No ${playerPosition.toLowerCase()} have ${gameWindow ?? 4} qualifying games this season.`}
                   ariaLabel={playerSection === "Defense"
                     ? `${playerPosition} tackles against tackle efficiency scatter plot`
                     : isPlayerEfficiency
@@ -954,9 +954,9 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
               </div>
               {playerInfoOpen ? (
                 <div id="player-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-2">
-                  <div><span className="font-black text-nrl-text">Position sample</span><br />{playerPosition} with at least {gameWindow ?? 5} qualifying games in position. Recorded positions are used, with jersey number only used when position data is unavailable.</div>
+                  <div><span className="font-black text-nrl-text">Position sample</span><br />{playerPosition} with at least {gameWindow ?? 4} qualifying games in position. Recorded positions are used, with jersey number only used when position data is unavailable.</div>
                   <div><span className="font-black text-nrl-text">Player / Games</span><br />Player mode combines each player&apos;s qualifying sample into one point. Games mode shows every game from that same sample as its own point.</div>
-                  <div><span className="font-black text-nrl-text">Game window</span><br />{gameWindow === null ? "All qualifying games are included for players with at least five appearances." : `L${gameWindow} uses each player's latest ${gameWindow} qualifying games from 2026 and requires that full sample.`}</div>
+                  <div><span className="font-black text-nrl-text">Game window</span><br />{gameWindow === null ? "All qualifying games are included for players with at least four appearances." : `L${gameWindow} uses each player's latest ${gameWindow} qualifying games from 2026 and requires that full sample.`}</div>
                   <div><span className="font-black text-nrl-text">Minutes adjustment</span><br />{
                     isPlayerGameMode
                       ? playerSection === "Defense"

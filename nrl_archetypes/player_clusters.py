@@ -22,9 +22,12 @@ supabase: Client = create_client(f.SUPABASE_URL, f.SUPABASE_KEY)
 YEARS_TO_PROCESS = [2023, 2024, 2025, 2026]
 ARCHETYPE_TABLE = "player_archetypes"
 UPSERT_BATCH_SIZE = 500
+PLAYER_NAME_ALIASES = {
+    "Nicholas Hynes": "Nicho Hynes",
+}
 
 class PositionConfig:
-    def __init__(self, name, features1, features2, features3, pc_names, n_clusters, labels, descriptions, min_games=5, profiles=None, assign_to_profiles=False):
+    def __init__(self, name, features1, features2, features3, pc_names, n_clusters, labels, descriptions, min_games=4, profiles=None, assign_to_profiles=False):
         self.name = name
         self.features1 = features1
         self.features2 = features2
@@ -116,7 +119,7 @@ POSITION_CONFIGS = [
             "These playmakers save their energy for the big moments, with reduced workrates but high involvement in tries and try assists.",
             "Players who are less involved in attack, but may specialise in defense or defusing kicks."
         ],
-        min_games=5,
+        min_games=4,
         profiles=PROFILES_FULLBACK
     ),
     PositionConfig(
@@ -132,7 +135,7 @@ POSITION_CONFIGS = [
             "Wingers who are specialist try scorers, often with great positional awareness and speed.",
             "High involvement wingers who are strong in contact, often taking carries out of their own end."
         ],
-        min_games=5,
+        min_games=4,
         profiles=PROFILES_WINGER,
         assign_to_profiles=True,
     ),
@@ -150,7 +153,7 @@ POSITION_CONFIGS = [
             "These players are less involved with ball in hand and may play other roles for the team.",
             "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
         ],
-        min_games=5,
+        min_games=4,
         profiles=PROFILES_CENTRE
     ),
     PositionConfig(
@@ -166,7 +169,7 @@ POSITION_CONFIGS = [
             "Halves with strong running games who look to break the line, usually Five-Eighths.",
             "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
         ],
-        min_games=5,
+        min_games=4,
         profiles=PROFILES_HALF
     ),
     PositionConfig(
@@ -183,7 +186,7 @@ POSITION_CONFIGS = [
             "Hookers that look to pass rather than run, usually having strong ball playing.",
             "Creative types who specialise in finding the right pass for their forwards."
         ],
-        min_games=7,
+        min_games=4,
         profiles=PROFILES_HOOKER
     ),
     PositionConfig(
@@ -200,7 +203,7 @@ POSITION_CONFIGS = [
             "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result.",
             "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
         ],
-        min_games=7,
+        min_games=4,
         profiles=PROFILES_EDGE
     ),
     PositionConfig(
@@ -216,7 +219,7 @@ POSITION_CONFIGS = [
             "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres.",
             "Making up the rest of the middle, these players share the hit up and tackling duties."
         ],
-        min_games=7,
+        min_games=4,
         profiles=PROFILES_MIDDLE
     )
 ]
@@ -344,6 +347,8 @@ def load_and_process_data(configs, player_data, stat_mode='production', recent_g
     
     # Extract year
     player_df['year'] = pd.to_datetime(player_df['match_date']).dt.year
+    player_df['player'] = player_df['player'].replace(PLAYER_NAME_ALIASES)
+    player_df = player_df.drop_duplicates().copy()
 
     # Prefer the recorded position; retain number as a fallback for legacy rows.
     player_df['position'] = player_df.apply(
@@ -628,6 +633,23 @@ def upsert_player_archetypes(records):
             .upsert(batch, on_conflict="player,year,position")
             .execute()
         )
+
+    canonical_players = {record["player"] for record in records}
+    stale_aliases = [
+        alias
+        for alias, canonical in PLAYER_NAME_ALIASES.items()
+        if canonical in canonical_players
+    ]
+    if stale_aliases:
+        (
+            supabase
+            .schema("nrl")
+            .table(ARCHETYPE_TABLE)
+            .delete()
+            .in_("player", stale_aliases)
+            .execute()
+        )
+        print(f"Removed stale player aliases: {', '.join(stale_aliases)}.")
     print(f"Upserted {len(records)} rows to nrl.{ARCHETYPE_TABLE}.")
 
 def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="production", game_window=None):

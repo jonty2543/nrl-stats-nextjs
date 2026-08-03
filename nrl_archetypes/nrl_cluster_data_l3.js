@@ -6,19 +6,19 @@ const clusterDataL3 = {
                 {
                     "id": 0,
                     "name": "Ball Running Fullback",
-                    "count": 24,
+                    "count": 20,
                     "description": "Fullbacks who are quick and able to break the defensive line, and opt for game breaking runs over tough carries."
                 },
                 {
                     "id": 1,
                     "name": "Balanced Fullback",
-                    "count": 20,
+                    "count": 12,
                     "description": "These well rounded fullbacks balance workrate, playmaking and elusiveness making them the complete package."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Fullback",
-                    "count": 18,
+                    "count": 23,
                     "description": "High-effort players who are always around the ball. They rack up high run metres and support plays."
                 },
                 {
@@ -30,7 +30,7 @@ const clusterDataL3 = {
                 {
                     "id": 4,
                     "name": "Support Fullback",
-                    "count": 35,
+                    "count": 42,
                     "description": "Players who are less involved in attack, but may specialise in defense or defusing kicks."
                 }
             ],

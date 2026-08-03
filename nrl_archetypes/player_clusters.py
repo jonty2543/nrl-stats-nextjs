@@ -120,7 +120,8 @@ POSITION_CONFIGS = [
             "Players who are less involved in attack, but may specialise in defense or defusing kicks."
         ],
         min_games=4,
-        profiles=PROFILES_FULLBACK
+        profiles=PROFILES_FULLBACK,
+        assign_to_profiles=True,
     ),
     PositionConfig(
         name='Winger',

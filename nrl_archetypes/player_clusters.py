@@ -25,9 +25,12 @@ UPSERT_BATCH_SIZE = 500
 PLAYER_NAME_ALIASES = {
     "Nicholas Hynes": "Nicho Hynes",
 }
+EDGE_STRIKE_MIN_ATTACKING_THREAT = 1.0
+EDGE_SUPPORT_MAX_DEFENSIVE_WORKRATE = -0.75
+MIDDLE_IMPACT_MIN_BALL_RUNNING = 1.0
 
 class PositionConfig:
-    def __init__(self, name, features1, features2, features3, pc_names, n_clusters, labels, descriptions, min_games=4, profiles=None, assign_to_profiles=False):
+    def __init__(self, name, features1, features2, features3, pc_names, n_clusters, labels, descriptions, min_games=5, profiles=None, assign_to_profiles=False):
         self.name = name
         self.features1 = features1
         self.features2 = features2
@@ -103,6 +106,26 @@ def build_middle_label_map(cluster_centroids):
         label_map[cluster_id] = 'Impact Middle'
     return label_map
 
+
+def apply_archetype_assignment_rules(df, config):
+    if config.name == '2nd Row':
+        low_threat_strike = (
+            (df['cluster_name'] == 'Strike Attacking Edge')
+            & (df['pc2'] < EDGE_STRIKE_MIN_ATTACKING_THREAT)
+            & (df['pc3'] < EDGE_SUPPORT_MAX_DEFENSIVE_WORKRATE)
+        )
+        df.loc[low_threat_strike, 'cluster_name'] = 'Support Edge'
+
+    if config.name == 'Middle':
+        low_running_impact = (
+            (df['cluster_name'] == 'Impact Middle')
+            & (df['pc2'] < MIDDLE_IMPACT_MIN_BALL_RUNNING)
+        )
+        df.loc[low_running_impact, 'cluster_name'] = 'Standard Middle'
+
+    return df
+
+
 POSITION_CONFIGS = [
     PositionConfig(
         name='Fullback',
@@ -119,7 +142,7 @@ POSITION_CONFIGS = [
             "These playmakers save their energy for the big moments, with reduced workrates but high involvement in tries and try assists.",
             "Players who are less involved in attack, but may specialise in defense or defusing kicks."
         ],
-        min_games=4,
+        min_games=5,
         profiles=PROFILES_FULLBACK,
         assign_to_profiles=True,
     ),
@@ -136,7 +159,7 @@ POSITION_CONFIGS = [
             "Wingers who are specialist try scorers, often with great positional awareness and speed.",
             "High involvement wingers who are strong in contact, often taking carries out of their own end."
         ],
-        min_games=4,
+        min_games=5,
         profiles=PROFILES_WINGER,
         assign_to_profiles=True,
     ),
@@ -154,7 +177,7 @@ POSITION_CONFIGS = [
             "These players are less involved with ball in hand and may play other roles for the team.",
             "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
         ],
-        min_games=4,
+        min_games=5,
         profiles=PROFILES_CENTRE
     ),
     PositionConfig(
@@ -170,7 +193,7 @@ POSITION_CONFIGS = [
             "Halves with strong running games who look to break the line, usually Five-Eighths.",
             "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
         ],
-        min_games=4,
+        min_games=5,
         profiles=PROFILES_HALF
     ),
     PositionConfig(
@@ -187,8 +210,9 @@ POSITION_CONFIGS = [
             "Hookers that look to pass rather than run, usually having strong ball playing.",
             "Creative types who specialise in finding the right pass for their forwards."
         ],
-        min_games=4,
-        profiles=PROFILES_HOOKER
+        min_games=5,
+        profiles=PROFILES_HOOKER,
+        assign_to_profiles=True,
     ),
     PositionConfig(
         name='2nd Row', # Mapped to 'Edge' in output
@@ -204,7 +228,7 @@ POSITION_CONFIGS = [
             "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result.",
             "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
         ],
-        min_games=4,
+        min_games=5,
         profiles=PROFILES_EDGE
     ),
     PositionConfig(
@@ -220,7 +244,7 @@ POSITION_CONFIGS = [
             "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres.",
             "Making up the rest of the middle, these players share the hit up and tackling duties."
         ],
-        min_games=4,
+        min_games=5,
         profiles=PROFILES_MIDDLE
     )
 ]
@@ -635,6 +659,22 @@ def upsert_player_archetypes(records):
             .execute()
         )
 
+    removed_below_minimum = 0
+    for config in POSITION_CONFIGS:
+        response = (
+            supabase
+            .schema("nrl")
+            .table(ARCHETYPE_TABLE)
+            .delete()
+            .eq("position", export_position_name(config))
+            .in_("year", YEARS_TO_PROCESS)
+            .lt("games", config.min_games)
+            .execute()
+        )
+        removed_below_minimum += len(response.data or [])
+    if removed_below_minimum:
+        print(f"Removed {removed_below_minimum} archetype rows below their position minimum.")
+
     canonical_players = {record["player"] for record in records}
     stale_aliases = [
         alias
@@ -725,10 +765,11 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
             df['centroid_distance'] = nearest_distances
             df['second_centroid_distance'] = second_distances
             df['confidence'] = confidence
-            
+
             # Map Labels
             df['cluster_name'] = df['cluster'].map(model_data['label_map'])
-            
+            df = apply_archetype_assignment_rules(df, config)
+
             percentile_features = sorted(all_features)
             percentile_df = df.groupby('year')[percentile_features].rank(pct=True, method='average') * 100
             for feature in percentile_features:

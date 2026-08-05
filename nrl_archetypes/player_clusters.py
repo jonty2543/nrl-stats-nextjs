@@ -59,10 +59,10 @@ PROFILES_WINGER = {
 }
 
 PROFILES_CENTRE = {
-    'Link Centre': [1.5, 0.0, 0.0],
-    'Strike Centre': [0.0, 1.5, 0.0],
+    'Link Centre': [1.5, 0.0, -0.75],
     'Workhorse Centre': [0.0, 0.0, 1.5],
-    'Support Centre': [-1.0, -1.0, -1.0]
+    'Support Centre': [-1.0, -1.0, -1.0],
+    'Strike Centre': [0.0, 1.5, 0.0],
 }
 
 PROFILES_HALF = {
@@ -178,7 +178,8 @@ POSITION_CONFIGS = [
             "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
         ],
         min_games=5,
-        profiles=PROFILES_CENTRE
+        profiles=PROFILES_CENTRE,
+        assign_to_profiles=True,
     ),
     PositionConfig(
         name='Half',

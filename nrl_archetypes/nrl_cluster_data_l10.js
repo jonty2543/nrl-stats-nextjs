@@ -114,13 +114,13 @@ const clusterDataL10 = {
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 39,
+                    "count": 45,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 46,
+                    "count": 49,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
@@ -132,7 +132,7 @@ const clusterDataL10 = {
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 54,
+                    "count": 45,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],

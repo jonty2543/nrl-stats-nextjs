@@ -539,7 +539,7 @@ const GAME_LOG_COLLAPSED_BASE_UPSIDE_MAX_HEIGHT_PX = 356
 const ALL_PLAYERS_STATS_YEAR = "2026"
 const ALL_PLAYERS_PREVIEW_LIMIT = 20
 const ALL_PLAYERS_INITIAL_PREVIEW_LIMIT = 6
-const ALL_PLAYERS_MOBILE_BATCH_SIZE = 40
+const ALL_PLAYERS_MOBILE_BATCH_SIZE = 16
 const ALL_PLAYERS_VIRTUALIZE_THRESHOLD = 80
 const ALL_PLAYERS_TABLE_ROW_HEIGHT_PX = 56
 
@@ -3640,6 +3640,32 @@ export function FantasyDashboard({
     setAllPlayerCardSummaryRows(precomputedAllPlayersRows)
   }, [precomputedAllPlayersRows])
   useEffect(() => {
+    if (!showAllPlayersOnly || hasPrecomputedAllPlayersRows) return
+
+    let cancelled = false
+    const controller = new AbortController()
+    const loadPlayerSummaries = async () => {
+      try {
+        const response = await fetch("/api/fantasy/player-summaries", { signal: controller.signal })
+        if (!response.ok) return
+        const rows = (await response.json()) as FantasyPlayerCardSummary[]
+        if (!cancelled && Array.isArray(rows) && rows.length > 0) {
+          startTransition(() => setAllPlayerCardSummaryRows(rows))
+        }
+      } catch (error) {
+        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
+          console.error("Failed to load fantasy player summaries", error)
+        }
+      }
+    }
+
+    void loadPlayerSummaries()
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [hasPrecomputedAllPlayersRows, showAllPlayersOnly])
+  useEffect(() => {
     if (!precomputedAllPlayersRowsArePreview) {
       setHasExpandedAllPlayersPreviewRows(true)
       return
@@ -4282,6 +4308,7 @@ export function FantasyDashboard({
   useEffect(() => {
     if (
       !showOwnedCards ||
+      showAllPlayersOnly ||
       isAllPlayersPreview ||
       hasPrecomputedAllPlayersRows ||
       allPlayersStatsLoadFailed ||
@@ -4318,7 +4345,7 @@ export function FantasyDashboard({
     return () => {
       cancelled = true
     }
-  }, [allPlayersStatsLoadFailed, allPlayersStatsSourceData, hasPrecomputedAllPlayersRows, hasRequestedAllPlayersStats, isAllPlayersPreview, showOwnedCards])
+  }, [allPlayersStatsLoadFailed, allPlayersStatsSourceData, hasPrecomputedAllPlayersRows, hasRequestedAllPlayersStats, isAllPlayersPreview, showAllPlayersOnly, showOwnedCards])
 
   useEffect(() => {
     if (hasLoginAccess) return
@@ -5272,7 +5299,7 @@ export function FantasyDashboard({
   const desktopAllPlayersVirtualRows = useVirtualRows(
     sortedAllPlayersTableRows.length,
     ALL_PLAYERS_TABLE_ROW_HEIGHT_PX,
-    10,
+    6,
     shouldVirtualizeAllPlayersRows
   )
 
@@ -5444,8 +5471,48 @@ export function FantasyDashboard({
     if (totalMins <= 0) return null
     return totalScore / totalMins
   }, [playerRowsForYear, selectedAllPlayersTableRow])
+  const selectedLiveLast3 = useMemo(() => {
+    const seenGames = new Set<string>()
+    const scores: number[] = []
+
+    for (const row of [...playerRowsForYear].sort(sortRoundsDesc)) {
+      const score = playerStatMetricValue(row, "Fantasy", "total_points")
+      if (score === null) continue
+      const gameKey = [row.Year, row.Round, row.match_date, row.Opponent].join("|")
+      if (seenGames.has(gameKey)) continue
+      seenGames.add(gameKey)
+      scores.push(score)
+      if (scores.length === 3) break
+    }
+
+    return averageNumbers(scores)
+  }, [playerRowsForYear])
+  const selectedTradeRating = useMemo(() => {
+    const row = selectedAllPlayersTableRow
+    if (!row?.tradeRating) return null
+    const liveLast3 = selectedLiveLast3 ?? row.last3
+    if (liveLast3 === row.last3) return row.tradeRating
+
+    return calculateTradeRating({
+      input: {
+        weeklyChange: row.weeklyChange,
+        last3: liveLast3,
+        projection: row.projection,
+        pricedAt: row.pricedAt,
+        value: row.value,
+        breakeven: row.breakeven,
+        team: row.team,
+        originChance: row.originChance,
+        playsNextMajorBye: row.playsNextMajorBye,
+        playerCasualtyWard: row.playerCasualtyWard,
+        relevantOuts: row.relevantOuts,
+      },
+      draw: draw2026Data,
+      currentRound: lineupsProjections?.round ?? selectedFantasyCoachRound ?? 1,
+    })
+  }, [draw2026Data, lineupsProjections?.round, selectedAllPlayersTableRow, selectedFantasyCoachRound, selectedLiveLast3])
   const selectedTradeRatingStats = useMemo(() => {
-    const rating = selectedAllPlayersTableRow?.tradeRating
+    const rating = selectedTradeRating
     if (!rating) return []
 
     return [
@@ -5458,7 +5525,7 @@ export function FantasyDashboard({
       { key: "be", label: "BE", tradeScore: tradeScore10(rating.breakeven), maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS },
       { key: "avail", label: "Avail", tradeScore: tradeScore10(rating.availability), maxStars: LOW_WEIGHT_TRADE_RATING_MAX_STARS },
     ]
-  }, [selectedAllPlayersTableRow?.tradeRating])
+  }, [selectedTradeRating])
 
   const playerSearchOptions = useMemo(
     () => (fantasyPlayers.length > 0 ? fantasyPlayers.map((player) => player.name) : allPlayersTableRows.map((row) => row.player.name)),

@@ -13,7 +13,6 @@ import {
   fetchAvailableYears,
   fetchFantasyPlayerCardSummaries,
   fetchOriginChances,
-  fetchPlayerStats,
   fetchPlayerImages,
   fetchRelevantCasualtyWardOutCandidates,
 } from "@/lib/supabase/queries"
@@ -64,11 +63,22 @@ async function withOptionalContextTimeout<T>(
 }
 
 export default async function FantasyPlayersPage() {
-  const { userId } = await auth()
+  const playerSummariesPromise = fetchFantasyPlayerCardSummaries()
+  const pageDataPromise = Promise.all([
+    withOptionalContextTimeout("fantasy players", fetchFantasyPlayersSnapshot(), [], 2500),
+    withOptionalContextTimeout("coach players", fetchFantasyCoachPlayersSnapshot(), []),
+    withOptionalContextTimeout("lineups projections", fetchLineupsProjectionsByPlayerId(), emptyLineupsProjectionSnapshot()),
+    withOptionalContextTimeout("available years", fetchAvailableYears(), ["2026"]),
+    withOptionalContextTimeout("ownership baseline", fetchLatestFantasyOwnershipBaselineSnapshot(), null),
+    withOptionalContextTimeout("player images", fetchPlayerImages(), []),
+    withOptionalContextTimeout("casualty context", fetchRelevantCasualtyWardOutCandidates(), []),
+    withOptionalContextTimeout("draw context", loadDraw2026Data(), null),
+    withOptionalContextTimeout("origin chances", fetchOriginChances(), []),
+    withOptionalContextTimeout("player summaries", playerSummariesPromise, []),
+  ])
+  const [{ userId }, pageData] = await Promise.all([auth(), pageDataPromise])
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
-  const playerSummariesPromise = fetchFantasyPlayerCardSummaries()
-
   const [
     fantasyPlayers,
     fantasyCoachPlayers,
@@ -80,26 +90,7 @@ export default async function FantasyPlayersPage() {
     draw2026Data,
     originChances,
     precomputedAllPlayersRows,
-  ] = await Promise.all([
-    fetchFantasyPlayersSnapshot(),
-    withOptionalContextTimeout("coach players", fetchFantasyCoachPlayersSnapshot(), []),
-    withOptionalContextTimeout("lineups projections", fetchLineupsProjectionsByPlayerId(), emptyLineupsProjectionSnapshot()),
-    withOptionalContextTimeout("available years", fetchAvailableYears(), ["2026"]),
-    withOptionalContextTimeout("ownership baseline", fetchLatestFantasyOwnershipBaselineSnapshot(), null),
-    withOptionalContextTimeout("player images", fetchPlayerImages(), []),
-    withOptionalContextTimeout("casualty context", fetchRelevantCasualtyWardOutCandidates(), []),
-    withOptionalContextTimeout("draw context", loadDraw2026Data(), null),
-    withOptionalContextTimeout("origin chances", fetchOriginChances(), []),
-    withOptionalContextTimeout("player summaries", playerSummariesPromise, []),
-  ])
-  const effectivePrecomputedAllPlayersRows =
-    fantasyPlayers.length === 0 && precomputedAllPlayersRows.length === 0
-      ? await withOptionalContextTimeout("fallback player summaries", playerSummariesPromise, [], 4500)
-      : precomputedAllPlayersRows
-  const initialAllPlayerStats =
-    fantasyPlayers.length === 0 && effectivePrecomputedAllPlayersRows.length === 0
-      ? await withOptionalContextTimeout("fallback player stats", fetchPlayerStats(["2026"]), [], 4500)
-      : []
+  ] = pageData
 
   const initialYears = defaultRecentYears(availableYears)
 
@@ -111,8 +102,8 @@ export default async function FantasyPlayersPage() {
       availableYears={availableYears}
       defaultYears={initialYears}
       initialPlayerStats={[]}
-      initialAllPlayerStats={initialAllPlayerStats}
-      precomputedAllPlayersRows={effectivePrecomputedAllPlayersRows}
+      initialAllPlayerStats={[]}
+      precomputedAllPlayersRows={precomputedAllPlayersRows}
       canAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
       showFantasyActions={false}

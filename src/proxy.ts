@@ -6,6 +6,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/ai/chat(.*)",
   "/api/fantasy-draft-pricing/screenshot(.*)",
   "/api/fantasy/player-comments(.*)",
+  "/api/fantasy/player-summaries(.*)",
   "/api/feedback(.*)",
   "/api/lineups/match-detail(.*)",
   "/api/lineups/supplemental(.*)",

@@ -542,29 +542,41 @@ function buildStatsByName(rows) {
 }
 
 function findLocalRows(playerName, statsByName) {
-  const exact = statsByName.get(normaliseName(playerName));
-  if (exact) return exact;
   const fantasyParts = normaliseName(playerName).split(" ").filter(Boolean);
   const first = fantasyParts[0];
   const last = fantasyParts[fantasyParts.length - 1];
-  if (!first || !last) return [];
+  if (!first || !last) return statsByName.get(normaliseName(playerName)) ?? [];
 
   const candidates = [];
   for (const [key, rows] of statsByName.entries()) {
     const parts = key.split(" ").filter(Boolean);
     if (parts[parts.length - 1] === last) candidates.push({ key, rows, parts });
   }
-  const initialMatches = candidates.filter(({ parts }) => parts[0]?.[0] && parts[0][0] === first[0]);
-  if (initialMatches.length === 1) return initialMatches[0].rows;
-
   const prefixMatches = candidates.filter(({ parts }) => {
     const candidateFirst = parts[0] ?? "";
     return candidateFirst.startsWith(first) || first.startsWith(candidateFirst);
   });
-  if (prefixMatches.length === 1) return prefixMatches[0].rows;
-  if (candidates.length === 1) return candidates[0].rows;
+  const matches = prefixMatches.length > 0
+    ? prefixMatches
+    : candidates.filter(({ parts }) => parts[0]?.[0] && parts[0][0] === first[0]);
+  const resolvedMatches = matches.length === 1 || prefixMatches.length > 0
+    ? matches
+    : candidates.length === 1
+      ? candidates
+      : [];
 
-  return [];
+  const seenGames = new Set();
+  const mergedRows = [];
+  for (const { rows } of resolvedMatches) {
+    for (const row of rows) {
+      const gameKey = [row.matchDate, row.round, normaliseTeamKey(row.team)].join("|");
+      if (seenGames.has(gameKey)) continue;
+      seenGames.add(gameKey);
+      mergedRows.push(row);
+    }
+  }
+
+  return mergedRows;
 }
 
 function average(values) {

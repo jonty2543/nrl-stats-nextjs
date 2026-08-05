@@ -175,6 +175,7 @@ const STATIC_DATA: LandingStaticSnapshotData = {
       oddsRow({ date: "2026-05-30", match: "Storm v Broncos", result: "Broncos", model: 0.42, bestBookie: "Sportsbet", bestPrice: 2.14, Sportsbet: 2.14, Pointsbet: 2.1, Unibet: 2.12 }),
     ],
     line: [],
+    margin: [],
     total: [],
     tryscorer: [],
   },

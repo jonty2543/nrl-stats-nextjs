@@ -102,6 +102,7 @@ function filterUnreleasedBettingRounds(
     ...snapshot,
     h2h: filterRows(snapshot.h2h),
     line: filterRows(snapshot.line),
+    margin: filterRows(snapshot.margin),
     total: filterRows(snapshot.total),
     tryscorer: filterRows(snapshot.tryscorer),
   };
@@ -120,6 +121,7 @@ function filterBettingSnapshotToDates(snapshot: BettingOddsSnapshot, dates: Set<
     ...snapshot,
     h2h: filterRows(snapshot.h2h),
     line: filterRows(snapshot.line),
+    margin: filterRows(snapshot.margin),
     total: filterRows(snapshot.total),
     tryscorer: filterRows(snapshot.tryscorer),
   };
@@ -129,6 +131,7 @@ function bettingSnapshotDates(snapshot: BettingOddsSnapshot): string[] {
   return Array.from(new Set([
     ...snapshot.h2h.map((row) => row.date),
     ...snapshot.line.map((row) => row.date),
+    ...snapshot.margin.map((row) => row.date),
     ...snapshot.total.map((row) => row.date),
     ...snapshot.tryscorer.map((row) => row.date),
   ].filter(Boolean))).sort();

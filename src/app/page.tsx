@@ -181,7 +181,7 @@ export default function Home() {
               {
                 eyebrow: "Betting",
                 title: "Best bets, model edge, odds comparison, and tracker tools",
-                description: "Betting uses our Machine Learning models along with market context to find the best bets across H2H, Line, Total and Tryscorer markets",
+                description: "Betting uses our Machine Learning models along with market context to find the best bets across H2H, Line, Margin, Total and Tryscorer markets",
                 bullets: ["Today's Best Bets", "Tryscorer odds and player form", "Odds comparison across 5 bookmakers", "Personal bet tracker and staking calculator"],
                 ctaHref: "/dashboard/betting",
                 ctaLabel: "Betting",

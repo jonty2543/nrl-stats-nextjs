@@ -14,6 +14,7 @@ import {
   type BettingOddsRow,
   type BettingOddsSnapshot,
 } from "@/lib/betting/types";
+import { calculateEdgePercentagePoints } from "@/lib/betting/calculations";
 
 interface BettingDashboardProps {
   snapshot: BettingOddsSnapshot;
@@ -234,11 +235,12 @@ interface MobileBetSlip {
   legs: ManualBetLegDraft[];
 }
 
-const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Total"];
-const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Total"];
+const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Total"];
+const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Total"];
 const DEFAULT_BETTING_MARKET: BettingMarket = "Tryscorer";
 const TOTAL_MODEL_BETA_MARKET: BettingMarket = "Total";
-const SUSPICIOUS_EDGE_THRESHOLD_PP = 6;
+const SUSPICIOUS_EDGE_THRESHOLD_PP = 10;
+const DEFAULT_MAX_EDGE = 0.1;
 const SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP = 10;
 const BET_SCORE_ZERO_EDGE = 0.3;
 const BET_SCORE_POSITIVE_EDGE_RANGE = 0.58;
@@ -290,6 +292,7 @@ function countBestBetsByMarket(bets: BestBetCandidate[]): Record<BettingMarket, 
   const counts: Record<BettingMarket, number> = {
     H2H: 0,
     Line: 0,
+    Margin: 0,
     Total: 0,
     Tryscorer: 0,
   };
@@ -559,7 +562,11 @@ function resolveTeamLogoUrl(teamName: string | null | undefined, teamLogos: Reco
 }
 
 function stripSelectionLineSuffix(selection: string): string {
-  return selection.trim().replace(/\s+[+-]?\d+(?:\.\d+)?\s*$/, "").trim();
+  return selection
+    .trim()
+    .replace(/\s+(?:1\s*[-–]\s*12|13\s*\+)\s*$/i, "")
+    .replace(/\s+[+-]?\d+(?:\.\d+)?\s*$/, "")
+    .trim();
 }
 
 function TeamLogoImage({
@@ -1644,7 +1651,7 @@ function inverseNormalCdf(probability: number): number | null {
 function marketOfferScore(offer: BookieOffer, market: BettingMarket, result: string): number | null {
   const implied = impliedProbability(offer.price);
   const z = implied == null ? null : inverseNormalCdf(implied);
-  if (market === "H2H" || market === "Tryscorer") return offer.price;
+  if (market === "H2H" || market === "Margin" || market === "Tryscorer") return offer.price;
   if (offer.value == null || z == null) return null;
 
   if (market === "Line") {
@@ -2053,7 +2060,8 @@ function buildBestBets({
         continue;
       }
 
-      const edgePp = (modelProbability - implied) * 100;
+      const edgePp = calculateEdgePercentagePoints(modelProbability, odds);
+      if (edgePp == null) continue;
       if (edgePp < BEST_BETS_CONFIG.minEdgePp) continue;
 
       const signals = buildMarketSignals(row, group.marketPctFromBest);
@@ -2299,7 +2307,7 @@ export function BettingDashboard({
   const [percentageStakePct, setPercentageStakePct] = useState(2);
   const [targetProfitPct, setTargetProfitPct] = useState(2);
   const [kellyScale, setKellyScale] = useState(0.5);
-  const [maxEdge, setMaxEdge] = useState(0.06);
+  const [maxEdge, setMaxEdge] = useState(DEFAULT_MAX_EDGE);
   const [selectedMarket, setSelectedMarket] = useState<BettingMarket>(DEFAULT_BETTING_MARKET);
   const [stakeOverrides, setStakeOverrides] = useState<Record<string, number>>({});
   const [oddsOverrides, setOddsOverrides] = useState<Record<string, number>>({});
@@ -2375,6 +2383,7 @@ export function BettingDashboard({
 
   const h2hGroups = useMemo(() => buildEventGroups(snapshot.h2h), [snapshot.h2h]);
   const lineGroups = useMemo(() => buildEventGroups(snapshot.line), [snapshot.line]);
+  const marginGroups = useMemo(() => buildEventGroups(snapshot.margin), [snapshot.margin]);
   const totalGroups = useMemo(() => buildEventGroups(snapshot.total), [snapshot.total]);
   const tryscorerGroups = useMemo(
     () => buildEventGroups(snapshot.tryscorer, resolveTryscorerResult),
@@ -2384,8 +2393,10 @@ export function BettingDashboard({
     ? h2hGroups
     : selectedMarket === "Line"
       ? lineGroups
+      : selectedMarket === "Margin"
+        ? marginGroups
       : selectedMarket === "Total"
-      ? totalGroups
+        ? totalGroups
         : tryscorerGroups;
   const hasTeamListsInModel = selectedMarketGroups.some((group) =>
     hasAnnouncedLineupsForGroup(group, lineupPlayersByMatch)
@@ -2396,20 +2407,21 @@ export function BettingDashboard({
   });
   const bestBets = useMemo(
     () => buildBestBets({
-      groups: [...h2hGroups, ...lineGroups, ...totalGroups, ...tryscorerGroups],
+      groups: [...h2hGroups, ...lineGroups, ...marginGroups, ...totalGroups, ...tryscorerGroups],
       bankroll,
       kellyScale,
       todayIso,
     }),
-    [bankroll, h2hGroups, kellyScale, lineGroups, todayIso, totalGroups, tryscorerGroups]
+    [bankroll, h2hGroups, kellyScale, lineGroups, marginGroups, todayIso, totalGroups, tryscorerGroups]
   );
   const bestBetCountsByMarket = useMemo(() => countBestBetsByMarket(bestBets), [bestBets]);
   const marketGroupsByMarket = useMemo<Record<BettingMarket, EventGroup[]>>(() => ({
     H2H: h2hGroups,
     Line: lineGroups,
+    Margin: marginGroups,
     Total: totalGroups,
     Tryscorer: tryscorerGroups,
-  }), [h2hGroups, lineGroups, totalGroups, tryscorerGroups]);
+  }), [h2hGroups, lineGroups, marginGroups, totalGroups, tryscorerGroups]);
   const orderedMarkets = useMemo(
     () => orderMarketsByAvailability(MARKET_TABS, marketGroupsByMarket, bestBetCountsByMarket),
     [bestBetCountsByMarket, marketGroupsByMarket]
@@ -2424,7 +2436,7 @@ export function BettingDashboard({
   );
 
   const handleMarketChange = (value: string) => {
-    if (value === "H2H" || value === "Line" || value === "Total" || value === "Tryscorer") {
+    if (value === "H2H" || value === "Line" || value === "Margin" || value === "Total" || value === "Tryscorer") {
       if (window.location.hash.startsWith("#betting-game-")) {
         window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
       }
@@ -2526,7 +2538,7 @@ export function BettingDashboard({
             percentageStakePct: Number(parsed.percentageStakePct) || 2,
             targetProfitPct: Number(parsed.targetProfitPct) || 2,
             kellyScale: Number(parsed.kellyScale) || 0.5,
-            maxEdge: Number(parsed.maxEdge) || 0.06,
+            maxEdge: Number(parsed.maxEdge) || DEFAULT_MAX_EDGE,
           });
         }
       } catch {
@@ -2560,7 +2572,7 @@ export function BettingDashboard({
             percentageStakePct: Number(payload.preferences.percentageStakePct) || 2,
             targetProfitPct: Number(payload.preferences.targetProfitPct) || 2,
             kellyScale: Number(payload.preferences.kellyScale) || 0.5,
-            maxEdge: Number(payload.preferences.maxEdge) || 0.06,
+            maxEdge: Number(payload.preferences.maxEdge) || DEFAULT_MAX_EDGE,
           });
         }
       } catch {
@@ -3669,6 +3681,29 @@ export function BettingDashboard({
               </button>
             </div>
 
+            <div className="mt-4 flex rounded-md border border-white/10 bg-[#0e1530] p-1">
+              {(["single", "multi"] as TrackedBetType[]).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  aria-pressed={manualBetType === type}
+                  onClick={() => {
+                    setManualBetType(type);
+                    setManualError(null);
+                    setManualOddsEdited(false);
+                    setManualOdds(type === "multi" ? (manualMultiOdds?.toFixed(2) ?? "1.90") : "1.90");
+                  }}
+                  className={`h-8 flex-1 cursor-pointer rounded px-2 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
+                    manualBetType === type
+                      ? "bg-emerald-400/12 text-emerald-300"
+                      : "text-nrl-muted hover:bg-white/[0.04] hover:text-nrl-text"
+                  }`}
+                >
+                  {betTypeLabel(type)}
+                </button>
+              ))}
+            </div>
+
             {manualBetType === "single" ? (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1">
@@ -3990,6 +4025,7 @@ function BestBetsHero({
     const counts: Record<BettingMarket, number> = {
       H2H: 0,
       Line: 0,
+      Margin: 0,
       Total: 0,
       Tryscorer: 0,
     };
@@ -5384,7 +5420,7 @@ function MarketSection({
                       : null;
                     const edgePp = edgeDecimal == null ? null : edgeDecimal * 100;
                     const hasPositiveEdge = edgeDecimal != null && edgeDecimal > 0;
-                    const overEdgeCliff = edgeDecimal != null && edgeDecimal > (maxEdge ?? 0.06);
+                    const overEdgeCliff = edgeDecimal != null && edgeDecimal > (maxEdge ?? DEFAULT_MAX_EDGE);
                     const suspiciousEdge = isSuspiciousEdge(edgePp);
                     const marketSignals = buildMarketSignals(row, group.marketPctFromBest);
                     const betScore = edgePp == null ? null : calculateBetScore({
@@ -5701,7 +5737,7 @@ function MarketSection({
                           : null;
                         const edgePp = edgeDecimal == null ? null : edgeDecimal * 100;
                         const hasPositiveEdge = edgeDecimal != null && edgeDecimal > 0;
-                        const overEdgeCliff = edgeDecimal != null && edgeDecimal > (maxEdge ?? 0.06);
+                        const overEdgeCliff = edgeDecimal != null && edgeDecimal > (maxEdge ?? DEFAULT_MAX_EDGE);
                         const suspiciousEdge = isSuspiciousEdge(edgePp);
                         const marketSignals = buildMarketSignals(row, group.marketPctFromBest);
                         const betScore = edgePp == null ? null : calculateBetScore({

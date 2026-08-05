@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { createServerSupabaseClient } from "@/lib/supabase/client";
 
-type BetMarket = "H2H" | "Line" | "Total" | "Tryscorer";
+type BetMarket = "H2H" | "Line" | "Margin" | "Total" | "Tryscorer";
 type BetStatus = "pending" | "won" | "lost" | "push";
 type BetType = "single" | "multi" | "sgm";
 
@@ -92,7 +92,7 @@ function isBetType(value: unknown): value is BetType {
 }
 
 function isBetMarket(value: unknown): value is BetMarket {
-  return value === "H2H" || value === "Line" || value === "Total" || value === "Tryscorer";
+  return value === "H2H" || value === "Line" || value === "Margin" || value === "Total" || value === "Tryscorer";
 }
 
 function normaliseBetLeg(raw: unknown): BetLeg | null {
@@ -172,6 +172,17 @@ function teamMatches(selection: string, team: string): boolean {
   const fullTeam = normaliseTeam(team);
   if (fullSelection && fullSelection === fullTeam) return true;
   return lastWord(selection) !== "" && lastWord(selection) === lastWord(team);
+}
+
+function parseMarginSelection(selection: string): { team: string; bucket: "1-12" | "13+" } | null {
+  const match = selection.trim().match(/^(.*?)\s+(1\s*[-–]\s*12|13\s*\+)\s*$/i);
+  if (!match) return null;
+  const team = match[1]?.trim() ?? "";
+  if (!team) return null;
+  return {
+    team,
+    bucket: /^1\s*[-–]\s*12$/i.test(match[2] ?? "") ? "1-12" : "13+",
+  };
 }
 
 function parseMatchTeams(match: string): { home: string; away: string } | null {
@@ -258,6 +269,20 @@ function settleBet(row: UserBetRow, result: MatchResult, nowIso: string): Pick<U
       if (adjustedMargin > 0) status = "won";
       else if (adjustedMargin < 0) status = "lost";
       else status = "push";
+    }
+  } else if (row.market === "Margin") {
+    const marginSelection = parseMarginSelection(selection);
+    let winningMargin: number | null = null;
+    if (marginSelection && teamMatches(marginSelection.team, result.home)) {
+      winningMargin = result.homeScore - result.awayScore;
+    } else if (marginSelection && teamMatches(marginSelection.team, result.away)) {
+      winningMargin = result.awayScore - result.homeScore;
+    }
+
+    if (marginSelection && winningMargin != null) {
+      status = marginSelection.bucket === "1-12"
+        ? (winningMargin >= 1 && winningMargin <= 12 ? "won" : "lost")
+        : (winningMargin >= 13 ? "won" : "lost");
     }
   } else if (row.market === "Total" && lineValue != null) {
     const normalizedSelection = normaliseTeam(selection);
@@ -463,7 +488,7 @@ export async function POST(request: NextRequest) {
   const status = body.status;
 
   if (!isBetMarket(market)) {
-    return NextResponse.json({ error: "market must be H2H, Line, Total, or Tryscorer" }, { status: 400 });
+    return NextResponse.json({ error: "market must be H2H, Line, Margin, Total, or Tryscorer" }, { status: 400 });
   }
   const legsError = validateLegsForBetType(betType, legs);
   if (legsError) {

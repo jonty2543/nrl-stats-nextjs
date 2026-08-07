@@ -2528,7 +2528,7 @@ async function fetchDiscreteMarketProbabilityRowsFromSupabase(
   const dateRange = bettingOddsDateRange(rows);
   if (!dateRange) return [];
 
-  const supabase = createServerSupabaseClient("nrl");
+  const supabase = createServerSupabaseClient("summary");
   const fetchMarketRows = async (market: "Line" | "Margin"): Promise<DiscreteMarketProbabilityRow[]> => {
     const marketRows: DiscreteMarketProbabilityRow[] = [];
     let start = 0;
@@ -2544,7 +2544,7 @@ async function fetchDiscreteMarketProbabilityRowsFromSupabase(
         .range(start, end);
 
       if (error) {
-        throw new Error(`Supabase fetch nrl.discrete_market_probabilities (${market}): ${error.message}`);
+        throw new Error(`Supabase fetch summary.discrete_market_probabilities (${market}): ${error.message}`);
       }
 
       const pageRows = (data ?? []) as unknown as DiscreteMarketProbabilityRow[];
@@ -3098,35 +3098,37 @@ async function enrichBettingSnapshotModels(snapshot: BettingOddsSnapshot): Promi
 
   const shouldEnrichH2hModels = snapshot.h2h.some((row) => row.model == null);
   const shouldEnrichTryscorerModels = snapshot.tryscorer.some((row) => row.model == null);
-  const predictionRows = shouldEnrichH2hModels
-    ? await fetchPredictionModelRowsFromSupabase(snapshot.h2h).catch((error) => {
-      console.warn("Unable to enrich summary H2H odds with prediction rows.", error);
+  const [predictionRows, totalPredictionRows, tryscorerPredictionRows, discreteProbabilityRows] = await Promise.all([
+    shouldEnrichH2hModels
+      ? fetchPredictionModelRowsFromSupabase(snapshot.h2h).catch((error) => {
+        console.warn("Unable to enrich summary H2H odds with prediction rows.", error);
+        return [];
+      })
+      : Promise.resolve([]),
+    fetchTotalPredictionRowsFromSupabase(snapshot.total).catch((error) => {
+      console.warn("Unable to enrich summary total odds with prediction rows.", error);
       return [];
-    })
-    : [];
-  const totalPredictionRows = await fetchTotalPredictionRowsFromSupabase(snapshot.total).catch((error) => {
-    console.warn("Unable to enrich summary total odds with prediction rows.", error);
-    return [];
-  });
+    }),
+    shouldEnrichTryscorerModels
+      ? fetchTryscorerPredictionRowsFromSupabase(snapshot.tryscorer).catch((error) => {
+        console.warn("Unable to enrich summary tryscorer odds with prediction rows.", error);
+        return [];
+      })
+      : Promise.resolve([]),
+    fetchDiscreteMarketProbabilityRowsFromSupabase([
+      ...snapshot.line,
+      ...snapshot.margin,
+    ]).catch((error) => {
+      console.warn("Unable to fetch summary.discrete_market_probabilities; Line and Margin models are unavailable.", error);
+      return [];
+    }),
+  ]);
   const marginOverrideRows = shouldEnrichH2hModels
     ? await fetchMarginOverrideRowsFromSupabase(predictionRows).catch((error) => {
       console.warn("Unable to fetch betting margin overrides for summary enrichment; using saved prediction margins.", error);
       return [];
     })
     : [];
-  const tryscorerPredictionRows = shouldEnrichTryscorerModels
-    ? await fetchTryscorerPredictionRowsFromSupabase(snapshot.tryscorer).catch((error) => {
-      console.warn("Unable to enrich summary tryscorer odds with prediction rows.", error);
-      return [];
-    })
-    : [];
-  const discreteProbabilityRows = await fetchDiscreteMarketProbabilityRowsFromSupabase([
-    ...snapshot.line,
-    ...snapshot.margin,
-  ]).catch((error) => {
-    console.warn("Unable to fetch nrl.discrete_market_probabilities; Line and Margin models are unavailable.", error);
-    return [];
-  });
   const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
   const totalPredictionLookup = buildTotalPredictionLookup(totalPredictionRows);
   const tryscorerPredictionLookup = buildTryscorerPredictionLookup(tryscorerPredictionRows);
@@ -3245,7 +3247,7 @@ export async function fetchBettingOddsSnapshotFromRawTables(): Promise<BettingOd
 
 export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
   try {
-    return await fetchBettingOddsSnapshotFromSummary();
+    return await fetchBettingOddsSnapshotFromSummaryCached();
   } catch (error) {
     console.warn("Unable to fetch summary betting odds snapshot; falling back to raw odds tables.", error);
     try {
@@ -3263,6 +3265,12 @@ export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
     }
   }
 }
+
+const fetchBettingOddsSnapshotFromSummaryCached = unstable_cache(
+  fetchBettingOddsSnapshotFromSummary,
+  ["betting-odds-snapshot-v2"],
+  { revalidate: 30 }
+);
 
 export async function fetchCasualtyWardForPlayer(playerName: string): Promise<CasualtyWardRecord[]> {
   const name = playerName.trim();

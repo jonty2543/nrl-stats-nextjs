@@ -233,6 +233,53 @@ interface BookieBetSlipSelection {
   modelProbability?: number | null;
 }
 
+function BufferedSlipInput({
+  value,
+  onCommit,
+  ariaLabel,
+  type = "text",
+  placeholder,
+  min,
+  step,
+  className,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  ariaLabel?: string;
+  type?: "text" | "number";
+  placeholder?: string;
+  min?: number;
+  step?: number;
+  className: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current && document.activeElement !== inputRef.current) {
+      inputRef.current.value = value;
+    }
+  }, [value]);
+
+  return (
+    <input
+      ref={inputRef}
+      type={type}
+      aria-label={ariaLabel}
+      defaultValue={value}
+      placeholder={placeholder}
+      min={min}
+      step={step}
+      onBlur={(event) => {
+        if (event.currentTarget.value !== value) onCommit(event.currentTarget.value);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+      className={className}
+    />
+  );
+}
+
 const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Total"];
 const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Total"];
 const DEFAULT_BETTING_MARKET: BettingMarket = "Tryscorer";
@@ -2968,6 +3015,28 @@ export function BettingDashboard({
     };
   };
 
+  const bookieSlipMarketOptions = useMemo(() => {
+    if (!bookieSlipOpen || bookieSlipType === "single") return [];
+    const seedMatchKey = bookieSlipSeed
+      ? `${bookieSlipSeed.matchDate}|${normaliseMatchLabel(bookieSlipSeed.matchName)}`
+      : null;
+
+    return MARKET_TABS.flatMap((marketOption) => {
+      const eligibleGroups = marketGroupsByMarket[marketOption].filter((group) => {
+        if (bookieSlipType !== "sgm") return true;
+        return seedMatchKey === `${group.date}|${normaliseMatchLabel(group.match)}`;
+      }).flatMap((group) => {
+        const outcomes = group.outcomes.flatMap((row) => {
+          const offer = row.bookieOffers[bookieSlipBookie];
+          return offer ? [{ row, offer }] : [];
+        });
+        return outcomes.length > 0 ? [{ group, outcomes }] : [];
+      });
+      const availableCount = eligibleGroups.reduce((count, entry) => count + entry.outcomes.length, 0);
+      return availableCount > 0 ? [{ marketOption, eligibleGroups, availableCount }] : [];
+    });
+  }, [bookieSlipBookie, bookieSlipOpen, bookieSlipSeed, bookieSlipType, marketGroupsByMarket]);
+
   const bookieSlipAvailableBookies = bookieSlipSeed
     ? BETTING_BOOKIE_COLUMNS.filter((bookie) => {
       const seedDraft: ManualBetLegDraft = {
@@ -4286,12 +4355,12 @@ export function BettingDashboard({
                   <select aria-label={`Leg ${index + 1} market`} value={leg.market} onChange={(event) => updateBookieSlipLeg(leg.id, { market: event.target.value as BettingMarket })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40">
                     {MARKET_TABS.map((marketOption) => <option key={marketOption} value={marketOption}>{marketOption}</option>)}
                   </select>
-                  <input type="text" aria-label={`Leg ${index + 1} match`} value={leg.matchName} onChange={(event) => updateBookieSlipLeg(leg.id, { matchName: event.target.value })} placeholder="Match" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40 sm:col-span-2" />
-                  <input type="text" aria-label={`Leg ${index + 1} selection`} value={leg.selection} onChange={(event) => updateBookieSlipLeg(leg.id, { selection: event.target.value })} placeholder="Selection" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
-                  <input type="number" aria-label={`Leg ${index + 1} line`} value={leg.lineValue} onChange={(event) => updateBookieSlipLeg(leg.id, { lineValue: event.target.value })} placeholder="Line optional" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                  <BufferedSlipInput ariaLabel={`Leg ${index + 1} match`} value={leg.matchName} onCommit={(value) => updateBookieSlipLeg(leg.id, { matchName: value })} placeholder="Match" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40 sm:col-span-2" />
+                  <BufferedSlipInput ariaLabel={`Leg ${index + 1} selection`} value={leg.selection} onCommit={(value) => updateBookieSlipLeg(leg.id, { selection: value })} placeholder="Selection" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                  <BufferedSlipInput type="number" ariaLabel={`Leg ${index + 1} line`} value={leg.lineValue} onCommit={(value) => updateBookieSlipLeg(leg.id, { lineValue: value })} placeholder="Line optional" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
                   <label className="flex flex-col gap-1 sm:col-span-2">
                     <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-nrl-muted">Leg Price</span>
-                    <input type="number" aria-label={`Leg ${index + 1} price`} value={leg.odds} min={1.01} step={0.01} onChange={(event) => updateBookieSlipLeg(leg.id, { odds: event.target.value })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                    <BufferedSlipInput type="number" ariaLabel={`Leg ${index + 1} price`} value={leg.odds} min={1.01} step={0.01} onCommit={(value) => updateBookieSlipLeg(leg.id, { odds: value })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
                   </label>
                 </div>
               </div>
@@ -4309,22 +4378,7 @@ export function BettingDashboard({
                 </div>
               </div>
               <div className="space-y-2">
-                {MARKET_TABS.map((marketOption) => {
-                  const seedMatchKey = bookieSlipSeed
-                    ? `${bookieSlipSeed.matchDate}|${normaliseMatchLabel(bookieSlipSeed.matchName)}`
-                    : null;
-                  const eligibleGroups = marketGroupsByMarket[marketOption].filter((group) => {
-                    if (bookieSlipType !== "sgm") return true;
-                    return seedMatchKey === `${group.date}|${normaliseMatchLabel(group.match)}`;
-                  }).flatMap((group) => {
-                    const outcomes = group.outcomes.flatMap((row) => {
-                      const offer = row.bookieOffers[bookieSlipBookie];
-                      return offer ? [{ row, offer }] : [];
-                    });
-                    return outcomes.length > 0 ? [{ group, outcomes }] : [];
-                  });
-                  const availableCount = eligibleGroups.reduce((count, entry) => count + entry.outcomes.length, 0);
-                  if (availableCount === 0) return null;
+                {bookieSlipMarketOptions.map(({ marketOption, eligibleGroups, availableCount }) => {
                   const expanded = bookieSlipExpandedMarkets[marketOption] === true;
                   return (
                     <div key={`bookie-slip-market-${marketOption}`} className="overflow-hidden rounded-lg border border-white/10 bg-[#0e1530]">
@@ -4460,14 +4514,14 @@ export function BettingDashboard({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1">
                 <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">{bookieSlipType === "multi" ? "Multi Odds" : bookieSlipType === "sgm" ? "Final SGM Odds" : "Odds"}</span>
-                <input
+                <BufferedSlipInput
                   type="number"
                   value={bookieSlipOdds}
                   min={1.01}
                   step={0.01}
                   placeholder={bookieSlipType === "sgm" ? "Enter bookie price" : "-"}
-                  onChange={(event) => {
-                    setBookieSlipOdds(event.target.value);
+                  onCommit={(value) => {
+                    setBookieSlipOdds(value);
                     setBookieSlipOddsEdited(true);
                   }}
                   className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
@@ -4487,7 +4541,7 @@ export function BettingDashboard({
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Stake</span>
-                <input type="number" value={bookieSlipStake} min={0} step={1} onChange={(event) => setBookieSlipStake(event.target.value)} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                <BufferedSlipInput type="number" value={bookieSlipStake} min={0} step={1} onCommit={setBookieSlipStake} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Status</span>
@@ -4540,7 +4594,7 @@ export function BettingDashboard({
 
       <div
         data-betting-tour="main-dashboard"
-        className={`scroll-mt-24 space-y-7 rounded-xl ${
+        className={`scroll-mt-24 space-y-7 rounded-xl ${bookieSlipOpen ? "hidden" : ""} ${
           activeTourStep?.target === "main-dashboard" ? BETTING_TOUR_HIGHLIGHT_CLASS : ""
         }`}
       >
@@ -5679,11 +5733,17 @@ function MarketSection({
     });
   }, [activeGroups, jumpTarget, market]);
 
+  const defaultExpandedTryscorerGroupKey = market === "Tryscorer"
+    ? activeGroups.find((group) => group.market === "Tryscorer")?.key ?? null
+    : null;
+
   const visibleTryscorerImageSources = useMemo(() => {
     if (market !== "Tryscorer") return [];
     const sources = new Set<string>();
     activeGroups.forEach((group) => {
       if (group.market !== "Tryscorer") return;
+      const collapsed = collapsedTryscorerGroups[group.key] ?? group.key !== defaultExpandedTryscorerGroupKey;
+      if (collapsed) return;
       const selectedTryscorerValue = tryscorerValueByGroup[group.key] ?? 1;
       group.outcomes
         .filter((row) => row.bestValueComputed === selectedTryscorerValue)
@@ -5700,7 +5760,7 @@ function MarketSection({
         });
     });
     return [...sources];
-  }, [activeGroups, market, playerImages, playerTeamsByName, tryscorerFormByPlayer, tryscorerValueByGroup]);
+  }, [activeGroups, collapsedTryscorerGroups, defaultExpandedTryscorerGroupKey, market, playerImages, playerTeamsByName, tryscorerFormByPlayer, tryscorerValueByGroup]);
   const visibleTryscorerImagesReady = useBatchedImagePreload(visibleTryscorerImageSources);
 
   if (activeGroups.length === 0) {
@@ -5742,9 +5802,13 @@ function MarketSection({
             const lineupHref = lineupLinksByMatchKey[`${group.date}|${buildMatchGroupKey(group.match)}`] ?? null;
             const showModelColumns = group.market !== "Tryscorer" || group.outcomes.some((row) => row.bestModelComputed != null);
             const blurPremiumColumns = !canAccessPremium && showModelColumns;
-            const collapsed = group.market === "Tryscorer" && collapsedTryscorerGroups[group.key] === true;
+            const collapsed = group.market === "Tryscorer" && (
+              collapsedTryscorerGroups[group.key] ?? group.key !== defaultExpandedTryscorerGroupKey
+            );
             const selectedTryscorerValue = tryscorerValueByGroup[group.key] ?? 1;
-            const filteredOutcomes = group.market === "Tryscorer"
+            const filteredOutcomes = collapsed
+              ? []
+              : group.market === "Tryscorer"
               ? group.outcomes.filter((row) => row.bestValueComputed === selectedTryscorerValue)
               : group.outcomes;
             const effectiveTryscorerSortKey = canAccessPremium ? tryscorerSortKey : "odds";
@@ -5819,7 +5883,7 @@ function MarketSection({
                         aria-label={collapsed ? "Expand game" : "Collapse game"}
                         onClick={() => setCollapsedTryscorerGroups((current) => ({
                           ...current,
-                          [group.key]: !current[group.key],
+                          [group.key]: !collapsed,
                         }))}
                         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
                       >

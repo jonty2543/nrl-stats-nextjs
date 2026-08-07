@@ -221,18 +221,16 @@ interface BetDraft {
   legs?: BetLeg[];
 }
 
-interface MobileBetSlip {
-  key: string;
-  betType: TrackedBetType;
-  date: string;
-  match: string;
+interface BookieBetSlipSelection {
+  bookie: BettingBookie;
   market: BettingMarket;
+  matchDate: string;
+  matchName: string;
   selection: string;
   lineValue: number | null;
   odds: number;
-  stake: number;
-  modelProb: number | null;
-  legs: ManualBetLegDraft[];
+  stake?: number;
+  modelProbability?: number | null;
 }
 
 const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Total"];
@@ -1235,33 +1233,6 @@ function createManualLegDraft(todayIso: string): ManualBetLegDraft {
   };
 }
 
-function createBetSlipLegDraft({
-  market,
-  matchDate,
-  matchName,
-  selection = "",
-  lineValue = null,
-  odds = 1.9,
-}: {
-  market: BettingMarket;
-  matchDate: string;
-  matchName: string;
-  selection?: string;
-  lineValue?: number | null;
-  odds?: number;
-}): ManualBetLegDraft {
-  return {
-    id: `slip-leg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    market,
-    matchDate,
-    matchName,
-    selection,
-    lineValue: lineValue == null ? "" : String(lineValue),
-    odds: Number.isFinite(odds) && odds > 1 ? String(odds) : "1.90",
-    bookie: "",
-  };
-}
-
 function parseManualLegs(legs: ManualBetLegDraft[]): BetLeg[] {
   return legs.flatMap((leg) => {
     const odds = Number(leg.odds);
@@ -1286,6 +1257,10 @@ function combinedMultiOdds(legs: BetLeg[]): number | null {
   if (legs.length < 2) return null;
   const product = legs.reduce((value, leg) => value * leg.odds, 1);
   return Number.isFinite(product) && product > 1 ? Number(product.toFixed(2)) : null;
+}
+
+function betSlipLegIdentity(leg: Pick<ManualBetLegDraft, "market" | "matchDate" | "matchName" | "selection" | "lineValue">): string {
+  return [leg.market, leg.matchDate, normaliseMatchLabel(leg.matchName), normaliseLookupKey(leg.selection), leg.lineValue].join("|");
 }
 
 function normaliseMatchLabel(value: string): string {
@@ -1573,15 +1548,6 @@ function PremiumValueMask({ className = "w-12" }: { className?: string }) {
       aria-hidden="true"
       className={`inline-block h-3 rounded-full bg-white/22 blur-[2px] ${className}`}
     />
-  );
-}
-
-function SuspiciousEdgeNotice() {
-  return (
-    <div className="rounded-md border border-orange-300/25 bg-orange-400/10 px-3 py-2 text-xs font-semibold leading-relaxed text-orange-100">
-      <span className="mr-1.5" aria-hidden="true">⚠️</span>
-      {SUSPICIOUS_EDGE_WARNING_COPY}.
-    </div>
   );
 }
 
@@ -2332,6 +2298,18 @@ export function BettingDashboard({
   const [manualStake, setManualStake] = useState("10");
   const [manualStatus, setManualStatus] = useState<TrackedBetStatus>("pending");
   const [manualError, setManualError] = useState<string | null>(null);
+  const [bookieSlipOpen, setBookieSlipOpen] = useState(false);
+  const [bookieSlipType, setBookieSlipType] = useState<TrackedBetType>("single");
+  const [bookieSlipBookie, setBookieSlipBookie] = useState<BettingBookie>("Sportsbet");
+  const [bookieSlipSeed, setBookieSlipSeed] = useState<BookieBetSlipSelection | null>(null);
+  const [bookieSlipLegs, setBookieSlipLegs] = useState<ManualBetLegDraft[]>([]);
+  const [bookieSlipOdds, setBookieSlipOdds] = useState("");
+  const [bookieSlipOddsEdited, setBookieSlipOddsEdited] = useState(false);
+  const [bookieSlipStake, setBookieSlipStake] = useState("10");
+  const [bookieSlipStatus, setBookieSlipStatus] = useState<TrackedBetStatus>("pending");
+  const [bookieSlipError, setBookieSlipError] = useState<string | null>(null);
+  const [bookieSlipExpandedMarkets, setBookieSlipExpandedMarkets] = useState<Partial<Record<BettingMarket, boolean>>>({});
+  const [bookieSlipExpandedMatches, setBookieSlipExpandedMatches] = useState<Record<string, boolean>>({});
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
   const [marketJumpTarget, setMarketJumpTarget] = useState<BettingMarketJumpTarget | null>(null);
   const hasAutoSelectedMarketRef = useRef(false);
@@ -2845,11 +2823,18 @@ export function BettingDashboard({
 
   const parsedManualLegs = useMemo(() => parseManualLegs(manualLegs), [manualLegs]);
   const manualMultiOdds = useMemo(() => combinedMultiOdds(parsedManualLegs), [parsedManualLegs]);
+  const parsedBookieSlipLegs = useMemo(() => parseManualLegs(bookieSlipLegs), [bookieSlipLegs]);
+  const bookieSlipMultiOdds = useMemo(() => combinedMultiOdds(parsedBookieSlipLegs), [parsedBookieSlipLegs]);
 
   useEffect(() => {
     if (manualBetType !== "multi" || manualOddsEdited || manualMultiOdds == null) return;
     setManualOdds(manualMultiOdds.toFixed(2));
   }, [manualBetType, manualMultiOdds, manualOddsEdited]);
+
+  useEffect(() => {
+    if (bookieSlipType !== "multi" || bookieSlipOddsEdited) return;
+    setBookieSlipOdds(bookieSlipMultiOdds?.toFixed(2) ?? "");
+  }, [bookieSlipMultiOdds, bookieSlipOddsEdited, bookieSlipType]);
 
   const updateManualLeg = (id: string, updates: Partial<ManualBetLegDraft>) => {
     setManualLegs((prev) => prev.map((leg) => (leg.id === id ? { ...leg, ...updates } : leg)));
@@ -2863,10 +2848,340 @@ export function BettingDashboard({
     setManualLegs((prev) => (prev.length <= 2 ? prev : prev.filter((leg) => leg.id !== id)));
   };
 
-  const handleAddBet = async (draft: BetDraft) => {
-    if (!hasPremiumBettingAccess) return;
-    if (!Number.isFinite(draft.stake) || draft.stake <= 0) return;
-    if (!Number.isFinite(draft.odds) || draft.odds <= 1) return;
+  const updateBookieSlipLeg = (id: string, updates: Partial<ManualBetLegDraft>) => {
+    setBookieSlipLegs((current) => current.map((leg) => leg.id === id ? { ...leg, ...updates } : leg));
+    setBookieSlipError(null);
+  };
+
+  const addManualBookieSlipLeg = () => {
+    setBookieSlipLegs((current) => {
+      const draft = createManualLegDraft(todayIso);
+      const firstLeg = current[0];
+      return [
+        ...current,
+        {
+          ...draft,
+          matchDate: bookieSlipType === "sgm" && firstLeg ? firstLeg.matchDate : draft.matchDate,
+          matchName: bookieSlipType === "sgm" && firstLeg ? firstLeg.matchName : draft.matchName,
+          bookie: bookieSlipBookie,
+        },
+      ];
+    });
+    setBookieSlipOpen(true);
+    setBookieSlipError(null);
+  };
+
+  const openBookieBetComposer = (selection: BookieBetSlipSelection) => {
+    const initialLeg: ManualBetLegDraft = {
+      id: `bookie-slip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      market: selection.market,
+      matchDate: selection.matchDate,
+      matchName: selection.matchName,
+      selection: selection.selection,
+      lineValue: selection.lineValue == null ? "" : String(selection.lineValue),
+      odds: selection.odds.toFixed(2),
+      bookie: selection.bookie,
+    };
+    setBookieSlipSeed(selection);
+    setBookieSlipType("single");
+    setBookieSlipBookie(selection.bookie);
+    setBookieSlipLegs([initialLeg]);
+    setBookieSlipOdds(selection.odds.toFixed(2));
+    setBookieSlipOddsEdited(false);
+    setBookieSlipStake(String(selection.stake != null && Number.isFinite(selection.stake) && selection.stake > 0 ? selection.stake : 10));
+    setBookieSlipStatus("pending");
+    setBookieSlipExpandedMarkets({ [selection.market]: true });
+    const seedGroup = marketGroupsByMarket[selection.market].find((group) =>
+      group.date === selection.matchDate && buildMatchGroupKey(group.match) === buildMatchGroupKey(selection.matchName)
+    );
+    setBookieSlipExpandedMatches(selection.market === "Tryscorer" && seedGroup ? { [seedGroup.key]: true } : {});
+    setBookieSlipError(null);
+    setBookieSlipOpen(true);
+  };
+
+  const addScrapedOfferToBookieSlip = (selection: BookieBetSlipSelection) => {
+    const nextLeg: ManualBetLegDraft = {
+      id: `bookie-slip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      market: selection.market,
+      matchDate: selection.matchDate,
+      matchName: selection.matchName,
+      selection: selection.selection,
+      lineValue: selection.lineValue == null ? "" : String(selection.lineValue),
+      odds: selection.odds.toFixed(2),
+      bookie: selection.bookie,
+    };
+
+    setBookieSlipOpen(true);
+    setBookieSlipError(null);
+    if (bookieSlipLegs.length === 0) {
+      setBookieSlipBookie(selection.bookie);
+    } else if (selection.bookie !== bookieSlipBookie) {
+      setBookieSlipError(`This slip uses ${bookieSlipBookie}. Clear its legs before selecting ${selection.bookie}.`);
+      return;
+    }
+
+    if (bookieSlipLegs.some((leg) => betSlipLegIdentity(leg) === betSlipLegIdentity(nextLeg))) {
+      setBookieSlipError("That selection is already in the slip.");
+      return;
+    }
+
+    const matchKey = `${selection.matchDate}|${normaliseMatchLabel(selection.matchName)}`;
+    const existingMatchKeys = new Set(bookieSlipLegs.map((leg) => `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}`));
+    if (bookieSlipType === "multi" && existingMatchKeys.has(matchKey)) {
+      setBookieSlipError("Use an SGM slip for selections from the same game.");
+      return;
+    }
+    if (bookieSlipType === "sgm" && existingMatchKeys.size > 0 && !existingMatchKeys.has(matchKey)) {
+      setBookieSlipError("SGM legs must be from the same game.");
+      return;
+    }
+
+    setBookieSlipLegs((current) => [...current, nextLeg]);
+  };
+
+  const findBookieSelectionForLeg = (
+    leg: Pick<ManualBetLegDraft, "market" | "matchDate" | "matchName" | "selection" | "lineValue">,
+    bookie: BettingBookie
+  ): BookieBetSlipSelection | null => {
+    const group = marketGroupsByMarket[leg.market].find((candidate) =>
+      candidate.date === leg.matchDate && buildMatchGroupKey(candidate.match) === buildMatchGroupKey(leg.matchName)
+    );
+    if (!group) return null;
+    const requestedValue = leg.lineValue.trim() ? Number(leg.lineValue) : null;
+    const candidates = group.outcomes.filter((outcome) => normaliseLookupKey(outcome.result) === normaliseLookupKey(leg.selection));
+    const outcome = candidates.find((candidate) => {
+      const offer = candidate.bookieOffers[bookie];
+      if (!offer) return false;
+      return leg.market !== "Tryscorer" || requestedValue == null || offer.value === requestedValue;
+    }) ?? candidates.find((candidate) => candidate.bookieOffers[bookie] != null);
+    const offer = outcome?.bookieOffers[bookie] ?? null;
+    if (!outcome || !offer) return null;
+    return {
+      bookie,
+      market: leg.market,
+      matchDate: group.date,
+      matchName: group.match,
+      selection: outcome.result,
+      lineValue: offer.value,
+      odds: offer.price,
+      modelProbability: modelPercentToProbability(offer.model),
+    };
+  };
+
+  const bookieSlipAvailableBookies = bookieSlipSeed
+    ? BETTING_BOOKIE_COLUMNS.filter((bookie) => {
+      const seedDraft: ManualBetLegDraft = {
+        id: "bookie-slip-seed-option",
+        market: bookieSlipSeed.market,
+        matchDate: bookieSlipSeed.matchDate,
+        matchName: bookieSlipSeed.matchName,
+        selection: bookieSlipSeed.selection,
+        lineValue: bookieSlipSeed.lineValue == null ? "" : String(bookieSlipSeed.lineValue),
+        odds: bookieSlipSeed.odds.toFixed(2),
+        bookie: bookieSlipSeed.bookie,
+      };
+      return findBookieSelectionForLeg(seedDraft, bookie) != null;
+    })
+    : [...BETTING_BOOKIE_COLUMNS];
+
+  const changeBookieSlipBookie = (bookie: BettingBookie) => {
+    const nextLegs = bookieSlipLegs.flatMap((leg) => {
+      if (leg.id.startsWith("leg-")) return [{ ...leg, bookie }];
+      const selection = findBookieSelectionForLeg(leg, bookie);
+      if (!selection) return [];
+      return [{
+        ...leg,
+        lineValue: selection.lineValue == null ? "" : String(selection.lineValue),
+        odds: selection.odds.toFixed(2),
+        bookie,
+      }];
+    });
+    const removedCount = bookieSlipLegs.length - nextLegs.length;
+    setBookieSlipBookie(bookie);
+    setBookieSlipLegs(nextLegs);
+    if (bookieSlipSeed) {
+      const seedDraft: ManualBetLegDraft = {
+        id: "bookie-slip-seed",
+        market: bookieSlipSeed.market,
+        matchDate: bookieSlipSeed.matchDate,
+        matchName: bookieSlipSeed.matchName,
+        selection: bookieSlipSeed.selection,
+        lineValue: bookieSlipSeed.lineValue == null ? "" : String(bookieSlipSeed.lineValue),
+        odds: bookieSlipSeed.odds.toFixed(2),
+        bookie: bookieSlipSeed.bookie,
+      };
+      const nextSeed = findBookieSelectionForLeg(seedDraft, bookie);
+      if (nextSeed) setBookieSlipSeed({ ...nextSeed, stake: bookieSlipSeed.stake });
+    }
+    setBookieSlipOddsEdited(false);
+    if (bookieSlipType === "single") {
+      const price = Number(nextLegs[0]?.odds);
+      setBookieSlipOdds(Number.isFinite(price) ? price.toFixed(2) : "");
+    } else if (bookieSlipType === "sgm") {
+      setBookieSlipOdds("");
+    }
+    setBookieSlipError(removedCount > 0 ? `${removedCount} unavailable ${removedCount === 1 ? "leg was" : "legs were"} removed for ${bookie}.` : null);
+  };
+
+  const changeBookieSlipType = (type: TrackedBetType) => {
+    setBookieSlipType(type);
+    setBookieSlipOddsEdited(false);
+    setBookieSlipError(null);
+    if (type === "single") {
+      const seedLeg = bookieSlipSeed ? {
+        id: `bookie-slip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        market: bookieSlipSeed.market,
+        matchDate: bookieSlipSeed.matchDate,
+        matchName: bookieSlipSeed.matchName,
+        selection: bookieSlipSeed.selection,
+        lineValue: bookieSlipSeed.lineValue == null ? "" : String(bookieSlipSeed.lineValue),
+        odds: bookieSlipSeed.odds.toFixed(2),
+        bookie: bookieSlipSeed.bookie,
+      } : null;
+      const selected = seedLeg ? findBookieSelectionForLeg(seedLeg, bookieSlipBookie) : null;
+      if (seedLeg && selected) {
+        const nextLeg = {
+          ...seedLeg,
+          lineValue: selected.lineValue == null ? "" : String(selected.lineValue),
+          odds: selected.odds.toFixed(2),
+          bookie: bookieSlipBookie,
+        };
+        setBookieSlipLegs([nextLeg]);
+        setBookieSlipOdds(selected.odds.toFixed(2));
+      }
+      return;
+    }
+    if (type === "sgm" && bookieSlipSeed) {
+      const seedMatchKey = `${bookieSlipSeed.matchDate}|${normaliseMatchLabel(bookieSlipSeed.matchName)}`;
+      setBookieSlipLegs((current) => current.filter((leg) => `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}` === seedMatchKey));
+      setBookieSlipOdds("");
+      return;
+    }
+    const seenGames = new Set<string>();
+    const multiLegs = bookieSlipLegs.filter((leg) => {
+      const key = `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}`;
+      if (seenGames.has(key)) return false;
+      seenGames.add(key);
+      return true;
+    });
+    setBookieSlipLegs(multiLegs);
+    setBookieSlipOdds(combinedMultiOdds(parseManualLegs(multiLegs))?.toFixed(2) ?? "");
+  };
+
+  const clearBookieSlip = () => {
+    setBookieSlipLegs([]);
+    setBookieSlipOdds("");
+    setBookieSlipOddsEdited(false);
+    setBookieSlipError(null);
+  };
+
+  const handleBookieSlipSubmit = async () => {
+    setBookieSlipError(null);
+    if (bookieSlipType === "single") {
+      const leg = parsedBookieSlipLegs[0];
+      const odds = Number(bookieSlipOdds);
+      const stake = Number(bookieSlipStake);
+      if (!leg) {
+        setBookieSlipError("Choose a valid selection.");
+        return;
+      }
+      if (!Number.isFinite(odds) || odds <= 1) {
+        setBookieSlipError("Odds must be greater than 1.");
+        return;
+      }
+      if (!Number.isFinite(stake) || stake <= 0) {
+        setBookieSlipError("Stake must be greater than 0.");
+        return;
+      }
+      const implied = impliedProbability(odds);
+      const modelProbability = bookieSlipSeed?.modelProbability ?? null;
+      const added = await handleAddBet({
+        betType: "single",
+        market: leg.market,
+        matchDate: leg.matchDate,
+        matchName: leg.matchName,
+        selection: leg.selection,
+        lineValue: leg.lineValue,
+        odds,
+        stake,
+        status: bookieSlipStatus,
+        modelProb: modelProbability,
+        impliedProb: implied,
+        edgePp: modelProbability != null && implied != null ? (modelProbability - implied) * 100 : null,
+        legs: [{ ...leg, odds, bookie: bookieSlipBookie }],
+      });
+      if (!added) {
+        setBookieSlipError("The bet could not be saved. Check the tracker error and try again.");
+        return;
+      }
+      clearBookieSlip();
+      setBookieSlipSeed(null);
+      setBookieSlipStatus("pending");
+      setBookieSlipOpen(false);
+      return;
+    }
+
+    if (parsedBookieSlipLegs.length !== bookieSlipLegs.length) {
+      setBookieSlipError("Each leg needs a date, match, selection, and odds greater than 1.");
+      return;
+    }
+    if (parsedBookieSlipLegs.length < 2) {
+      setBookieSlipError(`${bookieSlipType === "sgm" ? "SGM" : "Multi"} bets need at least 2 legs.`);
+      return;
+    }
+
+    const matchKeys = new Set(parsedBookieSlipLegs.map((leg) => `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}`));
+    if (bookieSlipType === "multi" && matchKeys.size !== parsedBookieSlipLegs.length) {
+      setBookieSlipError("Use an SGM slip for selections from the same game.");
+      return;
+    }
+    if (bookieSlipType === "sgm" && matchKeys.size !== 1) {
+      setBookieSlipError("SGM legs must be from the same game.");
+      return;
+    }
+
+    const odds = Number(bookieSlipOdds);
+    const stake = Number(bookieSlipStake);
+    if (!Number.isFinite(odds) || odds <= 1) {
+      setBookieSlipError(`${bookieSlipType === "sgm" ? "Enter the final SGM" : "Multi"} odds greater than 1.`);
+      return;
+    }
+    if (!Number.isFinite(stake) || stake <= 0) {
+      setBookieSlipError("Stake must be greater than 0.");
+      return;
+    }
+
+    const firstLeg = parsedBookieSlipLegs[0];
+    const added = await handleAddBet({
+      betType: bookieSlipType,
+      market: firstLeg.market,
+      matchDate: firstLeg.matchDate,
+      matchName: bookieSlipType === "multi" ? "Multiple games" : firstLeg.matchName,
+      selection: `${parsedBookieSlipLegs.length}-leg ${bookieSlipType === "multi" ? "Multi" : "SGM"}`,
+      lineValue: null,
+      odds,
+      stake,
+      status: bookieSlipStatus,
+      modelProb: null,
+      impliedProb: null,
+      edgePp: null,
+      legs: parsedBookieSlipLegs.map((leg) => ({ ...leg, bookie: bookieSlipBookie })),
+    });
+    if (!added) {
+      setBookieSlipError("The bet could not be saved. Check the tracker error and try again.");
+      return;
+    }
+    clearBookieSlip();
+    setBookieSlipSeed(null);
+    setBookieSlipStake("10");
+    setBookieSlipStatus("pending");
+    setBookieSlipOpen(false);
+  };
+
+  const handleAddBet = async (draft: BetDraft): Promise<boolean> => {
+    if (!hasPremiumBettingAccess) return false;
+    if (!Number.isFinite(draft.stake) || draft.stake <= 0) return false;
+    if (!Number.isFinite(draft.odds) || draft.odds <= 1) return false;
     const status = draft.status ?? "pending";
 
     if (!userId) {
@@ -2882,7 +3197,7 @@ export function BettingDashboard({
       };
       setBets((prev) => [localBet, ...prev]);
       setBetAddedMessage("Bet added to bet tracker");
-      return;
+      return true;
     }
 
     try {
@@ -2899,9 +3214,12 @@ export function BettingDashboard({
       if (payload.bet) {
         setBets((prev) => [payload.bet as TrackedBet, ...prev]);
         setBetAddedMessage("Bet added to bet tracker");
+        return true;
       }
+      return false;
     } catch (error) {
       setBetsError(error instanceof Error ? error.message : "Failed to save bet");
+      return false;
     }
   };
 
@@ -3024,7 +3342,7 @@ export function BettingDashboard({
         : `${validLegs.length}-leg SGM`;
       const matchLabel = manualBetType === "multi" ? "Multiple games" : firstLeg.matchName;
 
-      await handleAddBet({
+      const added = await handleAddBet({
         betType: manualBetType,
         market: firstLeg.market,
         matchDate: firstLeg.matchDate,
@@ -3039,6 +3357,10 @@ export function BettingDashboard({
         edgePp: null,
         legs: validLegs,
       });
+      if (!added) {
+        setManualError("The bet could not be saved. Check the tracker error and try again.");
+        return false;
+      }
 
       setManualLegs([createManualLegDraft(todayIso), createManualLegDraft(todayIso)]);
       setManualOdds(manualBetType === "multi" ? "1.90" : "");
@@ -3072,7 +3394,7 @@ export function BettingDashboard({
       return false;
     }
 
-    await handleAddBet({
+    const added = await handleAddBet({
       betType: "single",
       market: selectedMarket,
       matchDate: manualMatchDate,
@@ -3086,6 +3408,10 @@ export function BettingDashboard({
       impliedProb: null,
       edgePp: null,
     });
+    if (!added) {
+      setManualError("The bet could not be saved. Check the tracker error and try again.");
+      return false;
+    }
 
     setManualMatchName("");
     setManualSelection("");
@@ -3242,7 +3568,7 @@ export function BettingDashboard({
         teamLogos={teamLogos}
         tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
         onOpenMarket={handleBestBetMarketOpen}
-        onAddBet={handleAddBet}
+        onOpenBetComposer={openBookieBetComposer}
         isTourActive={activeTourStep?.target === "best-bets"}
       />
 
@@ -3682,7 +4008,7 @@ export function BettingDashboard({
             </div>
 
             <div className="mt-4 flex rounded-md border border-white/10 bg-[#0e1530] p-1">
-              {(["single", "multi"] as TrackedBetType[]).map((type) => (
+              {(["single", "multi", "sgm"] as TrackedBetType[]).map((type) => (
                 <button
                   key={type}
                   type="button"
@@ -3691,7 +4017,13 @@ export function BettingDashboard({
                     setManualBetType(type);
                     setManualError(null);
                     setManualOddsEdited(false);
-                    setManualOdds(type === "multi" ? (manualMultiOdds?.toFixed(2) ?? "1.90") : "1.90");
+                    setManualOdds(
+                      type === "multi"
+                        ? (manualMultiOdds?.toFixed(2) ?? "1.90")
+                        : type === "sgm"
+                          ? ""
+                          : "1.90"
+                    );
                   }}
                   className={`h-8 flex-1 cursor-pointer rounded px-2 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
                     manualBetType === type
@@ -3875,6 +4207,325 @@ export function BettingDashboard({
         </div>
       ) : null}
 
+      {bookieSlipOpen ? (
+        <div className="fixed inset-0 z-[90] grid place-items-center bg-black/65 px-3 py-4 sm:px-6">
+        <section className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-emerald-300/35 bg-[#10162f] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.55)] sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Bookie Bet Slip</div>
+              <div className="mt-1 text-sm font-semibold text-nrl-text">
+                {bookieSlipLegs.length} {bookieSlipLegs.length === 1 ? "leg" : "legs"}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBookieSlipOpen(false)}
+              aria-label="Close bookie bet slip"
+              className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 rounded-md border border-white/10 bg-[#0e1530] p-1">
+            {(["single", "multi", "sgm"] as TrackedBetType[]).map((type) => (
+              <button
+                key={type}
+                type="button"
+                aria-pressed={bookieSlipType === type}
+                onClick={() => changeBookieSlipType(type)}
+                className={`h-8 cursor-pointer rounded px-2 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
+                  bookieSlipType === type
+                    ? "bg-emerald-400/12 text-emerald-300"
+                    : "text-nrl-muted hover:bg-white/[0.04] hover:text-nrl-text"
+                }`}
+              >
+                {betTypeLabel(type)}
+              </button>
+            ))}
+          </div>
+
+          <label className="mt-4 flex flex-col gap-1">
+            <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Bookie</span>
+            <select
+              value={bookieSlipBookie}
+              onChange={(event) => changeBookieSlipBookie(event.target.value as BettingBookie)}
+              className="h-10 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40"
+            >
+              {bookieSlipAvailableBookies.map((bookie) => <option key={bookie} value={bookie}>{bookie}</option>)}
+            </select>
+            <span className="text-[9px] text-nrl-muted">Only markets and prices available from this bookie are shown below.</span>
+          </label>
+
+          <div className="mt-4 space-y-2">
+            {bookieSlipLegs.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-white/15 bg-white/[0.025] px-3 py-5 text-center text-xs text-nrl-muted">
+                Click a bookmaker price in the odds tables, or add a leg manually.
+              </div>
+            ) : bookieSlipLegs.map((leg, index) => (
+              <div key={leg.id} className="rounded-lg border border-white/8 bg-[#0e1530] p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Leg {index + 1}</span>
+                    <BookieLogo bookie={bookieSlipBookie} compact />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={bookieSlipType === "single"}
+                    onClick={() => {
+                      setBookieSlipLegs((current) => current.filter((candidate) => candidate.id !== leg.id));
+                      setBookieSlipError(null);
+                    }}
+                    className="cursor-pointer rounded border border-red-400/25 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em] text-red-300 transition-colors hover:bg-red-400/10 disabled:hidden"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input type="date" aria-label={`Leg ${index + 1} date`} value={leg.matchDate} onChange={(event) => updateBookieSlipLeg(leg.id, { matchDate: event.target.value })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                  <select aria-label={`Leg ${index + 1} market`} value={leg.market} onChange={(event) => updateBookieSlipLeg(leg.id, { market: event.target.value as BettingMarket })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40">
+                    {MARKET_TABS.map((marketOption) => <option key={marketOption} value={marketOption}>{marketOption}</option>)}
+                  </select>
+                  <input type="text" aria-label={`Leg ${index + 1} match`} value={leg.matchName} onChange={(event) => updateBookieSlipLeg(leg.id, { matchName: event.target.value })} placeholder="Match" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40 sm:col-span-2" />
+                  <input type="text" aria-label={`Leg ${index + 1} selection`} value={leg.selection} onChange={(event) => updateBookieSlipLeg(leg.id, { selection: event.target.value })} placeholder="Selection" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                  <input type="number" aria-label={`Leg ${index + 1} line`} value={leg.lineValue} onChange={(event) => updateBookieSlipLeg(leg.id, { lineValue: event.target.value })} placeholder="Line optional" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                  <label className="flex flex-col gap-1 sm:col-span-2">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-nrl-muted">Leg Price</span>
+                    <input type="number" aria-label={`Leg ${index + 1} price`} value={leg.odds} min={1.01} step={0.01} onChange={(event) => updateBookieSlipLeg(leg.id, { odds: event.target.value })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {bookieSlipType !== "single" ? (
+            <div className="mt-5">
+              <div className="mb-2">
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-text">Add Legs</div>
+                <div className="mt-1 text-[10px] text-nrl-muted">
+                  {bookieSlipType === "sgm"
+                    ? `Only ${bookieSlipSeed?.matchName ?? "the selected game"} is available for this SGM.`
+                    : "Choose one selection per game. Prices come from the selected bookie."}
+                </div>
+              </div>
+              <div className="space-y-2">
+                {MARKET_TABS.map((marketOption) => {
+                  const seedMatchKey = bookieSlipSeed
+                    ? `${bookieSlipSeed.matchDate}|${normaliseMatchLabel(bookieSlipSeed.matchName)}`
+                    : null;
+                  const eligibleGroups = marketGroupsByMarket[marketOption].filter((group) => {
+                    if (bookieSlipType !== "sgm") return true;
+                    return seedMatchKey === `${group.date}|${normaliseMatchLabel(group.match)}`;
+                  }).flatMap((group) => {
+                    const outcomes = group.outcomes.flatMap((row) => {
+                      const offer = row.bookieOffers[bookieSlipBookie];
+                      return offer ? [{ row, offer }] : [];
+                    });
+                    return outcomes.length > 0 ? [{ group, outcomes }] : [];
+                  });
+                  const availableCount = eligibleGroups.reduce((count, entry) => count + entry.outcomes.length, 0);
+                  if (availableCount === 0) return null;
+                  const expanded = bookieSlipExpandedMarkets[marketOption] === true;
+                  return (
+                    <div key={`bookie-slip-market-${marketOption}`} className="overflow-hidden rounded-lg border border-white/10 bg-[#0e1530]">
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        onClick={() => setBookieSlipExpandedMarkets((current) => ({ ...current, [marketOption]: !expanded }))}
+                        className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-white/[0.035]"
+                      >
+                        <span className="text-xs font-bold text-nrl-text">{marketOption}</span>
+                        <span className="flex items-center gap-2 text-[10px] font-semibold text-nrl-muted">
+                          {availableCount} available <span aria-hidden="true">{expanded ? "▴" : "▾"}</span>
+                        </span>
+                      </button>
+                      {expanded ? (
+                        <div className="space-y-3 border-t border-white/8 p-3">
+                          {eligibleGroups.map(({ group, outcomes }) => {
+                            const matchExpanded = bookieSlipExpandedMatches[group.key] === true;
+                            const showOutcomes = marketOption !== "Tryscorer" || matchExpanded;
+                            return (
+                            <div
+                              key={`bookie-slip-group-${marketOption}-${group.key}`}
+                              className={marketOption === "Tryscorer" ? "overflow-hidden rounded-md border border-white/10 bg-white/[0.02]" : ""}
+                            >
+                              {marketOption === "Tryscorer" ? (
+                                <button
+                                  type="button"
+                                  aria-expanded={matchExpanded}
+                                  onClick={() => setBookieSlipExpandedMatches((current) => ({ ...current, [group.key]: !matchExpanded }))}
+                                  className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.035]"
+                                >
+                                  <span className="min-w-0 truncate text-[10px] font-semibold text-nrl-muted">
+                                    {formatDateLabel(group.date)} · {group.match}
+                                  </span>
+                                  <span className="flex shrink-0 items-center gap-2 text-[9px] font-semibold text-nrl-muted">
+                                    {outcomes.length} <span aria-hidden="true">{matchExpanded ? "▴" : "▾"}</span>
+                                  </span>
+                                </button>
+                              ) : (
+                                <div className="mb-2 text-[10px] font-semibold text-nrl-muted">
+                                  {formatDateLabel(group.date)} · {group.match}
+                                </div>
+                              )}
+                              {showOutcomes ? <div className={`grid gap-2 sm:grid-cols-2 ${marketOption === "Tryscorer" ? "border-t border-white/8 p-2.5" : ""}`}>
+                                {outcomes.map(({ row, offer }) => {
+                                  const candidate: BookieBetSlipSelection = {
+                                    bookie: bookieSlipBookie,
+                                    market: marketOption,
+                                    matchDate: group.date,
+                                    matchName: group.match,
+                                    selection: row.result,
+                                    lineValue: offer.value,
+                                    odds: offer.price,
+                                    modelProbability: modelPercentToProbability(offer.model),
+                                  };
+                                  const candidateDraft: ManualBetLegDraft = {
+                                    id: "candidate",
+                                    market: candidate.market,
+                                    matchDate: candidate.matchDate,
+                                    matchName: candidate.matchName,
+                                    selection: candidate.selection,
+                                    lineValue: candidate.lineValue == null ? "" : String(candidate.lineValue),
+                                    odds: candidate.odds.toFixed(2),
+                                    bookie: candidate.bookie,
+                                  };
+                                  const selectedLeg = bookieSlipLegs.find((leg) => betSlipLegIdentity(leg) === betSlipLegIdentity(candidateDraft));
+                                  const candidateMatchKey = `${candidate.matchDate}|${normaliseMatchLabel(candidate.matchName)}`;
+                                  const sameGameAlreadyUsed = bookieSlipType === "multi" && bookieSlipLegs.some((leg) =>
+                                    `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}` === candidateMatchKey && leg.id !== selectedLeg?.id
+                                  );
+                                  return (
+                                    <button
+                                      key={`${group.key}-${row.result}-${offer.value ?? ""}`}
+                                      type="button"
+                                      disabled={!selectedLeg && sameGameAlreadyUsed}
+                                      aria-pressed={selectedLeg != null}
+                                      onClick={() => {
+                                        if (selectedLeg) {
+                                          setBookieSlipLegs((current) => current.filter((leg) => leg.id !== selectedLeg.id));
+                                          setBookieSlipError(null);
+                                        } else {
+                                          addScrapedOfferToBookieSlip(candidate);
+                                        }
+                                      }}
+                                      className={`flex min-h-12 items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition-colors ${
+                                        selectedLeg
+                                          ? "cursor-pointer border-emerald-300/55 bg-emerald-400/12 text-emerald-200"
+                                          : sameGameAlreadyUsed
+                                            ? "cursor-not-allowed border-white/5 text-nrl-muted opacity-40"
+                                            : "cursor-pointer border-white/10 bg-white/[0.025] text-nrl-text hover:border-emerald-300/40 hover:bg-emerald-400/[0.06]"
+                                      }`}
+                                    >
+                                      <span className="min-w-0">
+                                        <span className="block truncate text-[11px] font-semibold">{formatBestBetSelection(marketOption, row.result, offer.value)}</span>
+                                        <span className="mt-0.5 block text-[9px] text-nrl-muted">{bookieSlipBookie}</span>
+                                      </span>
+                                      <span className="shrink-0 text-xs font-bold tabular-nums">{formatPrice(offer.price)}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div> : null}
+                            </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {bookieSlipType !== "single" ? <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <button type="button" onClick={addManualBookieSlipLeg} className="cursor-pointer rounded-md border border-emerald-300/40 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-300 transition-colors hover:bg-emerald-400/12">
+              Add Manual Leg
+            </button>
+            {bookieSlipLegs.length > 0 ? (
+              <button type="button" onClick={clearBookieSlip} className="cursor-pointer px-2 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:text-red-300">
+                Clear All
+              </button>
+            ) : null}
+          </div> : null}
+
+          <div className="mt-4 rounded-lg border border-white/8 bg-white/[0.025] p-3">
+            {bookieSlipType === "multi" ? (
+              <div className="mb-3 text-[10px] text-nrl-muted">
+                Multiplied leg price: <span className="font-semibold text-nrl-text">{bookieSlipMultiOdds == null ? "-" : bookieSlipMultiOdds.toFixed(2)}</span>. You can adjust the final price below.
+              </div>
+            ) : bookieSlipType === "sgm" ? (
+              <div className="mb-3 text-[10px] text-nrl-muted">Enter the final SGM price shown by {bookieSlipBookie}.</div>
+            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">{bookieSlipType === "multi" ? "Multi Odds" : bookieSlipType === "sgm" ? "Final SGM Odds" : "Odds"}</span>
+                <input
+                  type="number"
+                  value={bookieSlipOdds}
+                  min={1.01}
+                  step={0.01}
+                  placeholder={bookieSlipType === "sgm" ? "Enter bookie price" : "-"}
+                  onChange={(event) => {
+                    setBookieSlipOdds(event.target.value);
+                    setBookieSlipOddsEdited(true);
+                  }}
+                  className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                />
+                {bookieSlipType === "multi" && bookieSlipOddsEdited && bookieSlipMultiOdds != null ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBookieSlipOddsEdited(false);
+                      setBookieSlipOdds(bookieSlipMultiOdds.toFixed(2));
+                    }}
+                    className="self-start text-[9px] font-semibold text-emerald-300 hover:underline"
+                  >
+                    Use multiplied price
+                  </button>
+                ) : null}
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Stake</span>
+                <input type="number" value={bookieSlipStake} min={0} step={1} onChange={(event) => setBookieSlipStake(event.target.value)} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Status</span>
+                <select value={bookieSlipStatus} onChange={(event) => setBookieSlipStatus(event.target.value as TrackedBetStatus)} className={`h-9 rounded-md border px-2 text-xs font-semibold outline-none focus:border-emerald-300/40 ${betStatusPillClass(bookieSlipStatus)}`}>
+                  <option value="pending">pending</option>
+                  <option value="won">won</option>
+                  <option value="lost">lost</option>
+                  <option value="push">push</option>
+                </select>
+              </label>
+              <div className="flex flex-col justify-end gap-1">
+                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Projected P/L</span>
+                <div className="flex h-9 items-center rounded-md border border-white/8 bg-[#10162f] px-2 text-xs font-semibold text-nrl-text">
+                  {(() => {
+                    const odds = Number(bookieSlipOdds);
+                    const stake = Number(bookieSlipStake);
+                    if (!Number.isFinite(odds) || odds <= 1 || !Number.isFinite(stake) || stake <= 0) return "-";
+                    const profit = computeBetProfit(bookieSlipStatus, stake, odds);
+                    return profit == null ? "-" : formatMoney(profit);
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {bookieSlipError ? <div className="mt-3 text-[11px] font-semibold text-red-400">{bookieSlipError}</div> : null}
+
+          <button
+            type="button"
+            onClick={() => void handleBookieSlipSubmit()}
+            className="mt-4 w-full cursor-pointer rounded-md border border-emerald-300/45 bg-emerald-400/14 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/65 hover:bg-emerald-400/20"
+          >
+            Add {betTypeLabel(bookieSlipType)} to Tracker
+          </button>
+        </section>
+        </div>
+      ) : null}
+
       {betAddedMessage ? (
         <div className="fixed bottom-4 right-4 z-[120] rounded-md border border-emerald-300/40 bg-nrl-panel px-3 py-2 text-xs font-semibold text-emerald-300 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
           {betAddedMessage}
@@ -3935,7 +4586,7 @@ export function BettingDashboard({
             showPastMarkets={showPastMarkets}
             onStakeOverride={handleStakeOverride}
             onOddsOverride={handleOddsOverride}
-            onAddBet={handleAddBet}
+            onOpenBetComposer={openBookieBetComposer}
           />
         </section>
       </div>
@@ -3988,7 +4639,7 @@ function BestBetsHero({
   teamLogos,
   tryscorerKickoffsByMatch,
   onOpenMarket,
-  onAddBet,
+  onOpenBetComposer,
   isTourActive = false,
 }: {
   modelBets: BestBetCandidate[];
@@ -3998,7 +4649,7 @@ function BestBetsHero({
   teamLogos: Record<string, string>;
   tryscorerKickoffsByMatch: Record<string, string>;
   onOpenMarket: (bet: BestBetCandidate) => void;
-  onAddBet: (draft: BetDraft) => void | Promise<void>;
+  onOpenBetComposer: (selection: BookieBetSlipSelection) => void;
   isTourActive?: boolean;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
@@ -4006,11 +4657,6 @@ function BestBetsHero({
   const [selectedBestBetIds, setSelectedBestBetIds] = useState<Partial<Record<"model" | "arbitrage", string>>>({});
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [weeklyFreeBetId, setWeeklyFreeBetId] = useState<string | null | undefined>(undefined);
-  const [bestBetSlip, setBestBetSlip] = useState<{
-    bet: BestBetCandidate;
-    odds: number;
-    stake: number;
-  } | null>(null);
   const queueViewportRef = useRef<HTMLDivElement | null>(null);
   const hasAutoSelectedModelMarketRef = useRef(false);
   const isArbitrage = category === "arbitrage";
@@ -4090,18 +4736,6 @@ function BestBetsHero({
         activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.08)]",
         metric: "text-nrl-accent drop-shadow-[0_0_10px_rgba(0,245,138,0.22)]",
       };
-  const bestBetSlipImplied = bestBetSlip ? impliedProbability(bestBetSlip.odds) : null;
-  const bestBetSlipEdgePp = bestBetSlip && bestBetSlipImplied != null
-    ? (bestBetSlip.bet.modelProbability - bestBetSlipImplied) * 100
-    : null;
-  const [bestBetSubmitAttempted, setBestBetSubmitAttempted] = useState(false);
-  const bestBetSlipError = (() => {
-    if (!bestBetSlip) return null;
-    if (!Number.isFinite(bestBetSlip.odds) || bestBetSlip.odds <= 1) return "Odds must be greater than 1.";
-    if (!Number.isFinite(bestBetSlip.stake) || bestBetSlip.stake <= 0) return "Stake must be greater than 0.";
-    return null;
-  })();
-  const canConfirmBestBetSlip = bestBetSlip != null;
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNowMs(Date.now()), 30_000);
@@ -4167,6 +4801,20 @@ function BestBetsHero({
     }));
     window.requestAnimationFrame(() => {
       if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
+    });
+  };
+
+  const openBestBetComposer = (bet: BestBetCandidate) => {
+    onOpenBetComposer({
+      bookie: bet.bestBookie,
+      market: bet.market,
+      matchDate: bet.date,
+      matchName: bet.match,
+      selection: bet.selection,
+      lineValue: bet.lineValue,
+      odds: bet.odds,
+      stake: bet.kellyStake,
+      modelProbability: bet.modelProbability,
     });
   };
 
@@ -4312,12 +4960,7 @@ function BestBetsHero({
                         onClick={(event) => {
                           event.stopPropagation();
                           const bet = featuredItem as BestBetCandidate;
-                          setBestBetSubmitAttempted(false);
-                          setBestBetSlip({
-                            bet,
-                            odds: bet.odds,
-                            stake: bet.kellyStake,
-                          });
+                          openBestBetComposer(bet);
                         }}
                         aria-label="Add to bet tracker"
                         className="relative grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-emerald-300/35 bg-emerald-400/10 text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/16 hover:text-emerald-200 sm:hidden"
@@ -4429,12 +5072,7 @@ function BestBetsHero({
                       onClick={(event) => {
                         event.stopPropagation();
                         const bet = featuredItem as BestBetCandidate;
-                        setBestBetSubmitAttempted(false);
-                        setBestBetSlip({
-                          bet,
-                          odds: bet.odds,
-                          stake: bet.kellyStake,
-                        });
+                        openBestBetComposer(bet);
                       }}
                       aria-label="Add to bet tracker"
                       className="absolute right-0 top-3 hidden h-8 w-52 cursor-pointer place-items-center text-emerald-300 sm:grid"
@@ -4577,12 +5215,7 @@ function BestBetsHero({
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     const bet = item as BestBetCandidate;
-                                    setBestBetSubmitAttempted(false);
-                                    setBestBetSlip({
-                                      bet,
-                                      odds: bet.odds,
-                                      stake: bet.kellyStake,
-                                    });
+                                    openBestBetComposer(bet);
                                   }}
                                   aria-label="Add to bet tracker"
                                   className="relative grid h-8 w-8 cursor-pointer place-items-center rounded-full border border-emerald-300/35 bg-emerald-400/10 text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/16 hover:text-emerald-200 sm:hidden"
@@ -4642,12 +5275,7 @@ function BestBetsHero({
                             onClick={(event) => {
                               event.stopPropagation();
                               const bet = item as BestBetCandidate;
-                              setBestBetSubmitAttempted(false);
-                              setBestBetSlip({
-                                bet,
-                                odds: bet.odds,
-                                stake: bet.kellyStake,
-                              });
+                              openBestBetComposer(bet);
                             }}
                             aria-label="Add to bet tracker"
                             className="absolute right-0 top-3 hidden h-8 w-52 cursor-pointer place-items-center text-emerald-300 sm:grid"
@@ -4708,136 +5336,6 @@ function BestBetsHero({
               </div>
             </div>
           ) : null}
-        </div>
-      ) : null}
-      {bestBetSlip ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 px-4 py-6">
-          <div className="w-full max-w-md rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">
-                  Add To Bet Tracker
-                </div>
-                <div className="mt-1 flex min-w-0 items-center gap-2 text-base font-semibold text-nrl-text">
-                  <BettingTeamLogos
-                    selection={bestBetSlip.bet.selection}
-                    match={bestBetSlip.bet.match}
-                    market={bestBetSlip.bet.market}
-                    teamLogos={teamLogos}
-                    className="h-5 w-5"
-                  />
-                  <span className="truncate">{bestBetSlip.bet.selectionLabel}</span>
-                </div>
-                <div className="mt-0.5 truncate text-xs text-nrl-muted">{bestBetSlip.bet.match}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setBestBetSlip(null)}
-                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
-                aria-label="Close bet slip"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Odds</span>
-                <input
-                  type="number"
-                  min={1.01}
-                  step={0.01}
-                  value={Number.isFinite(bestBetSlip.odds) ? bestBetSlip.odds : ""}
-                  onChange={(event) => {
-                    const nextOdds = Number(event.target.value);
-                    setBestBetSlip((current) => current ? {
-                      ...current,
-                      odds: Number.isFinite(nextOdds) ? nextOdds : 0,
-                    } : current);
-                  }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Stake</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={Number.isFinite(bestBetSlip.stake) ? bestBetSlip.stake : 0}
-                  onChange={(event) => {
-                    const nextStake = Math.max(0, Number(event.target.value) || 0);
-                    setBestBetSlip((current) => current ? { ...current, stake: nextStake } : current);
-                  }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
-                />
-              </label>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Implied</div>
-                <div className="mt-0.5 font-semibold text-nrl-text">{formatPct(bestBetSlipImplied == null ? null : bestBetSlipImplied * 100)}</div>
-              </div>
-              <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className={`mt-0.5 inline-flex items-center gap-1 font-semibold ${bestBetSlipEdgePp != null && bestBetSlipEdgePp < 0 ? "text-red-300" : "text-emerald-300"}`}>
-                  <span>{bestBetSlipEdgePp == null ? "-" : `${bestBetSlipEdgePp >= 0 ? "+" : ""}${bestBetSlipEdgePp.toFixed(2)}`}</span>
-                  {isSuspiciousEdge(bestBetSlipEdgePp) ? <SuspiciousEdgeCaution /> : null}
-                </div>
-              </div>
-            </div>
-
-            {isSuspiciousEdge(bestBetSlipEdgePp) ? (
-              <div className="mt-3">
-                <SuspiciousEdgeNotice />
-              </div>
-            ) : null}
-
-            {bestBetSubmitAttempted && bestBetSlipError ? (
-              <div className="mt-3 rounded-md border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">
-                {bestBetSlipError}
-              </div>
-            ) : null}
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setBestBetSlip(null)}
-                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!canConfirmBestBetSlip}
-                onClick={() => {
-                  setBestBetSubmitAttempted(true);
-                  if (!bestBetSlip || bestBetSlipError) return;
-                  void onAddBet({
-                    market: bestBetSlip.bet.market,
-                    matchDate: bestBetSlip.bet.date,
-                    matchName: bestBetSlip.bet.match,
-                    selection: bestBetSlip.bet.selection,
-                    lineValue: bestBetSlip.bet.lineValue,
-                    odds: bestBetSlip.odds,
-                    stake: bestBetSlip.stake,
-                    modelProb: bestBetSlip.bet.modelProbability,
-                    impliedProb: bestBetSlipImplied,
-                    edgePp: bestBetSlipEdgePp,
-                  });
-                  setBestBetSlip(null);
-                }}
-                className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
-                  canConfirmBestBetSlip
-                    ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
-                    : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
-                }`}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
         </div>
       ) : null}
     </section>
@@ -5093,7 +5591,7 @@ function MarketSection({
   showPastMarkets,
   onStakeOverride,
   onOddsOverride,
-  onAddBet,
+  onOpenBetComposer,
 }: {
   groups: EventGroup[];
   canAccessPremium: boolean;
@@ -5119,13 +5617,12 @@ function MarketSection({
   showPastMarkets?: boolean;
   onStakeOverride: (key: string, value: number) => void;
   onOddsOverride: (key: string, value: number) => void;
-  onAddBet: (draft: BetDraft) => void | Promise<void>;
+  onOpenBetComposer: (selection: BookieBetSlipSelection) => void;
 }) {
   const [tryscorerValueByGroup, setTryscorerValueByGroup] = useState<Record<string, number>>({});
   const [collapsedTryscorerGroups, setCollapsedTryscorerGroups] = useState<Record<string, boolean>>({});
   const [tryscorerSortKey, setTryscorerSortKey] = useState<TryscorerSortKey>("betRating");
   const [tryscorerSortDirection, setTryscorerSortDirection] = useState<TryscorerSortDirection>("best");
-  const [mobileBetSlip, setMobileBetSlip] = useState<MobileBetSlip | null>(null);
   const [selectedTryscorerProfile, setSelectedTryscorerProfile] = useState<TryscorerProfileSelection | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const processedMarketJumpIdRef = useRef<number | null>(null);
@@ -5205,7 +5702,6 @@ function MarketSection({
     return [...sources];
   }, [activeGroups, market, playerImages, playerTeamsByName, tryscorerFormByPlayer, tryscorerValueByGroup]);
   const visibleTryscorerImagesReady = useBatchedImagePreload(visibleTryscorerImageSources);
-  const [mobileSlipSubmitAttempted, setMobileSlipSubmitAttempted] = useState(false);
 
   if (activeGroups.length === 0) {
     return (
@@ -5226,17 +5722,6 @@ function MarketSection({
     acc.set(group.date, [group]);
     return acc;
   }, new Map<string, EventGroup[]>());
-  const mobileSlipImplied = mobileBetSlip ? impliedProbability(mobileBetSlip.odds) : null;
-  const mobileSlipEdgePp = mobileBetSlip?.modelProb != null && mobileSlipImplied != null
-    ? (mobileBetSlip.modelProb - mobileSlipImplied) * 100
-    : null;
-  const mobileSlipError = (() => {
-    if (!mobileBetSlip) return null;
-    if (!Number.isFinite(mobileBetSlip.odds) || mobileBetSlip.odds <= 1) return "Odds must be greater than 1.";
-    if (!Number.isFinite(mobileBetSlip.stake) || mobileBetSlip.stake <= 0) return "Stake must be greater than 0.";
-    return null;
-  })();
-  const canConfirmMobileSlip = mobileBetSlip != null;
   const showGameJumpSidebar = activeGroups.length > 1;
 
   return (
@@ -5523,27 +6008,18 @@ function MarketSection({
                         aria-label="Add bet"
                         onClick={(event) => {
                           event.stopPropagation();
-                          if (!canOpenMobileBet || oddsValue == null) return;
-                          setMobileSlipSubmitAttempted(false);
-                          setMobileBetSlip({
-                            key: betRowKey,
-                            betType: "single",
-                            date: group.date,
-                            match: group.match,
+                          const bookie = row.bestOfferComputed?.bookie;
+                          if (!canOpenMobileBet || oddsValue == null || !bookie) return;
+                          onOpenBetComposer({
+                            bookie,
                             market: group.market,
+                            matchDate: group.date,
+                            matchName: group.match,
                             selection: row.result,
                             lineValue: row.bestValueComputed,
                             odds: oddsValue,
                             stake: stakeValue,
-                            modelProb: modelProbability,
-                            legs: [createBetSlipLegDraft({
-                              market: group.market,
-                              matchDate: group.date,
-                              matchName: group.match,
-                              selection: row.result,
-                              lineValue: row.bestValueComputed,
-                              odds: oddsValue,
-                            })],
+                            modelProbability,
                           });
                         }}
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-base font-black leading-none ${
@@ -5981,27 +6457,18 @@ function MarketSection({
                                   disabled={!canPlaceBet}
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    if (!canPlaceBet || oddsValue == null) return;
-                                    setMobileSlipSubmitAttempted(false);
-                                    setMobileBetSlip({
-                                      key: betRowKey,
-                                      betType: "single",
+                                    const bookie = row.bestOfferComputed?.bookie;
+                                    if (!canPlaceBet || oddsValue == null || !bookie) return;
+                                    onOpenBetComposer({
+                                      bookie,
                                       market: group.market,
-                                      date: group.date,
-                                      match: group.match,
+                                      matchDate: group.date,
+                                      matchName: group.match,
                                       selection: row.result,
                                       lineValue: row.bestValueComputed,
                                       odds: oddsValue,
                                       stake: stakeValue,
-                                      modelProb: modelProbability,
-                                      legs: [createBetSlipLegDraft({
-                                        market: group.market,
-                                        matchDate: group.date,
-                                        matchName: group.match,
-                                        selection: row.result,
-                                        lineValue: row.bestValueComputed,
-                                        odds: oddsValue,
-                                      })],
+                                      modelProbability,
                                     });
                                   }}
                                   className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
@@ -6032,134 +6499,6 @@ function MarketSection({
           </section>
         ))}
       </div>
-      {mobileBetSlip ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 px-3 py-4">
-          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border border-nrl-border bg-[#10162f] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-300">
-                  Add To Bets
-                </div>
-                <div className="mt-1 truncate text-base font-semibold text-nrl-text">
-                  {mobileBetSlip.betType === "single"
-                    ? formatBestBetSelection(mobileBetSlip.market, mobileBetSlip.selection, mobileBetSlip.lineValue)
-                    : `${mobileBetSlip.legs.length}-leg ${betTypeLabel(mobileBetSlip.betType)}`}
-                </div>
-                <div className="mt-0.5 truncate text-xs text-nrl-muted">{mobileBetSlip.match}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMobileBetSlip(null)}
-                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-nrl-border bg-nrl-panel-2 text-sm font-semibold text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
-                aria-label="Close bet slip"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Odds</span>
-                <input
-                  type="number"
-                  min={1.01}
-                  step={0.01}
-                  value={Number.isFinite(mobileBetSlip.odds) ? mobileBetSlip.odds : ""}
-                  onChange={(event) => {
-                    const nextOdds = Number(event.target.value);
-                    setMobileBetSlip((current) => current ? {
-                      ...current,
-                      odds: Number.isFinite(nextOdds) ? nextOdds : 0,
-                    } : current);
-                  }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Stake</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={Number.isFinite(mobileBetSlip.stake) ? mobileBetSlip.stake : 0}
-                  onChange={(event) => {
-                    const nextStake = Math.max(0, Number(event.target.value) || 0);
-                    setMobileBetSlip((current) => current ? { ...current, stake: nextStake } : current);
-                  }}
-                  className="mt-1 w-full rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-sm text-nrl-text outline-none focus:border-emerald-300/40"
-                />
-              </label>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Implied</div>
-                <div className="mt-0.5 font-semibold text-nrl-text">{formatPct(mobileSlipImplied == null ? null : mobileSlipImplied * 100)}</div>
-              </div>
-              <div className="rounded-md border border-white/8 bg-white/[0.03] px-2 py-1.5">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Edge</div>
-                <div className={`mt-0.5 inline-flex items-center gap-1 font-semibold ${mobileSlipEdgePp != null && mobileSlipEdgePp < 0 ? "text-red-300" : "text-emerald-300"}`}>
-                  <span>{mobileSlipEdgePp == null ? "-" : `${mobileSlipEdgePp >= 0 ? "+" : ""}${mobileSlipEdgePp.toFixed(2)}`}</span>
-                  {isSuspiciousEdge(mobileSlipEdgePp) ? <SuspiciousEdgeCaution /> : null}
-                </div>
-              </div>
-            </div>
-
-            {isSuspiciousEdge(mobileSlipEdgePp) ? (
-              <div className="mt-3">
-                <SuspiciousEdgeNotice />
-              </div>
-            ) : null}
-
-            {mobileSlipSubmitAttempted && mobileSlipError ? (
-              <div className="mt-3 rounded-md border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">
-                {mobileSlipError}
-              </div>
-            ) : null}
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setMobileBetSlip(null)}
-                className="cursor-pointer rounded-md border border-nrl-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!canConfirmMobileSlip}
-                onClick={() => {
-                  setMobileSlipSubmitAttempted(true);
-                  if (!mobileBetSlip || mobileSlipError) return;
-                  onOddsOverride(mobileBetSlip.key, mobileBetSlip.odds);
-                  onStakeOverride(mobileBetSlip.key, mobileBetSlip.stake);
-                  void onAddBet({
-                    betType: "single",
-                    market: mobileBetSlip.market,
-                    matchDate: mobileBetSlip.date,
-                    matchName: mobileBetSlip.match,
-                    selection: mobileBetSlip.selection,
-                    lineValue: mobileBetSlip.lineValue,
-                    odds: mobileBetSlip.odds,
-                    stake: mobileBetSlip.stake,
-                    modelProb: mobileBetSlip.modelProb,
-                    impliedProb: mobileSlipImplied,
-                    edgePp: mobileSlipEdgePp,
-                  });
-                  setMobileBetSlip(null);
-                }}
-                className={`rounded-md border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
-                  canConfirmMobileSlip
-                    ? "cursor-pointer border-emerald-300/40 bg-emerald-400/12 text-emerald-300 hover:bg-emerald-400/12"
-                    : "cursor-not-allowed border-nrl-border text-nrl-muted opacity-60"
-                }`}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

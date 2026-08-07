@@ -2529,31 +2529,39 @@ async function fetchDiscreteMarketProbabilityRowsFromSupabase(
   if (!dateRange) return [];
 
   const supabase = createServerSupabaseClient("nrl");
-  const allRows: DiscreteMarketProbabilityRow[] = [];
-  let start = 0;
+  const fetchMarketRows = async (market: "Line" | "Margin"): Promise<DiscreteMarketProbabilityRow[]> => {
+    const marketRows: DiscreteMarketProbabilityRow[] = [];
+    let start = 0;
 
-  while (true) {
-    const end = start + PAGE_SIZE - 1;
-    const { data, error } = await supabase
-      .from("discrete_market_probabilities")
-      .select("match_date,match,market,selection,outcome_key,line_value,model_probability,generated_at")
-      .gte("match_date", dateRange.minDate)
-      .lte("match_date", dateRange.maxDate)
-      .in("market", ["Line", "Margin"])
-      .range(start, end);
+    while (true) {
+      const end = start + PAGE_SIZE - 1;
+      const { data, error } = await supabase
+        .from("discrete_market_probabilities")
+        .select("match_date,match,market,selection,outcome_key,line_value,model_probability,generated_at")
+        .gte("match_date", dateRange.minDate)
+        .lte("match_date", dateRange.maxDate)
+        .eq("market", market)
+        .range(start, end);
 
-    if (error) {
-      throw new Error(`Supabase fetch nrl.discrete_market_probabilities: ${error.message}`);
+      if (error) {
+        throw new Error(`Supabase fetch nrl.discrete_market_probabilities (${market}): ${error.message}`);
+      }
+
+      const pageRows = (data ?? []) as unknown as DiscreteMarketProbabilityRow[];
+      if (pageRows.length === 0) break;
+      marketRows.push(...pageRows);
+      if (pageRows.length < PAGE_SIZE) break;
+      start += PAGE_SIZE;
     }
 
-    const pageRows = (data ?? []) as unknown as DiscreteMarketProbabilityRow[];
-    if (pageRows.length === 0) break;
-    allRows.push(...pageRows);
-    if (pageRows.length < PAGE_SIZE) break;
-    start += PAGE_SIZE;
-  }
+    return marketRows;
+  };
 
-  return allRows;
+  const marketRows = await Promise.all([
+    fetchMarketRows("Line"),
+    fetchMarketRows("Margin"),
+  ]);
+  return marketRows.flat();
 }
 
 function enrichDiscreteMarketRows(

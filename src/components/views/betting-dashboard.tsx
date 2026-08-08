@@ -4777,7 +4777,7 @@ function BestBetsHero({
   const activeSelectedBestBetId = selectedBestBetIds[category];
   const activeItems = useMemo(() => {
     if (!isArbitrage) {
-      if (!weeklyFreeBet) return [];
+      if (!weeklyFreeBet) return selectedModelBets;
       return [
         weeklyFreeBet,
         ...selectedModelBets.filter((bet) => bet.id !== weeklyFreeBet.id),
@@ -4799,8 +4799,9 @@ function BestBetsHero({
       ...sortedItems.slice(selectedIndex + 1),
     ];
   }, [activeSelectedBestBetId, isArbitrage, ratedArbitrageBets, selectedModelBets, weeklyFreeBet]);
-  const featuredItem = activeItems[0] ?? null;
-  const queueItems = activeItems.slice(1);
+  const hasFeaturedItem = isArbitrage || weeklyFreeBet != null;
+  const featuredItem = hasFeaturedItem ? activeItems[0] ?? null : null;
+  const queueItems = hasFeaturedItem ? activeItems.slice(1) : activeItems;
   const activeTheme = isArbitrage
     ? {
         label: "Arbitrage",
@@ -4969,8 +4970,10 @@ function BestBetsHero({
               ? "No free bets available"
               : `No strong ${formatBestBetMarketLabel(selectedModelMarket).toLowerCase()} model value currently identified.`}
         </div>
-      ) : featuredItem ? (
+      ) : (
         <div className="space-y-4 p-4">
+          {featuredItem ? (
+            <>
           {!isArbitrage ? (
             <div className="flex items-center justify-between gap-3 px-1 py-1.5">
               <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-text">
@@ -5180,6 +5183,8 @@ function BestBetsHero({
               </div>
             )}
           </article>
+            </>
+          ) : null}
 
           {queueItems.length > 0 ? (
             <div>
@@ -5417,7 +5422,7 @@ function BestBetsHero({
             </div>
           ) : null}
         </div>
-      ) : null}
+      )}
     </section>
   );
 }

@@ -116,6 +116,17 @@ export interface HalvesPairingPoint {
 
 const BACK_POSITIONS = new Set<PlayerAttackPosition>(PLAYER_BACK_POSITIONS);
 
+const PLAYER_NAME_ALIASES: Record<string, string> = {
+  "nicholas hynes": "Nicho Hynes",
+  "nicho hynes": "Nicho Hynes",
+};
+
+export function canonicalPlayerName(value: unknown): string {
+  const name = String(value ?? "").trim();
+  const key = name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return PLAYER_NAME_ALIASES[key] ?? name;
+}
+
 const EFFICIENCY_BASE_FIELDS: Record<PlayerEfficiencyBaseMetric, keyof PlayerStat> = {
   Receipts: "Receipts",
   Runs: "All Runs",
@@ -252,7 +263,7 @@ export function buildPlayerAttackPoints(
   const players = new Map<string, PlayerStat[]>();
   for (const row of rows) {
     if (positionFromRow(row) !== position || finite(row["Mins Played"]) <= 0) continue;
-    const player = String(row.Name ?? "").trim();
+    const player = canonicalPlayerName(row.Name);
     if (!player) continue;
     players.set(player, [...(players.get(player) ?? []), row]);
   }
@@ -342,7 +353,7 @@ export function buildPlayerAttackComparisonPoints(
       teamGameTotals.set(key, totals);
     }
     if (positionFromRow(row) !== position || finite(row["Mins Played"]) <= 0) continue;
-    const player = String(row.Name ?? "").trim();
+    const player = canonicalPlayerName(row.Name);
     if (!player) continue;
     players.set(player, [...(players.get(player) ?? []), row]);
   }
@@ -456,13 +467,13 @@ export function buildHalvesPairingPoints(
     const seven = gameRows.find((row) => halfRoleFromRow(row) === 7);
     if (!six || !seven) continue;
     if (finite(six["Mins Played"]) < 60 || finite(seven["Mins Played"]) < 60) continue;
-    const sixName = String(six.Name ?? "").trim();
-    const sevenName = String(seven.Name ?? "").trim();
+    const sixName = canonicalPlayerName(six.Name);
+    const sevenName = canonicalPlayerName(seven.Name);
     if (!sixName || !sevenName || sixName === sevenName) continue;
 
     const [playerARow, playerBRow] = sixName.localeCompare(sevenName) <= 0 ? [six, seven] : [seven, six];
-    const playerA = String(playerARow.Name).trim();
-    const playerB = String(playerBRow.Name).trim();
+    const playerA = canonicalPlayerName(playerARow.Name);
+    const playerB = canonicalPlayerName(playerBRow.Name);
     const team = String(playerARow.Team ?? playerBRow.Team ?? "").trim();
     const key = `${team.toLowerCase()}|${playerA.toLowerCase()}|${playerB.toLowerCase()}`;
     const pairing = pairings.get(key) ?? { team, playerA, playerB, samples: [] };
@@ -520,7 +531,7 @@ export function buildPlayerDefencePoints(
   const players = new Map<string, PlayerStat[]>();
   for (const row of rows) {
     if (positionFromRow(row) !== position || finite(row["Mins Played"]) <= 0) continue;
-    const player = String(row.Name ?? "").trim();
+    const player = canonicalPlayerName(row.Name);
     if (!player) continue;
     players.set(player, [...(players.get(player) ?? []), row]);
   }

@@ -61,7 +61,7 @@ function FeatureSection({
   children?: React.ReactNode
 }) {
   return (
-    <section className="flex h-full flex-col border border-white/8 bg-[linear-gradient(180deg,rgba(16,20,42,0.92),rgba(11,14,29,0.92))] p-5 sm:p-7 lg:p-8">
+    <section className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(16,20,42,0.92),rgba(11,14,29,0.92))] p-5 sm:p-7 lg:p-8">
       <div className="flex min-w-0 flex-1 flex-col px-1 sm:px-2">
         <div className="flex flex-wrap items-center gap-3">
           <SectionEyebrow>{eyebrow}</SectionEyebrow>
@@ -77,9 +77,9 @@ function FeatureSection({
           <p className="max-w-2xl text-sm leading-6 text-white/58 sm:leading-7">{description}</p>
           <div className="grid gap-x-5 gap-y-2 md:grid-cols-2">
             {bullets.map((bullet) => (
-              <div key={bullet} className="flex items-center gap-2 text-sm text-white/78">
-                <span className="h-1.5 w-1.5 rounded-full bg-nrl-accent" />
-                <span>{bullet}</span>
+              <div key={bullet} className="flex min-w-0 items-start gap-2 text-sm text-white/78">
+                <span className="mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full bg-nrl-accent" />
+                <span className="min-w-0">{bullet}</span>
               </div>
             ))}
           </div>
@@ -163,6 +163,22 @@ export default function Home() {
           <div className="grid gap-4 lg:grid-cols-2">
             {[
               {
+                eyebrow: "Betting",
+                title: "Best bets, model edge, odds comparison, and tracker tools",
+                description: "Betting uses our Machine Learning models along with market context to find the best bets across H2H, Line, Margin, Total and Tryscorer markets",
+                bullets: ["Today's Best Bets", "Tryscorer odds and player form", "Odds comparison across 5 bookmakers", "Personal bet tracker and staking calculator"],
+                ctaHref: "/dashboard/betting",
+                ctaLabel: "Betting",
+              },
+              {
+                eyebrow: "Stats",
+                title: "Player stats, Team stats, Player archetypes",
+                description: "Use the stats section to compare players and teams directly, inspect plot comparisons, profile archetypes, and see stat leaders across seasons.",
+                bullets: ["Player archetype profiles", "Player comparison and filtered charts", "Percentile ranks and recent form", "Season leader cards"],
+                ctaHref: "/dashboard/players",
+                ctaLabel: "Stats",
+              },
+              {
                 eyebrow: "Fantasy",
                 title: "See top movers, player game logs and more",
                 description: "Use Fantasy to see player stats, info and game logs, and upgrade to pro to see projections, breakevens, and our unique Trade Ratings",
@@ -179,12 +195,12 @@ export default function Home() {
                 ctaLabel: "Lineups",
               },
               {
-                eyebrow: "Betting",
-                title: "Best bets, model edge, odds comparison, and tracker tools",
-                description: "Betting uses our Machine Learning models along with market context to find the best bets across H2H, Line, Margin, Total and Tryscorer markets",
-                bullets: ["Today's Best Bets", "Tryscorer odds and player form", "Odds comparison across 5 bookmakers", "Personal bet tracker and staking calculator"],
-                ctaHref: "/dashboard/betting",
-                ctaLabel: "Betting",
+                eyebrow: "NRL AI",
+                title: "A personal AI that knows every NRL stat at your fingertips",
+                description: "Ask NRL AI for rankings, player trends, betting context, and follow-up questions across our vast NRL dataset.",
+                bullets: ["Player and team stat queries", "Fantasy screenshot analysis", "Follow-up questions in context", "Betting market summaries"],
+                ctaHref: "/dashboard/ai",
+                ctaLabel: "NRL AI",
               },
               {
                 eyebrow: "Articles",
@@ -193,22 +209,6 @@ export default function Home() {
                 bullets: ["Machine learning walkthroughs", "Public article submission"],
                 ctaHref: "/dashboard/articles",
                 ctaLabel: "Articles",
-              },
-              {
-                eyebrow: "Stats",
-                title: "Player stats, Team stats, Player archetypes",
-                description: "Use the stats section to compare players and teams directly, inspect plot comparisons, profile archetypes, and see stat leaders across seasons.",
-                bullets: ["Player archetype profiles", "Player comparison and filtered charts", "Percentile ranks and recent form", "Season leader cards"],
-                ctaHref: "/dashboard/players",
-                ctaLabel: "Stats",
-              },
-              {
-                eyebrow: "NRL AI",
-                title: "A personal AI that knows every NRL stat at your fingertips",
-                description: "Ask NRL AI for rankings, player trends, betting context, and follow-up questions across our vast NRL dataset.",
-                bullets: ["Player and team stat queries", "Fantasy screenshot analysis", "Follow-up questions in context", "Betting market summaries"],
-                ctaHref: "/dashboard/ai",
-                ctaLabel: "NRL AI",
               },
             ].map((feature) => (
               <FeatureSection key={feature.eyebrow} {...feature} />

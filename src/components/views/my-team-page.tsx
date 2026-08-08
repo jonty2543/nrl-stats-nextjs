@@ -77,7 +77,6 @@ const MY_TEAM_ORIGIN_FALLBACK_PLAYERS = [
 ] as const
 const MY_TEAM_THIRTEEN_PLAYER_ROUNDS = [13, 15, 16, 18, 19] as const
 const MY_TEAM_PROJECTION_ROUNDS = Array.from({ length: 19 }, (_, index) => index + 1)
-const MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS = [12, 13, 15, 16, 18, 19] as const
 const MY_TEAM_ROUND_CUTOFF_MS = 2 * 60 * 60 * 1000
 const MY_TEAM_AI_ENABLED = true
 const FANTASY_SQUAD_ID_TO_TEAM: Record<number, string> = {
@@ -2249,22 +2248,6 @@ function TeamBoard({
   const showRoundProjections = showProjections && selectedProjectionRound == null
   const activeHeaderIsMajorRound = isThirteenPlayerRound(activeHeaderRound)
   const playingTarget = activeHeaderIsMajorRound ? 13 : 17
-  const availabilitySummaryRounds =
-    team && players.length > 0
-      ? MY_TEAM_AVAILABILITY_SUMMARY_ROUNDS.filter((round) => round >= (currentRoundForHeader ?? 1))
-      : []
-  const availabilitySummary = availabilitySummaryRounds.map((round) => {
-    const target = isThirteenPlayerRound(round) ? 13 : 17
-    const availableCount = players.filter((player) => {
-      if (actualScoreForPlayerRound(player, round, fantasyPlayersById) != null) return true
-      const availability = getRoundAvailability(player, round, fantasyPlayersById, playerImages, draw2026Data, originPlayerNames)
-      if (!availability.available) return false
-      if (round === currentRoundForHeader && playerHasCurrentUnavailableStatus(player, fantasyPlayersById)) return false
-      const namedStatus = round === currentRoundForHeader ? getLineupsNamedStatus(player, fantasyPlayersById, lineupsProjections) : null
-      return namedStatus !== false
-    }).length
-    return { round, availableCount: Math.min(availableCount, target), target }
-  })
   const projectedStarterEntries = [...startersBySlot.values()].flat()
   const projectedIntEntries = benchPlayers.slice(0, 4)
   const selectedRoundPlayingCount = selectedProjectionRound == null
@@ -2328,30 +2311,6 @@ function TeamBoard({
 
   return (
     <section className="rounded-xl border border-nrl-border bg-nrl-panel text-nrl-text shadow-[0_18px_48px_rgba(2,6,23,0.28)]">
-      {availabilitySummary.length > 0 ? (
-        <div className="flex gap-2 overflow-x-auto border-b border-nrl-border bg-[#0b1229] p-2 text-center sm:gap-3 sm:p-3">
-          {availabilitySummary.map(({ round, availableCount, target }) => {
-            const missing = Math.max(0, target - availableCount)
-            const countColour = missing === 0
-              ? "text-nrl-accent"
-              : missing <= 2
-                ? "text-[#9af06a]"
-                : missing <= 5
-                  ? "text-[#f6b73c]"
-                  : "text-[#f16161]"
-            return (
-            <button
-              key={round}
-              type="button"
-              onClick={() => selectHeaderRound(round)}
-              className="min-w-[5.5rem] flex-1 rounded-lg border border-nrl-border bg-[#101936] px-3 py-3 transition-colors hover:bg-[#14203f] sm:min-w-[7rem]"
-            >
-              <div className="text-[8px] font-black uppercase tracking-[0.12em] text-nrl-muted">R{round}</div>
-              <div className={`text-[11px] font-black leading-tight sm:text-sm lg:text-base ${countColour}`}>{availableCount}/{target}</div>
-            </button>
-          )})}
-        </div>
-      ) : null}
       <div className="relative flex min-h-[72px] items-center justify-center bg-[linear-gradient(135deg,#101936,#123a36)] px-16 py-4 text-center text-2xl font-black italic tracking-wide text-nrl-accent lg:text-2xl">
         {team ? (
           <button

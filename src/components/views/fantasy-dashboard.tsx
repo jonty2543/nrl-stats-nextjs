@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import dynamic from "next/dynamic"
-import { Fragment, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type MouseEvent, type PointerEvent } from "react"
+import { Fragment, memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
@@ -1166,8 +1166,13 @@ function findLocalPlayerAliasesFromIndex(fantasyName: string, nameIndex: LocalPl
   return Array.from(aliases)
 }
 
-function useVirtualRows(count: number, estimatedRowHeight: number, overscan: number, enabled: boolean) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
+function useVirtualRows(
+  count: number,
+  estimatedRowHeight: number,
+  overscan: number,
+  enabled: boolean,
+  containerRef: RefObject<HTMLDivElement | null>
+) {
   const [viewportHeight, setViewportHeight] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
   const latestScrollTopRef = useRef(0)
@@ -1182,14 +1187,13 @@ function useVirtualRows(count: number, estimatedRowHeight: number, overscan: num
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null
       const nextScrollTop = latestScrollTopRef.current
-      const nextRow = Math.floor(nextScrollTop / estimatedRowHeight)
-      startTransition(() => {
-        setScrollTop((currentScrollTop) =>
-          Math.floor(currentScrollTop / estimatedRowHeight) === nextRow ? currentScrollTop : nextScrollTop
-        )
-      })
+      const scrollBucketHeight = estimatedRowHeight * 3
+      const nextBucket = Math.floor(nextScrollTop / scrollBucketHeight)
+      setScrollTop((currentScrollTop) =>
+        Math.floor(currentScrollTop / scrollBucketHeight) === nextBucket ? currentScrollTop : nextScrollTop
+      )
     })
-  }, [estimatedRowHeight])
+  }, [containerRef, estimatedRowHeight])
 
   useEffect(
     () => () => {
@@ -1214,7 +1218,7 @@ function useVirtualRows(count: number, estimatedRowHeight: number, overscan: num
     const observer = new ResizeObserver(updateViewportHeight)
     observer.observe(container)
     return () => observer.disconnect()
-  }, [enabled])
+  }, [containerRef, enabled])
 
   const startIndex = enabled
     ? Math.max(0, Math.floor(scrollTop / estimatedRowHeight) - overscan)
@@ -1232,13 +1236,44 @@ function useVirtualRows(count: number, estimatedRowHeight: number, overscan: num
   )
 
   return {
-    containerRef,
     enabled,
     items,
     onScroll,
     paddingBottom: enabled ? Math.max(0, count - endIndex) * estimatedRowHeight : 0,
     paddingTop: enabled ? startIndex * estimatedRowHeight : 0,
   }
+}
+
+type VirtualRowsState = ReturnType<typeof useVirtualRows>
+
+function VirtualScrollContainer({
+  children,
+  className,
+  count,
+  enabled,
+  estimatedRowHeight,
+  overscan,
+}: {
+  children: (virtualRows: VirtualRowsState) => ReactNode
+  className: string
+  count: number
+  enabled: boolean
+  estimatedRowHeight: number
+  overscan: number
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const virtualRows = useVirtualRows(count, estimatedRowHeight, overscan, enabled, containerRef)
+
+  return (
+    <div
+      ref={containerRef}
+      onScroll={virtualRows.onScroll}
+      className={className}
+      style={{ contain: "layout paint", willChange: "scroll-position" }}
+    >
+      {children(virtualRows)}
+    </div>
+  )
 }
 
 function buildInitialSurnamePlayerNameMap(playerNames: string[]): Map<string, string> {
@@ -1319,6 +1354,100 @@ function getPlayerThumbnailSources(imageRow: PlayerImageRecord | null): string[]
 
   return sources
 }
+
+const AllPlayersDesktopRow = memo(function AllPlayersDesktopRow({
+  cancelPlayerRoutePrefetch,
+  hasFantasyPlotAccess,
+  navigateToPlayer,
+  prefetchPlayerRoute,
+  row,
+  schedulePlayerRoutePrefetch,
+}: {
+  cancelPlayerRoutePrefetch: () => void
+  hasFantasyPlotAccess: boolean
+  navigateToPlayer: (name: string) => void
+  prefetchPlayerRoute: (name: string) => void
+  row: AllPlayersTableRow
+  schedulePlayerRoutePrefetch: (name: string) => void
+}) {
+  const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
+  const tradeScores = [
+    { key: "tradeRating" as const, value: formatTradeScore(row.tradeRating?.overall ?? null), tradeScore: row.tradeRating?.overall ?? null },
+    { key: "tradeWeeklyDelta" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.weeklyDelta)), tradeScore: tradeScore10(row.tradeRating?.weeklyDelta) },
+    { key: "tradeValue" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.value)), tradeScore: tradeScore10(row.tradeRating?.value) },
+    { key: "tradeKeeper" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.keeperScore)), tradeScore: tradeScore10(row.tradeRating?.keeperScore) },
+    { key: "tradeRole" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.roleSecurityScore)), tradeScore: tradeScore10(row.tradeRating?.roleSecurityScore) },
+    { key: "tradeForm" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.form)), tradeScore: tradeScore10(row.tradeRating?.form) },
+    { key: "tradeBreakeven" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.breakeven)), tradeScore: tradeScore10(row.tradeRating?.breakeven) },
+    { key: "tradeAvailability" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.availability)), tradeScore: tradeScore10(row.tradeRating?.availability) },
+  ]
+
+  return (
+    <tr
+      onClick={() => navigateToPlayer(row.player.name)}
+      onFocus={() => prefetchPlayerRoute(row.player.name)}
+      onMouseEnter={() => schedulePlayerRoutePrefetch(row.player.name)}
+      onMouseLeave={cancelPlayerRoutePrefetch}
+      className="h-14 cursor-pointer border-b border-nrl-border/60"
+    >
+      <td className="sticky left-0 z-[1] w-13 min-w-13 max-w-13 border-r border-nrl-border bg-nrl-panel px-1 py-2 sm:w-15 sm:min-w-15 sm:max-w-15">
+        <div className="mx-auto grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
+          <ImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
+        </div>
+      </td>
+      <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-xs font-semibold text-nrl-text sm:w-32 sm:min-w-32 sm:max-w-32 sm:px-2 lg:sticky lg:left-[3.75rem] lg:z-[1]">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="block min-w-0 truncate" title={row.player.name}>{row.player.name}</span>
+        </div>
+      </td>
+      <td className="w-[72px] min-w-[72px] max-w-[72px] border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-muted sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px] sm:px-3">{row.player.positionLabel}</td>
+      <td className={`w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getOwnershipDeltaClass(row.weeklyChange)}`}>
+        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("weeklyChange")}`}>{formatOwnershipDelta(row.weeklyChange)}</span>
+      </td>
+      <td className="w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:px-3">
+        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("ownPercent")}`}>{formatPercent(row.player.ownedBy)}</span>
+      </td>
+      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">{formatPrice(row.player.cost)}</td>
+      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
+        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("pricedAt")}`}>{formatTableNumber(row.pricedAt, 0)}</span>
+      </td>
+      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:px-3">
+        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("avg2026")}`}>{formatTableNumber(row.avg2026)}</span>
+      </td>
+      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
+        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("last3")}`}>{formatTableNumber(row.last3)}</span>
+      </td>
+      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">{formatTableNumber(row.ppm, 2)}</td>
+      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
+        <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : "inline-block"}>
+          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>{formatTableNumber(row.projection, 0)}</span>
+        </span>
+      </td>
+      <td className={`w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${hasFantasyPlotAccess ? getFantasyValueClass(row.value) : "text-nrl-text"}`}>
+        <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("value")}`}>
+          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>{formatSignedTableNumber(row.value, 0)}</span>
+        </span>
+      </td>
+      {tradeScores.map((score) => {
+        const locked = !hasFantasyPlotAccess && score.key !== "tradeRating"
+        const widthClass = score.key === "tradeRating" ? "w-20 min-w-20 max-w-20" : "w-28 min-w-28 max-w-28"
+        return (
+          <td key={score.key} className={`${widthClass} border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getTradeScoreColorClass(score.tradeScore)}`}>
+            <span className={locked ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass(score.key)}`}>
+              <span className={locked ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>{score.value}</span>
+            </span>
+          </td>
+        )
+      })}
+      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
+        <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : "inline-block"}>
+          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>{formatTableNumber(row.breakeven)}</span>
+        </span>
+      </td>
+      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0 sm:px-3">{row.gamesPlayed || "-"}</td>
+    </tr>
+  )
+})
 
 function normalisePositionForComparison(value: string | null | undefined): string {
   return String(value ?? "")
@@ -5296,12 +5425,6 @@ export function FantasyDashboard({
 
   const shouldVirtualizeAllPlayersRows =
     hasLoadedFullAllPlayersRows && sortedAllPlayersTableRows.length > ALL_PLAYERS_VIRTUALIZE_THRESHOLD
-  const desktopAllPlayersVirtualRows = useVirtualRows(
-    sortedAllPlayersTableRows.length,
-    ALL_PLAYERS_TABLE_ROW_HEIGHT_PX,
-    6,
-    shouldVirtualizeAllPlayersRows
-  )
 
   const fantasyMarketWatch = useMemo(() => {
     const candidates = allPlayersTableRows.filter(
@@ -7356,11 +7479,14 @@ export function FantasyDashboard({
               </>
             )}
           </div>
-          <div
-            ref={desktopAllPlayersVirtualRows.containerRef}
-            onScroll={desktopAllPlayersVirtualRows.onScroll}
+          <VirtualScrollContainer
+            count={sortedAllPlayersTableRows.length}
+            estimatedRowHeight={ALL_PLAYERS_TABLE_ROW_HEIGHT_PX}
+            overscan={6}
+            enabled={shouldVirtualizeAllPlayersRows}
             className={`${hasLoadedFullAllPlayersRows ? "hidden md:block" : "hidden"} ${showAllPlayersOnly ? "h-[calc(100vh-13rem)] min-h-[520px]" : "h-[756px]"} overflow-y-auto overflow-x-auto`}
           >
+            {(desktopAllPlayersVirtualRows) => (
             <table className="w-full min-w-[1550px] border-collapse text-left text-xs table-fixed">
               <thead>
                 <tr>
@@ -7413,109 +7539,16 @@ export function FantasyDashboard({
                   {desktopAllPlayersVirtualRows.items.map(({ index }) => {
                     const row = sortedAllPlayersTableRows[index]
                     if (!row) return null
-                    const thumbnailSources = getPlayerThumbnailSources(row.imageRow)
                     return (
-                      <tr
+                      <AllPlayersDesktopRow
                         key={row.player.id}
-                        onClick={() => navigateToPlayer(row.player.name)}
-                        onFocus={() => prefetchPlayerRoute(row.player.name)}
-                        onMouseEnter={() => schedulePlayerRoutePrefetch(row.player.name)}
-                        onMouseLeave={cancelPlayerRoutePrefetch}
-                        className="h-14 cursor-pointer border-b border-nrl-border/60"
-                      >
-                        <td className="sticky left-0 z-[1] w-13 min-w-13 max-w-13 border-r border-nrl-border bg-nrl-panel px-1 py-2 sm:w-15 sm:min-w-15 sm:max-w-15">
-                          <div className="mx-auto grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
-                            <ImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
-                          </div>
-                        </td>
-                        <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-xs font-semibold text-nrl-text sm:w-32 sm:min-w-32 sm:max-w-32 sm:px-2 lg:sticky lg:left-[3.75rem] lg:z-[1]">
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            <span className="block min-w-0 truncate" title={row.player.name}>
-                              {row.player.name}
-                            </span>
-                          </div>
-                        </td>
-                      <td className="w-[72px] min-w-[72px] max-w-[72px] border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-muted sm:w-[88px] sm:min-w-[88px] sm:max-w-[88px] sm:px-3">
-                        {row.player.positionLabel}
-                      </td>
-                      <td className={`w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getOwnershipDeltaClass(row.weeklyChange)}`}>
-                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("weeklyChange")}`}>
-                          {formatOwnershipDelta(row.weeklyChange)}
-                        </span>
-                      </td>
-                      <td className="w-20 min-w-20 max-w-20 border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:px-3">
-                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("ownPercent")}`}>
-                          {formatPercent(row.player.ownedBy)}
-                        </span>
-                      </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
-                        {formatPrice(row.player.cost)}
-                      </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
-                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("pricedAt")}`}>
-                          {formatTableNumber(row.pricedAt, 0)}
-                        </span>
-                      </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap text-nrl-accent sm:px-3">
-                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("avg2026")}`}>
-                          {formatTableNumber(row.avg2026)}
-                        </span>
-                      </td>
-                      <td className="w-16 min-w-16 max-w-16 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
-                        <span className={`inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("last3")}`}>
-                          {formatTableNumber(row.last3)}
-                        </span>
-                      </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
-                        {formatTableNumber(row.ppm, 2)}
-                      </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
-                        <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : "inline-block"}>
-                          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
-                          {formatTableNumber(row.projection, 0)}
-                          </span>
-                        </span>
-                      </td>
-                      <td className={`w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${hasFantasyPlotAccess ? getFantasyValueClass(row.value) : "text-nrl-text"}`}>
-                        <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass("value")}`}>
-                          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
-                          {formatSignedTableNumber(row.value, 0)}
-                          </span>
-                        </span>
-                      </td>
-                      {[
-                        { key: "tradeRating" as const, value: formatTradeScore(row.tradeRating?.overall ?? null), tradeScore: row.tradeRating?.overall ?? null },
-                        { key: "tradeWeeklyDelta" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.weeklyDelta)), tradeScore: tradeScore10(row.tradeRating?.weeklyDelta) },
-                        { key: "tradeValue" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.value)), tradeScore: tradeScore10(row.tradeRating?.value) },
-                        { key: "tradeKeeper" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.keeperScore)), tradeScore: tradeScore10(row.tradeRating?.keeperScore) },
-                        { key: "tradeRole" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.roleSecurityScore)), tradeScore: tradeScore10(row.tradeRating?.roleSecurityScore) },
-                        { key: "tradeForm" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.form)), tradeScore: tradeScore10(row.tradeRating?.form) },
-                        { key: "tradeBreakeven" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.breakeven)), tradeScore: tradeScore10(row.tradeRating?.breakeven) },
-                        { key: "tradeAvailability" as const, value: formatTradeScore(tradeScore10(row.tradeRating?.availability)), tradeScore: tradeScore10(row.tradeRating?.availability) },
-                      ].map((score) => {
-                        const locked = !hasFantasyPlotAccess && score.key !== "tradeRating"
-                        const widthClass = score.key === "tradeRating" ? "w-20 min-w-20 max-w-20" : "w-28 min-w-28 max-w-28"
-                        return (
-                          <td key={score.key} className={`${widthClass} border-r border-nrl-border px-1.5 py-3 text-center text-xs font-semibold whitespace-nowrap sm:px-3 ${getTradeScoreColorClass(score.tradeScore)}`}>
-                            <span className={locked ? FANTASY_LOCKED_VALUE_BOX_CLASS : `inline-block text-left tabular-nums sm:min-w-0 ${getCenteredValueClass(score.key)}`}>
-                              <span className={locked ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
-                              {score.value}
-                              </span>
-                            </span>
-                          </td>
-                        )
-                      })}
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-text sm:px-3">
-                        <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_BOX_CLASS : "inline-block"}>
-                          <span className={!hasFantasyPlotAccess ? FANTASY_LOCKED_VALUE_TEXT_CLASS : ""}>
-                          {formatTableNumber(row.breakeven)}
-                          </span>
-                        </span>
-                      </td>
-                      <td className="w-14 min-w-14 max-w-14 border-r border-nrl-border px-1.5 py-3 text-center text-xs whitespace-nowrap text-nrl-muted last:border-r-0 sm:px-3">
-                        {row.gamesPlayed || "-"}
-                      </td>
-                    </tr>
+                        row={row}
+                        hasFantasyPlotAccess={hasFantasyPlotAccess}
+                        navigateToPlayer={navigateToPlayer}
+                        prefetchPlayerRoute={prefetchPlayerRoute}
+                        schedulePlayerRoutePrefetch={schedulePlayerRoutePrefetch}
+                        cancelPlayerRoutePrefetch={cancelPlayerRoutePrefetch}
+                      />
                     )
                   })}
                   {desktopAllPlayersVirtualRows.paddingBottom > 0 ? (
@@ -7527,7 +7560,8 @@ export function FantasyDashboard({
                 )}
               </tbody>
             </table>
-          </div>
+            )}
+          </VirtualScrollContainer>
         </section>
       ) : null}
 

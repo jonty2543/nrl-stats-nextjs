@@ -172,6 +172,7 @@ interface BetLeg {
   lineValue: number | null;
   odds: number;
   bookie: string | null;
+  autoResult: boolean;
 }
 
 interface ManualBetLegDraft {
@@ -183,6 +184,7 @@ interface ManualBetLegDraft {
   lineValue: string;
   odds: string;
   bookie: string;
+  autoResult?: boolean;
 }
 
 interface TrackedBet {
@@ -203,6 +205,7 @@ interface TrackedBet {
   placedAt: string;
   settledAt: string | null;
   legs?: BetLeg[];
+  autoSettle: boolean;
 }
 
 interface BetDraft {
@@ -219,6 +222,7 @@ interface BetDraft {
   impliedProb: number | null;
   edgePp: number | null;
   legs?: BetLeg[];
+  autoSettle?: boolean;
 }
 
 interface BookieBetSlipSelection {
@@ -1277,6 +1281,7 @@ function createManualLegDraft(todayIso: string): ManualBetLegDraft {
     lineValue: "",
     odds: "1.90",
     bookie: "",
+    autoResult: false,
   };
 }
 
@@ -1296,6 +1301,7 @@ function parseManualLegs(legs: ManualBetLegDraft[]): BetLeg[] {
       lineValue,
       odds,
       bookie: leg.bookie.trim() || null,
+      autoResult: leg.autoResult === true,
     }];
   });
 }
@@ -2928,6 +2934,7 @@ export function BettingDashboard({
       lineValue: selection.lineValue == null ? "" : String(selection.lineValue),
       odds: selection.odds.toFixed(2),
       bookie: selection.bookie,
+      autoResult: true,
     };
     setBookieSlipSeed(selection);
     setBookieSlipType("single");
@@ -2956,6 +2963,7 @@ export function BettingDashboard({
       lineValue: selection.lineValue == null ? "" : String(selection.lineValue),
       odds: selection.odds.toFixed(2),
       bookie: selection.bookie,
+      autoResult: true,
     };
 
     setBookieSlipOpen(true);
@@ -3178,6 +3186,7 @@ export function BettingDashboard({
         impliedProb: implied,
         edgePp: modelProbability != null && implied != null ? (modelProbability - implied) * 100 : null,
         legs: [{ ...leg, odds, bookie: bookieSlipBookie }],
+        autoSettle: leg.autoResult,
       });
       if (!added) {
         setBookieSlipError("The bet could not be saved. Check the tracker error and try again.");
@@ -3262,6 +3271,7 @@ export function BettingDashboard({
         profit: computeBetProfit(status, draft.stake, draft.odds),
         placedAt: new Date().toISOString(),
         settledAt: status === "pending" ? null : new Date().toISOString(),
+        autoSettle: draft.autoSettle === true,
         ...draft,
       };
       setBets((prev) => [localBet, ...prev]);
@@ -3425,6 +3435,7 @@ export function BettingDashboard({
         impliedProb: null,
         edgePp: null,
         legs: validLegs,
+        autoSettle: false,
       });
       if (!added) {
         setManualError("The bet could not be saved. Check the tracker error and try again.");
@@ -3476,6 +3487,7 @@ export function BettingDashboard({
       modelProb: null,
       impliedProb: null,
       edgePp: null,
+      autoSettle: false,
     });
     if (!added) {
       setManualError("The bet could not be saved. Check the tracker error and try again.");
@@ -3495,6 +3507,7 @@ export function BettingDashboard({
   const pendingStake = bets
     .filter((bet) => bet.status === "pending")
     .reduce((sum, bet) => sum + (Number.isFinite(bet.stake) ? bet.stake : 0), 0);
+  const manualPendingBets = bets.filter((bet) => bet.status === "pending" && !bet.autoSettle);
   const winningBets = bets.filter((bet) => bet.status === "won").length;
   const losingBets = bets.filter((bet) => bet.status === "lost").length;
   const settledNoPush = winningBets + losingBets;
@@ -3789,6 +3802,16 @@ export function BettingDashboard({
               </button>
             </div>
 
+            {!betTrackerLoading && manualPendingBets.length > 0 ? (
+              <div className="mt-4 flex items-start gap-2 rounded-md border border-amber-300/30 bg-amber-400/10 px-3 py-2.5 text-[11px] text-amber-100">
+                <span aria-hidden="true">⚠️</span>
+                <span>
+                  <span className="font-bold">{manualPendingBets.length} manual {manualPendingBets.length === 1 ? "bet needs" : "bets need"} a result.</span>{" "}
+                  Open the tracker and set {manualPendingBets.length === 1 ? "it" : "them"} to won, lost, or push.
+                </span>
+              </div>
+            ) : null}
+
             {betTrackerLoading ? (
               <div className="mt-4 rounded-md border border-white/8 bg-nrl-panel/60 px-3 py-4 text-xs text-nrl-muted">
                 Loading bet tracker...
@@ -3951,6 +3974,9 @@ export function BettingDashboard({
                                     {betTypeLabel(bet.betType)} | {bet.matchName}
                                   </div>
                                   <div className="mt-0.5 text-[10px] text-nrl-muted">{formatDateLabel(bet.matchDate)}</div>
+                                  {bet.status === "pending" && !bet.autoSettle ? (
+                                    <div className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-amber-200">Manual result required</div>
+                                  ) : null}
                                 </div>
                               </div>
                               <div className="shrink-0 text-right">

@@ -17,6 +17,7 @@ interface BetLeg {
   lineValue: number | null;
   odds: number;
   bookie: string | null;
+  autoResult: boolean;
 }
 
 interface UserBetRow {
@@ -46,6 +47,13 @@ interface MatchResult {
   away: string;
   homeScore: number;
   awayScore: number;
+}
+
+interface PlayerTryResult {
+  date: string;
+  team: string;
+  player: string;
+  tries: number;
 }
 
 async function requirePremiumUser() {
@@ -115,6 +123,7 @@ function normaliseBetLeg(raw: unknown): BetLeg | null {
     lineValue: toFinite(raw.lineValue),
     odds,
     bookie: typeof raw.bookie === "string" && raw.bookie.trim() ? raw.bookie.trim() : null,
+    autoResult: raw.autoResult === true,
   };
 }
 
@@ -124,6 +133,16 @@ function normaliseBetLegs(value: unknown): BetLeg[] {
     const leg = normaliseBetLeg(item);
     return leg ? [leg] : [];
   });
+}
+
+function canAutoSettleBet(row: UserBetRow): boolean {
+  if (row.bet_type != null && row.bet_type !== "single") return false;
+  const rawLegs = Array.isArray(row.legs) ? row.legs.filter(isJsonObject) : [];
+  const hasAutoResultLeg = rawLegs.some((leg) => leg.autoResult === true);
+  const hasOnlyLegacyLegs = rawLegs.length > 0 && rawLegs.every((leg) => !("autoResult" in leg));
+  // Older dashboard/bookie singles predate the explicit leg marker. Quick-add
+  // manual singles have no legs or model probability and remain manual.
+  return hasAutoResultLeg || hasOnlyLegacyLegs || row.model_prob != null;
 }
 
 function matchLegKey(leg: BetLeg): string {
@@ -240,10 +259,40 @@ function mapRowToResponse(row: UserBetRow) {
     placedAt: row.placed_at,
     settledAt: row.settled_at,
     legs: normaliseBetLegs(row.legs),
+    autoSettle: canAutoSettleBet(row),
   };
 }
 
-function settleBet(row: UserBetRow, result: MatchResult, nowIso: string): Pick<UserBetRow, "status" | "profit" | "settled_at"> {
+function normalisePlayer(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b(anytime|first|last)\s+(?:try\s*)?scorer\b/g, " ")
+    .replace(/\b\d+\s*\+(?:\s*tries?)?/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function playerMatches(selection: string, player: string): boolean {
+  const selected = normalisePlayer(selection);
+  const candidate = normalisePlayer(player);
+  if (!selected || !candidate) return false;
+  if (selected === candidate) return true;
+
+  const selectedParts = selected.split(" ");
+  const candidateParts = candidate.split(" ");
+  const selectedFirst = selectedParts[0] ?? "";
+  const selectedLast = selectedParts.at(-1) ?? "";
+  const candidateFirst = candidateParts[0] ?? "";
+  const candidateLast = candidateParts.at(-1) ?? "";
+  return selectedLast === candidateLast && selectedFirst[0] === candidateFirst[0];
+}
+
+function settleBet(
+  row: UserBetRow,
+  result: MatchResult,
+  nowIso: string,
+  playerTries: number | null = null
+): Pick<UserBetRow, "status" | "profit" | "settled_at"> {
   const selection = row.selection;
   const lineValue = row.line_value;
   const totalPoints = result.homeScore + result.awayScore;
@@ -296,6 +345,12 @@ function settleBet(row: UserBetRow, result: MatchResult, nowIso: string): Pick<U
       if (totalPoints < lineValue) status = "won";
       else if (totalPoints > lineValue) status = "lost";
       else status = "push";
+    }
+  } else if (row.market === "Tryscorer" && playerTries != null) {
+    const isOrderedScorerMarket = /\b(first|last)\b/i.test(selection);
+    if (!isOrderedScorerMarket) {
+      const requiredTries = lineValue != null && lineValue >= 1 ? Math.ceil(lineValue) : 1;
+      status = playerTries >= requiredTries ? "won" : "lost";
     }
   }
 
@@ -354,12 +409,56 @@ async function buildMatchResultMap(dates: string[]): Promise<Map<string, MatchRe
   return out;
 }
 
+async function buildPlayerTryResults(dates: string[]): Promise<PlayerTryResult[]> {
+  if (dates.length === 0) return [];
+
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("player_stats")
+    .select("match_date,team,player,tries")
+    .in("match_date", dates);
+
+  if (error) {
+    throw new Error(`Failed to fetch try-scorer results: ${error.message}`);
+  }
+
+  return (data ?? []).flatMap((raw) => {
+    const date = String(raw.match_date ?? "");
+    const team = String(raw.team ?? "").replace(/-/g, " ").trim();
+    const player = String(raw.player ?? "").trim();
+    const tries = toFinite(raw.tries);
+    return date && team && player && tries != null ? [{ date, team, player, tries }] : [];
+  });
+}
+
+function findPlayerTries(row: UserBetRow, result: MatchResult, playerResults: PlayerTryResult[]): number | null {
+  const matchTeams = [result.home, result.away];
+  const candidate = playerResults.find((playerResult) => (
+    playerResult.date === row.match_date &&
+    playerMatches(row.selection, playerResult.player) &&
+    matchTeams.some((team) => teamMatches(playerResult.team, team))
+  ));
+  return candidate?.tries ?? null;
+}
+
 async function settlePendingBets(rows: UserBetRow[], userId: string): Promise<UserBetRow[]> {
-  const pendingRows = rows.filter((row) => row.status === "pending" && (row.bet_type == null || row.bet_type === "single"));
+  const pendingRows = rows.filter((row) => (
+    row.status === "pending" &&
+    canAutoSettleBet(row) &&
+    (row.bet_type == null || row.bet_type === "single")
+  ));
   if (pendingRows.length === 0) return rows;
 
   const dates = Array.from(new Set(pendingRows.map((row) => row.match_date).filter(Boolean)));
-  const resultMap = await buildMatchResultMap(dates);
+  const [resultMap, playerTryResults] = await Promise.all([
+    buildMatchResultMap(dates),
+    pendingRows.some((row) => row.market === "Tryscorer")
+      ? buildPlayerTryResults(dates).catch((error) => {
+          console.warn("Unable to fetch try-scorer results; leaving those bets pending.", error);
+          return [];
+        })
+      : Promise.resolve([]),
+  ]);
   const today = new Date().toISOString().slice(0, 10);
   const nowIso = new Date().toISOString();
   const updates: Array<{ id: string; status: BetStatus; profit: number; settled_at: string }> = [];
@@ -380,7 +479,8 @@ async function settlePendingBets(rows: UserBetRow[], userId: string): Promise<Us
       continue;
     }
 
-    const settled = settleBet(row, result, nowIso);
+    const playerTries = row.market === "Tryscorer" ? findPlayerTries(row, result, playerTryResults) : null;
+    const settled = settleBet(row, result, nowIso, playerTries);
     if (settled.status === "pending" || settled.profit == null || !settled.settled_at) continue;
 
     updates.push({

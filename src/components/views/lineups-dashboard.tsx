@@ -1455,7 +1455,7 @@ function MatchStatsPanel({
       title: "Defence",
       rows: [
         { label: "Disruptions / 100 runs", home: homeModelMetrics?.contactDisruptionsPer100Runs, away: awayModelMetrics?.contactDisruptionsPer100Runs },
-        { label: "Cover defence", home: homeModelMetrics?.coverDefenseRating, away: awayModelMetrics?.coverDefenseRating },
+        { label: "Defense rating", home: homeModelMetrics?.defenseRating, away: awayModelMetrics?.defenseRating },
         { label: "Expected line breaks allowed", home: homeModelMetrics?.expectedLineBreaksAllowed, away: awayModelMetrics?.expectedLineBreaksAllowed },
         { label: "Line breaks prevented", home: homeModelMetrics?.lineBreaksPrevented, away: awayModelMetrics?.lineBreaksPrevented },
       ],

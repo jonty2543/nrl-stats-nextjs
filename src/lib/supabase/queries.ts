@@ -1993,7 +1993,7 @@ const POST_MATCH_TEAM_METRIC_COLUMNS = [
   "expected_line_breaks_allowed",
   "actual_line_breaks_allowed",
   "line_breaks_prevented",
-  "cover_defense_rating",
+  "defense_rating",
   "attacking_ruck_rating",
   "defensive_ruck_rating",
   "ruck_dominance_rating",
@@ -2060,7 +2060,7 @@ function mapPostMatchTeamMetric(row: Record<string, unknown>): PostMatchTeamMetr
     expectedLineBreaksAllowed: toFiniteNumber(row.expected_line_breaks_allowed),
     actualLineBreaksAllowed: toFiniteNumber(row.actual_line_breaks_allowed),
     lineBreaksPrevented: toFiniteNumber(row.line_breaks_prevented),
-    coverDefenseRating: toFiniteNumber(row.cover_defense_rating),
+    defenseRating: toFiniteNumber(row.defense_rating),
     attackingRuckRating: toFiniteNumber(row.attacking_ruck_rating),
     defensiveRuckRating: toFiniteNumber(row.defensive_ruck_rating),
     ruckDominanceRating: toFiniteNumber(row.ruck_dominance_rating),
@@ -2185,7 +2185,7 @@ export async function fetchPostMatchTeamMetricsWithRdr(
 
   const fetchCached = unstable_cache(
     async () => fetchPostMatchTeamMetricsWithRdrFromSupabase(normalizedArg),
-    ["post-match-team-metrics-with-rdr-v3", key],
+    ["post-match-team-metrics-with-rdr-v4", key],
     { revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS }
   );
 
@@ -2204,7 +2204,7 @@ export async function fetchPostMatchTeamMetrics(years?: string[]): Promise<PostM
 
   const fetchCached = unstable_cache(
     async () => fetchPostMatchTeamMetricsFromSupabase(normalizedArg),
-    ["post-match-team-metrics-v1", key],
+    ["post-match-team-metrics-v2", key],
     { revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS }
   );
 

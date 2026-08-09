@@ -76,14 +76,14 @@ function VolumeAxisToggle({ checked, onChange }: { checked: boolean; onChange: (
 }
 
 const LOWER_IS_BETTER_STATS = new Set(["Missed tackles", "Penalties", "Errors", "PTB"]);
-const LOCKED_TEAM_STATS = new Set(["Attacking Ruck Rating", "Defensive Ruck Rating", "Ruck Dominance Rating", "PTB Rating", "Cover Rating"]);
-const DEFENSIVE_RATING_STATS = new Set(["Contact Rating", "Cover Rating", "Defensive Ruck Rating"]);
+const LOCKED_TEAM_STATS = new Set(["Attacking Ruck Rating", "Defensive Ruck Rating", "Ruck Dominance Rating", "PTB Rating", "Defense Rating"]);
+const DEFENSIVE_RATING_STATS = new Set(["Contact Rating", "Defense Rating", "Defensive Ruck Rating"]);
 const TEAM_FOR_AGAINST_STATS = TEAM_ATTACK_COMPARISON_STATS.filter((stat) => !LOCKED_TEAM_STATS.has(stat));
 const CURRENT_GAME_WINDOW_YEAR = "2026";
 type PlayerStatsAggregation = "Per game" | "Totals";
 
 type TeamStatsComparisonStat = TeamAttackComparisonStat | TeamDefenceConcededStat;
-type TeamStatsRatingPoint = AttackRatingPoint & Pick<TeamPostMatchStatPoint, "attackingRuckRating" | "defensiveRuckRating" | "ruckDominanceRating" | "ptbRating" | "contactRating" | "coverRating">;
+type TeamStatsRatingPoint = AttackRatingPoint & Pick<TeamPostMatchStatPoint, "attackingRuckRating" | "defensiveRuckRating" | "ruckDominanceRating" | "ptbRating" | "contactRating" | "defenseRating">;
 
 function teamStatSelectOptions(stats: readonly TeamStatsComparisonStat[], canAccessModelPlots: boolean) {
   return stats.map((stat) => !canAccessModelPlots && LOCKED_TEAM_STATS.has(stat)
@@ -93,7 +93,7 @@ function teamStatSelectOptions(stats: readonly TeamStatsComparisonStat[], canAcc
 
 function teamStatHigherIsBetter(stat: TeamStatsComparisonStat, conceded: boolean): boolean {
   if (!conceded) return !LOWER_IS_BETTER_STATS.has(stat);
-  return stat === "PTB" || stat === "Cover Rating" || stat === "Defensive Ruck Rating";
+  return stat === "PTB" || stat === "Defense Rating" || stat === "Defensive Ruck Rating";
 }
 
 function defenceStatLabel(stat: TeamDefenceConcededStat): string {
@@ -196,12 +196,12 @@ const TEAM_ATTACK_STAT_META: Record<TeamStatsComparisonStat, {
     minPadding: 1,
     value: (point) => point.contactRating ?? point.disruptionRate,
   },
-  "Cover Rating": {
-    axisLabel: "COVER RATING",
-    metricLabel: "Cover Rating",
-    description: "Context-adjusted cover-defence rating, centred on 50.",
+  "Defense Rating": {
+    axisLabel: "DEFENSE RATING",
+    metricLabel: "Defense Rating",
+    description: "Context-adjusted defense rating, centred on 50.",
     minPadding: 2,
-    value: (point) => point.coverRating,
+    value: (point) => point.defenseRating,
   },
   "Missed tackles": perGameAttackStat("Missed tackles"),
   Penalties: perGameAttackStat("Penalties"),
@@ -209,10 +209,10 @@ const TEAM_ATTACK_STAT_META: Record<TeamStatsComparisonStat, {
 };
 
 const DEFENCE_QUADRANTS: QuadrantLabels = {
-  topLeft: ["CONTACT LEAKS", "STRONG COVER"],
-  topRight: ["STRONG CONTACT", "STRONG COVER"],
-  bottomLeft: ["CONTACT LEAKS", "COVER LEAKS"],
-  bottomRight: ["STRONG CONTACT", "COVER LEAKS"],
+  topLeft: ["CONTACT LEAKS", "STRONG DEFENSE"],
+  topRight: ["STRONG CONTACT", "STRONG DEFENSE"],
+  bottomLeft: ["CONTACT LEAKS", "DEFENSE LEAKS"],
+  bottomRight: ["STRONG CONTACT", "DEFENSE LEAKS"],
 };
 
 const XPOINTS_QUADRANTS: QuadrantLabels = {
@@ -245,7 +245,7 @@ const PLAYER_TACKLE_QUADRANTS: QuadrantLabels = {
 
 type TeamSection = "Attack" | "Defense" | "Other";
 type AttackPlot = "Stats" | "Efficiency" | "xPoints vs actual points";
-type DefencePlot = "Contact vs cover defence" | "Stats Conceded" | "Defensive Efficiency" | "Actual points conceded vs xPoints conceded";
+type DefencePlot = "Contact vs defense rating" | "Stats Conceded" | "Defensive Efficiency" | "Actual points conceded vs xPoints conceded";
 type EfficiencyView = "Efficiency" | "Volume axis";
 type TeamOtherPlot = "For vs Against" | "Team Share by Position" | "Ruck Dominance Rating";
 type PlayerAttackPlot = "Stats" | "Efficiency" | "Team Proportion";
@@ -369,7 +369,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const [teamDefenceEfficiencyBaseMetric, setTeamDefenceEfficiencyBaseMetric] = useState<TeamAttackEfficiencyBaseStat>("Runs");
   const [teamDefenceEfficiencyOutputMetric, setTeamDefenceEfficiencyOutputMetric] = useState<TeamAttackEfficiencyOutputStat>("Run metres");
   const [teamDefenceEfficiencyView, setTeamDefenceEfficiencyView] = useState<EfficiencyView>("Efficiency");
-  const [defencePlot, setDefencePlot] = useState<DefencePlot>("Contact vs cover defence");
+  const [defencePlot, setDefencePlot] = useState<DefencePlot>("Contact vs defense rating");
   const [teamOtherPlot, setTeamOtherPlot] = useState<TeamOtherPlot>("Team Share by Position");
   const [teamForStat, setTeamForStat] = useState<TeamAttackComparisonStat>("Points");
   const [teamAgainstStat, setTeamAgainstStat] = useState<TeamAttackComparisonStat>("Points");
@@ -402,7 +402,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
   const isTeamEfficiency = isTeamAttackEfficiency || isTeamDefenceEfficiency;
   const isDefenseXPoints = isDefense && defencePlot === "Actual points conceded vs xPoints conceded";
   const isXPoints = isAttackXPoints || isDefenseXPoints;
-  const isModelPlot = isXPoints || isRuckDominancePlot || (isDefense && defencePlot === "Contact vs cover defence");
+  const isModelPlot = isXPoints || isRuckDominancePlot || (isDefense && defencePlot === "Contact vs defense rating");
   const teamAttackXMeta = TEAM_ATTACK_STAT_META[teamAttackXStat];
   const effectiveTeamAttackYStat = teamAttackYStat === "None" ? teamAttackXStat : teamAttackYStat;
   const teamAttackYMeta = TEAM_ATTACK_STAT_META[effectiveTeamAttackYStat];
@@ -572,7 +572,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
           ruckDominanceRating: modelPoint?.ruckDominanceRating ?? null,
           ptbRating: modelPoint?.ptbRating ?? null,
           contactRating: modelPoint?.contactRating ?? null,
-          coverRating: modelPoint?.coverRating ?? null,
+          defenseRating: modelPoint?.defenseRating ?? null,
         };
         const efficiencyBase = point.totals[TEAM_EFFICIENCY_BASE_TOTALS[activeTeamEfficiencyBaseMetric]];
         const efficiencyOutput = point.totals[activeTeamEfficiencyOutputMetric];
@@ -635,7 +635,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
       opponent: point.opponent,
       games: point.games,
       xValue: point.contactRating,
-      yValue: point.coverRating,
+      yValue: point.defenseRating,
       detail: `Expected LB ${point.expectedLineBreaks.toFixed(1)} · Allowed ${point.actualLineBreaks.toFixed(1)}`,
     }));
   }, [activeTeamEfficiencyBaseMetric, activeTeamEfficiencyOutputMetric, activeTeamEfficiencyShowsVolume, activeTeamXMeta, activeTeamYMeta, attackPoints, concededPoints, defencePoints, isAttack, isForVsAgainstPlot, isRuckDominancePlot, isTeamDefenceEfficiency, isTeamDefenceStatsConceded, isTeamEfficiency, teamAgainstMeta, teamAgainstStat, teamForMeta, teamForStat, teamModelStats.attack, teamModelStats.defense]);
@@ -662,7 +662,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
             ? `${activeTeamXDisplayName} against ${activeTeamYDisplayName} scatter plot`
             : isAttack
               ? `${teamAttackXStat} against ${effectiveTeamAttackYStat} scatter plot`
-            : "Contact defence against cover defence scatter plot";
+            : "Contact disruptions against defense rating scatter plot";
   const teamXAxisLabel = isAttackXPoints
     ? mode === "season" ? "AVERAGE XPOINTS PER GAME →" : "XPOINTS →"
     : isDefenseXPoints
@@ -696,7 +696,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
           ? `${defenceStatAxisLabel(effectiveTeamYStat as TeamDefenceConcededStat, activeTeamYMeta.axisLabel)} · BETTER ${activeTeamYHigherIsBetter ? "↑" : "↓"}`
           : isAttack
             ? `${teamAttackYMeta.axisLabel} · BETTER ${teamAttackYHigherIsBetter ? "↑" : "↓"}`
-            : "COVER DEFENCE RATING · BETTER ↑";
+            : "DEFENSE RATING · BETTER ↑";
   const teamXMetricLabel = isAttackXPoints
     ? "xPoints"
     : isDefenseXPoints
@@ -722,7 +722,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
           ? `${teamAgainstMeta.metricLabel} against`
         : isTeamDefenceStatsConceded
           ? activeTeamYDisplayName
-          : isAttack ? teamAttackYMeta.metricLabel : "Cover";
+          : isAttack ? teamAttackYMeta.metricLabel : "Defense rating";
   const teamGameRSquared = useMemo(
     () => mode === "games" && !isTeamSingleStat ? coefficientOfDetermination(plottedTeamPoints) : null,
     [isTeamSingleStat, mode, plottedTeamPoints]
@@ -1018,11 +1018,11 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
                   compact
                   value={defencePlot}
                   options={canAccessModelPlots
-                    ? ["Stats Conceded", "Defensive Efficiency", "Contact vs cover defence", "Actual points conceded vs xPoints conceded"]
+                    ? ["Stats Conceded", "Defensive Efficiency", "Contact vs defense rating", "Actual points conceded vs xPoints conceded"]
                     : [
                         "Stats Conceded",
                         "Defensive Efficiency",
-                        { value: "Contact vs cover defence", label: "🔒 Contact vs cover defence" },
+                        { value: "Contact vs defense rating", label: "🔒 Contact vs defense rating" },
                         { value: "Actual points conceded vs xPoints conceded", label: "🔒 Actual points conceded vs xPoints conceded" },
                       ]}
                   onChange={(value) => setDefencePlot(value as DefencePlot)}
@@ -1066,7 +1066,7 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
               </div>
             ) : null}
             {modelPlotLocked ? (
-              <ModelPlotLock plotName={isXPoints ? "xPoints" : isRuckDominancePlot ? "Ruck Dominance Rating" : selectedModelStatName || "contact and cover defence"} />
+              <ModelPlotLock plotName={isXPoints ? "xPoints" : isRuckDominancePlot ? "Ruck Dominance Rating" : selectedModelStatName || "contact and defense rating"} />
             ) : isTeamSharePlot ? (
               <ReceiptShareLines series={teamShareSeries} metric={teamShareMetric} />
             ) : (
@@ -1164,8 +1164,8 @@ export function PlotsDashboard({ initialData, initialPlayerData, initialPostMatc
             ) : (
               <>
                 <div><span className="font-black text-nrl-text">Contact rating</span><br />(Opponent tackle breaks + opponent offloads) ÷ opponent runs × 100. Lower is better.</div>
-                <div><span className="font-black text-nrl-text">Cover rating</span><br />Sourced from the post-match cover model in nrl.post_match_team_metrics. Higher is better.</div>
-                <div><span className="font-black text-nrl-text">Profiles</span><br />League averages split the four defensive profiles. Contact improves right; cover improves up.</div>
+                <div><span className="font-black text-nrl-text">Defense rating</span><br />Sourced from nrl.post_match_team_metrics. Higher is better.</div>
+                <div><span className="font-black text-nrl-text">Profiles</span><br />League averages split the four defensive profiles. Contact improves right; defense improves up.</div>
               </>
             )}
           </div> : null}

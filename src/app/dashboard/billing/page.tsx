@@ -207,7 +207,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                   "Everything in Free",
                   "Fantasy projections and breakevens",
                   "All plots unlocked in Fantasy and Stats",
-                  "Stats models, including xPoints and cover defense",
+                  "Stats models, including xPoints and defense rating",
                   "Fantasy trade ratings",
                   "New features as they release",
                   formatAiQuota("pro"),

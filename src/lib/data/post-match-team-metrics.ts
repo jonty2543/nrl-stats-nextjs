@@ -18,7 +18,7 @@ export interface PostMatchTeamMetric {
   expectedLineBreaksAllowed: number | null;
   actualLineBreaksAllowed: number | null;
   lineBreaksPrevented: number | null;
-  coverDefenseRating: number | null;
+  defenseRating: number | null;
   attackingRuckRating: number | null;
   defensiveRuckRating: number | null;
   ruckDominanceRating: number | null;
@@ -88,7 +88,7 @@ export interface TeamPostMatchStatPoint {
   ruckDominanceRating: number | null;
   ptbRating: number | null;
   contactRating: number | null;
-  coverRating: number | null;
+  defenseRating: number | null;
 }
 
 export type XPointsPerspective = "attack" | "defense";
@@ -160,7 +160,7 @@ export function buildTeamPostMatchStatPoints(
       ruckDominanceRating: metric.ruckDominanceRating ?? metric.rdr?.ruckDominanceRating ?? null,
       ptbRating: attackingMetric?.rdr?.playTheBallSpeedAboveExpected ?? null,
       contactRating: perspective === "defense" ? metric.contactDisruptionsPer100Runs : null,
-      coverRating: perspective === "defense" ? metric.coverDefenseRating : null,
+      defenseRating: perspective === "defense" ? metric.defenseRating : null,
     };
   });
 
@@ -182,7 +182,7 @@ export function buildTeamPostMatchStatPoints(
     ruckDominanceRating: nullableMean(points.map((point) => point.ruckDominanceRating)),
     ptbRating: nullableMean(points.map((point) => point.ptbRating)),
     contactRating: nullableMean(points.map((point) => point.contactRating)),
-    coverRating: nullableMean(points.map((point) => point.coverRating)),
+    defenseRating: nullableMean(points.map((point) => point.defenseRating)),
   }));
 }
 

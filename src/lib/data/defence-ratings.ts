@@ -11,12 +11,12 @@ export interface DefenceRatingPoint {
   opponent: string | null;
   games: number;
   contactRating: number;
-  coverRating: number;
+  defenseRating: number;
   expectedLineBreaks: number;
   actualLineBreaks: number;
 }
 
-interface RawDefencePoint extends Omit<DefenceRatingPoint, "coverRating"> {
+interface RawDefencePoint extends Omit<DefenceRatingPoint, "defenseRating"> {
   lineBreaksPrevented: number;
   contactDisruptions: number;
   opponentRuns: number;
@@ -166,7 +166,7 @@ function standardise(points: RawDefencePoint[]): DefenceRatingPoint[] {
     contactRating: point.contactRating,
     expectedLineBreaks: point.expectedLineBreaks,
     actualLineBreaks: point.actualLineBreaks,
-    coverRating: 50 + 10 * ((point.lineBreaksPrevented - leagueMean) / leagueSd),
+    defenseRating: 50 + 10 * ((point.lineBreaksPrevented - leagueMean) / leagueSd),
   }));
 }
 
@@ -176,7 +176,7 @@ function buildDefenceRatingPointsFromMetrics(
   gameWindow: 3 | 5 | 10 | null
 ): DefenceRatingPoint[] {
   const allGames = metrics.flatMap((metric): DefenceRatingPoint[] => {
-    if (metric.contactDisruptionsPer100Runs == null || metric.coverDefenseRating == null) return [];
+    if (metric.contactDisruptionsPer100Runs == null || metric.defenseRating == null) return [];
     return [{
       id: `${metric.url}|${metric.team}|defence`,
       team: metric.team,
@@ -185,7 +185,7 @@ function buildDefenceRatingPointsFromMetrics(
       opponent: metric.opponentTeam,
       games: 1,
       contactRating: metric.contactDisruptionsPer100Runs,
-      coverRating: metric.coverDefenseRating,
+      defenseRating: metric.defenseRating,
       expectedLineBreaks: metric.expectedLineBreaksAllowed ?? 0,
       actualLineBreaks: metric.actualLineBreaksAllowed ?? 0,
     }];
@@ -208,7 +208,7 @@ function buildDefenceRatingPointsFromMetrics(
     opponent: null,
     games: points.length,
     contactRating: mean(points.map((point) => point.contactRating)),
-    coverRating: mean(points.map((point) => point.coverRating)),
+    defenseRating: mean(points.map((point) => point.defenseRating)),
     expectedLineBreaks: points.reduce((sum, point) => sum + point.expectedLineBreaks, 0),
     actualLineBreaks: points.reduce((sum, point) => sum + point.actualLineBreaks, 0),
   })).sort((left, right) => left.team.localeCompare(right.team));

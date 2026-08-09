@@ -46,9 +46,12 @@ interface LineupsDashboardProps {
   summaryDiagnostic?: string | null
 }
 
+type LineupPostMatchMetric = import("@/lib/data/post-match-team-metrics").PostMatchTeamMetricWithRdr
+
 interface LineupMatchDetailData {
   match: LineupMatch
   matchStats: LineupMatchStats | null
+  postMatchMetrics: LineupPostMatchMetric[]
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   sportsbetOdds: Record<string, LineupSportsbetOdds>
   casualtyWardOuts: Record<string, LineupCasualtyOut[]>
@@ -104,6 +107,7 @@ function fallbackLineupMatchDetail(match: LineupMatch): LineupMatchDetailData {
   return {
     match,
     matchStats: null,
+    postMatchMetrics: [],
     tryscorerOdds: {},
     sportsbetOdds: {},
     casualtyWardOuts: {},
@@ -1411,11 +1415,15 @@ function MatchStatsPanel({
   match,
   liveMatch,
   stats,
+  postMatchMetrics,
+  showPostMatchModel,
   teamLogos,
 }: {
   match: LineupMatch
   liveMatch: LineupLiveMatch | null
   stats: LineupMatchStats | null
+  postMatchMetrics: LineupPostMatchMetric[]
+  showPostMatchModel: boolean
   teamLogos: Record<string, string>
 }) {
   const score = matchScore(match, liveMatch)
@@ -1425,6 +1433,62 @@ function MatchStatsPanel({
   const away = sumLiveStats(liveMatch, match.awayTeam, baseAway)
   const isPregame = !hasMatchStarted(liveMatch) && match.homeScore == null && match.awayScore == null
   const isFixtureOnly = match.matchId.startsWith("draw-2026-")
+  const metricForTeam = (team: LineupTeam | null, isHome: boolean) => {
+    const sideMetric = postMatchMetrics.find((metric) => metric.isHome === isHome)
+    if (sideMetric) return sideMetric
+    if (!team) return null
+    const aliases = new Set([...teamAliases(team.team), ...teamAliases(team.teamName)])
+    return postMatchMetrics.find((metric) => aliases.has(normaliseKey(metric.team))) ?? null
+  }
+  const homeModelMetrics = metricForTeam(match.homeTeam, true)
+  const awayModelMetrics = metricForTeam(match.awayTeam, false)
+  const modelMetricSections = [
+    {
+      title: "xPoints",
+      rows: [
+        { label: "xPoints", home: homeModelMetrics?.xpoints, away: awayModelMetrics?.xpoints },
+        { label: "xPoints margin", home: homeModelMetrics?.xpointsMargin, away: awayModelMetrics?.xpointsMargin },
+        { label: "Finishing vs xPoints", home: homeModelMetrics?.finishingDelta, away: awayModelMetrics?.finishingDelta },
+      ],
+    },
+    {
+      title: "Defence",
+      rows: [
+        { label: "Disruptions / 100 runs", home: homeModelMetrics?.contactDisruptionsPer100Runs, away: awayModelMetrics?.contactDisruptionsPer100Runs },
+        { label: "Cover defence", home: homeModelMetrics?.coverDefenseRating, away: awayModelMetrics?.coverDefenseRating },
+        { label: "Expected line breaks allowed", home: homeModelMetrics?.expectedLineBreaksAllowed, away: awayModelMetrics?.expectedLineBreaksAllowed },
+        { label: "Line breaks prevented", home: homeModelMetrics?.lineBreaksPrevented, away: awayModelMetrics?.lineBreaksPrevented },
+      ],
+    },
+    {
+      title: "Ruck",
+      rows: [
+        { label: "Attacking ruck rating", home: homeModelMetrics?.attackingRuckRating ?? homeModelMetrics?.rdr?.attackingRuckRating, away: awayModelMetrics?.attackingRuckRating ?? awayModelMetrics?.rdr?.attackingRuckRating },
+        { label: "Defensive ruck rating", home: homeModelMetrics?.defensiveRuckRating ?? homeModelMetrics?.rdr?.defensiveRuckRating, away: awayModelMetrics?.defensiveRuckRating ?? awayModelMetrics?.rdr?.defensiveRuckRating },
+        { label: "Ruck dominance", home: homeModelMetrics?.ruckDominanceRating ?? homeModelMetrics?.rdr?.ruckDominanceRating, away: awayModelMetrics?.ruckDominanceRating ?? awayModelMetrics?.rdr?.ruckDominanceRating },
+      ],
+    },
+    {
+      title: "Post contact",
+      rows: [
+        { label: "Expected post contact", home: homeModelMetrics?.rdr?.expectedPostContactMetres, away: awayModelMetrics?.rdr?.expectedPostContactMetres },
+        { label: "Post contact vs expected", home: homeModelMetrics?.rdr?.postContactMetresAboveExpected, away: awayModelMetrics?.rdr?.postContactMetresAboveExpected },
+        { label: "PCM vs expected / 100 runs", home: homeModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, away: awayModelMetrics?.rdr?.pcmAboveExpectedPer100Runs },
+      ],
+    },
+    {
+      title: "Play-the-ball",
+      rows: [
+        { label: "Expected play-the-ball", home: homeModelMetrics?.rdr?.expectedPlayTheBallSpeed, away: awayModelMetrics?.rdr?.expectedPlayTheBallSpeed },
+        { label: "PTB speed vs expected", home: homeModelMetrics?.rdr?.playTheBallSpeedAboveExpected, away: awayModelMetrics?.rdr?.playTheBallSpeedAboveExpected },
+      ],
+    },
+  ]
+    .map((section) => ({
+      ...section,
+      rows: section.rows.filter((row) => row.home != null || row.away != null),
+    }))
+    .filter((section) => section.rows.length > 0)
 
   if (!home || !away) {
     if (isPregame) return <PregameMatchStatsPreview match={match} teamLogos={teamLogos} />
@@ -1458,6 +1522,26 @@ function MatchStatsPanel({
         <MatchStatCompare label="Errors" home={home.errors} away={away.errors} />
         <MatchStatCompare label="Offloads" home={home.offloads} away={away.offloads} />
       </div>
+      {showPostMatchModel ? (
+        modelMetricSections.length > 0 ? (
+          <div className="space-y-3">
+            {modelMetricSections.map((section) => (
+              <section key={section.title} className="rounded-lg border border-emerald-300/20 bg-emerald-400/[0.035] p-2.5">
+                <div className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">{section.title}</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {section.rows.map((row) => (
+                    <MatchStatCompare key={row.label} label={row.label} home={row.home} away={row.away} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+          ) : (
+            <div className="rounded-lg border border-emerald-300/20 bg-emerald-400/[0.035] px-3 py-3 text-xs text-nrl-muted">
+              Model metrics are still processing for this match.
+            </div>
+          )
+      ) : null}
     </div>
   )
 }
@@ -2058,7 +2142,12 @@ function PitchPlayer({
     >
       <div className={`${compact ? "h-9 w-9 sm:h-10 sm:w-10" : "h-12 w-12"} relative mx-auto`}>
         <div className="grid h-full w-full place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-nrl-panel shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
-          <ImageWithFallback sources={imageSources} alt={`${player.player} player image`} className="h-full w-full object-cover object-top" />
+          <ImageWithFallback
+            sources={imageSources}
+            alt={`${player.player} player image`}
+            className="h-full w-full object-cover object-top"
+            loading="eager"
+          />
         </div>
         <div className={`${compact ? "-right-3 px-1.5 text-[9px]" : "-right-3.5 px-2 text-[10px]"} absolute -top-1 rounded-full bg-blue-950 py-0.5 font-bold text-white`}>
           {slot}
@@ -3260,6 +3349,9 @@ function LineupCard({
   const hasOpenedHashTargetRef = useRef(false)
   const hasResultScore = detailMatch.homeScore != null || detailMatch.awayScore != null
   const headerScore = matchScore(detailMatch, displayLiveMatch)
+  const isPostMatch =
+    isCompletedMatchState(displayLiveMatch?.state?.matchState) ||
+    (hasResultScore && !isMatchLive(displayLiveMatch))
   const showSplitScore = headerScore.homeScore != null || headerScore.awayScore != null
   const homeScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.homeScore > headerScore.awayScore
   const awayScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.awayScore > headerScore.homeScore
@@ -3458,7 +3550,7 @@ function LineupCard({
           <>
         <LiveTryScorersStrip match={detailMatch} liveMatch={displayLiveMatch} />
         {availableDetailViews.length > 0 ? (
-          <div className="mb-3 flex w-full justify-center">
+          <div className="mb-5 flex w-full justify-center sm:mb-3">
             <div className="inline-flex max-w-full items-center overflow-x-auto rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
               {availableDetailViews.map((view) => (
                 <button
@@ -3478,8 +3570,17 @@ function LineupCard({
 
         {activeDetailView === "stats" ? (
           <div className="space-y-3">
-            <MatchStatsPanel match={detailMatch} liveMatch={displayLiveMatch} stats={matchStats} teamLogos={teamLogos} />
-            <SeasonFormGuide match={detailMatch} homeSummary={homeSummary} awaySummary={awaySummary} />
+            <MatchStatsPanel
+              match={detailMatch}
+              liveMatch={displayLiveMatch}
+              stats={matchStats}
+              postMatchMetrics={detail?.postMatchMetrics ?? []}
+              showPostMatchModel={canAccessFantasyProjections && isPostMatch}
+              teamLogos={teamLogos}
+            />
+            {showPregameContent ? (
+              <SeasonFormGuide match={detailMatch} homeSummary={homeSummary} awaySummary={awaySummary} />
+            ) : null}
           </div>
         ) : activeDetailView === "insights" ? (
           <div className="space-y-3">
@@ -3594,7 +3695,7 @@ function LineupSelectors({
   selectedCompetition: LineupCompetition
 }) {
   return (
-    <div className="flex flex-wrap justify-end gap-2">
+    <div className="mb-3 flex flex-wrap justify-end gap-2 sm:mb-0">
       <label className="block w-36 sm:w-40">
         <span className="sr-only">Select competition</span>
         <select

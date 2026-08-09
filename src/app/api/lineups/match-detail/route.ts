@@ -2,7 +2,12 @@ import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { getServerPremiumAccess, getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { fetchLineupsForRound } from "@/lib/lineups/nrl-lineups"
-import { fetchLineupPlayerAverageSources, fetchLineupsMatchDetailSummary } from "@/lib/supabase/queries"
+import {
+  fetchLineupPlayerAverageSources,
+  fetchLineupsMatchDetailSummary,
+  fetchPostMatchTeamMetricsWithRdr,
+} from "@/lib/supabase/queries"
+import type { PostMatchTeamMetricWithRdr } from "@/lib/data/post-match-team-metrics"
 import type { LineupMatch } from "@/lib/lineups/nrl-lineups"
 import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
 
@@ -51,6 +56,44 @@ function sameFixture(left: LineupMatch, right: LineupMatch): boolean {
   const leftTeams = matchTeams(left)
   const rightTeams = matchTeams(right)
   return leftTeams.some((team) => rightTeams.includes(team))
+}
+
+function normaliseFixtureValue(value: string | null | undefined): string {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+function postMatchMetricsForFixture(
+  metrics: PostMatchTeamMetricWithRdr[],
+  match: LineupMatch
+): PostMatchTeamMetricWithRdr[] {
+  const matchUrl = normaliseFixtureValue(match.matchUrl)
+  if (matchUrl) {
+    const urlMatches = metrics.filter((metric) => normaliseFixtureValue(metric.url) === matchUrl)
+    if (urlMatches.length > 0) return urlMatches
+  }
+
+  const matchDate = match.matchDate.slice(0, 10)
+  const fixtureTeams = new Set(
+    [
+      match.homeTeam?.team,
+      match.homeTeam?.teamName,
+      match.awayTeam?.team,
+      match.awayTeam?.teamName,
+      ...match.match.split(/\s+vs?\.?\s+/i),
+    ]
+      .map(normaliseFixtureValue)
+      .filter(Boolean)
+  )
+  const matchesFixtureTeam = (value: string | null | undefined) => {
+    const candidate = normaliseFixtureValue(value)
+    if (!candidate) return false
+    return [...fixtureTeams].some((team) => team === candidate || team.includes(candidate) || candidate.includes(team))
+  }
+
+  return metrics.filter((metric) => {
+    if (metric.matchDate.slice(0, 10) !== matchDate) return false
+    return matchesFixtureTeam(metric.team) || matchesFixtureTeam(metric.opponentTeam)
+  })
 }
 
 function stripFantasyProjections(match: LineupMatch): LineupMatch {
@@ -183,9 +226,27 @@ export async function POST(request: NextRequest) {
       : fallbackDetail
     if (!responseDetail) return NextResponse.json({ detail: null }, { status: 404 })
 
+    let postMatchMetrics: PostMatchTeamMetricWithRdr[] = []
+    const responseMatch = responseDetail.match
+    const hasCompletedResult =
+      (responseMatch.homeScore ?? responseDetail.matchStats?.home.score) != null &&
+      (responseMatch.awayScore ?? responseDetail.matchStats?.away.score) != null &&
+      responseMatch.matchDate.slice(0, 10) <= new Date().toISOString().slice(0, 10)
+    if (hasProAccess && competition === "nrl" && hasCompletedResult) {
+      try {
+        postMatchMetrics = postMatchMetricsForFixture(
+          await fetchPostMatchTeamMetricsWithRdr([String(year)]),
+          responseMatch
+        )
+      } catch (error) {
+        console.warn("Unable to load lineup post-match model metrics.", error)
+      }
+    }
+
     const accessFilteredDetail = {
       ...(hasPremiumAccess ? responseDetail : stripPremiumTryscorerOdds(responseDetail)),
       match: hasProAccess ? responseDetail.match : stripFantasyProjections(responseDetail.match),
+      postMatchMetrics,
     }
 
     return NextResponse.json({ detail: accessFilteredDetail })

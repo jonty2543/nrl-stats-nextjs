@@ -6,6 +6,7 @@ interface ImageWithFallbackProps {
   sources: string[]
   alt: string
   className?: string
+  loading?: "eager" | "lazy"
 }
 
 function upgradeHttpSource(source: string): string {
@@ -56,7 +57,7 @@ function imageSourceCandidates(value: string): string[] {
   return out
 }
 
-export function ImageWithFallback({ sources, alt, className }: ImageWithFallbackProps) {
+export function ImageWithFallback({ sources, alt, className, loading = "lazy" }: ImageWithFallbackProps) {
   const rawSourceSignature = sources.join("|")
   const uniqueSources = useMemo(() => {
     const seen = new Set<string>()
@@ -90,7 +91,7 @@ export function ImageWithFallback({ sources, alt, className }: ImageWithFallback
       src={activeSource}
       alt={alt}
       className={className}
-      loading="lazy"
+      loading={loading}
       decoding="async"
       referrerPolicy="no-referrer"
       onError={() => {

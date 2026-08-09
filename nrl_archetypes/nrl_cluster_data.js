@@ -6,7 +6,7 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Ball Running Fullback",
-                    "count": 14,
+                    "count": 15,
                     "description": "Fullbacks who are quick and able to break the defensive line, and opt for game breaking runs over tough carries."
                 },
                 {
@@ -30,7 +30,7 @@ const clusterData = {
                 {
                     "id": 4,
                     "name": "Support Fullback",
-                    "count": 29,
+                    "count": 28,
                     "description": "Players who are less involved in attack, but may specialise in defense or defusing kicks."
                 }
             ],
@@ -67,7 +67,7 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Support Winger",
-                    "count": 85,
+                    "count": 86,
                     "description": "These wingers tend to be less involved in the game, perhaps due to lack of skill or opportunity."
                 },
                 {
@@ -79,7 +79,7 @@ const clusterData = {
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 70,
+                    "count": 69,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -120,7 +120,7 @@ const clusterData = {
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 51,
+                    "count": 52,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
@@ -220,7 +220,7 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 36,
+                    "count": 37,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
@@ -238,7 +238,7 @@ const clusterData = {
                 {
                     "id": 3,
                     "name": "Crafty Hooker",
-                    "count": 17,
+                    "count": 16,
                     "description": "Creative types who specialise in finding the right pass for their forwards."
                 }
             ],
@@ -274,25 +274,25 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 57,
+                    "count": 69,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 65,
+                    "count": 81,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 39,
+                    "count": 31,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 55,
+                    "count": 36,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -328,19 +328,19 @@ const clusterData = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 31,
+                    "count": 26,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 58,
+                    "count": 60,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 177,
+                    "count": 180,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

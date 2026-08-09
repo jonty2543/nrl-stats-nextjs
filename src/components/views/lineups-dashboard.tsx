@@ -1202,6 +1202,30 @@ function formatCompactStat(value: number | null | undefined, suffix = ""): strin
   return `${rounded}${suffix}`
 }
 
+type MatchStatShadeScale = {
+  neutral: number
+  extent: number
+}
+
+const MODEL_METRIC_SHADE_SCALES = {
+  rating: { neutral: 50, extent: 25 },
+  finishingDelta: { neutral: 0, extent: 16 },
+  lineBreaksPrevented: { neutral: 0, extent: 4 },
+  postContactDelta: { neutral: 0, extent: 120 },
+  pcmDeltaPer100: { neutral: 0, extent: 40 },
+  ptbDelta: { neutral: 0, extent: 0.4 },
+} as const satisfies Record<string, MatchStatShadeScale>
+
+function fixedMatchStatShade(value: number | null | undefined, scale: MatchStatShadeScale | null | undefined): CSSProperties | undefined {
+  if (value == null || !Number.isFinite(value) || !scale || scale.extent <= 0) return undefined
+  const score = Math.max(-1, Math.min(1, (value - scale.neutral) / scale.extent))
+  const hue = (score + 1) * 60
+  return {
+    color: `hsl(${hue} 78% 70%)`,
+    backgroundColor: `hsl(${hue} 72% 48% / 0.1)`,
+  }
+}
+
 function sumLiveStats(
   liveMatch: LineupLiveMatch | null,
   team: LineupTeam | null,
@@ -1239,12 +1263,14 @@ function MatchStatCompare({
   away,
   suffix = "",
   bar = false,
+  shadeScale,
 }: {
   label: string
   home: number | null | undefined
   away: number | null | undefined
   suffix?: string
   bar?: boolean
+  shadeScale?: MatchStatShadeScale | null
 }) {
   const hasValues = home != null || away != null
   if (!hasValues) return null
@@ -1256,9 +1282,9 @@ function MatchStatCompare({
   return (
     <div className="rounded-md border border-white/8 bg-nrl-panel-2/55 px-3 py-2">
       <div className="mb-1 flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
-        <span>{formatCompactStat(home, suffix)}</span>
+        <span className="rounded px-1 py-0.5" style={fixedMatchStatShade(home, shadeScale)}>{formatCompactStat(home, suffix)}</span>
         <span>{label}</span>
-        <span>{formatCompactStat(away, suffix)}</span>
+        <span className="rounded px-1 py-0.5" style={fixedMatchStatShade(away, shadeScale)}>{formatCompactStat(away, suffix)}</span>
       </div>
       {bar ? (
         <div className="flex h-2 overflow-hidden rounded-full bg-white/10">
@@ -1442,45 +1468,53 @@ function MatchStatsPanel({
   }
   const homeModelMetrics = metricForTeam(match.homeTeam, true)
   const awayModelMetrics = metricForTeam(match.awayTeam, false)
-  const modelMetricSections = [
+  const modelMetricSections: Array<{
+    title: string
+    rows: Array<{
+      label: string
+      home: number | null | undefined
+      away: number | null | undefined
+      shadeScale?: MatchStatShadeScale
+    }>
+  }> = [
     {
       title: "xPoints",
       rows: [
         { label: "xPoints", home: homeModelMetrics?.xpoints, away: awayModelMetrics?.xpoints },
         { label: "xPoints margin", home: homeModelMetrics?.xpointsMargin, away: awayModelMetrics?.xpointsMargin },
-        { label: "Finishing vs xPoints", home: homeModelMetrics?.finishingDelta, away: awayModelMetrics?.finishingDelta },
+        { label: "Finishing vs xPoints", home: homeModelMetrics?.finishingDelta, away: awayModelMetrics?.finishingDelta, shadeScale: MODEL_METRIC_SHADE_SCALES.finishingDelta },
       ],
     },
     {
       title: "Defence",
       rows: [
         { label: "Disruptions / 100 runs", home: homeModelMetrics?.contactDisruptionsPer100Runs, away: awayModelMetrics?.contactDisruptionsPer100Runs },
-        { label: "Defense rating", home: homeModelMetrics?.defenseRating, away: awayModelMetrics?.defenseRating },
+        { label: "Defense rating", home: homeModelMetrics?.defenseRating, away: awayModelMetrics?.defenseRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
         { label: "Expected line breaks allowed", home: homeModelMetrics?.expectedLineBreaksAllowed, away: awayModelMetrics?.expectedLineBreaksAllowed },
-        { label: "Line breaks prevented", home: homeModelMetrics?.lineBreaksPrevented, away: awayModelMetrics?.lineBreaksPrevented },
+        { label: "Line breaks prevented", home: homeModelMetrics?.lineBreaksPrevented, away: awayModelMetrics?.lineBreaksPrevented, shadeScale: MODEL_METRIC_SHADE_SCALES.lineBreaksPrevented },
       ],
     },
     {
       title: "Ruck",
       rows: [
-        { label: "Attacking ruck rating", home: homeModelMetrics?.attackingRuckRating ?? homeModelMetrics?.rdr?.attackingRuckRating, away: awayModelMetrics?.attackingRuckRating ?? awayModelMetrics?.rdr?.attackingRuckRating },
-        { label: "Defensive ruck rating", home: homeModelMetrics?.defensiveRuckRating ?? homeModelMetrics?.rdr?.defensiveRuckRating, away: awayModelMetrics?.defensiveRuckRating ?? awayModelMetrics?.rdr?.defensiveRuckRating },
-        { label: "Ruck dominance", home: homeModelMetrics?.ruckDominanceRating ?? homeModelMetrics?.rdr?.ruckDominanceRating, away: awayModelMetrics?.ruckDominanceRating ?? awayModelMetrics?.rdr?.ruckDominanceRating },
+        { label: "Attacking ruck rating", home: homeModelMetrics?.attackingRuckRating ?? homeModelMetrics?.rdr?.attackingRuckRating, away: awayModelMetrics?.attackingRuckRating ?? awayModelMetrics?.rdr?.attackingRuckRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
+        { label: "Defensive ruck rating", home: homeModelMetrics?.defensiveRuckRating ?? homeModelMetrics?.rdr?.defensiveRuckRating, away: awayModelMetrics?.defensiveRuckRating ?? awayModelMetrics?.rdr?.defensiveRuckRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
+        { label: "Ruck dominance", home: homeModelMetrics?.ruckDominanceRating ?? homeModelMetrics?.rdr?.ruckDominanceRating, away: awayModelMetrics?.ruckDominanceRating ?? awayModelMetrics?.rdr?.ruckDominanceRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
       ],
     },
     {
       title: "Post contact",
       rows: [
         { label: "Expected post contact", home: homeModelMetrics?.rdr?.expectedPostContactMetres, away: awayModelMetrics?.rdr?.expectedPostContactMetres },
-        { label: "Post contact vs expected", home: homeModelMetrics?.rdr?.postContactMetresAboveExpected, away: awayModelMetrics?.rdr?.postContactMetresAboveExpected },
-        { label: "PCM vs expected / 100 runs", home: homeModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, away: awayModelMetrics?.rdr?.pcmAboveExpectedPer100Runs },
+        { label: "Post contact vs expected", home: homeModelMetrics?.rdr?.postContactMetresAboveExpected, away: awayModelMetrics?.rdr?.postContactMetresAboveExpected, shadeScale: MODEL_METRIC_SHADE_SCALES.postContactDelta },
+        { label: "PCM vs expected / 100 runs", home: homeModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, away: awayModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, shadeScale: MODEL_METRIC_SHADE_SCALES.pcmDeltaPer100 },
       ],
     },
     {
       title: "Play-the-ball",
       rows: [
         { label: "Expected play-the-ball", home: homeModelMetrics?.rdr?.expectedPlayTheBallSpeed, away: awayModelMetrics?.rdr?.expectedPlayTheBallSpeed },
-        { label: "PTB speed vs expected", home: homeModelMetrics?.rdr?.playTheBallSpeedAboveExpected, away: awayModelMetrics?.rdr?.playTheBallSpeedAboveExpected },
+        { label: "PTB speed vs expected", home: homeModelMetrics?.rdr?.playTheBallSpeedAboveExpected, away: awayModelMetrics?.rdr?.playTheBallSpeedAboveExpected, shadeScale: MODEL_METRIC_SHADE_SCALES.ptbDelta },
       ],
     },
   ]
@@ -1530,7 +1564,7 @@ function MatchStatsPanel({
                 <div className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">{section.title}</div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {section.rows.map((row) => (
-                    <MatchStatCompare key={row.label} label={row.label} home={row.home} away={row.away} />
+                    <MatchStatCompare key={row.label} label={row.label} home={row.home} away={row.away} shadeScale={row.shadeScale} />
                   ))}
                 </div>
               </section>

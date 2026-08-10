@@ -1058,7 +1058,7 @@ function ScoreNumber({ value, align, isWinner, lift = false }: { value: number |
   return (
     <div
       className={`min-w-[1.35rem] text-[1.5rem] leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-5xl lg:text-6xl ${
-        isWinner ? "font-black" : "font-normal"
+        isWinner ? "font-black sm:font-bold" : "font-normal"
       } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
       } ${
@@ -1104,7 +1104,7 @@ function LiveScoreHeader({
             </div>
           ) : null}
           {splitScore ? null : (
-            <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl">
+            <div className="text-2xl font-black leading-none tabular-nums text-nrl-text sm:text-3xl sm:font-bold">
               {score.homeScore ?? "-"} - {score.awayScore ?? "-"}
             </div>
           )}
@@ -1247,6 +1247,7 @@ function sumLiveStats(
     fantasyPoints: sum((row) => row.fantasyPointsTotal),
     tries: sum((row) => row.tries),
     allRunMetres: sum((row) => row.allRunMetres),
+    kickingMetres: sum((row) => row.kickMetres),
     postContactMetres: sum((row) => row.postContactMetres),
     lineBreaks: sum((row) => row.lineBreaks),
     tackleBreaks: sum((row) => row.tackleBreaks),
@@ -1472,6 +1473,7 @@ function MatchStatsPanel({
     title: string
     rows: Array<{
       label: string
+      description: string
       home: number | null | undefined
       away: number | null | undefined
       shadeScale?: MatchStatShadeScale
@@ -1480,41 +1482,41 @@ function MatchStatsPanel({
     {
       title: "xPoints",
       rows: [
-        { label: "xPoints", home: homeModelMetrics?.xpoints, away: awayModelMetrics?.xpoints },
-        { label: "xPoints margin", home: homeModelMetrics?.xpointsMargin, away: awayModelMetrics?.xpointsMargin },
-        { label: "Finishing vs xPoints", home: homeModelMetrics?.finishingDelta, away: awayModelMetrics?.finishingDelta, shadeScale: MODEL_METRIC_SHADE_SCALES.finishingDelta },
+        { label: "xPoints", description: "The points the model expected from the team's attacking performance.", home: homeModelMetrics?.xpoints, away: awayModelMetrics?.xpoints },
+        { label: "xPoints margin", description: "The team's xPoints minus its opponent's xPoints. Positive is better.", home: homeModelMetrics?.xpointsMargin, away: awayModelMetrics?.xpointsMargin },
+        { label: "Finishing vs xPoints", description: "Actual points minus xPoints. Positive means the team scored more than expected.", home: homeModelMetrics?.finishingDelta, away: awayModelMetrics?.finishingDelta, shadeScale: MODEL_METRIC_SHADE_SCALES.finishingDelta },
       ],
     },
     {
       title: "Defence",
       rows: [
-        { label: "Disruptions / 100 runs", home: homeModelMetrics?.contactDisruptionsPer100Runs, away: awayModelMetrics?.contactDisruptionsPer100Runs },
-        { label: "Defense rating", home: homeModelMetrics?.defenseRating, away: awayModelMetrics?.defenseRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
-        { label: "Expected line breaks allowed", home: homeModelMetrics?.expectedLineBreaksAllowed, away: awayModelMetrics?.expectedLineBreaksAllowed },
-        { label: "Line breaks prevented", home: homeModelMetrics?.lineBreaksPrevented, away: awayModelMetrics?.lineBreaksPrevented, shadeScale: MODEL_METRIC_SHADE_SCALES.lineBreaksPrevented },
+        { label: "Disruptions / 100 runs", description: "Opponent tackle breaks plus offloads for every 100 opposition runs. Lower is better for the defence.", home: homeModelMetrics?.contactDisruptionsPer100Runs, away: awayModelMetrics?.contactDisruptionsPer100Runs },
+        { label: "Defense rating", description: "A modelled line-break prevention rating centred around 50. Higher is better.", home: homeModelMetrics?.defenseRating, away: awayModelMetrics?.defenseRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
+        { label: "Expected line breaks allowed", description: "The number of line breaks the model expected the opposition to make. Lower is better.", home: homeModelMetrics?.expectedLineBreaksAllowed, away: awayModelMetrics?.expectedLineBreaksAllowed },
+        { label: "Line breaks prevented", description: "Expected opposition line breaks minus actual opposition line breaks. Positive is better.", home: homeModelMetrics?.lineBreaksPrevented, away: awayModelMetrics?.lineBreaksPrevented, shadeScale: MODEL_METRIC_SHADE_SCALES.lineBreaksPrevented },
       ],
     },
     {
       title: "Ruck",
       rows: [
-        { label: "Attacking ruck rating", home: homeModelMetrics?.attackingRuckRating ?? homeModelMetrics?.rdr?.attackingRuckRating, away: awayModelMetrics?.attackingRuckRating ?? awayModelMetrics?.rdr?.attackingRuckRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
-        { label: "Defensive ruck rating", home: homeModelMetrics?.defensiveRuckRating ?? homeModelMetrics?.rdr?.defensiveRuckRating, away: awayModelMetrics?.defensiveRuckRating ?? awayModelMetrics?.rdr?.defensiveRuckRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
-        { label: "Ruck dominance", home: homeModelMetrics?.ruckDominanceRating ?? homeModelMetrics?.rdr?.ruckDominanceRating, away: awayModelMetrics?.ruckDominanceRating ?? awayModelMetrics?.rdr?.ruckDominanceRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
+        { label: "Attacking ruck rating", description: "A modelled rating of how strongly the team carried and played the ball through the ruck. Higher is better.", home: homeModelMetrics?.attackingRuckRating ?? homeModelMetrics?.rdr?.attackingRuckRating, away: awayModelMetrics?.attackingRuckRating ?? awayModelMetrics?.rdr?.attackingRuckRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
+        { label: "Defensive ruck rating", description: "A modelled rating of how well the team restricted its opponent through the ruck. Higher is better.", home: homeModelMetrics?.defensiveRuckRating ?? homeModelMetrics?.rdr?.defensiveRuckRating, away: awayModelMetrics?.defensiveRuckRating ?? awayModelMetrics?.rdr?.defensiveRuckRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
+        { label: "Ruck dominance", description: "The combined attacking and defensive ruck performance rating. Higher is better.", home: homeModelMetrics?.ruckDominanceRating ?? homeModelMetrics?.rdr?.ruckDominanceRating, away: awayModelMetrics?.ruckDominanceRating ?? awayModelMetrics?.rdr?.ruckDominanceRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
       ],
     },
     {
       title: "Post contact",
       rows: [
-        { label: "Expected post contact", home: homeModelMetrics?.rdr?.expectedPostContactMetres, away: awayModelMetrics?.rdr?.expectedPostContactMetres },
-        { label: "Post contact vs expected", home: homeModelMetrics?.rdr?.postContactMetresAboveExpected, away: awayModelMetrics?.rdr?.postContactMetresAboveExpected, shadeScale: MODEL_METRIC_SHADE_SCALES.postContactDelta },
-        { label: "PCM vs expected / 100 runs", home: homeModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, away: awayModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, shadeScale: MODEL_METRIC_SHADE_SCALES.pcmDeltaPer100 },
+        { label: "Expected post contact", description: "Post-contact metres expected from the team's runs and match context.", home: homeModelMetrics?.rdr?.expectedPostContactMetres, away: awayModelMetrics?.rdr?.expectedPostContactMetres },
+        { label: "Post contact vs expected", description: "Actual post-contact metres minus expected post-contact metres. Positive is better.", home: homeModelMetrics?.rdr?.postContactMetresAboveExpected, away: awayModelMetrics?.rdr?.postContactMetresAboveExpected, shadeScale: MODEL_METRIC_SHADE_SCALES.postContactDelta },
+        { label: "PCM vs expected / 100 runs", description: "Post-contact metres above or below expectation, normalised to 100 runs. Positive is better.", home: homeModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, away: awayModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, shadeScale: MODEL_METRIC_SHADE_SCALES.pcmDeltaPer100 },
       ],
     },
     {
       title: "Play-the-ball",
       rows: [
-        { label: "Expected play-the-ball", home: homeModelMetrics?.rdr?.expectedPlayTheBallSpeed, away: awayModelMetrics?.rdr?.expectedPlayTheBallSpeed },
-        { label: "PTB speed vs expected", home: homeModelMetrics?.rdr?.playTheBallSpeedAboveExpected, away: awayModelMetrics?.rdr?.playTheBallSpeedAboveExpected, shadeScale: MODEL_METRIC_SHADE_SCALES.ptbDelta },
+        { label: "Expected play-the-ball", description: "The average play-the-ball time expected from the team's runs and match context.", home: homeModelMetrics?.rdr?.expectedPlayTheBallSpeed, away: awayModelMetrics?.rdr?.expectedPlayTheBallSpeed },
+        { label: "PTB speed vs expected", description: "How much quicker or slower the team's play-the-ball was than expected. Positive is better.", home: homeModelMetrics?.rdr?.playTheBallSpeedAboveExpected, away: awayModelMetrics?.rdr?.playTheBallSpeedAboveExpected, shadeScale: MODEL_METRIC_SHADE_SCALES.ptbDelta },
       ],
     },
   ]
@@ -1548,6 +1550,7 @@ function MatchStatsPanel({
         <MatchStatCompare label="Fantasy" home={home.fantasyPoints} away={away.fantasyPoints} />
         <MatchStatCompare label="Completion" home={home.completionRate} away={away.completionRate} suffix="%" />
         <MatchStatCompare label="Run metres" home={home.allRunMetres} away={away.allRunMetres} />
+        <MatchStatCompare label="Kicking metres" home={home.kickingMetres} away={away.kickingMetres} />
         <MatchStatCompare label="Post contact" home={home.postContactMetres} away={away.postContactMetres} />
         <MatchStatCompare label="Line breaks" home={home.lineBreaks} away={away.lineBreaks} />
         <MatchStatCompare label="Tackle breaks" home={home.tackleBreaks} away={away.tackleBreaks} />
@@ -1560,8 +1563,26 @@ function MatchStatsPanel({
         modelMetricSections.length > 0 ? (
           <div className="space-y-3">
             {modelMetricSections.map((section) => (
-              <section key={section.title} className="rounded-lg border border-emerald-300/20 bg-emerald-400/[0.035] p-2.5">
-                <div className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">{section.title}</div>
+              <section key={section.title} className="relative rounded-lg border border-emerald-300/20 bg-emerald-400/[0.035] p-2.5">
+                <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">{section.title}</div>
+                  <details className="relative">
+                    <summary className="grid h-5 w-5 cursor-pointer list-none place-items-center rounded-full border border-emerald-300/35 bg-emerald-300/8 text-[11px] font-black normal-case tracking-normal text-emerald-200 transition hover:border-emerald-300/60 hover:bg-emerald-300/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60 [&::-webkit-details-marker]:hidden" aria-label={`Explain ${section.title} metrics`}>
+                      i
+                    </summary>
+                    <div className={`absolute right-0 z-30 w-[min(19rem,calc(100vw-4rem))] rounded-lg border border-nrl-border bg-nrl-panel p-3 text-left shadow-[0_18px_46px_rgba(0,0,0,0.55)] ${section.title === "Play-the-ball" ? "bottom-7" : "top-7"}`}>
+                      <div className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-300">{section.title}</div>
+                      <div className="space-y-2.5">
+                        {section.rows.map((row) => (
+                          <div key={row.label}>
+                            <div className="text-[10px] font-black uppercase tracking-wide text-nrl-text">{row.label}</div>
+                            <p className="mt-0.5 text-[11px] font-medium leading-relaxed normal-case tracking-normal text-nrl-muted">{row.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
+                </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {section.rows.map((row) => (
                     <MatchStatCompare key={row.label} label={row.label} home={row.home} away={row.away} shadeScale={row.shadeScale} />

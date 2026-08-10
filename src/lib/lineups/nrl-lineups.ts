@@ -83,6 +83,7 @@ export interface LineupTeamMatchStats {
   fantasyPoints: number | null
   tries: number | null
   allRunMetres: number | null
+  kickingMetres: number | null
   postContactMetres: number | null
   lineBreaks: number | null
   tackleBreaks: number | null
@@ -896,6 +897,7 @@ function teamStatsFromMatchRow(row: RawRow, fantasyPoints: number | null): Lineu
     fantasyPoints,
     tries: numberOrNull(row.tries),
     allRunMetres: numberOrNull(row.all_run_metres),
+    kickingMetres: numberOrNull(row.kicking_metres),
     postContactMetres: numberOrNull(row.post_contact_metres),
     lineBreaks: numberOrNull(row.line_breaks),
     tackleBreaks: numberOrNull(row.tackle_breaks),
@@ -1248,6 +1250,7 @@ export async function fetchLineupsForRound({
           fantasyPoints: awayFantasy,
           tries: numberOrNull(row.opponent_tries),
           allRunMetres: numberOrNull(row.opponent_all_run_metres),
+          kickingMetres: numberOrNull(row.opponent_kicking_metres),
           postContactMetres: numberOrNull(row.opponent_post_contact_metres),
           lineBreaks: numberOrNull(row.opponent_line_breaks),
           tackleBreaks: numberOrNull(row.opponent_tackle_breaks),

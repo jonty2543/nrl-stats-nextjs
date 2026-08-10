@@ -274,25 +274,25 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 51,
+                    "count": 57,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 100,
+                    "count": 94,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 44,
+                    "count": 34,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 22,
+                    "count": 32,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -328,19 +328,19 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 28,
+                    "count": 23,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 54,
+                    "count": 53,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 184,
+                    "count": 190,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

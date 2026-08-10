@@ -27,6 +27,7 @@ PLAYER_NAME_ALIASES = {
 }
 EDGE_STRIKE_MIN_ATTACKING_THREAT = 1.0
 EDGE_SUPPORT_MAX_DEFENSIVE_WORKRATE = -0.75
+EDGE_STRONG_MIN_ATTACKING_WORKRATE = 1.0
 MIDDLE_IMPACT_MIN_BALL_RUNNING = 1.0
 
 class PositionConfig:
@@ -109,6 +110,14 @@ def build_middle_label_map(cluster_centroids):
 
 def apply_archetype_assignment_rules(df, config):
     if config.name == '2nd Row':
+        low_workrate_strong = (
+            (df['cluster_name'] == 'Strong Attacking Edge')
+            & (df['pc1'] < EDGE_STRONG_MIN_ATTACKING_WORKRATE)
+        )
+        df.loc[low_workrate_strong & (df['pc2'] >= EDGE_STRIKE_MIN_ATTACKING_THREAT), 'cluster_name'] = 'Strike Attacking Edge'
+        df.loc[low_workrate_strong & (df['pc2'] < EDGE_STRIKE_MIN_ATTACKING_THREAT) & (df['pc3'] >= 0), 'cluster_name'] = 'Defensive Enforcer Edge'
+        df.loc[low_workrate_strong & (df['pc2'] < EDGE_STRIKE_MIN_ATTACKING_THREAT) & (df['pc3'] < 0), 'cluster_name'] = 'Support Edge'
+
         low_threat_strike = (
             (df['cluster_name'] == 'Strike Attacking Edge')
             & (df['pc2'] < EDGE_STRIKE_MIN_ATTACKING_THREAT)

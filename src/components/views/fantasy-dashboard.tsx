@@ -1484,15 +1484,6 @@ function resolveProjectionSigma(
   return sigmas.find((row) => projectionSigmaPositionKey(row.position) === positionKey) ?? globalSigma
 }
 
-function resolveProjectionBand(
-  projection: number | null,
-  position: string | null | undefined,
-  sigmas: FantasyProjectionSigma[]
-): { lower: number; upper: number } | null {
-  const distribution = resolveProjectionDistribution(projection, position, sigmas)
-  return distribution ? { lower: distribution.lower, upper: distribution.upper } : null
-}
-
 function resolveProjectionDistribution(
   projection: number | null,
   position: string | null | undefined,
@@ -3355,68 +3346,40 @@ function MetricCard({
 }
 
 function ProjectionBreakevenMetricGrid({
+  last3Average,
   projection,
-  lower,
-  upper,
   breakeven,
+  value,
   blurValue = false,
 }: {
+  last3Average: string
   projection: string
-  lower: string
-  upper: string
   breakeven: string
+  value: number | null
   blurValue?: boolean
 }) {
+  const metrics = [
+    { label: "L3 Average", value: last3Average, valueClassName: "text-nrl-text" },
+    { label: "Projection", value: projection, valueClassName: "text-nrl-text" },
+    { label: "Breakeven", value: breakeven, valueClassName: "text-nrl-text" },
+    { label: "Value", value: formatSignedTableNumber(value, 0), valueClassName: getFantasyValueClass(value) },
+  ]
+
   return (
-    <div className="grid w-full grid-cols-[minmax(0,4fr)_minmax(4.5rem,1fr)] gap-2 sm:grid-cols-4 sm:gap-4">
-      <div className="rounded-lg border border-nrl-border bg-[#111832] px-2.5 py-3 text-center sm:col-span-3 sm:px-4">
-        <div className="grid h-full grid-cols-3 items-center gap-2">
-          <div>
-            <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
-              Low 5%
-            </div>
-            <div
-              className={`mt-2 text-[1.25rem] font-bold leading-none tracking-tight text-red-300 sm:text-[1.45rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
-              aria-hidden={blurValue || undefined}
-            >
-              {lower}
-            </div>
+    <div className="grid w-full grid-cols-2 gap-2 sm:gap-4">
+      {metrics.map((metric) => (
+        <div key={metric.label} className="rounded-lg border border-nrl-border bg-[#111832] px-2.5 py-3 text-center sm:px-4">
+          <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
+            {metric.label}
           </div>
-          <div>
-            <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
-              Projection
-            </div>
-            <div
-              className={`mt-2 text-[1.7rem] font-bold leading-none tracking-tight text-nrl-text sm:text-[2rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
-              aria-hidden={blurValue || undefined}
-            >
-              {projection}
-            </div>
-          </div>
-          <div>
-            <div className="text-[8px] font-semibold uppercase leading-tight tracking-wide text-nrl-muted sm:text-[9px]">
-              High 5%
-            </div>
-            <div
-              className={`mt-2 text-[1.25rem] font-bold leading-none tracking-tight text-emerald-300 sm:text-[1.45rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
-              aria-hidden={blurValue || undefined}
-            >
-              {upper}
-            </div>
+          <div
+            className={`mt-2 text-[1.35rem] font-bold leading-none tracking-tight sm:text-[1.85rem] ${metric.valueClassName} ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
+            aria-hidden={blurValue || undefined}
+          >
+            {metric.value}
           </div>
         </div>
-      </div>
-      <div className="rounded-lg border border-nrl-border bg-[#111832] px-1.5 py-3 text-center sm:px-2.5">
-        <div className="text-[7px] font-semibold uppercase leading-tight tracking-[0.06em] text-nrl-muted sm:text-[9px] sm:tracking-wide">
-          Breakeven
-        </div>
-        <div
-          className={`mt-2 text-[1.35rem] font-bold leading-none tracking-tight text-nrl-text sm:text-[1.85rem] ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
-          aria-hidden={blurValue || undefined}
-        >
-          {breakeven}
-        </div>
-      </div>
+      ))}
     </div>
   )
 }
@@ -5546,17 +5509,6 @@ export function FantasyDashboard({
       ))
     },
     [casualtyWardPlayerNames, draw2026Data, fantasyCardImage, latestLocalTeam, lineupsProjections, selectedAllPlayersTableRow, selectedFantasyCoachMetrics, selectedFantasyCoachRound, selectedFantasyPlayer, selectedLineupRole]
-  )
-  const selectedProjectionBand = useMemo(
-    () => {
-      if (lineupsProjections?.source === "lineups" && !selectedLineupRole) return null
-      return resolveProjectionBand(
-        selectedAdjustedProjection,
-        selectedLineupRole?.position,
-        fantasyProjectionSigmas
-      )
-    },
-    [fantasyProjectionSigmas, lineupsProjections?.source, selectedAdjustedProjection, selectedLineupRole]
   )
   const selectedProjectionDistribution = useMemo(
     () => {
@@ -7733,10 +7685,16 @@ export function FantasyDashboard({
                 <div className={analysisLocked ? "select-none" : undefined}>
                   <div className="mx-auto mb-5 w-full sm:max-w-[760px]">
                     <ProjectionBreakevenMetricGrid
+                      last3Average={formatNumber(selectedLiveLast3 ?? selectedAllPlayersTableRow?.last3 ?? null, 0)}
                       projection={formatNumber(selectedAdjustedProjection, 0)}
-                      lower={selectedProjectionBand ? formatNumber(selectedProjectionBand.lower, 0) : "-"}
-                      upper={selectedProjectionBand ? formatNumber(selectedProjectionBand.upper, 0) : "-"}
                       breakeven={formatNumber(selectedAdjustedBreakEven, 0)}
+                      value={
+                        selectedAllPlayersTableRow?.value ??
+                        roundedFantasyValue(
+                          selectedAdjustedProjection,
+                          selectedAllPlayersTableRow?.pricedAt ?? selectedDisplayFantasyPlayer?.pricedAt ?? null
+                        )
+                      }
                       blurValue={analysisLocked}
                     />
                   </div>

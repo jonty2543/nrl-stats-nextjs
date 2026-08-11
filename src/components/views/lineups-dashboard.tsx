@@ -2201,7 +2201,8 @@ function PitchPlayer({
             sources={imageSources}
             alt={`${player.player} player image`}
             className="h-full w-full object-cover object-top"
-            loading="eager"
+            loading={orientation === "landscape" ? "eager" : "lazy"}
+            fetchPriority={orientation === "landscape" ? "high" : "auto"}
           />
         </div>
         <div className={`${compact ? "-right-3 px-1.5 text-[9px]" : "-right-3.5 px-2 text-[10px]"} absolute -top-1 rounded-full bg-blue-950 py-0.5 font-bold text-white`}>
@@ -3398,6 +3399,7 @@ function LineupCard({
     detailMatch.awayTeam ? { ...detailMatch.awayTeam, players: awayPlayers } : historicalTeamFromStats(matchStats, matchStats?.away, "Away", awayPlayers)
   const hasLineupData = homePlayers.length > 0 || awayPlayers.length > 0
   const isFixtureOnly = detailMatch.matchId.startsWith("draw-2026-") && !hasLineupData && matchStats == null
+  const [isExpanded, setIsExpanded] = useState(false)
   const [selectedPlayer, setSelectedPlayer] = useState<LineupPlayer | null>(null)
   const [detailView, setDetailView] = useState<LineupDetailView | null>(null)
   const isLive = hasMatchStarted(displayLiveMatch)
@@ -3505,14 +3507,35 @@ function LineupCard({
     })
   }, [anchorId, detailStatus])
 
+  useEffect(() => {
+    const card = detailsRef.current
+    if (!card || detailStatus !== "idle") return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return
+        onOpen()
+        observer.disconnect()
+      },
+      { rootMargin: "600px 0px" }
+    )
+    observer.observe(card)
+    return () => observer.disconnect()
+  }, [detailStatus, onOpen])
+
   return (
     <details
       ref={detailsRef}
       id={anchorId}
       className="group relative origin-top overflow-hidden rounded-lg border border-transparent shadow-[0_24px_54px_rgba(0,0,0,0.48)] transform-gpu [transform:perspective(1100px)_rotateX(3.2deg)_scaleY(0.965)]"
       style={BLUE_GRADIENT_BORDER_STYLE}
+      onPointerEnter={onOpen}
+      onFocusCapture={onOpen}
+      onPointerDown={onOpen}
       onToggle={(event) => {
-        if (event.currentTarget.open) onOpen()
+        const open = event.currentTarget.open
+        setIsExpanded(open)
+        if (open) onOpen()
       }}
     >
       <span
@@ -3591,6 +3614,8 @@ function LineupCard({
         </span>
       </summary>
 
+      {isExpanded ? (
+        <>
       <div className="relative z-[1] border-t border-blue-300/30 px-2 pb-3 sm:px-3">
         <div className="pt-5" />
         {detailStatus === "loading" && !detail && shellPlayerCount === 0 ? (
@@ -3732,6 +3757,8 @@ function LineupCard({
         )}
       </div>
       <PlayerStatsDialog selection={selectedPlayerStats} onClose={() => setSelectedPlayer(null)} />
+        </>
+      ) : null}
     </details>
   )
 }
@@ -3833,6 +3860,7 @@ export function LineupsDashboard({
   const [displayMode, setDisplayMode] = useState<DisplayMode>("Line Breaks")
   const [statsSource, setStatsSource] = useState<StatsSource>(selectedCompetition === "origin" ? "origin2026" : "nrl2026")
   const [matchDetails, setMatchDetails] = useState<Record<string, { status: "loading" | "loaded" | "error"; detail: LineupMatchDetailData | null }>>({})
+  const requestedMatchDetailsRef = useRef(new Set<string>())
   const [supplementalData, setSupplementalData] = useState<{
     key: string
     liveMatches: Record<string, LineupLiveMatch>
@@ -3849,8 +3877,11 @@ export function LineupsDashboard({
     : initialWeatherForecasts
 
   function loadMatchDetail(match: LineupMatch) {
+    const requestKey = `${selectedCompetition}:${year}:${match.round || selectedRound}:${match.matchId}`
+    if (requestedMatchDetailsRef.current.has(requestKey)) return
     const current = matchDetails[match.matchId]
     if (current?.status === "loading" || current?.status === "loaded") return
+    requestedMatchDetailsRef.current.add(requestKey)
 
     setMatchDetails((details) => ({
       ...details,

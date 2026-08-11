@@ -7,6 +7,7 @@ interface ImageWithFallbackProps {
   alt: string
   className?: string
   loading?: "eager" | "lazy"
+  fetchPriority?: "high" | "low" | "auto"
 }
 
 function upgradeHttpSource(source: string): string {
@@ -57,7 +58,13 @@ function imageSourceCandidates(value: string): string[] {
   return out
 }
 
-export function ImageWithFallback({ sources, alt, className, loading = "lazy" }: ImageWithFallbackProps) {
+export function ImageWithFallback({
+  sources,
+  alt,
+  className,
+  loading = "lazy",
+  fetchPriority = "auto",
+}: ImageWithFallbackProps) {
   const rawSourceSignature = sources.join("|")
   const uniqueSources = useMemo(() => {
     const seen = new Set<string>()
@@ -92,6 +99,7 @@ export function ImageWithFallback({ sources, alt, className, loading = "lazy" }:
       alt={alt}
       className={className}
       loading={loading}
+      fetchPriority={fetchPriority}
       decoding="async"
       referrerPolicy="no-referrer"
       onError={() => {

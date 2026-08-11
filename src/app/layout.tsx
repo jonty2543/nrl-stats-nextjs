@@ -16,6 +16,16 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+function publicSupabaseOrigin(): string | null {
+  try {
+    return process.env.NEXT_PUBLIC_SUPABASE_URL
+      ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export const metadata: Metadata = {
   title: "Short Side NRL",
   description: "NRL player and team statistics dashboard",
@@ -48,9 +58,17 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabaseOrigin = publicSupabaseOrigin();
+
   return (
     <ClerkProvider appearance={{ baseTheme: dark }}>
       <html lang="en" data-theme="dark" suppressHydrationWarning>
+        {supabaseOrigin ? (
+          <head>
+            <link rel="dns-prefetch" href={supabaseOrigin} />
+            <link rel="preconnect" href={supabaseOrigin} />
+          </head>
+        ) : null}
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >

@@ -5,7 +5,7 @@ import { useAuth } from "@clerk/nextjs"
 import { useEffect, useMemo, useState } from "react"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { SearchableSelect } from "@/components/ui/searchable-select"
-import { ImageWithFallback } from "@/components/ui/image-with-fallback"
+import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback"
 import { resolvePlayerImage } from "@/components/views/player-comparison"
 import type { Draw2026Data } from "@/lib/draw/types"
 import {
@@ -620,7 +620,7 @@ function TeamHeader({
   return (
       <div className={`flex flex-col ${alignClass}`}>
       <div className="flex h-8 w-8 items-end justify-center overflow-hidden rounded-full border border-nrl-border bg-[linear-gradient(180deg,#243055,#181f39)] shadow-sm md:h-14 md:w-14">
-        <ImageWithFallback sources={avatarSources} alt={teamLabel} className="h-full w-full object-cover object-top" />
+        <PlayerImageWithFallback sources={avatarSources} alt={teamLabel} className="h-full w-full object-cover object-top" />
       </div>
       <div className="mt-1 text-[9px] font-semibold text-nrl-muted md:mt-2 md:text-xs">{selectedCount}/{totalSlots}</div>
       <input
@@ -848,7 +848,7 @@ function EditableBoardRow({
 
       <div className="grid grid-cols-[20px_minmax(0,1fr)] items-center gap-1 md:grid-cols-[30px_minmax(0,1fr)] md:gap-1.5">
         <div className={`group relative flex h-5 w-5 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${leftPlayer?.id === leftCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
-          <ImageWithFallback
+          <PlayerImageWithFallback
             sources={leftPlayer ? playerImageSources(leftPlayer, playerPoolById, fantasyPlayersById, playerImages) : []}
             alt={leftName || "Player"}
             className="h-full w-full object-cover object-top"
@@ -946,7 +946,7 @@ function EditableBoardRow({
           </div>
         </div>
         <div className={`group relative flex h-5 w-5 items-end justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#243055,#181f39)] md:h-8 md:w-8 ${rightPlayer?.id === rightCaptainId ? "border border-orange-400 shadow-[0_0_0_1px_rgba(251,146,60,0.35)]" : ""}`}>
-          <ImageWithFallback
+          <PlayerImageWithFallback
             sources={rightPlayer ? playerImageSources(rightPlayer, playerPoolById, fantasyPlayersById, playerImages) : []}
             alt={rightName || "Player"}
             className="h-full w-full object-cover object-top"

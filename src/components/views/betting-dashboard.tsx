@@ -5,6 +5,7 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import Image from "next/image";
 import Link from "next/link";
 import { BillingPageLink } from "@/components/billing/billing-page-link";
+import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback";
 import { hasPremiumAccess } from "@/lib/access/pro-access";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import {
@@ -888,39 +889,13 @@ function PlayerProfileImage({
   className?: string;
   reveal?: boolean;
 }) {
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const imageSrc = normalizePlayerImageUrl(image);
-  const src = imageSrc && imageSrc !== failedSrc ? imageSrc : null;
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "?";
-
-  if (!src) {
-    return (
-      <span
-        aria-label={name}
-        className={`${className} grid shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-[10px] font-semibold text-white/55 transition-opacity duration-150 ${reveal ? "opacity-100" : "opacity-0"}`}
-      >
-        {initials}
-      </span>
-    );
-  }
-
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
+    <PlayerImageWithFallback
+      sources={[image ?? ""]}
       alt={name}
       className={`${className} shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover transition-opacity duration-150 ${reveal ? "opacity-100" : "opacity-0"}`}
       loading="eager"
-      decoding="async"
       fetchPriority="high"
-      onError={() => {
-        if (imageSrc && src === imageSrc) setFailedSrc(imageSrc);
-      }}
     />
   );
 }
@@ -1304,6 +1279,14 @@ function parseManualLegs(legs: ManualBetLegDraft[]): BetLeg[] {
       autoResult: leg.autoResult === true,
     }];
   });
+}
+
+function canAutoSettleTrackedLeg(leg: BetLeg): boolean {
+  if (!leg.autoResult) return false;
+  if ((leg.market === "Line" || leg.market === "Total") && leg.lineValue == null) return false;
+  if (leg.market === "Margin" && !/^(.*?)\s+(1\s*[-–]\s*12|13\s*\+)\s*$/i.test(leg.selection)) return false;
+  if (leg.market === "Tryscorer" && /\b(first|last)\b/i.test(leg.selection)) return false;
+  return true;
 }
 
 function combinedMultiOdds(legs: BetLeg[]): number | null {
@@ -3186,7 +3169,7 @@ export function BettingDashboard({
         impliedProb: implied,
         edgePp: modelProbability != null && implied != null ? (modelProbability - implied) * 100 : null,
         legs: [{ ...leg, odds, bookie: bookieSlipBookie }],
-        autoSettle: leg.autoResult,
+        autoSettle: canAutoSettleTrackedLeg(leg),
       });
       if (!added) {
         setBookieSlipError("The bet could not be saved. Check the tracker error and try again.");
@@ -3244,6 +3227,7 @@ export function BettingDashboard({
       impliedProb: null,
       edgePp: null,
       legs: parsedBookieSlipLegs.map((leg) => ({ ...leg, bookie: bookieSlipBookie })),
+      autoSettle: parsedBookieSlipLegs.every(canAutoSettleTrackedLeg),
     });
     if (!added) {
       setBookieSlipError("The bet could not be saved. Check the tracker error and try again.");
@@ -3803,12 +3787,8 @@ export function BettingDashboard({
             </div>
 
             {!betTrackerLoading && manualPendingBets.length > 0 ? (
-              <div className="mt-4 flex items-start gap-2 rounded-md border border-amber-300/30 bg-amber-400/10 px-3 py-2.5 text-[11px] text-amber-100">
-                <span aria-hidden="true">⚠️</span>
-                <span>
-                  <span className="font-bold">{manualPendingBets.length} manual {manualPendingBets.length === 1 ? "bet needs" : "bets need"} a result.</span>{" "}
-                  Open the tracker and set {manualPendingBets.length === 1 ? "it" : "them"} to won, lost, or push.
-                </span>
+              <div className="mt-4 w-fit max-w-full rounded-md border border-amber-300/30 bg-amber-400/10 px-3 py-2.5 text-[11px] font-bold text-amber-100">
+                {manualPendingBets.length} manual pending {manualPendingBets.length === 1 ? "bet" : "bets"}
               </div>
             ) : null}
 
@@ -4627,7 +4607,7 @@ export function BettingDashboard({
         <MarketTabsRail orderedMarkets={orderedMarkets} selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
         {selectedMarketGroups.length > 0 ? (
           hasTeamListsInModel ? (
-            <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-[10px] font-semibold text-emerald-300 sm:text-xs">
+            <div className="w-fit max-w-full rounded-lg border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-[10px] font-semibold text-emerald-300 sm:text-xs">
               <span aria-hidden="true">🟢</span> Team lists processed by model.
             </div>
           ) : teamListsAnnouncementPassed ? (

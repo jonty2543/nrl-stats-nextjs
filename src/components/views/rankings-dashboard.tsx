@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
+import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback"
 import { playerSlug } from "@/lib/data/player-slug"
 import type { PlayerStat, TeamStat } from "@/lib/data/types"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
@@ -698,9 +699,9 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                     <td className="px-2 pb-0 pt-2">
                       <div className="flex min-w-0 items-end gap-3">
                         <div className="grid h-12 w-11 shrink-0 place-items-end overflow-hidden">
-                          <ImageWithFallback
+                          <PlayerImageWithFallback
                             sources={entry.imageSources}
-                            alt={entry.name}
+                            alt={`${entry.name} player image`}
                             className="h-full w-full object-cover object-bottom"
                           />
                         </div>

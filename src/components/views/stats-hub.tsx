@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { StatsHubInsight, StatsHubModel } from "@/lib/data/stats-hub";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import { ImageWithFallback } from "@/components/ui/image-with-fallback";
+import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback";
 import { playerSlug } from "@/lib/data/player-slug";
 
 interface StatsHubProps {
@@ -75,11 +76,11 @@ function InsightCard({
   return (
     <article className="flex gap-3 rounded-lg border border-nrl-border bg-nrl-panel px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.22)]">
       <div className={`grid w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel-2 ${isMetricCard ? "self-stretch" : "h-14"}`}>
-        <ImageWithFallback
-          sources={imageSources}
-          alt={insight.entityName}
-          className={insight.entityType === "player" ? "h-full w-full object-cover object-top" : "h-12 w-12 object-contain"}
-        />
+        {insight.entityType === "player" ? (
+          <PlayerImageWithFallback sources={imageSources} alt={`${insight.entityName} player image`} className="h-full w-full object-cover object-top" />
+        ) : (
+          <ImageWithFallback sources={imageSources} alt={insight.entityName} className="h-12 w-12 object-contain" />
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <h3 className="text-xs font-black leading-tight text-nrl-text">

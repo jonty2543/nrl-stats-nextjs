@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { PLAYER_SILHOUETTE_SRC } from "@/components/ui/player-image-with-fallback";
 
 export interface TeamQuadrantPoint {
   id: string;
@@ -657,10 +658,7 @@ export function TeamQuadrantScatter({
               {imageUrl || isPlayerPoint ? <defs><clipPath id={clipId}><circle cx={x} cy={y} r={radius - 1.5} /></clipPath></defs> : null}
               <circle cx={x} cy={y} r={radius} fill={imageUrl ? "var(--color-nrl-panel)" : isPlayerPoint ? "#596273" : pointColor} stroke={pointColor} strokeWidth={active ? 3 : 1.5} opacity={active ? 1 : 0.78} />
               {isPlayerPoint && !imageUrl ? (
-                <g clipPath={`url(#${clipId})`} pointerEvents="none" fill="#b7becb">
-                  <circle cx={x} cy={y - radius * 0.3} r={radius * 0.27} />
-                  <ellipse cx={x} cy={y + radius * 0.55} rx={radius * 0.62} ry={radius * 0.52} />
-                </g>
+                <image href={PLAYER_SILHOUETTE_SRC} x={x - radius} y={y - radius} width={radius * 2} height={radius * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} pointerEvents="none" />
               ) : null}
               {imageUrl ? <image href={imageUrl} x={x - radius} y={y - radius} width={radius * 2} height={radius * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} pointerEvents="none" onError={() => setFailedImageUrls((current) => new Set(current).add(imageUrl))} /> : null}
               {isGroup ? <text x={x} y={y + (isMobile ? 3.5 : 2.75)} textAnchor="middle" fill="var(--color-nrl-bg)" fontSize={isMobile ? 9 : 7} fontWeight="950" pointerEvents="none">+{group.points.length}</text> : null}

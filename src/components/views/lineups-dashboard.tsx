@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
+import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
 import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
@@ -1879,7 +1880,7 @@ function PlayerStatsDialog({ selection, onClose }: { selection: PlayerStatsSelec
       <div className="max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-lg border border-blue-300/20 bg-[#071024] shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-blue-300/15 bg-[#0b1630] px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            <ImageWithFallback sources={imageSources} alt={`${player.player} player image`} className="h-14 w-14 shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover" />
+            <PlayerImageWithFallback sources={imageSources} alt={`${player.player} player image`} className="h-14 w-14 shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover" />
             <div className="min-w-0">
               <div className="truncate text-base font-bold text-nrl-text">{player.player}</div>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-nrl-muted">
@@ -2197,7 +2198,7 @@ function PitchPlayer({
     >
       <div className={`${compact ? "h-9 w-9 sm:h-10 sm:w-10" : "h-12 w-12"} relative mx-auto`}>
         <div className="grid h-full w-full place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-nrl-panel shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
-          <ImageWithFallback
+          <PlayerImageWithFallback
             sources={imageSources}
             alt={`${player.player} player image`}
             className="h-full w-full object-cover object-top"
@@ -2952,7 +2953,7 @@ function TryChartPlayers({
           ) : null}
           <div className={`mx-auto grid h-7 w-7 place-items-center overflow-hidden rounded-full border border-white/10 bg-nrl-panel text-[7px] font-black text-nrl-muted ${tone === "defence" ? "mt-1" : ""}`}>
             {player ? (
-              <ImageWithFallback sources={playerImageSources(player.cachedHeadImage, player.cachedBodyImage, player.headImage, player.bodyImage)} alt={player.player} className="h-full w-full object-cover object-top" />
+              <PlayerImageWithFallback sources={playerImageSources(player.cachedHeadImage, player.cachedBodyImage, player.headImage, player.bodyImage)} alt={player.player} className="h-full w-full object-cover object-top" />
             ) : (
               label.slice(0, 1)
             )}

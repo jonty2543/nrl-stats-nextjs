@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback";
 import type { HalvesPairingPoint, PlayerAttackComparisonStat } from "@/lib/data/player-attack";
 
 interface HalvesPairingBarsProps {
@@ -20,7 +20,7 @@ function normalisePlayerName(value: string): string {
 function PlayerFace({ player, src, color }: { player: string; src?: string; color: string }) {
   return (
     <div className="relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-nrl-panel text-[9px] font-black text-nrl-text shadow-lg" style={{ border: `2px solid ${color}` }}>
-      {src ? <Image src={src} alt="" fill sizes="36px" unoptimized className="object-cover" /> : player.slice(0, 1).toUpperCase()}
+      <PlayerImageWithFallback sources={[src ?? ""]} alt={`${player} player image`} className="h-full w-full object-cover object-top" />
     </div>
   );
 }
@@ -44,12 +44,12 @@ export function HalvesPairingBars({ pairings, stat, playerFaceImages, minimumGam
             <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-3 text-xs">
               <div className="min-w-0">
                 <div className="truncate font-black text-nrl-text">{pairing.leftPlayer}</div>
-                <div className="font-bold" style={{ color: LEFT_COLOR }}>#7 · {pairing.leftShare.toFixed(1)}%</div>
+                <div className="font-bold" style={{ color: LEFT_COLOR }}>{pairing.leftShare.toFixed(1)}%</div>
               </div>
               <div className="text-center text-[9px] font-bold uppercase tracking-wide text-nrl-muted">{pairing.team}<br />{pairing.games} games</div>
               <div className="min-w-0 text-right">
                 <div className="truncate font-black text-nrl-text">{pairing.rightPlayer}</div>
-                <div className="font-bold" style={{ color: RIGHT_COLOR }}>{pairing.rightShare.toFixed(1)}% · #6</div>
+                <div className="font-bold" style={{ color: RIGHT_COLOR }}>{pairing.rightShare.toFixed(1)}%</div>
               </div>
             </div>
 

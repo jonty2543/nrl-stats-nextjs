@@ -5,7 +5,7 @@ import dynamic from "next/dynamic"
 import { Fragment, memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react"
 import { useRouter } from "next/navigation"
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs"
-import { ImageWithFallback } from "@/components/ui/image-with-fallback"
+import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback"
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types"
 import type { FantasyGameLogTrendBrushProps } from "@/components/charts/fantasy-game-log-trend-brush"
 import type { Draw2026Data } from "@/lib/draw/types"
@@ -1392,7 +1392,7 @@ const AllPlayersDesktopRow = memo(function AllPlayersDesktopRow({
     >
       <td className="sticky left-0 z-[1] w-13 min-w-13 max-w-13 border-r border-nrl-border bg-nrl-panel px-1 py-2 sm:w-15 sm:min-w-15 sm:max-w-15">
         <div className="mx-auto grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] text-nrl-muted">
-          <ImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
+          <PlayerImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
         </div>
       </td>
       <td className="w-[136px] min-w-[136px] max-w-[136px] border-r border-nrl-border bg-nrl-panel px-1.5 py-2 text-xs font-semibold text-nrl-text sm:w-32 sm:min-w-32 sm:max-w-32 sm:px-2 lg:sticky lg:left-[3.75rem] lg:z-[1]">
@@ -2672,7 +2672,7 @@ function FantasyAnalyticsScatterPlot({
           className="group flex items-center gap-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-xs text-nrl-text transition-colors hover:border-nrl-accent/60 hover:bg-nrl-panel"
         >
           <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-xs font-semibold text-nrl-muted">
-            <ImageWithFallback sources={[selectedPoint.imageUrl ?? ""]} alt={`${selectedPoint.name} player image`} className="h-full w-full object-cover object-top" />
+            <PlayerImageWithFallback sources={[selectedPoint.imageUrl ?? ""]} alt={`${selectedPoint.name} player image`} className="h-full w-full object-cover object-top" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-start justify-between gap-3">
@@ -2967,7 +2967,7 @@ function GlobalStatVsFantasyScatterPlot({
           className="group flex items-center gap-3 rounded-lg border border-nrl-border bg-nrl-panel-2 p-2.5 text-xs text-nrl-text transition-colors hover:border-nrl-accent/60 hover:bg-nrl-panel"
         >
           <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-xs font-semibold text-nrl-muted">
-            <ImageWithFallback sources={[selectedPoint.imageUrl ?? ""]} alt={`${selectedPoint.name} player image`} className="h-full w-full object-cover object-top" />
+            <PlayerImageWithFallback sources={[selectedPoint.imageUrl ?? ""]} alt={`${selectedPoint.name} player image`} className="h-full w-full object-cover object-top" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-start justify-between gap-3">
@@ -6131,7 +6131,7 @@ export function FantasyDashboard({
                         {index + 1}
                       </span>
                       <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full border border-white/10 bg-black/20 text-[11px] text-nrl-muted shadow-[0_8px_18px_rgba(0,0,0,0.25)] sm:h-11 sm:w-11">
-                        <ImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
+                        <PlayerImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                       </div>
                       <div className="min-w-0">
                         <div className="truncate text-[13px] font-black text-white">
@@ -6754,7 +6754,7 @@ export function FantasyDashboard({
 	                            const content = (
 	                              <>
 	                                <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-full border-2 border-white/80 bg-nrl-panel shadow-[0_10px_22px_rgba(0,0,0,0.34)] transition-colors group-hover:border-nrl-accent/80 sm:h-14 sm:w-14">
-                                  <ImageWithFallback
+                                  <PlayerImageWithFallback
                                     sources={thumbnailSources}
                                     alt={playerRow ? `${playerRow.player.name} player image` : slot.slot}
                                     className="h-full w-full object-cover object-top"
@@ -7294,7 +7294,7 @@ export function FantasyDashboard({
 	                    <div className="flex w-full items-start justify-between gap-3">
                       <div className="flex min-w-0 flex-1 items-start gap-2.5">
                         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel text-[11px] text-nrl-muted">
-                          <ImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
+                          <PlayerImageWithFallback sources={thumbnailSources} alt={`${row.player.name} player image`} className="h-full w-full object-cover object-top" />
                         </div>
                         <div className="min-w-0 shrink-0 md:w-64">
                           <div className="flex min-w-0 flex-wrap items-center gap-1.5">

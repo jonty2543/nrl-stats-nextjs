@@ -135,14 +135,40 @@ function normaliseBetLegs(value: unknown): BetLeg[] {
   });
 }
 
+function isSelectionAutoSettleSupported(
+  market: BetMarket,
+  selection: string,
+  lineValue: number | null
+): boolean {
+  if ((market === "Line" || market === "Total") && lineValue == null) return false;
+  if (market === "Margin" && parseMarginSelection(selection) == null) return false;
+  if (market === "Tryscorer" && /\b(first|last)\b/i.test(selection)) return false;
+  return true;
+}
+
+function isLegAutoSettleSupported(leg: BetLeg): boolean {
+  return leg.autoResult && isSelectionAutoSettleSupported(leg.market, leg.selection, leg.lineValue);
+}
+
 function canAutoSettleBet(row: UserBetRow): boolean {
-  if (row.bet_type != null && row.bet_type !== "single") return false;
   const rawLegs = Array.isArray(row.legs) ? row.legs.filter(isJsonObject) : [];
-  const hasAutoResultLeg = rawLegs.some((leg) => leg.autoResult === true);
+  const legs = normaliseBetLegs(row.legs);
+  const betType = isBetType(row.bet_type) ? row.bet_type : "single";
+
+  if (betType !== "single") {
+    return legs.length >= 2 && legs.length === rawLegs.length && legs.every(isLegAutoSettleSupported);
+  }
+
   const hasOnlyLegacyLegs = rawLegs.length > 0 && rawLegs.every((leg) => !("autoResult" in leg));
   // Older dashboard/bookie singles predate the explicit leg marker. Quick-add
   // manual singles have no legs or model probability and remain manual.
-  return hasAutoResultLeg || hasOnlyLegacyLegs || row.model_prob != null;
+  if (hasOnlyLegacyLegs) {
+    return isSelectionAutoSettleSupported(row.market, row.selection, row.line_value);
+  }
+  if (legs.length > 0) {
+    return legs.length === rawLegs.length && legs.every(isLegAutoSettleSupported);
+  }
+  return row.model_prob != null && isSelectionAutoSettleSupported(row.market, row.selection, row.line_value);
 }
 
 function matchLegKey(leg: BetLeg): string {
@@ -287,18 +313,17 @@ function playerMatches(selection: string, player: string): boolean {
   return selectedLast === candidateLast && selectedFirst[0] === candidateFirst[0];
 }
 
-function settleBet(
-  row: UserBetRow,
+function settleSelection(
+  market: BetMarket,
+  selection: string,
+  lineValue: number | null,
   result: MatchResult,
-  nowIso: string,
   playerTries: number | null = null
-): Pick<UserBetRow, "status" | "profit" | "settled_at"> {
-  const selection = row.selection;
-  const lineValue = row.line_value;
+): BetStatus {
   const totalPoints = result.homeScore + result.awayScore;
   let status: BetStatus = "pending";
 
-  if (row.market === "H2H") {
+  if (market === "H2H") {
     if (result.homeScore === result.awayScore) {
       status = "push";
     } else if (teamMatches(selection, result.home)) {
@@ -306,7 +331,7 @@ function settleBet(
     } else if (teamMatches(selection, result.away)) {
       status = result.awayScore > result.homeScore ? "won" : "lost";
     }
-  } else if (row.market === "Line" && lineValue != null) {
+  } else if (market === "Line" && lineValue != null) {
     let adjustedMargin: number | null = null;
     if (teamMatches(selection, result.home)) {
       adjustedMargin = (result.homeScore - result.awayScore) + lineValue;
@@ -319,7 +344,7 @@ function settleBet(
       else if (adjustedMargin < 0) status = "lost";
       else status = "push";
     }
-  } else if (row.market === "Margin") {
+  } else if (market === "Margin") {
     const marginSelection = parseMarginSelection(selection);
     let winningMargin: number | null = null;
     if (marginSelection && teamMatches(marginSelection.team, result.home)) {
@@ -333,7 +358,7 @@ function settleBet(
         ? (winningMargin >= 1 && winningMargin <= 12 ? "won" : "lost")
         : (winningMargin >= 13 ? "won" : "lost");
     }
-  } else if (row.market === "Total" && lineValue != null) {
+  } else if (market === "Total" && lineValue != null) {
     const normalizedSelection = normaliseTeam(selection);
     const isOver = normalizedSelection.includes("over");
     const isUnder = normalizedSelection.includes("under");
@@ -346,7 +371,7 @@ function settleBet(
       else if (totalPoints > lineValue) status = "lost";
       else status = "push";
     }
-  } else if (row.market === "Tryscorer" && playerTries != null) {
+  } else if (market === "Tryscorer" && playerTries != null) {
     const isOrderedScorerMarket = /\b(first|last)\b/i.test(selection);
     if (!isOrderedScorerMarket) {
       const requiredTries = lineValue != null && lineValue >= 1 ? Math.ceil(lineValue) : 1;
@@ -354,27 +379,7 @@ function settleBet(
     }
   }
 
-  if (status === "pending") {
-    return {
-      status: row.status,
-      profit: row.profit,
-      settled_at: row.settled_at,
-    };
-  }
-
-  const stake = Number.isFinite(row.stake) ? row.stake : 0;
-  const odds = Number.isFinite(row.odds) ? row.odds : 0;
-  const profit = status === "won"
-    ? Number((stake * Math.max(0, odds - 1)).toFixed(2))
-    : status === "lost"
-      ? Number((-stake).toFixed(2))
-      : 0;
-
-  return {
-    status,
-    profit,
-    settled_at: nowIso,
-  };
+  return status;
 }
 
 async function buildMatchResultMap(dates: string[]): Promise<Map<string, MatchResult>> {
@@ -431,28 +436,58 @@ async function buildPlayerTryResults(dates: string[]): Promise<PlayerTryResult[]
   });
 }
 
-function findPlayerTries(row: UserBetRow, result: MatchResult, playerResults: PlayerTryResult[]): number | null {
+function findPlayerTries(
+  matchDate: string,
+  selection: string,
+  result: MatchResult,
+  playerResults: PlayerTryResult[]
+): number | null {
   const matchTeams = [result.home, result.away];
   const candidate = playerResults.find((playerResult) => (
-    playerResult.date === row.match_date &&
-    playerMatches(row.selection, playerResult.player) &&
+    playerResult.date === matchDate &&
+    playerMatches(selection, playerResult.player) &&
     matchTeams.some((team) => teamMatches(playerResult.team, team))
   ));
   return candidate?.tries ?? null;
 }
 
+function settlementLegsForBet(row: UserBetRow): BetLeg[] {
+  const betType = isBetType(row.bet_type) ? row.bet_type : "single";
+  if (betType !== "single") return normaliseBetLegs(row.legs);
+  return [{
+    market: row.market,
+    matchDate: row.match_date,
+    matchName: row.match_name,
+    selection: row.selection,
+    lineValue: row.line_value,
+    odds: row.odds,
+    bookie: null,
+    autoResult: true,
+  }];
+}
+
+function findMatchResult(leg: BetLeg, resultMap: Map<string, MatchResult>): MatchResult | null {
+  const teams = parseMatchTeams(leg.matchName);
+  if (!teams) return null;
+  const key = `${leg.matchDate}|${canonicalMatchKey(teams.home, teams.away)}`;
+  return resultMap.get(key) ?? [...resultMap.values()].find((candidate) => (
+    candidate.date === leg.matchDate &&
+    teamsMatchByLastWord(teams.home, teams.away, candidate.home, candidate.away)
+  )) ?? null;
+}
+
 async function settlePendingBets(rows: UserBetRow[], userId: string): Promise<UserBetRow[]> {
   const pendingRows = rows.filter((row) => (
     row.status === "pending" &&
-    canAutoSettleBet(row) &&
-    (row.bet_type == null || row.bet_type === "single")
+    canAutoSettleBet(row)
   ));
   if (pendingRows.length === 0) return rows;
 
-  const dates = Array.from(new Set(pendingRows.map((row) => row.match_date).filter(Boolean)));
+  const pendingLegs = pendingRows.flatMap(settlementLegsForBet);
+  const dates = Array.from(new Set(pendingLegs.map((leg) => leg.matchDate).filter(Boolean)));
   const [resultMap, playerTryResults] = await Promise.all([
     buildMatchResultMap(dates),
-    pendingRows.some((row) => row.market === "Tryscorer")
+    pendingLegs.some((leg) => leg.market === "Tryscorer")
       ? buildPlayerTryResults(dates).catch((error) => {
           console.warn("Unable to fetch try-scorer results; leaving those bets pending.", error);
           return [];
@@ -464,30 +499,46 @@ async function settlePendingBets(rows: UserBetRow[], userId: string): Promise<Us
   const updates: Array<{ id: string; status: BetStatus; profit: number; settled_at: string }> = [];
 
   for (const row of pendingRows) {
-    const teams = parseMatchTeams(row.match_name);
-    if (!teams) continue;
-    const key = `${row.match_date}|${canonicalMatchKey(teams.home, teams.away)}`;
-    const directResult = resultMap.get(key);
-    const result = directResult ?? [...resultMap.values()].find((candidate) => (
-      candidate.date === row.match_date &&
-      teamsMatchByLastWord(teams.home, teams.away, candidate.home, candidate.away)
-    ));
-    if (!result) continue;
+    const legs = settlementLegsForBet(row);
+    const legStatuses = legs.map((leg) => {
+      const result = findMatchResult(leg, resultMap);
+      if (!result) return { leg, status: "pending" as BetStatus };
 
-    // Avoid settling clearly future fixtures with placeholder 0-0 scores.
-    if (result.homeScore === 0 && result.awayScore === 0 && row.match_date >= today) {
-      continue;
-    }
+      // Avoid settling clearly future fixtures with placeholder 0-0 scores.
+      if (result.homeScore === 0 && result.awayScore === 0 && leg.matchDate >= today) {
+        return { leg, status: "pending" as BetStatus };
+      }
 
-    const playerTries = row.market === "Tryscorer" ? findPlayerTries(row, result, playerTryResults) : null;
-    const settled = settleBet(row, result, nowIso, playerTries);
-    if (settled.status === "pending" || settled.profit == null || !settled.settled_at) continue;
+      const playerTries = leg.market === "Tryscorer"
+        ? findPlayerTries(leg.matchDate, leg.selection, result, playerTryResults)
+        : null;
+      return {
+        leg,
+        status: settleSelection(leg.market, leg.selection, leg.lineValue, result, playerTries),
+      };
+    });
+
+    const hasLoss = legStatuses.some(({ status }) => status === "lost");
+    const hasPending = legStatuses.some(({ status }) => status === "pending");
+    if (!hasLoss && hasPending) continue;
+
+    const allPush = legStatuses.every(({ status }) => status === "push");
+    const status: BetStatus = hasLoss ? "lost" : allPush ? "push" : "won";
+    const hasPush = legStatuses.some(({ status: legStatus }) => legStatus === "push");
+    const effectiveOdds = status === "won" && hasPush
+      ? legStatuses.reduce(
+          (combined, { leg, status: legStatus }) => legStatus === "won" ? combined * leg.odds : combined,
+          1
+        )
+      : row.odds;
+    const profit = computeProfitForStatus(status, row.stake, effectiveOdds);
+    if (profit == null) continue;
 
     updates.push({
       id: row.id,
-      status: settled.status,
-      profit: settled.profit,
-      settled_at: settled.settled_at,
+      status,
+      profit,
+      settled_at: nowIso,
     });
   }
 

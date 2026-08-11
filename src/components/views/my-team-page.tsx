@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { SignInButton, useAuth } from "@clerk/nextjs"
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
-import { ImageWithFallback } from "@/components/ui/image-with-fallback"
+import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback"
 import { resolvePlayerImage } from "@/components/views/player-comparison"
 import type { Draw2026Data } from "@/lib/draw/types"
 import {
@@ -1902,7 +1902,7 @@ function PlayerToken({
         </span>
       ) : null}
       <div className={`relative h-16 w-16 overflow-hidden rounded-full border-[3px] bg-white shadow-[0_10px_24px_rgba(10,22,38,0.14)] lg:h-20 lg:w-20 lg:border-4 ${ring}`}>
-        <ImageWithFallback
+        <PlayerImageWithFallback
           sources={imageSourcesForPlayer(player, fantasyPlayersById, playerImages)}
           alt={`${player.displayName} player image`}
           className="h-full w-full object-cover object-top"
@@ -2105,7 +2105,7 @@ function TradeOverlay({
               className={`grid grid-cols-[3rem_minmax(0,1.4fr)_0.7fr_0.5fr_0.5fr_0.6fr_0.7fr] items-center gap-2 border-b border-nrl-border/70 px-4 py-2 ${candidate.affordable ? "text-nrl-text" : "text-nrl-muted opacity-55"}`}
             >
               <div className="h-10 w-10 overflow-hidden rounded-full border border-nrl-border bg-white">
-                <ImageWithFallback
+                <PlayerImageWithFallback
                   sources={imageSourcesForFantasyPlayer(candidate.player, playerImages)}
                   alt={`${candidate.player.name} player image`}
                   className="h-full w-full object-cover object-top"

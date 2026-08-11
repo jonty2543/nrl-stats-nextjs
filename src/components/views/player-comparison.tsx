@@ -20,6 +20,7 @@ import {
   buildFantasyRank,
 } from "@/lib/data/transform";
 import { FilterBar } from "@/components/filters/filter-bar";
+import { PLAYER_SILHOUETTE_SRC } from "@/components/ui/player-image-with-fallback";
 import { ProfileCard } from "@/components/summary/profile-card";
 import { StatsTable } from "@/components/summary/stats-table";
 import { PercentileRanks } from "@/components/summary/percentile-ranks";
@@ -304,15 +305,6 @@ function parsePersonName(value: string): { first: string; last: string } {
 }
 
 const preferredImageIndexByCandidatesKey = new Map<string, number>();
-
-function playerImageInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "?";
-}
 
 function playerLastName(name: string): string {
   return parsePersonName(name).last || name;
@@ -707,7 +699,10 @@ export function PlayerImageCard({
                   }));
                 }}
               />
-            ) : null}
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={PLAYER_SILHOUETTE_SRC} alt={`${playerName} player silhouette`} className="relative z-10 h-[72%] w-auto object-contain" />
+            )}
           </div>
 
           {/* Combined name/team + stats panel */}
@@ -825,9 +820,8 @@ export function SimplePlayerPhotoTile({
             }}
           />
         ) : (
-          <span className="relative z-10 grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-white/55 sm:h-20 sm:w-20 sm:text-xl">
-            {playerImageInitials(playerName)}
-          </span>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={PLAYER_SILHOUETTE_SRC} alt={`${playerName} player silhouette`} className="relative z-10 h-12 w-12 rounded-full sm:h-20 sm:w-20" />
         )}
       </div>
       {showName ? (
@@ -878,7 +872,8 @@ function PlayerStatsTableThumbnail({
             }}
           />
         ) : (
-          <span aria-label={`${name} player image`}>{playerImageInitials(name)}</span>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={PLAYER_SILHOUETTE_SRC} alt={`${name} player silhouette`} className="h-full w-full object-cover" />
         )}
       </div>
       <div className="w-full truncate text-center text-[7px] font-black uppercase leading-none tracking-[0.08em] text-nrl-text sm:text-[8px]">

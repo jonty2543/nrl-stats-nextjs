@@ -669,7 +669,6 @@ export function TeamQuadrantScatter({
         {selectedPoint ? (
           <g pointerEvents="none" aria-hidden="true">
             <circle cx={activePointX} cy={activePointY} r={isMobile ? 18 : 13} fill="none" stroke="var(--color-nrl-accent)" strokeWidth={3} />
-            {!isMobile ? <circle cx={activePointX} cy={activePointY} r={8} fill="none" stroke="var(--color-nrl-text)" strokeWidth={2} /> : null}
           </g>
         ) : null}
 

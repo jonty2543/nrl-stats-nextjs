@@ -708,7 +708,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
                       x={MAIN_PADDING.left - 8}
                       y={y + 3}
                       textAnchor="end"
-                      className="fill-nrl-muted text-[9px] font-semibold"
+                      className="fill-nrl-muted text-[14px] font-semibold"
                     >
                       {Math.round(value)}
                     </text>
@@ -749,7 +749,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
                       <text
                         x={x + 4}
                         y={MAIN_CHART_HEIGHT - 8}
-                        className="fill-nrl-muted text-[9px] font-semibold"
+                        className="fill-nrl-muted text-[14px] font-semibold"
                       >
                         {boundary.year}
                       </text>
@@ -903,7 +903,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
                   x={x}
                   y={OVERVIEW_CHART_HEIGHT - 8}
                   textAnchor="middle"
-                  className="fill-nrl-muted text-[8px] font-semibold"
+                  className="fill-nrl-muted text-[12px] font-semibold"
                 >
                   {boundary.year}
                 </text>

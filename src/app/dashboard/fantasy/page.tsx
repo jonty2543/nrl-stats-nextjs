@@ -72,7 +72,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
     }),
     fetchAvailableYears(),
     withFantasyPageContextTimeout("ownership baseline", fetchLatestFantasyOwnershipBaselineSnapshot(), null, FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
-    withFantasyPageContextTimeout("player images", fetchPlayerImages(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
+    fetchPlayerImages(),
     withFantasyPageContextTimeout("approved articles", fetchApprovedArticleLinks(), [], FANTASY_PAGE_ARTICLE_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("relevant casualty candidates", fetchRelevantCasualtyWardOutCandidates(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("2026 draw", loadDraw2026Data(), null, FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),

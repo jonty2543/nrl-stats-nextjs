@@ -670,12 +670,6 @@ export function TeamQuadrantScatter({
           );
         })}</g>
 
-        {selectedPoint ? (
-          <g pointerEvents="none" aria-hidden="true">
-            <circle cx={activePointX} cy={activePointY} r={isMobile ? 18 : 13} fill="none" stroke="var(--color-nrl-accent)" strokeWidth={3} />
-          </g>
-        ) : null}
-
         {singleAxis ? (
           <g aria-label={`Average ${xMetricLabel.toLowerCase()} ${chart.xMean.toFixed(xValueDecimals)}${xValueSuffix}`}>
             <rect x={singleAxisHeatBarX} y={singleAxisHeatBarY} width={singleAxisHeatBarWidth} height={singleAxisHeatBarHeight} rx={singleAxisHeatBarHeight / 2} fill={`url(#${heatGradientId})`} />

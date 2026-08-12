@@ -70,7 +70,7 @@ export default async function FantasyPlayersPage() {
     withOptionalContextTimeout("lineups projections", fetchLineupsProjectionsByPlayerId(), emptyLineupsProjectionSnapshot()),
     withOptionalContextTimeout("available years", fetchAvailableYears(), ["2026"]),
     withOptionalContextTimeout("ownership baseline", fetchLatestFantasyOwnershipBaselineSnapshot(), null),
-    withOptionalContextTimeout("player images", fetchPlayerImages(), []),
+    fetchPlayerImages(),
     withOptionalContextTimeout("casualty context", fetchRelevantCasualtyWardOutCandidates(), []),
     withOptionalContextTimeout("draw context", loadDraw2026Data(), null),
     withOptionalContextTimeout("origin chances", fetchOriginChances(), []),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { PLAYER_SILHOUETTE_SRC } from "@/components/ui/player-image-with-fallback";
 
 export interface TeamQuadrantPoint {
@@ -256,6 +256,10 @@ export function TeamQuadrantScatter({
   singleAxis = false,
   showQuadrantLabels = false,
 }: TeamQuadrantScatterProps) {
+  const svgId = useId().replace(/:/g, "");
+  const dataClipId = `${svgId}-data-area`;
+  const pointAreaClipId = `${svgId}-point-area`;
+  const heatGradientId = `${svgId}-heat-gradient`;
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
@@ -542,9 +546,9 @@ export function TeamQuadrantScatter({
         style={{ touchAction: zoomIndex > 0 ? "none" : "auto" }}
       >
         <defs>
-          <clipPath id="quadrant-data-area"><rect x={xPlotLeft} y={margin.top} width={xPlotWidth} height={plotHeight} rx="8" /></clipPath>
-          <clipPath id="quadrant-point-area"><rect x={xPlotLeft - pointOverflow} y={margin.top - pointOverflow} width={xPlotWidth + pointOverflow * 2} height={plotHeight + pointOverflow * 2} /></clipPath>
-          <linearGradient id="single-axis-heat-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <clipPath id={dataClipId}><rect x={xPlotLeft} y={margin.top} width={xPlotWidth} height={plotHeight} rx="8" /></clipPath>
+          <clipPath id={pointAreaClipId}><rect x={xPlotLeft - pointOverflow} y={margin.top - pointOverflow} width={xPlotWidth + pointOverflow * 2} height={plotHeight + pointOverflow * 2} /></clipPath>
+          <linearGradient id={heatGradientId} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#ff5364" />
             <stop offset="32%" stopColor="#f6c445" />
             <stop offset="62%" stopColor="#10f08b" />
@@ -562,7 +566,7 @@ export function TeamQuadrantScatter({
           return <g key={`y-${tick}`}><line x1={margin.left} y1={y} x2={margin.left + plotWidth} y2={y} stroke="var(--color-nrl-border)" opacity="0.45" /><text x={margin.left - (isMobile ? 18 : 14)} y={y + (isMobile ? 7 : 4)} textAnchor="end" fill="var(--color-nrl-muted)" className="text-[20px] sm:text-[12px] lg:text-[8px]">{formatTick(tick, yValueDecimals)}{yValueSuffix}</text></g>;
         }) : null}
 
-        <g clipPath="url(#quadrant-data-area)">
+        <g clipPath={`url(#${dataClipId})`}>
           {comparisonLine ? (
             <line x1={xScale(Math.max(xDomain[0], yDomain[0]))} y1={yScale(Math.max(xDomain[0], yDomain[0]))} x2={xScale(Math.min(xDomain[1], yDomain[1]))} y2={yScale(Math.min(xDomain[1], yDomain[1]))} stroke="#a7b0cd" strokeWidth="2" opacity="0.85" />
           ) : (
@@ -582,7 +586,7 @@ export function TeamQuadrantScatter({
           </g>
         ) : null}
 
-        <g clipPath="url(#quadrant-point-area)">{pointGroups.map((group, pointIndex) => {
+        <g clipPath={`url(#${pointAreaClipId})`}>{pointGroups.map((group, pointIndex) => {
           const point = group.points[0];
           const x = xScale(group.xValue);
           const y = groupY(group);
@@ -614,7 +618,7 @@ export function TeamQuadrantScatter({
             : singleAxis
               ? Math.max(radius, Math.min(pointStackGap * 0.48, isMobile ? 7 : 5))
               : Math.max(radius, isMobile ? 11 : 7);
-          const clipId = `plot-point-image-${pointIndex}`;
+          const clipId = `${svgId}-point-image-${pointIndex}`;
           const groupLabel = pointImages ? "players" : "points";
           return (
             <g
@@ -674,7 +678,7 @@ export function TeamQuadrantScatter({
 
         {singleAxis ? (
           <g aria-label={`Average ${xMetricLabel.toLowerCase()} ${chart.xMean.toFixed(xValueDecimals)}${xValueSuffix}`}>
-            <rect x={singleAxisHeatBarX} y={singleAxisHeatBarY} width={singleAxisHeatBarWidth} height={singleAxisHeatBarHeight} rx={singleAxisHeatBarHeight / 2} fill="url(#single-axis-heat-gradient)" />
+            <rect x={singleAxisHeatBarX} y={singleAxisHeatBarY} width={singleAxisHeatBarWidth} height={singleAxisHeatBarHeight} rx={singleAxisHeatBarHeight / 2} fill={`url(#${heatGradientId})`} />
             <line x1={xScale(chart.xMean)} y1={singleAxisHeatBarY - 4} x2={xScale(chart.xMean)} y2={singleAxisHeatBarY + singleAxisHeatBarHeight + 4} stroke="var(--color-nrl-text)" strokeWidth={isMobile ? 3 : 2} />
             <path d={`M ${xScale(chart.xMean) - 5} ${singleAxisHeatBarY + singleAxisHeatBarHeight + 6} L ${xScale(chart.xMean) + 5} ${singleAxisHeatBarY + singleAxisHeatBarHeight + 6} L ${xScale(chart.xMean)} ${singleAxisHeatBarY + singleAxisHeatBarHeight + 12} Z`} fill="var(--color-nrl-text)" />
             <text x={xScale(chart.xMean)} y={singleAxisHeatBarY + singleAxisHeatBarHeight + (isMobile ? 34 : 26)} textAnchor="middle" fill="var(--color-nrl-muted)" fontWeight="900" className="text-[14px] sm:text-[12px] lg:text-[8px]">AVG</text>

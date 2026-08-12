@@ -4,13 +4,11 @@ import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import Image from "next/image";
 import Link from "next/link";
 import { BillingNavButton } from "@/components/billing/billing-action-button";
-import { TabNav } from "@/components/ui/tab-nav";
 import { ToolNav } from "@/components/ui/tool-nav";
 
 interface AppHeaderProps {
   sticky?: boolean;
   showBillingNav?: boolean;
-  showStatsTabs?: boolean;
   blendBackground?: boolean;
   className?: string;
 }
@@ -18,7 +16,6 @@ interface AppHeaderProps {
 export function AppHeader({
   sticky = false,
   showBillingNav = false,
-  showStatsTabs = false,
   blendBackground = false,
   className = "",
 }: AppHeaderProps) {
@@ -69,11 +66,6 @@ export function AppHeader({
           </div>
         </div>
       </div>
-      {showStatsTabs ? (
-        <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <TabNav />
-        </div>
-      ) : null}
     </header>
   );
 }

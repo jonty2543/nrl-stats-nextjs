@@ -427,25 +427,25 @@ type PlayerSection = "Attack" | "Defense" | "Other";
 type OptionalPlayerComparisonStat = PlayerAttackComparisonStat | "None";
 type OptionalTeamAttackComparisonStat = TeamAttackComparisonStat | "None";
 type OptionalTeamDefenceComparisonStat = TeamDefenceConcededStat | "None";
+type FormWindow = 3 | 5;
 type PlotViewId =
   | "player_attack_stats"
   | "player_attack_efficiency"
   | "player_attack_share"
+  | "player_form"
   | "player_defense_tackles"
   | "player_combinations_halves"
   | "team_attack_stats"
-type FormWindow = 3 | 5;
   | "team_attack_efficiency"
   | "team_attack_xpoints"
+  | "team_form"
   | "team_defense_stats"
   | "team_defense_efficiency"
-  | "player_form"
   | "team_defense_contact"
   | "team_defense_xpoints"
   | "team_context_for_against"
   | "team_context_position_share"
   | "team_context_ruck";
-  | "team_form"
 const HALVES_PAIRING_SORT_OPTIONS = ["Ascending · most different", "Descending · closest to 50/50"] as const;
 type HalvesPairingSortLabel = (typeof HALVES_PAIRING_SORT_OPTIONS)[number];
 
@@ -473,19 +473,19 @@ const PLOT_DISCOVERY_OPTIONS: PlotDiscoveryOption[] = [
   { id: "player-metres", sentence: "Who gains the most run metres?", category: "Players · Attack", keywords: "player running carries fullback winger centre", view: "player_attack_stats", preset: "player_metres" },
   { id: "player-efficiency", sentence: "Which players combine run volume and efficiency?", category: "Players · Attack", keywords: "player metres per run output middle forward", view: "player_attack_efficiency", preset: "player_efficiency" },
   { id: "player-team-role", sentence: "Who contributes the largest share of their team's output?", category: "Players · Attack", keywords: "player team role proportion share receipts runs metres", view: "player_attack_share", preset: "player_team_role" },
+  { id: "player-form", sentence: "Whose recent form has improved most?", category: "Players · Form", keywords: "player form recent l3 l5 improvement prior", view: "player_form" },
   { id: "player-defence", sentence: "Who tackles most effectively?", category: "Players · Defense", keywords: "player defence defense tackles tackle efficiency middles", view: "player_defense_tackles", preset: "player_defence" },
   { id: "player-halves", sentence: "How do each team's halves split kicking metres?", category: "Players · Combinations", keywords: "halfback five eighth halves pairing kicks contribution", view: "player_combinations_halves", preset: "player_halves" },
   { id: "team-metres", sentence: "Which teams gain the most run metres?", category: "Teams · Attack", keywords: "team attack running carries", view: "team_attack_stats", preset: "team_metres" },
   { id: "team-efficiency", sentence: "Which attacks combine run volume and efficiency?", category: "Teams · Attack", keywords: "team metres per run output", view: "team_attack_efficiency", preset: "team_efficiency" },
+  { id: "team-form", sentence: "Which teams' recent form has improved most?", category: "Teams · Form", keywords: "team form recent l3 l5 improvement prior", view: "team_form" },
   { id: "team-xpoints", sentence: "Which teams score more points than expected?", category: "Teams · Attack", keywords: "team attack actual expected xpoints overperform", view: "team_attack_xpoints", locked: true },
   { id: "team-defence", sentence: "Which defenses concede the fewest points?", category: "Teams · Defense", keywords: "team defence defense points allowed", view: "team_defense_stats", preset: "team_defence" },
   { id: "team-defence-efficiency", sentence: "Which defenses limit attacking output most efficiently?", category: "Teams · Defense", keywords: "team defence defense opponent runs metres volume", view: "team_defense_efficiency" },
-  { id: "player-form", sentence: "Whose recent form has improved most?", category: "Players · Form", keywords: "player form recent l3 l5 improvement prior", view: "player_form" },
   { id: "team-contact", sentence: "Which teams combine strong contact and defense ratings?", category: "Teams · Defense", keywords: "team defence tackle breaks offloads rating", view: "team_defense_contact", locked: true },
   { id: "team-xpoints-against", sentence: "Which teams concede fewer points than expected?", category: "Teams · Defense", keywords: "team defence actual expected xpoints against overperform", view: "team_defense_xpoints", locked: true },
   { id: "team-for-against", sentence: "Which teams score most and concede least?", category: "Teams · Team context", keywords: "team points for against attack defence balance", view: "team_context_for_against", preset: "team_for_against" },
   { id: "team-position-share", sentence: "Which starting positions drive each team's runs?", category: "Teams · Team context", keywords: "team player position share fullback winger centres halves edges middles", view: "team_context_position_share", preset: "team_position_share" },
-  { id: "team-form", sentence: "Which teams' recent form has improved most?", category: "Teams · Form", keywords: "team form recent l3 l5 improvement prior", view: "team_form" },
   { id: "team-ruck", sentence: "Which teams dominate the ruck?", category: "Teams · Team context", keywords: "team ruck dominance rating play the ball ptb", view: "team_context_ruck", locked: true },
 ];
 const POPULAR_PLOT_DISCOVERY_IDS = ["player-metres", "team-metres", "team-defence", "team-for-against", "player-efficiency"];
@@ -868,6 +868,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const [playerEfficiencyView, setPlayerEfficiencyView] = useState<EfficiencyView>("Efficiency");
   const [playerComparisonXStat, setPlayerComparisonXStat] = useState<PlayerAttackComparisonStat>("Run metres");
   const [playerComparisonYStat, setPlayerComparisonYStat] = useState<OptionalPlayerComparisonStat>("None");
+  const [playerFormStat, setPlayerFormStat] = useState<PlayerAttackComparisonStat>("Run metres");
+  const [playerFormPerStat, setPlayerFormPerStat] = useState<OptionalPlayerComparisonStat>("None");
   const [playerStatsAggregation, setPlayerStatsAggregation] = useState<PlayerStatsAggregation>("Per game");
   const [playerTeamProportionXStat, setPlayerTeamProportionXStat] = useState<PlayerAttackComparisonStat>("Receipts");
   const [playerTeamProportionYStat, setPlayerTeamProportionYStat] = useState<OptionalPlayerComparisonStat>("Run metres");
@@ -879,14 +881,16 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const [playerInfoOpen, setPlayerInfoOpen] = useState(false);
   const [teamInfoOpen, setTeamInfoOpen] = useState(false);
   const [playerFiltersOpen, setPlayerFiltersOpen] = useState(false);
-  const [playerFormStat, setPlayerFormStat] = useState<PlayerAttackComparisonStat>("Run metres");
-  const [playerFormPerStat, setPlayerFormPerStat] = useState<OptionalPlayerComparisonStat>("None");
   const [teamFiltersOpen, setTeamFiltersOpen] = useState(false);
   const [plotFinderOpen, setPlotFinderOpen] = useState(false);
   const [plotFinderQuery, setPlotFinderQuery] = useState("");
   const plotFinderRef = useRef<HTMLDivElement>(null);
   const plotFinderInputRef = useRef<HTMLInputElement>(null);
   const [attackPlot, setAttackPlot] = useState<AttackPlot>("Stats");
+  const [teamFormStat, setTeamFormStat] = useState<PlayerAttackComparisonStat>("Run metres");
+  const [teamFormPerStat, setTeamFormPerStat] = useState<OptionalPlayerComparisonStat>("None");
+  const [formWindow, setFormWindow] = useState<FormWindow>(5);
+  const [minPriorGames, setMinPriorGames] = useState(5);
   const [teamAttackXStat, setTeamAttackXStat] = useState<TeamAttackComparisonStat>("Run metres");
   const [teamAttackYStat, setTeamAttackYStat] = useState<OptionalTeamAttackComparisonStat>("None");
   const [teamEfficiencyBaseMetric, setTeamEfficiencyBaseMetric] = useState<TeamAttackEfficiencyBaseStat>("Runs");
@@ -898,10 +902,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const [teamDefenceEfficiencyOutputMetric, setTeamDefenceEfficiencyOutputMetric] = useState<TeamAttackEfficiencyOutputStat>("Run metres");
   const [teamDefenceEfficiencyView, setTeamDefenceEfficiencyView] = useState<EfficiencyView>("Efficiency");
   const [defencePlot, setDefencePlot] = useState<DefencePlot>("Contact vs defense rating");
-  const [teamFormStat, setTeamFormStat] = useState<PlayerAttackComparisonStat>("Run metres");
-  const [teamFormPerStat, setTeamFormPerStat] = useState<OptionalPlayerComparisonStat>("None");
-  const [formWindow, setFormWindow] = useState<FormWindow>(5);
-  const [minPriorGames, setMinPriorGames] = useState(5);
   const [teamOtherPlot, setTeamOtherPlot] = useState<TeamOtherPlot>("Team Share by Position");
   const [teamForStat, setTeamForStat] = useState<TeamAttackComparisonStat>("Points");
   const [teamAgainstStat, setTeamAgainstStat] = useState<TeamAttackComparisonStat>("Points");
@@ -983,6 +983,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const isDefense = teamSection === "Defense";
   const isOther = teamSection === "Other";
   const isAttackXPoints = isAttack && attackPlot === "xPoints vs actual points";
+  const isTeamForm = isAttack && attackPlot === "Form";
   const isTeamAttackEfficiency = isAttack && attackPlot === "Efficiency";
   const teamEfficiencyShowsVolume = isTeamAttackEfficiency && teamEfficiencyView === "Volume axis";
   const isTeamAttackStatComparison = isAttack && attackPlot === "Stats";
@@ -994,10 +995,11 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const isTeamSharePlot = isOther && teamOtherPlot === "Team Share by Position";
   const activePlotView: PlotViewId = entity === "Players"
     ? playerSection === "Defense"
-  const isTeamForm = isAttack && attackPlot === "Form";
       ? "player_defense_tackles"
       : playerSection === "Other"
         ? "player_combinations_halves"
+        : playerAttackPlot === "Form"
+          ? "player_form"
         : playerAttackPlot === "Efficiency"
           ? "player_attack_efficiency"
           : playerAttackPlot === "Team Proportion"
@@ -1009,8 +1011,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
         : defencePlot === "Contact vs defense rating"
           ? "team_defense_contact"
           : defencePlot === "Actual points conceded vs xPoints conceded"
-        : playerAttackPlot === "Form"
-          ? "player_form"
             ? "team_defense_xpoints"
             : "team_defense_stats"
       : isOther
@@ -1019,6 +1019,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
           : teamOtherPlot === "Ruck Dominance Rating"
             ? "team_context_ruck"
             : "team_context_position_share"
+        : attackPlot === "Form"
+          ? "team_form"
         : attackPlot === "Efficiency"
           ? "team_attack_efficiency"
           : attackPlot === "xPoints vs actual points"
@@ -1030,8 +1032,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const isXPoints = isAttackXPoints || isDefenseXPoints;
   const isModelPlot = isXPoints || isRuckDominancePlot || (isDefense && defencePlot === "Contact vs defense rating");
   const teamAttackXMeta = TEAM_ATTACK_STAT_META[teamAttackXStat];
-        : attackPlot === "Form"
-          ? "team_form"
   const effectiveTeamAttackYStat = teamAttackYStat === "None" ? teamAttackXStat : teamAttackYStat;
   const teamAttackYMeta = TEAM_ATTACK_STAT_META[effectiveTeamAttackYStat];
   const teamAttackXHigherIsBetter = teamStatHigherIsBetter(teamAttackXStat, false);
@@ -1076,6 +1076,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     : (["Tries", "Try assists", "Line breaks", "Line break assists", "Forced drop outs"] as TeamAttackEfficiencyOutputStat[]).includes(activeTeamEfficiencyOutputMetric) ? 3 : 2;
   const playerUsesPer80 = (PLAYER_BACK_POSITIONS as readonly PlayerAttackPosition[]).includes(playerPosition);
   const isPlayerEfficiency = playerAttackPlot === "Efficiency";
+  const isPlayerForm = playerSection === "Attack" && playerAttackPlot === "Form";
   const playerEfficiencyShowsVolume = isPlayerEfficiency && playerEfficiencyView === "Volume axis";
   const isPlayerTeamProportion = playerAttackPlot === "Team Proportion";
   const isPlayerGameMode = playerPlotMode === "games";
@@ -1087,7 +1088,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const playerComparisonXHigherIsBetter = !LOWER_IS_BETTER_STATS.has(activePlayerComparisonXStat);
   const playerComparisonYHigherIsBetter = !LOWER_IS_BETTER_STATS.has(effectivePlayerComparisonYStat);
   const playerComparisonQuadrants = useMemo(
-  const isPlayerForm = playerSection === "Attack" && playerAttackPlot === "Form";
     () => comparisonQuadrants(activePlayerComparisonXStat, effectivePlayerComparisonYStat, isPlayerTeamProportion ? " %" : ""),
     [activePlayerComparisonXStat, effectivePlayerComparisonYStat, isPlayerTeamProportion]
   );
@@ -1212,6 +1212,12 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
       : [],
     [entity, gameWindow, isPlayerEfficiency, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, playerPlotMode, playerPosition, playerRowsByYear, playerSection, year]
   );
+  const playerFormPoints = useMemo(
+    () => entity === "Players" && isPlayerForm
+      ? buildPlayerFormPoints(playerRowsByYear[year] ?? [], playerPosition, playerFormStat, playerFormPerStat, formWindow, minPriorGames, year)
+      : [],
+    [entity, formWindow, isPlayerForm, minPriorGames, playerFormPerStat, playerFormStat, playerPosition, playerRowsByYear, year]
+  );
   const playerAttackComparisonData = useMemo(
     () => entity === "Players" && playerSection === "Attack" && !isPlayerEfficiency
       ? buildPlayerAttackComparisonPoints(
@@ -1223,12 +1229,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
           gameWindow,
           playerPlotMode
         )
-  const playerFormPoints = useMemo(
-    () => entity === "Players" && isPlayerForm
-      ? buildPlayerFormPoints(playerRowsByYear[year] ?? [], playerPosition, playerFormStat, playerFormPerStat, formWindow, minPriorGames, year)
-      : [],
-    [entity, formWindow, isPlayerForm, minPriorGames, playerFormPerStat, playerFormStat, playerPosition, playerRowsByYear, year]
-  );
       : [],
     [activePlayerComparisonXStat, effectivePlayerComparisonYStat, entity, gameWindow, isPlayerEfficiency, isPlayerStatsTotals, isPlayerTeamProportion, playerPlotMode, playerPosition, playerRowsByYear, playerSection, year]
   );
@@ -1283,17 +1283,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
       return image ? [[point.id, image]] : [];
     })
   ), [playerAttackComparisonData, playerAttackData, playerDefenceData, playerFaceImages]);
-  const points = useMemo<TeamQuadrantPoint[]>(() => {
-    if (isAttack || isTeamDefenceStatsConceded || isTeamDefenceEfficiency) {
-      const sourcePoints = isAttack ? attackPoints : concededPoints;
-      const modelPoints = isAttack ? teamModelStats.attack : teamModelStats.defense;
-      return sourcePoints.flatMap((point): TeamQuadrantPoint[] => {
-        const modelPoint = modelPoints.get(teamModelPointKey(point.team, point.year, point.roundLabel));
-        const statsPoint: TeamStatsRatingPoint = {
-          ...point,
-          attackingRuckRating: modelPoint?.attackingRuckRating ?? null,
-          defensiveRuckRating: modelPoint?.defensiveRuckRating ?? null,
-          ruckDominanceRating: modelPoint?.ruckDominanceRating ?? null,
   const playerFormPointImages = useMemo(() => Object.fromEntries(
     playerFormPoints.flatMap((point) => {
       const image = playerFaceImages[normalisePlayerName(point.team)];
@@ -1306,6 +1295,17 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
       : [],
     [currentRows, entity, formWindow, isTeamForm, minPriorGames, teamFormPerStat, teamFormStat, year]
   );
+  const points = useMemo<TeamQuadrantPoint[]>(() => {
+    if (isAttack || isTeamDefenceStatsConceded || isTeamDefenceEfficiency) {
+      const sourcePoints = isAttack ? attackPoints : concededPoints;
+      const modelPoints = isAttack ? teamModelStats.attack : teamModelStats.defense;
+      return sourcePoints.flatMap((point): TeamQuadrantPoint[] => {
+        const modelPoint = modelPoints.get(teamModelPointKey(point.team, point.year, point.roundLabel));
+        const statsPoint: TeamStatsRatingPoint = {
+          ...point,
+          attackingRuckRating: modelPoint?.attackingRuckRating ?? null,
+          defensiveRuckRating: modelPoint?.defensiveRuckRating ?? null,
+          ruckDominanceRating: modelPoint?.ruckDominanceRating ?? null,
           ptbRating: modelPoint?.ptbRating ?? null,
           contactRating: modelPoint?.contactRating ?? null,
           defenseRating: modelPoint?.defenseRating ?? null,
@@ -1380,6 +1380,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     ? "Expected points against actual points scatter plot"
     : isDefenseXPoints
       ? "Actual points conceded against expected points conceded scatter plot"
+      : isTeamForm
+        ? `${teamFormStat} prior average against L${formWindow} form scatter plot`
       : isTeamDefenceEfficiency
         ? teamDefenceEfficiencyShowsVolume
           ? `${activeTeamEfficiencyOutputMetric} conceded per ${teamEfficiencyUnit} against ${activeTeamEfficiencyBaseMetric} volume defensive efficiency scatter plot`
@@ -1391,8 +1393,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
         : isRuckDominancePlot
           ? "Ruck Dominance Rating dot plot"
         : isForVsAgainstPlot
-      : isTeamForm
-        ? `${teamFormStat} prior average against L${formWindow} form scatter plot`
           ? `${teamForStat} for against ${teamAgainstStat} against scatter plot`
         : isTeamSingleStat
           ? `${activeTeamXDisplayName} dot plot`
@@ -1405,6 +1405,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     ? mode === "season" ? "AVERAGE XPOINTS PER GAME →" : "XPOINTS →"
     : isDefenseXPoints
       ? mode === "season" ? "AVERAGE ACTUAL POINTS CONCEDED PER GAME →" : "ACTUAL POINTS CONCEDED →"
+      : isTeamForm
+        ? `PRIOR ${teamFormStat.toUpperCase()}${teamFormPerStat === "None" ? " PER GAME" : ` PER ${teamFormPerStat.toUpperCase()}`} →`
       : isTeamDefenceEfficiency
         ? `${activeTeamEfficiencyOutputMetric.toUpperCase()} CONCEDED PER ${teamEfficiencyUnit.toUpperCase()} · BETTER →`
       : isTeamAttackEfficiency
@@ -1416,14 +1418,14 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
         : isTeamDefenceStatsConceded
           ? `${defenceStatAxisLabel(activeTeamXStat as TeamDefenceConcededStat, activeTeamXMeta.axisLabel)} · BETTER →`
           : isAttack
-      : isTeamForm
-        ? `PRIOR ${teamFormStat.toUpperCase()}${teamFormPerStat === "None" ? " PER GAME" : ` PER ${teamFormPerStat.toUpperCase()}`} →`
             ? `${teamAttackXMeta.axisLabel} · BETTER ${teamAttackXHigherIsBetter ? "→" : "←"}`
             : "CONTACT DISRUPTIONS ALLOWED PER 100 RUNS · BETTER →";
   const teamYAxisLabel = isAttackXPoints
     ? mode === "season" ? "AVERAGE ACTUAL POINTS PER GAME ↑" : "ACTUAL POINTS ↑"
     : isDefenseXPoints
       ? mode === "season" ? "AVERAGE XPOINTS CONCEDED PER GAME ↑" : "XPOINTS CONCEDED ↑"
+      : isTeamForm
+        ? `L${formWindow} ${teamFormStat.toUpperCase()}${teamFormPerStat === "None" ? " PER GAME" : ` PER ${teamFormPerStat.toUpperCase()}`} ↑`
       : isTeamSingleStat
         ? ""
         : isTeamEfficiency
@@ -1435,14 +1437,14 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
         : isTeamDefenceStatsConceded
           ? `${defenceStatAxisLabel(effectiveTeamYStat as TeamDefenceConcededStat, activeTeamYMeta.axisLabel)} · BETTER ${activeTeamYHigherIsBetter ? "↑" : "↓"}`
           : isAttack
-      : isTeamForm
-        ? `L${formWindow} ${teamFormStat.toUpperCase()}${teamFormPerStat === "None" ? " PER GAME" : ` PER ${teamFormPerStat.toUpperCase()}`} ↑`
             ? `${teamAttackYMeta.axisLabel} · BETTER ${teamAttackYHigherIsBetter ? "↑" : "↓"}`
             : "DEFENSE RATING · BETTER ↑";
   const teamXMetricLabel = isAttackXPoints
     ? "xPoints"
     : isDefenseXPoints
       ? "Actual conceded"
+      : isTeamForm
+        ? "Prior"
       : isTeamDefenceEfficiency
         ? `${activeTeamEfficiencyOutputMetric} conceded/${teamEfficiencyUnit}`
       : isTeamAttackEfficiency
@@ -1454,10 +1456,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
           : isAttack ? teamAttackXMeta.metricLabel : "Contact";
   const teamYMetricLabel = isAttackXPoints
     ? "Actual points"
-      : isTeamForm
-        ? "Prior"
     : isDefenseXPoints
       ? "xPoints conceded"
+      : isTeamForm
+        ? `L${formWindow}`
       : isTeamSingleStat
         ? ""
         : isTeamEfficiency
@@ -1469,8 +1471,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
           : isAttack ? teamAttackYMeta.metricLabel : "Defense rating";
   const teamGameRSquared = useMemo(
     () => mode === "games" && !isTeamSingleStat ? coefficientOfDetermination(plottedTeamPoints) : null,
-      : isTeamForm
-        ? `L${formWindow}`
     [isTeamSingleStat, mode, plottedTeamPoints]
   );
 
@@ -1581,6 +1581,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
           setPlayerSection("Attack");
           setPlayerAttackPlot("Team Proportion");
           break;
+        case "player_form":
+          setPlayerSection("Attack");
+          setPlayerAttackPlot("Form");
+          break;
         case "player_defense_tackles":
           setPlayerSection("Defense");
           break;
@@ -1592,10 +1596,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     }
 
     setEntity("Teams");
-        case "player_form":
-          setPlayerSection("Attack");
-          setPlayerAttackPlot("Form");
-          break;
     setTeamInfoOpen(false);
     setTeamFiltersOpen(false);
 
@@ -1610,6 +1610,12 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
         setAttackPlot("Efficiency");
         void loadTeamYear(year);
         break;
+      case "team_form":
+        setTeamSection("Attack");
+        setAttackPlot("Form");
+        setMode("season");
+        void loadTeamYear(year);
+        break;
       case "team_attack_xpoints":
         setTeamSection("Attack");
         setAttackPlot("xPoints vs actual points");
@@ -1621,12 +1627,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
         void loadTeamYear(year, true, LOCKED_TEAM_STATS.has(teamDefenceXStat) || (teamDefenceYStat !== "None" && LOCKED_TEAM_STATS.has(teamDefenceYStat)));
         break;
       case "team_defense_efficiency":
-      case "team_form":
-        setTeamSection("Attack");
-        setAttackPlot("Form");
-        setMode("season");
-        void loadTeamYear(year);
-        break;
         setTeamSection("Defense");
         setDefencePlot("Defensive Efficiency");
         void loadTeamYear(year);
@@ -1846,6 +1846,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     ? `${halvesPairingStat} contribution — halves pairings`
     : playerSection === "Defense"
       ? `Tackles vs tackle efficiency — ${playerPosition}`
+      : isPlayerForm
+        ? `${playerFormStat}${playerFormPerStat === "None" ? "" : ` per ${playerFormPerStat.toLowerCase()}`} — ${playerPosition} · L${formWindow} form`
       : isPlayerEfficiency
         ? playerEfficiencyShowsVolume
           ? `${playerEfficiencyOutputMetric} efficiency vs ${playerEfficiencyBaseMetric} volume — ${playerPosition}`
@@ -1857,8 +1859,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
           : activePlayerComparisonYStat === "None"
             ? `${activePlayerComparisonXStat} — ${playerPosition}`
             : `${activePlayerComparisonXStat} vs ${effectivePlayerComparisonYStat} — ${playerPosition}`;
-      : isPlayerForm
-        ? `${playerFormStat}${playerFormPerStat === "None" ? "" : ` per ${playerFormPerStat.toLowerCase()}`} — ${playerPosition} · L${formWindow} form`
   const teamPlotTitle = isOther
     ? isForVsAgainstPlot
       ? `${teamForStat} for vs ${teamAgainstStat} against`
@@ -1868,6 +1868,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     : isAttack
       ? isAttackXPoints
         ? "Expected points vs actual points"
+        : isTeamForm
+          ? `${teamFormStat}${teamFormPerStat === "None" ? "" : ` per ${teamFormPerStat.toLowerCase()}`} — Teams · L${formWindow} form`
         : isTeamAttackEfficiency
           ? `${activeTeamEfficiencyOutputMetric} per ${teamEfficiencyUnit}`
           : activeTeamYStat === "None"
@@ -1879,8 +1881,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
           ? `${activeTeamEfficiencyOutputMetric} conceded per ${teamEfficiencyUnit} faced`
           : isTeamDefenceStatsConceded
             ? activeTeamYStat === "None"
-        : isTeamForm
-          ? `${teamFormStat}${teamFormPerStat === "None" ? "" : ` per ${teamFormPerStat.toLowerCase()}`} — Teams · L${formWindow} form`
               ? activeTeamXDisplayName
               : `${activeTeamXDisplayName} vs ${activeTeamYDisplayName}`
             : "Contact vs defense rating";
@@ -1938,6 +1938,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                 { value: "player_attack_efficiency", label: "Player efficiency" },
                 { value: "player_attack_share", label: "Player team share" },
               ] },
+              { label: "Players · Form", options: [
+                { value: "player_form", label: "Player form" },
+              ] },
               { label: "Players · Defense", options: [
                 { value: "player_defense_tackles", label: "Tackling effectiveness" },
               ] },
@@ -1948,10 +1951,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                 { value: "team_attack_stats", label: "Team stats" },
                 { value: "team_attack_efficiency", label: "Team efficiency" },
               ] },
-              { label: "Teams · Defense", options: [
-              { label: "Players · Form", options: [
-                { value: "player_form", label: "Player form" },
+              { label: "Teams · Form", options: [
+                { value: "team_form", label: "Team form" },
               ] },
+              { label: "Teams · Defense", options: [
                 { value: "team_defense_stats", label: "Stats conceded" },
                 { value: "team_defense_efficiency", label: "Defensive efficiency" },
               ] },
@@ -1962,9 +1965,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
             ]}
             onChange={changePlotView}
           />
-              { label: "Teams · Form", options: [
-                { value: "team_form", label: "Team form" },
-              ] },
         </div>
       </div>
 
@@ -2217,6 +2217,11 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                 <div><span className="font-black text-nrl-text">Performance</span><br />{isDefenseXPoints ? "Green means fewer points were conceded than expected; red means more were conceded than expected." : "Green means actual points exceeded xPoints; red means actual points finished below xPoints."}</div>
                 <div><span className="font-black text-nrl-text">Equality line</span><br />Points on the diagonal matched model expectation exactly.</div>
               </>
+            ) : isTeamForm ? (
+              <>
+                <div><span className="font-black text-nrl-text">L{formWindow} form</span><br />The vertical value averages the latest {formWindow} games. The diagonal represents no change.</div>
+                <div><span className="font-black text-nrl-text">Colour</span><br />Green indicates improvement and red indicates decline. For errors, penalties and missed tackles, a lower recent value is treated as improvement.</div>
+              </>
             ) : isAttack ? (
               isTeamAttackEfficiency ? (
                 teamEfficiencyShowsVolume ? (
@@ -2228,11 +2233,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                 ) : (
                   <div><span className="font-black text-nrl-text">Efficiency</span><br />Total {teamEfficiencyOutputMetric.toLowerCase()} divided by total {teamEfficiencyBaseMetric.toLowerCase()} in the selected sample. Enable Volume axis to compare efficiency with team volume per game.</div>
                 )
-            ) : isTeamForm ? (
-              <>
-                <div><span className="font-black text-nrl-text">L{formWindow} form</span><br />The vertical value averages the latest {formWindow} games. The diagonal represents no change.</div>
-                <div><span className="font-black text-nrl-text">Colour</span><br />Green indicates improvement and red indicates decline. For errors, penalties and missed tackles, a lower recent value is treated as improvement.</div>
-              </>
               ) : isTeamSingleStat ? (
                 <>
                   <div><span className="font-black text-nrl-text">{activeTeamXStat}{isTeamDefenceStatsConceded ? " conceded" : ""}</span><br />{isTeamDefenceStatsConceded ? activeTeamXMeta.description.replace("Average", "Average opponent") : activeTeamXMeta.description} {isTeamDefenceStatsConceded || !teamAttackXHigherIsBetter ? "Lower" : "Higher"} is better.</div>

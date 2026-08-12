@@ -61,12 +61,11 @@ function GameWindowButtons({ value, onChange }: { value: PlayerGameWindow; onCha
   );
 }
 
-function PlotSummary({ title, detail, children }: { title: string; detail: string; children?: ReactNode }) {
+function PlotSummary({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-nrl-border px-4 py-3 sm:px-5">
       <div className="min-w-0">
         <h2 className="text-sm font-black text-nrl-text sm:text-base">{title}</h2>
-        <p className="mt-1 text-[10px] font-semibold text-nrl-muted">{detail}</p>
       </div>
       {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
     </div>
@@ -1659,7 +1658,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     setPlotFinderQuery("");
   };
 
-  const sampleSummary = gameWindow === null ? "All games" : `Last ${gameWindow} games`;
   const playerPlotTitle = playerSection === "Other"
     ? `${halvesPairingStat} contribution — halves pairings`
     : playerSection === "Defense"
@@ -1675,7 +1673,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
           : activePlayerComparisonYStat === "None"
             ? `${activePlayerComparisonXStat} — ${playerPosition}`
             : `${activePlayerComparisonXStat} vs ${effectivePlayerComparisonYStat} — ${playerPosition}`;
-  const playerPlotDetail = `${year} season · ${sampleSummary} · ${playerSection === "Other" ? "One bar per pairing" : isPlayerGameMode ? "One point per game" : "One point per player"}${playerSection === "Attack" && playerAttackPlot === "Stats" && !isPlayerGameMode ? ` · ${isPlayerStatsTotals ? "Season totals" : playerUsesPer80 ? "Rates per 80 minutes" : "Rates per qualifying game"}` : ""}`;
   const teamPlotTitle = isOther
     ? isForVsAgainstPlot
       ? `${teamForStat} for vs ${teamAgainstStat} against`
@@ -1699,7 +1696,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
               ? activeTeamXDisplayName
               : `${activeTeamXDisplayName} vs ${activeTeamYDisplayName}`
             : "Contact vs defense rating";
-  const teamPlotDetail = `${year} season · ${sampleSummary} · ${isTeamSharePlot ? "Team profiles" : mode === "season" ? "One point per team" : "One point per game"}`;
 
   return (
     <div className="space-y-4">
@@ -1788,7 +1784,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                   <div className="w-48 shrink-0"><Select label="Sort" compact value={halvesPairingSort === "ascending" ? "Ascending · most different" : "Descending · closest to 50/50"} options={[...HALVES_PAIRING_SORT_OPTIONS]} onChange={(value) => setHalvesPairingSort((value as HalvesPairingSortLabel).startsWith("Ascending") ? "ascending" : "descending")} /></div>
                 </div>
               </div>
-              <PlotSummary title={playerPlotTitle} detail={playerPlotDetail}>
+              <PlotSummary title={playerPlotTitle}>
                 <InfoCircleButton open={playerInfoOpen} onClick={() => setPlayerInfoOpen((current) => !current)} controls="player-plot-info" />
                 <FiltersButton open={playerFiltersOpen} onClick={() => setPlayerFiltersOpen((current) => !current)} controls="player-plot-filters" />
               </PlotSummary>
@@ -1826,7 +1822,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                   <div className="w-24"><Select label="Position" compact value={playerPosition} options={[...PLAYER_ATTACK_POSITIONS]} onChange={(value) => setPlayerPosition(value as PlayerAttackPosition)} /></div>
                 </div>
               </div>
-              <PlotSummary title={playerPlotTitle} detail={playerPlotDetail}>
+              <PlotSummary title={playerPlotTitle}>
                 <InfoCircleButton open={playerInfoOpen} onClick={() => setPlayerInfoOpen((current) => !current)} controls="player-plot-info" />
                 <FiltersButton open={playerFiltersOpen} onClick={() => setPlayerFiltersOpen((current) => !current)} controls="player-plot-filters" />
               </PlotSummary>
@@ -1938,7 +1934,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
             </div>
           ) : null}
 
-          <PlotSummary title={teamPlotTitle} detail={teamPlotDetail}>
+          <PlotSummary title={teamPlotTitle}>
             <InfoCircleButton open={teamInfoOpen} onClick={() => setTeamInfoOpen((current) => !current)} controls="team-plot-info" />
             <FiltersButton open={teamFiltersOpen} onClick={() => setTeamFiltersOpen((current) => !current)} controls="team-plot-filters" />
           </PlotSummary>
@@ -2084,10 +2080,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
           <span className="mb-1 shrink-0 rounded-full border border-violet-300/35 bg-violet-400/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.14em] text-violet-200">Pro</span>
         </div>
 
-        <PlotSummary
-          title={activeProPlot.title}
-          detail={`${proYear} season · ${proGameWindow === null ? "All games" : `Last ${proGameWindow} games`} · ${proMode === "season" ? "One point per team" : "One point per game"}`}
-        >
+        <PlotSummary title={activeProPlot.title}>
           <InfoCircleButton open={proInfoOpen} onClick={() => setProInfoOpen((current) => !current)} controls="pro-plot-info" />
           <FiltersButton open={proFiltersOpen} onClick={() => setProFiltersOpen((current) => !current)} controls="pro-plot-filters" />
         </PlotSummary>

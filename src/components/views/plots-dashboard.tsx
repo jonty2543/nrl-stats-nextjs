@@ -1763,18 +1763,14 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
               { label: "Teams · Attack", options: [
                 { value: "team_attack_stats", label: "Team stats" },
                 { value: "team_attack_efficiency", label: "Team efficiency" },
-                { value: "team_attack_xpoints", label: canAccessModelPlots ? "Expected vs actual points" : "🔒 Expected vs actual points" },
               ] },
               { label: "Teams · Defense", options: [
                 { value: "team_defense_stats", label: "Stats conceded" },
                 { value: "team_defense_efficiency", label: "Defensive efficiency" },
-                { value: "team_defense_contact", label: canAccessModelPlots ? "Contact vs defense rating" : "🔒 Contact vs defense rating" },
-                { value: "team_defense_xpoints", label: canAccessModelPlots ? "Actual vs expected conceded" : "🔒 Actual vs expected conceded" },
               ] },
               { label: "Teams · Team context", options: [
                 { value: "team_context_for_against", label: "For vs against" },
                 { value: "team_context_position_share", label: "Share by starting position" },
-                { value: "team_context_ruck", label: canAccessModelPlots ? "Ruck dominance rating" : "🔒 Ruck dominance rating" },
               ] },
             ]}
             onChange={changePlotView}

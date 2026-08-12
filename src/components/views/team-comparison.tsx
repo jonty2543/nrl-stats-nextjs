@@ -34,6 +34,7 @@ interface TeamComparisonProps {
 type TeamPerspective = "For" | "Against";
 type TeamStatsTableSortDirection = "asc" | "desc";
 type TeamStatsTableValueMode = "Average" | "Total";
+const TEAM_STATS_TABLE_ENABLED = false;
 type TeamStatsTableGroupBy = "Team" | "Year + Team";
 type TeamStatsTableStatKey = (typeof TEAM_STATS)[number];
 type TeamStatsTableSortKey = "year" | "team" | "games" | `stat:${TeamStatsTableStatKey}`;
@@ -722,7 +723,7 @@ export function TeamComparison({
 
   return (
     <div className="space-y-4">
-      {allData.length > 0 && (
+      {TEAM_STATS_TABLE_ENABLED && allData.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
           <div className="flex min-h-[44px] items-center justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-5 py-1.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">

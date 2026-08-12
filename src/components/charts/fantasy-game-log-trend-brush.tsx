@@ -173,7 +173,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   rows,
   defaultStartYear,
   headerTitle = "Fantasy Trend",
-  mainChartClassName = "h-[400px] w-full sm:h-[320px]",
+  mainChartClassName = "h-auto w-full sm:h-[320px]",
   rollingWindow: controlledRollingWindow,
   onRollingWindowChange,
   showInternalControls = true,

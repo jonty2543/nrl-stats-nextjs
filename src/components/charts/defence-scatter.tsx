@@ -45,6 +45,7 @@ interface TeamQuadrantScatterProps {
   searchEntityLabel?: "players" | "teams";
   colorByQuadrant?: boolean;
   comparisonLine?: boolean;
+  comparisonHigherIsBetter?: boolean;
   rSquared?: number | null;
   singleAxis?: boolean;
   showQuadrantLabels?: boolean;
@@ -252,6 +253,7 @@ export function TeamQuadrantScatter({
   searchEntityLabel: searchEntityLabelOverride,
   colorByQuadrant = true,
   comparisonLine = false,
+  comparisonHigherIsBetter = true,
   rSquared = null,
   singleAxis = false,
   showQuadrantLabels = false,
@@ -595,7 +597,7 @@ export function TeamQuadrantScatter({
           const pointColor = singleAxis
             ? singleAxisHeatColor((x - singleAxisHeatBarX) / singleAxisHeatBarWidth)
             : comparisonLine
-            ? group.yValue >= group.xValue ? "#10f08b" : "#ff5364"
+            ? (group.yValue >= group.xValue) === comparisonHigherIsBetter ? "#10f08b" : "#ff5364"
             : colorByQuadrant
               ? isTop && isRight ? "#10f08b" : !isTop && !isRight ? "#ff5364" : "#4f9cff"
               : "#79dbe3";
@@ -660,7 +662,7 @@ export function TeamQuadrantScatter({
             >
               {!imageUrl && !isPlayerPoint ? <circle cx={x} cy={y} r={hitRadius} fill="transparent" /> : null}
               {imageUrl || isPlayerPoint ? <defs><clipPath id={clipId}><circle cx={x} cy={y} r={radius - 1.5} /></clipPath></defs> : null}
-              <circle cx={x} cy={y} r={radius} fill={imageUrl ? "var(--color-nrl-panel)" : isPlayerPoint ? "#596273" : pointColor} stroke={pointColor} strokeWidth={active ? 3 : 1.5} opacity={active ? 1 : 0.78} />
+              <circle cx={x} cy={y} r={radius} fill={imageUrl ? "var(--color-nrl-panel)" : isPlayerPoint ? "var(--color-nrl-panel-2)" : pointColor} stroke={pointColor} strokeWidth={active ? 3 : 1.5} opacity={active ? 1 : 0.78} />
               {isPlayerPoint && !imageUrl ? (
                 <image href={PLAYER_SILHOUETTE_SRC} x={x - radius} y={y - radius} width={radius * 2} height={radius * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} pointerEvents="none" />
               ) : null}

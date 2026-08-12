@@ -52,6 +52,7 @@ interface PlayerComparisonProps {
 
 type PlayerStatsTableSortDirection = "asc" | "desc";
 type PlayerStatsTableValueMode = "Average" | "Total";
+const PLAYER_STATS_TABLE_ENABLED = false;
 type PlayerStatsTableGroupBy = "Player" | "Year + Player" | "Team + Player" | "Position + Player";
 type PlayerStatsTableStatKey = (typeof PLAYER_STATS)[number];
 type PlayerStatsTableSortKey =
@@ -2089,7 +2090,7 @@ export function PlayerComparison({
           <div>No data available for the selected season.</div>
         </div>
       )}
-      {allData.length > 0 && (
+      {PLAYER_STATS_TABLE_ENABLED && allData.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
           <div className="flex min-h-[44px] items-center justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-5 py-1.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">

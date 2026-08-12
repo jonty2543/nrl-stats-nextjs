@@ -1,9 +1,11 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
+import { PillRadio } from "@/components/ui/pill-radio"
 import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback"
+import { Select } from "@/components/ui/select"
 import { playerSlug } from "@/lib/data/player-slug"
 import type { PlayerStat, TeamStat } from "@/lib/data/types"
 import type { PlayerImageRecord } from "@/lib/supabase/queries"
@@ -18,6 +20,8 @@ interface RankingsDashboardProps {
 
 type ValueMode = "average" | "total"
 type RankingView = "players" | "teams"
+type RankingSection = "rankings" | "form"
+type FormWindow = 3 | 5
 type SortDirection = "asc" | "desc"
 
 interface StatOption {
@@ -32,7 +36,29 @@ interface RankingEntry {
   value: number
   statValue: number
   perStatValue: number | null
+  seasonValue: number
+  priorValue: number | null
+  recentValue: number | null
   imageSources: string[]
+}
+
+interface RankingGame {
+  round: number
+  value: number
+  perValue: number | null
+}
+
+interface RankingDiscoveryOption {
+  id: string
+  sentence: string
+  category: string
+  view: RankingView
+  section: RankingSection
+  statKey: string
+  perStatKey: string
+  position: string
+  formWindow: FormWindow
+  mode: ValueMode
 }
 
 const POSITION_ORDER = ["Fullback", "Winger", "Centre", "Half", "Edge", "Middle", "Hooker"]
@@ -104,6 +130,112 @@ const STAT_OPTIONS = RAW_STAT_OPTIONS.filter((option) => !RANKING_EXCLUDED_STAT_
 const TEAM_STAT_OPTIONS = STAT_OPTIONS.filter(
   (option) => !["Mins Played", "Fantasy"].includes(option.key)
 )
+
+const RANKING_SEARCH_STOP_WORDS = new Set(["a", "an", "and", "are", "by", "for", "has", "have", "i", "in", "is", "me", "of", "rank", "ranking", "rankings", "show", "the", "to", "want", "which", "who"])
+
+function normaliseRankingSearch(value: string): string {
+  return value.toLowerCase().replace(/meters/g, "metres").replace(/[^a-z0-9]+/g, " ").trim()
+}
+
+function rankingSearchTokens(value: string): string[] {
+  return normaliseRankingSearch(value).split(/\s+/).filter((token) => token && !RANKING_SEARCH_STOP_WORDS.has(token))
+}
+
+function statSearchAliases(option: StatOption): string[] {
+  const aliases = [option.key, option.label]
+  if (option.key === "All Run Metres") aliases.push("run metre", "run metres", "running metres")
+  if (option.key === "All Runs") aliases.push("run", "runs", "carry", "carries")
+  if (option.key === "Post Contact Metres") aliases.push("post contact metres", "post-contact metres", "pcm")
+  if (option.key === "Mins Played") aliases.push("minute", "minutes", "mins")
+  if (option.key === "Fantasy") aliases.push("fantasy points", "fantasy score")
+  if (option.key === "Tackles Made") aliases.push("tackle", "tackles")
+  return aliases.map(normaliseRankingSearch)
+}
+
+function findRankingStat(query: string, options: StatOption[]): string | null {
+  const normalized = ` ${normaliseRankingSearch(query)} `
+  let match: { key: string; length: number } | null = null
+  for (const option of options) {
+    for (const alias of statSearchAliases(option)) {
+      if (normalized.includes(` ${alias} `) && (!match || alias.length > match.length)) {
+        match = { key: option.key, length: alias.length }
+      }
+    }
+  }
+  return match?.key ?? null
+}
+
+function findRankingPosition(query: string): string {
+  const normalized = ` ${normaliseRankingSearch(query)} `
+  const aliases: Array<{ position: string; values: string[] }> = [
+    { position: "Fullback", values: ["fullback", "fullbacks"] },
+    { position: "Winger", values: ["wing", "winger", "wingers"] },
+    { position: "Centre", values: ["centre", "centres", "center", "centers"] },
+    { position: "Half", values: ["half", "halves", "halfback", "five eighth"] },
+    { position: "Edge", values: ["edge", "edges", "second row"] },
+    { position: "Middle", values: ["middle", "middles", "prop", "props", "lock"] },
+    { position: "Hooker", values: ["hooker", "hookers", "dummy half"] },
+  ]
+  return aliases.find(({ values }) => values.some((value) => normalized.includes(` ${value} `)))?.position ?? "All Positions"
+}
+
+function perStatUnitLabel(key: string, options: StatOption[]): string {
+  const special: Record<string, string> = {
+    "All Runs": "run",
+    Passes: "pass",
+    Receipts: "receipt",
+    "Mins Played": "minute",
+    Kicks: "kick",
+    "Play The Ball": "play the ball",
+  }
+  return special[key] ?? statLabel(key, options).toLowerCase()
+}
+
+function rankingSuggestionSentence(option: Omit<RankingDiscoveryOption, "id" | "sentence" | "category">): string {
+  const options = option.view === "teams" ? TEAM_STAT_OPTIONS : STAT_OPTIONS
+  const primary = statLabel(option.statKey, options)
+  const per = option.perStatKey ? ` per ${perStatUnitLabel(option.perStatKey, options)}` : ""
+  const subject = option.view === "teams" ? "teams" : option.position === "All Positions" ? "players" : `${option.position.toLowerCase()}s`
+  if (option.section === "form") return `Which ${subject} improved their L${option.formWindow} ${primary.toLowerCase()}${per} most?`
+  return `Rank ${subject} by ${option.mode === "total" && !option.perStatKey ? "total " : ""}${primary.toLowerCase()}${per}.`
+}
+
+function buildRankingSuggestions(query: string): RankingDiscoveryOption[] {
+  const normalized = normaliseRankingSearch(query)
+  if (!normalized) return []
+  const view: RankingView = /\bteam|teams\b/.test(normalized) ? "teams" : "players"
+  const section: RankingSection = /\bform|recent|improv|increase|l3|l5\b/.test(normalized) ? "form" : "rankings"
+  const formWindow: FormWindow = /\bl5\b|last 5|last five/.test(normalized) ? 5 : 3
+  const mode: ValueMode = /\btotal|totals\b/.test(normalized) ? "total" : "average"
+  const position = view === "players" ? findRankingPosition(query) : "All Positions"
+  const options = view === "teams" ? TEAM_STAT_OPTIONS : STAT_OPTIONS
+  const perParts = normalized.split(/\bper\b/)
+  const explicitPrimary = findRankingStat(perParts[0] ?? normalized, options)
+  const explicitPer = perParts.length > 1 ? findRankingStat(perParts.slice(1).join(" "), options) : null
+  const queryTokens = rankingSearchTokens(query)
+  const candidates = explicitPrimary
+    ? [explicitPrimary]
+    : options
+        .map((option) => ({
+          key: option.key,
+          score: rankingSearchTokens(`${option.key} ${option.label}`).filter((token) => queryTokens.some((queryToken) => token.startsWith(queryToken) || queryToken.startsWith(token))).length,
+        }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map(({ key }) => key)
+
+  const primaryKeys = candidates.length > 0 ? candidates : ["All Run Metres", "Fantasy", "Try Assists"]
+  return primaryKeys.map((primaryKey) => {
+    const base = { view, section, statKey: primaryKey, perStatKey: explicitPer ?? "", position, formWindow, mode }
+    return {
+      ...base,
+      id: `${view}-${section}-${primaryKey}-${explicitPer ?? "none"}-${position}-${formWindow}`,
+      sentence: rankingSuggestionSentence(base),
+      category: `${view === "teams" ? "Teams" : "Players"} · ${section === "form" ? "Form" : "Rankings"}`,
+    }
+  })
+}
 
 function normalisePersonName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim()
@@ -195,7 +327,7 @@ function buildPlayerImageSources(playerName: string, teamHint: string, rows: Pla
   })
 
   return sorted.flatMap((row) =>
-    [row.cached_body_image, row.cached_head_image, row.body_image, row.head_image].flatMap((source) =>
+    [row.cached_head_image, row.head_image, row.cached_body_image, row.body_image].flatMap((source) =>
       normaliseRemoteImageCandidates(source)
     )
   )
@@ -269,6 +401,54 @@ function formatCountValue(value: number): string {
   return Math.round(value).toLocaleString()
 }
 
+function formatFormChange(value: number, isRatio: boolean): string {
+  const formatted = formatRankingValue(Math.abs(value), isRatio)
+  if (formatted === "-") return formatted
+  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${formatted}`
+}
+
+const LOWER_IS_BETTER_RANKING_STATS = new Set([
+  "Errors",
+  "Handling Errors",
+  "Missed Tackles",
+  "Ineffective Tackles",
+  "One on One Lost",
+  "Penalties",
+  "Ruck Infringements",
+  "Inside 10 Metres",
+  "Kicked Dead",
+  "On Report",
+  "Sin Bins",
+  "Send Offs",
+])
+
+function formChangeClass(value: number, statKey: string): string {
+  const improvement = LOWER_IS_BETTER_RANKING_STATS.has(statKey) ? -value : value
+  if (improvement > 0) return "text-nrl-accent"
+  if (improvement < 0) return "text-rose-300"
+  return "text-nrl-muted"
+}
+
+function FiltersButton({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      aria-controls="ranking-filters"
+      aria-label={open ? "Hide filters" : "Show filters"}
+      title={open ? "Hide filters" : "Show filters"}
+      onClick={onClick}
+      className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border transition-colors ${open ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent" : "border-nrl-border bg-nrl-panel-2 text-nrl-muted hover:text-nrl-text"}`}
+    >
+      <span aria-hidden="true" className="flex w-3.5 flex-col gap-[3px]">
+        <span className="h-px w-full rounded-full bg-current" />
+        <span className="h-px w-full rounded-full bg-current" />
+        <span className="h-px w-full rounded-full bg-current" />
+      </span>
+    </button>
+  )
+}
+
 function compareRankingEntries(direction: SortDirection) {
   return (a: RankingEntry, b: RankingEntry) => {
     const valueCompare = direction === "desc" ? b.value - a.value : a.value - b.value
@@ -298,9 +478,11 @@ function buildPlayerRankings(
   minGames: number,
   minMinutes: number,
   positionFilter: string,
-  sortDirection: SortDirection
+  sortDirection: SortDirection,
+  formWindow: FormWindow | null,
+  minPriorGames: number
 ): RankingEntry[] {
-  const byPlayer = new Map<string, { team: string; games: number; total: number; perTotal: number; latestRound: number }>()
+  const byPlayer = new Map<string, { team: string; games: RankingGame[]; total: number; perTotal: number; latestRound: number }>()
 
   for (const row of rows) {
     const name = typeof row.Name === "string" ? row.Name.trim() : ""
@@ -315,13 +497,13 @@ function buildPlayerRankings(
     const perValue = perStatKey ? getStatValue(row, perStatKey) : null
     const current = byPlayer.get(name) ?? {
       team: typeof row.Team === "string" ? row.Team : "",
-      games: 0,
+      games: [],
       total: 0,
       perTotal: 0,
       latestRound: 0,
     }
 
-    current.games += 1
+    current.games.push({ round: toFiniteNumber(row.Round) ?? 0, value, perValue })
     current.total += value
     current.perTotal += perValue ?? 0
 
@@ -336,22 +518,44 @@ function buildPlayerRankings(
 
   return [...byPlayer.entries()]
     .map(([name, aggregate]) => {
-      if (aggregate.games < minGames) return null
+      if (aggregate.games.length < minGames || (formWindow && aggregate.games.length < formWindow + minPriorGames)) return null
       if (perStatKey && aggregate.perTotal <= 0) return null
 
-      const value = perStatKey
+      const seasonValue = perStatKey
         ? aggregate.total / aggregate.perTotal
         : mode === "average"
-          ? aggregate.total / aggregate.games
+          ? aggregate.total / aggregate.games.length
           : aggregate.total
+      const orderedGames = formWindow ? [...aggregate.games].sort((a, b) => b.round - a.round) : []
+      const recentGames = formWindow ? orderedGames.slice(0, formWindow) : []
+      const priorGames = formWindow ? orderedGames.slice(formWindow) : []
+      const recentStatTotal = recentGames.reduce((sum, game) => sum + game.value, 0)
+      const recentPerTotal = recentGames.reduce((sum, game) => sum + (game.perValue ?? 0), 0)
+      const priorStatTotal = priorGames.reduce((sum, game) => sum + game.value, 0)
+      const priorPerTotal = priorGames.reduce((sum, game) => sum + (game.perValue ?? 0), 0)
+      if (formWindow && perStatKey && (recentPerTotal <= 0 || priorPerTotal <= 0)) return null
+      const recentValue = formWindow
+        ? perStatKey
+          ? recentStatTotal / recentPerTotal
+          : recentStatTotal / recentGames.length
+        : null
+      const priorValue = formWindow
+        ? perStatKey
+          ? priorStatTotal / priorPerTotal
+          : priorStatTotal / priorGames.length
+        : null
+      const value = recentValue == null || priorValue == null ? seasonValue : recentValue - priorValue
 
       return {
         name,
         team: aggregate.team,
-        games: aggregate.games,
+        games: aggregate.games.length,
         value,
         statValue: aggregate.total,
         perStatValue: perStatKey ? aggregate.perTotal : null,
+        seasonValue,
+        priorValue,
+        recentValue,
         imageSources: buildPlayerImageSources(name, aggregate.team, images),
       }
     })
@@ -366,9 +570,11 @@ function buildTeamRankings(
   statKey: string,
   perStatKey: string,
   minGames: number,
-  sortDirection: SortDirection
+  sortDirection: SortDirection,
+  formWindow: FormWindow | null,
+  minPriorGames: number
 ): RankingEntry[] {
-  const byTeam = new Map<string, { games: number; total: number; perTotal: number }>()
+  const byTeam = new Map<string, { games: RankingGame[]; total: number; perTotal: number }>()
 
   for (const row of rows) {
     const team = typeof row.Team === "string" ? row.Team.trim() : ""
@@ -377,9 +583,9 @@ function buildTeamRankings(
     const value = getStatValue(row, statKey)
     if (value == null) continue
     const perValue = perStatKey ? getStatValue(row, perStatKey) : null
-    const current = byTeam.get(team) ?? { games: 0, total: 0, perTotal: 0 }
+    const current = byTeam.get(team) ?? { games: [], total: 0, perTotal: 0 }
 
-    current.games += 1
+    current.games.push({ round: toFiniteNumber(row.Round) ?? 0, value, perValue })
     current.total += value
     current.perTotal += perValue ?? 0
     byTeam.set(team, current)
@@ -387,22 +593,44 @@ function buildTeamRankings(
 
   return [...byTeam.entries()]
     .map(([name, aggregate]) => {
-      if (aggregate.games < minGames) return null
+      if (aggregate.games.length < minGames || (formWindow && aggregate.games.length < formWindow + minPriorGames)) return null
       if (perStatKey && aggregate.perTotal <= 0) return null
 
-      const value = perStatKey
+      const seasonValue = perStatKey
         ? aggregate.total / aggregate.perTotal
         : mode === "average"
-          ? aggregate.total / aggregate.games
+          ? aggregate.total / aggregate.games.length
           : aggregate.total
+      const orderedGames = formWindow ? [...aggregate.games].sort((a, b) => b.round - a.round) : []
+      const recentGames = formWindow ? orderedGames.slice(0, formWindow) : []
+      const priorGames = formWindow ? orderedGames.slice(formWindow) : []
+      const recentStatTotal = recentGames.reduce((sum, game) => sum + game.value, 0)
+      const recentPerTotal = recentGames.reduce((sum, game) => sum + (game.perValue ?? 0), 0)
+      const priorStatTotal = priorGames.reduce((sum, game) => sum + game.value, 0)
+      const priorPerTotal = priorGames.reduce((sum, game) => sum + (game.perValue ?? 0), 0)
+      if (formWindow && perStatKey && (recentPerTotal <= 0 || priorPerTotal <= 0)) return null
+      const recentValue = formWindow
+        ? perStatKey
+          ? recentStatTotal / recentPerTotal
+          : recentStatTotal / recentGames.length
+        : null
+      const priorValue = formWindow
+        ? perStatKey
+          ? priorStatTotal / priorPerTotal
+          : priorStatTotal / priorGames.length
+        : null
+      const value = recentValue == null || priorValue == null ? seasonValue : recentValue - priorValue
 
       return {
         name,
         team: "",
-        games: aggregate.games,
+        games: aggregate.games.length,
         value,
         statValue: aggregate.total,
         perStatValue: perStatKey ? aggregate.perTotal : null,
+        seasonValue,
+        priorValue,
+        recentValue,
         imageSources: buildTeamLogoSources(name, teamLogos),
       }
     })
@@ -412,28 +640,56 @@ function buildTeamRankings(
 
 export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerImages, teamLogos }: RankingsDashboardProps) {
   const [view, setView] = useState<RankingView>("players")
+  const [section, setSection] = useState<RankingSection>("rankings")
   const [mode, setMode] = useState<ValueMode>("average")
+  const [formWindow, setFormWindow] = useState<FormWindow>(3)
+  const [minPriorGames, setMinPriorGames] = useState(5)
   const [statKey, setStatKey] = useState("All Run Metres")
-  const [perStatKey, setPerStatKey] = useState("All Runs")
+  const [perStatKey, setPerStatKey] = useState("")
   const [minGames, setMinGames] = useState(5)
   const [minMinutes, setMinMinutes] = useState(40)
   const [positionFilter, setPositionFilter] = useState("All Positions")
   const [valueSortDirection, setValueSortDirection] = useState<SortDirection>("desc")
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [rankingFinderOpen, setRankingFinderOpen] = useState(false)
+  const [rankingFinderQuery, setRankingFinderQuery] = useState("")
+  const rankingFinderRef = useRef<HTMLDivElement>(null)
+  const rankingFinderInputRef = useRef<HTMLInputElement>(null)
   const activeStatOptions = view === "teams" ? TEAM_STAT_OPTIONS : STAT_OPTIONS
   const effectiveStatKey = activeStatOptions.some((option) => option.key === statKey) ? statKey : "All Run Metres"
   const effectivePerStatKey = perStatKey && activeStatOptions.some((option) => option.key === perStatKey) ? perStatKey : ""
+  const activeFormWindow = section === "form" ? formWindow : null
+  const effectiveMode = section === "form" ? "average" : mode
+  const rankingFinderSuggestions = useMemo(() => buildRankingSuggestions(rankingFinderQuery), [rankingFinderQuery])
+
+  useEffect(() => {
+    if (!rankingFinderOpen) return
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!rankingFinderRef.current?.contains(event.target as Node)) setRankingFinderOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRankingFinderOpen(false)
+    }
+    document.addEventListener("pointerdown", closeOnOutsideClick)
+    document.addEventListener("keydown", closeOnEscape)
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick)
+      document.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [rankingFinderOpen])
 
   const playerRankings = useMemo(
-    () => buildPlayerRankings(playerRows, playerImages, mode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection),
-    [playerRows, playerImages, mode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection]
+    () => buildPlayerRankings(playerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames),
+    [playerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames]
   )
   const teamRankings = useMemo(
-    () => buildTeamRankings(teamRows, teamLogos, mode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection),
-    [teamRows, teamLogos, mode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection]
+    () => buildTeamRankings(teamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames),
+    [teamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames]
   )
-  const valueHeading = effectivePerStatKey
+  const statHeading = effectivePerStatKey
     ? `${statInitials(effectiveStatKey, activeStatOptions)} / ${statInitials(effectivePerStatKey, activeStatOptions)}`
     : statInitials(effectiveStatKey, activeStatOptions)
+  const valueHeading = section === "form" ? "Change" : statHeading
   const toggleValueSortDirection = () => {
     setValueSortDirection((current) => current === "desc" ? "asc" : "desc")
   }
@@ -441,305 +697,257 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
     view === "teams"
       ? teamRankings.length > 0
       : playerRankings.length > 0
+  const ratioRanking = Boolean(effectivePerStatKey)
+  const rankingTitle = `${statLabel(effectiveStatKey, activeStatOptions)}${effectivePerStatKey ? ` per ${perStatUnitLabel(effectivePerStatKey, activeStatOptions)}` : ""} — ${view === "teams" ? "Teams" : positionFilter === "All Positions" ? "All players" : positionFilter}${section === "form" ? ` · L${formWindow} form` : ""}`
+  const changeView = (value: string) => {
+    const [nextView, nextSection] = value.split("_") as [RankingView, RankingSection]
+    setView(nextView)
+    setSection(nextSection)
+    if (nextView === "teams") setPositionFilter("All Positions")
+    setValueSortDirection("desc")
+  }
+  const selectRankingSuggestion = (option: RankingDiscoveryOption) => {
+    setView(option.view)
+    setSection(option.section)
+    setStatKey(option.statKey)
+    setPerStatKey(option.perStatKey)
+    setPositionFilter(option.view === "players" ? option.position : "All Positions")
+    setFormWindow(option.formWindow)
+    setMode(option.mode)
+    setValueSortDirection("desc")
+    setRankingFinderOpen(false)
+    setRankingFinderQuery("")
+  }
 
   return (
     <div className="space-y-4">
-      <section className="rounded-lg border border-nrl-border bg-nrl-panel p-3">
-        <div>
-          <h1 className="text-sm font-black text-nrl-text">Rankings</h1>
-          <p className="mt-1 text-[10px] font-semibold text-nrl-muted">{selectedYear || "Latest"} season</p>
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-end gap-3">
+        <div className="min-w-0">
+          <Select
+            label="View"
+            compact
+            value={`${view}_${section}`}
+            options={[
+              { label: "Players", options: [{ value: "players_rankings", label: "Player rankings" }, { value: "players_form", label: "Player form" }] },
+              { label: "Teams", options: [{ value: "teams_rankings", label: "Team rankings" }, { value: "teams_form", label: "Team form" }] },
+            ]}
+            onChange={changeView}
+          />
         </div>
-
-        <div className="mt-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="grid min-w-max grid-cols-[180px_180px_100px_112px] items-end gap-2 sm:grid-cols-[220px_220px_112px_120px]">
-            <label className="block">
-              <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
-                Stat
-              </span>
-              <select
-                value={effectiveStatKey}
-                onChange={(event) => setStatKey(event.target.value)}
-                className="h-10 w-full rounded border border-[#323a5c] bg-[#111733] px-3 text-xs font-bold text-white outline-none transition-colors hover:border-[#465077]"
-              >
-                {activeStatOptions.map((option) => (
-                  <option key={option.key} value={option.key}>
-                    {option.label}
-                  </option>
+        <div ref={rankingFinderRef} className="relative min-w-0">
+          <label htmlFor="ranking-finder-input" className="sr-only">Find a ranking</label>
+          <input
+            ref={rankingFinderInputRef}
+            id="ranking-finder-input"
+            type="text"
+            value={rankingFinderQuery}
+            onFocus={() => setRankingFinderOpen(true)}
+            onChange={(event) => {
+              setRankingFinderQuery(event.target.value)
+              setRankingFinderOpen(true)
+            }}
+            placeholder="Describe the ranking you want…"
+            autoComplete="off"
+            className="h-8 w-full rounded-xl border border-nrl-border bg-nrl-panel-2 px-3 text-[10px] text-nrl-text outline-none placeholder:text-nrl-muted/70 focus:border-nrl-accent"
+          />
+          {rankingFinderOpen && rankingFinderQuery.trim() ? (
+            <div className="absolute inset-x-0 top-[calc(100%+0.35rem)] z-50 rounded-2xl border border-nrl-border bg-nrl-panel p-3 shadow-[0_18px_48px_rgba(2,6,23,0.48)]">
+              <div className="space-y-1">
+                {rankingFinderSuggestions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => selectRankingSuggestion(option)}
+                    className="block w-full rounded-xl border border-transparent px-2.5 py-2 text-left transition-colors hover:border-nrl-border hover:bg-nrl-panel-2 focus-visible:border-nrl-accent focus-visible:bg-nrl-panel-2 focus-visible:outline-none"
+                  >
+                    <span className="block text-[8px] font-bold uppercase tracking-[0.1em] text-nrl-muted">{option.category}</span>
+                    <span className="mt-0.5 block text-[11px] font-semibold leading-snug text-nrl-text">{option.sentence}</span>
+                  </button>
                 ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
-                Per Stat
-              </span>
-              <select
-                value={effectivePerStatKey}
-                onChange={(event) => setPerStatKey(event.target.value)}
-                className="h-10 w-full rounded border border-[#323a5c] bg-[#111733] px-3 text-xs font-bold text-white outline-none transition-colors hover:border-[#465077]"
-              >
-                {[{ key: "", label: "None" }, ...activeStatOptions].map((option) => (
-                  <option key={option.key || "none"} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
-                Min Games
-              </span>
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={minGames}
-                onChange={(event) => setMinGames(Math.max(1, Number(event.target.value) || 1))}
-                className="h-10 w-full rounded border border-[#323a5c] bg-[#111733] px-3 text-xs font-bold text-white outline-none transition-colors hover:border-[#465077]"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
-                Min Minutes
-              </span>
-              <input
-                type="number"
-                min={0}
-                max={80}
-                value={minMinutes}
-                onChange={(event) => setMinMinutes(Math.max(0, Number(event.target.value) || 0))}
-                className="h-10 w-full rounded border border-[#323a5c] bg-[#111733] px-3 text-xs font-bold text-white outline-none transition-colors hover:border-[#465077]"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex min-w-max items-center gap-2">
-            <div className="flex rounded border border-[#323a5c] bg-[#111733] p-1">
-              {(["average", "total"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setMode(option)}
-                  className={`rounded px-3 py-2 text-xs font-extrabold capitalize leading-none transition-colors ${
-                    mode === option ? "bg-[#10f08b] text-[#06121f]" : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  {option}
-                </button>
-              ))}
+              </div>
             </div>
+          ) : null}
+        </div>
+      </div>
 
-            <div className="flex rounded border border-[#323a5c] bg-[#111733] p-1">
-              {(["players", "teams"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setView(option)}
-                  className={`rounded px-3 py-2 text-xs font-extrabold capitalize leading-none transition-colors ${
-                    view === option ? "bg-[#10f08b] text-[#06121f]" : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
+      <section className="overflow-hidden rounded-2xl border border-nrl-border bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
+        <div className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border px-4 py-3 [scrollbar-width:thin]">
+          <div className="w-40 shrink-0">
+            <Select label="Primary stat" compact value={effectiveStatKey} options={activeStatOptions.map((option) => ({ value: option.key, label: option.label }))} onChange={setStatKey} />
+          </div>
+          <div className="w-40 shrink-0">
+            <Select label="Per stat" compact value={effectivePerStatKey} options={[{ value: "", label: "Add per stat" }, ...activeStatOptions.map((option) => ({ value: option.key, label: option.label }))]} onChange={setPerStatKey} />
+          </div>
+          {view === "players" ? <div className="w-32 shrink-0"><Select label="Position" compact value={positionFilter} options={POSITION_FILTERS} onChange={setPositionFilter} /></div> : null}
+          <div className="flex shrink-0 flex-col gap-0.5">
+            <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">{section === "form" ? "Form sample" : "Values"}</span>
+            <PillRadio
+              options={section === "form" ? ["L3", "L5"] : ["Average", "Total"]}
+              value={section === "form" ? `L${formWindow}` : mode === "average" ? "Average" : "Total"}
+              onChange={(value) => section === "form" ? setFormWindow(value === "L5" ? 5 : 3) : setMode(value === "Total" ? "total" : "average")}
+            />
+          </div>
+        </div>
 
-            <label className="block">
-              <span className="sr-only">Position</span>
-              <select
-                value={positionFilter}
-                onChange={(event) => {
-                  setView("players")
-                  setPositionFilter(event.target.value)
-                }}
-                className="h-10 w-36 rounded border border-[#323a5c] bg-[#111733] px-3 text-xs font-bold text-white outline-none transition-colors hover:border-[#465077]"
-              >
-                {POSITION_FILTERS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+        <div className="flex items-center justify-between gap-3 border-b border-nrl-border px-4 py-3 sm:px-5">
+          <h1 className="min-w-0 truncate text-sm font-black text-nrl-text sm:text-base">{rankingTitle}</h1>
+          <FiltersButton open={filtersOpen} onClick={() => setFiltersOpen((current) => !current)} />
+        </div>
+
+        {filtersOpen ? (
+          <div id="ranking-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
+            <label className="flex w-24 shrink-0 flex-col gap-0.5">
+              <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min games</span>
+              <input type="number" min={1} max={30} value={minGames} onChange={(event) => setMinGames(Math.max(1, Number(event.target.value) || 1))} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" />
             </label>
+            {section === "form" ? (
+              <label className="flex w-24 shrink-0 flex-col gap-0.5">
+                <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min prior games</span>
+                <input type="number" min={1} max={20} value={minPriorGames} onChange={(event) => setMinPriorGames(Math.min(20, Math.max(1, Number(event.target.value) || 1)))} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" />
+              </label>
+            ) : null}
+            {view === "players" ? (
+              <label className="flex w-24 shrink-0 flex-col gap-0.5">
+                <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min minutes</span>
+                <input type="number" min={0} max={80} value={minMinutes} onChange={(event) => setMinMinutes(Math.max(0, Number(event.target.value) || 0))} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" />
+              </label>
+            ) : null}
+            <div className="flex shrink-0 flex-col gap-0.5">
+              <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Season</span>
+              <div className="grid h-8 min-w-20 place-items-center rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text">{selectedYear || "Latest"}</div>
+            </div>
           </div>
-        </div>
-      </section>
+        ) : null}
 
-      {!hasEntries ? (
-        <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-center text-xs font-bold text-nrl-muted">
-          No {view} match the current ranking filters.
-        </div>
-      ) : null}
-
-      {!hasEntries ? null : view === "teams" ? (
-        <section className="rounded-lg border border-nrl-border bg-nrl-panel">
-          <div className="flex items-center justify-between gap-3 border-b border-nrl-border px-4 py-3">
-            <h2 className="text-xs font-black uppercase tracking-[0.14em] text-nrl-accent">Teams</h2>
-          </div>
+        {!hasEntries ? (
+          <div className="p-8 text-center text-xs font-bold text-nrl-muted">No {view} match the current {section} filters.</div>
+        ) : view === "teams" ? (
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[320px] border-collapse text-left sm:min-w-[420px]">
+            <table className="w-full min-w-[370px] border-collapse text-left">
               <thead className="sticky top-0 z-10 bg-[#111733]">
-                <tr className="border-b border-nrl-border text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
-                  <th className="w-12 px-4 py-2">#</th>
-                  <th className="px-2 py-2">Team</th>
-                  <th className="w-24 px-2 py-2 text-right sm:hidden" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
-                    <button
-                      type="button"
-                      onClick={toggleValueSortDirection}
-                      className="ml-auto flex flex-col items-end gap-0.5 text-right font-black uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:text-white"
-                    >
-                      <span>{valueHeading}</span>
-                      <span className="text-[8px]">{valueSortDirection}</span>
-                    </button>
-                  </th>
-                  <th className="w-16 px-2 py-2 text-right">Games</th>
-                  <th className="hidden w-20 px-2 py-2 text-right sm:table-cell">{statInitials(effectiveStatKey, activeStatOptions)}</th>
-                  {effectivePerStatKey ? (
-                    <th className="hidden w-20 px-2 py-2 text-right sm:table-cell">{statInitials(effectivePerStatKey, activeStatOptions)}</th>
+                <tr className="border-b border-nrl-border text-[7px] font-black uppercase tracking-[0.1em] text-nrl-muted sm:text-[9px] sm:tracking-[0.14em]">
+                  <th className="w-8 px-2 py-1.5 sm:w-12 sm:px-4 sm:py-2">#</th>
+                  <th className="px-1.5 py-1.5 sm:px-2 sm:py-2">Team</th>
+                  <th className="w-12 px-1.5 py-1.5 text-right sm:w-16 sm:px-2 sm:py-2">Games</th>
+                  <th className="w-14 px-1.5 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? "Prior" : statInitials(effectiveStatKey, activeStatOptions)}</th>
+                  {section === "form" || effectivePerStatKey ? (
+                    <th className="w-12 px-1.5 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? `L${formWindow}` : statInitials(effectivePerStatKey, activeStatOptions)}</th>
                   ) : null}
-                  <th className="hidden w-28 px-4 py-2 text-right sm:table-cell" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
+                  <th className="w-16 px-2 py-1.5 text-right sm:w-28 sm:px-4 sm:py-2" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
                     <button
                       type="button"
                       onClick={toggleValueSortDirection}
                       className="ml-auto flex flex-col items-end gap-0.5 text-right font-black uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:text-white"
                     >
                       <span>{valueHeading}</span>
-                      <span className="text-[8px]">{valueSortDirection}</span>
+                      <span className="text-[6px] sm:text-[8px]">{valueSortDirection}</span>
                     </button>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {teamRankings.map((entry, index) => (
-                  <tr key={entry.name} className="border-b border-nrl-border/70 last:border-b-0">
-                    <td className="px-4 py-2 text-xs font-black text-nrl-muted">{index + 1}</td>
-                    <td className="px-2 py-2">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded border border-nrl-border bg-nrl-panel-2 p-1">
+                  <tr key={entry.name} className="border-b border-nrl-border/70 odd:bg-transparent even:bg-white/[0.018] last:border-b-0">
+                    <td className="px-2 py-1.5 text-[10px] font-black text-nrl-muted sm:px-4 sm:py-2 sm:text-xs">{index + 1}</td>
+                    <td className="px-1.5 py-1.5 sm:px-2 sm:py-2">
+                      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded border border-nrl-border bg-nrl-panel-2 p-1 sm:h-11 sm:w-11">
                           <ImageWithFallback
                             sources={entry.imageSources}
                             alt={entry.name}
                             className="h-full w-full object-contain"
                           />
                         </div>
-                        <div className="truncate text-xs font-black text-nrl-text">{entry.name}</div>
+                        <div className="truncate text-[10px] font-black text-nrl-text sm:text-xs">{entry.name}</div>
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-right text-sm font-black text-nrl-text sm:hidden">
-                      {formatRankingValue(entry.value, Boolean(effectivePerStatKey))}
+                    <td className="px-1.5 py-1.5 text-right text-[10px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">{entry.games}</td>
+                    <td className="px-1.5 py-1.5 text-right text-[10px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
+                      {section === "form" ? formatRankingValue(entry.priorValue ?? 0, ratioRanking) : formatCountValue(entry.statValue)}
                     </td>
-                    <td className="px-2 py-2 text-right text-xs font-bold text-nrl-muted">{entry.games}</td>
-                    <td className="hidden px-2 py-2 text-right text-xs font-bold text-nrl-muted sm:table-cell">
-                      {formatCountValue(entry.statValue)}
-                    </td>
-                    {effectivePerStatKey ? (
-                      <td className="hidden px-2 py-2 text-right text-xs font-bold text-nrl-muted sm:table-cell">
-                        {formatCountValue(entry.perStatValue ?? 0)}
+                    {section === "form" || effectivePerStatKey ? (
+                      <td className="px-1.5 py-1.5 text-right text-[10px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
+                        {section === "form" ? formatRankingValue(entry.recentValue ?? 0, ratioRanking) : formatCountValue(entry.perStatValue ?? 0)}
                       </td>
                     ) : null}
-                    <td className="hidden px-4 py-2 text-right text-sm font-black text-nrl-text sm:table-cell">
-                      {formatRankingValue(entry.value, Boolean(effectivePerStatKey))}
+                    <td className={`px-2 py-1.5 text-right text-[12px] font-black sm:px-4 sm:py-2 sm:text-sm ${section === "form" ? formChangeClass(entry.value, effectiveStatKey) : "text-nrl-text"}`}>
+                      {section === "form" ? formatFormChange(entry.value, ratioRanking) : formatRankingValue(entry.value, ratioRanking)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
       ) : (
-        <section className="rounded-lg border border-nrl-border bg-nrl-panel">
-          <div className="flex items-center justify-between gap-3 border-b border-nrl-border px-4 py-3">
-            <h2 className="text-xs font-black uppercase tracking-[0.14em] text-nrl-accent">
-              {positionFilter === "All Positions" ? "Players" : positionFilter}
-            </h2>
-          </div>
-
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[320px] border-collapse text-left sm:min-w-[420px]">
+            <table className="w-full min-w-[370px] border-collapse text-left">
               <thead className="sticky top-0 z-10 bg-[#111733]">
-                <tr className="border-b border-nrl-border text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">
-                  <th className="w-12 px-4 py-2">#</th>
-                  <th className="px-2 py-2">Player</th>
-                  <th className="w-24 px-2 py-2 text-right sm:hidden" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
-                    <button
-                      type="button"
-                      onClick={toggleValueSortDirection}
-                      className="ml-auto flex flex-col items-end gap-0.5 text-right font-black uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:text-white"
-                    >
-                      <span>{valueHeading}</span>
-                      <span className="text-[8px]">{valueSortDirection}</span>
-                    </button>
-                  </th>
-                  <th className="w-16 px-2 py-2 text-right">Games</th>
-                  <th className="hidden w-20 px-2 py-2 text-right sm:table-cell">{statInitials(effectiveStatKey, activeStatOptions)}</th>
-                  {effectivePerStatKey ? (
-                    <th className="hidden w-20 px-2 py-2 text-right sm:table-cell">{statInitials(effectivePerStatKey, activeStatOptions)}</th>
+                <tr className="border-b border-nrl-border text-[7px] font-black uppercase tracking-[0.1em] text-nrl-muted sm:text-[9px] sm:tracking-[0.14em]">
+                  <th className="w-8 px-2 py-1.5 sm:w-12 sm:px-4 sm:py-2">#</th>
+                  <th className="px-1.5 py-1.5 sm:px-2 sm:py-2">Player</th>
+                  <th className="w-12 px-1.5 py-1.5 text-right sm:w-16 sm:px-2 sm:py-2">Games</th>
+                  <th className="w-14 px-1.5 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? "Prior" : statInitials(effectiveStatKey, activeStatOptions)}</th>
+                  {section === "form" || effectivePerStatKey ? (
+                    <th className="w-12 px-1.5 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? `L${formWindow}` : statInitials(effectivePerStatKey, activeStatOptions)}</th>
                   ) : null}
-                  <th className="hidden w-28 px-4 py-2 text-right sm:table-cell" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
+                  <th className="w-16 px-2 py-1.5 text-right sm:w-28 sm:px-4 sm:py-2" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
                     <button
                       type="button"
                       onClick={toggleValueSortDirection}
                       className="ml-auto flex flex-col items-end gap-0.5 text-right font-black uppercase tracking-[0.14em] text-nrl-muted transition-colors hover:text-white"
                     >
                       <span>{valueHeading}</span>
-                      <span className="text-[8px]">{valueSortDirection}</span>
+                      <span className="text-[6px] sm:text-[8px]">{valueSortDirection}</span>
                     </button>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {playerRankings.map((entry, index) => (
-                  <tr key={entry.name} className="border-b border-nrl-border/70 last:border-b-0">
-                    <td className="px-4 py-2 text-xs font-black text-nrl-muted">{index + 1}</td>
-                    <td className="px-2 pb-0 pt-2">
-                      <div className="flex min-w-0 items-end gap-3">
-                        <div className="grid h-12 w-11 shrink-0 place-items-end overflow-hidden">
+                  <tr key={entry.name} className="border-b border-nrl-border/70 odd:bg-transparent even:bg-white/[0.018] last:border-b-0">
+                    <td className="px-2 py-1.5 text-[10px] font-black text-nrl-muted sm:px-4 sm:py-2 sm:text-xs">{index + 1}</td>
+                    <td className="px-1.5 py-1.5 sm:px-2 sm:py-2">
+                      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 sm:h-11 sm:w-11">
                           <PlayerImageWithFallback
                             sources={entry.imageSources}
                             alt={`${entry.name} player image`}
-                            className="h-full w-full object-cover object-bottom"
+                            className="h-full w-full object-cover object-top"
                           />
                         </div>
                         <div className="min-w-0">
                           <Link
                             href={`/dashboard/players/${playerSlug(entry.name)}`}
-                            className="block truncate text-xs font-black text-nrl-text transition-colors hover:text-nrl-accent"
+                            className="block truncate text-[10px] font-black text-nrl-text transition-colors hover:text-nrl-accent sm:text-xs"
                           >
                             {entry.name}
                           </Link>
-                          <div className="mt-0.5 truncate text-[10px] font-semibold text-nrl-muted">
+                          <div className="mt-0.5 truncate text-[8px] font-semibold text-nrl-muted sm:text-[10px]">
                             {entry.team || "-"}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-right text-sm font-black text-nrl-text sm:hidden">
-                      {formatRankingValue(entry.value, Boolean(effectivePerStatKey))}
+                    <td className="px-1.5 py-1.5 text-right text-[10px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">{entry.games}</td>
+                    <td className="px-1.5 py-1.5 text-right text-[10px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
+                      {section === "form" ? formatRankingValue(entry.priorValue ?? 0, ratioRanking) : formatCountValue(entry.statValue)}
                     </td>
-                    <td className="px-2 py-2 text-right text-xs font-bold text-nrl-muted">{entry.games}</td>
-                    <td className="hidden px-2 py-2 text-right text-xs font-bold text-nrl-muted sm:table-cell">
-                      {formatCountValue(entry.statValue)}
-                    </td>
-                    {effectivePerStatKey ? (
-                      <td className="hidden px-2 py-2 text-right text-xs font-bold text-nrl-muted sm:table-cell">
-                        {formatCountValue(entry.perStatValue ?? 0)}
+                    {section === "form" || effectivePerStatKey ? (
+                      <td className="px-1.5 py-1.5 text-right text-[10px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
+                        {section === "form" ? formatRankingValue(entry.recentValue ?? 0, ratioRanking) : formatCountValue(entry.perStatValue ?? 0)}
                       </td>
                     ) : null}
-                    <td className="hidden px-4 py-2 text-right text-sm font-black text-nrl-text sm:table-cell">
-                      {formatRankingValue(entry.value, Boolean(effectivePerStatKey))}
+                    <td className={`px-2 py-1.5 text-right text-[12px] font-black sm:px-4 sm:py-2 sm:text-sm ${section === "form" ? formChangeClass(entry.value, effectiveStatKey) : "text-nrl-text"}`}>
+                      {section === "form" ? formatFormChange(entry.value, ratioRanking) : formatRankingValue(entry.value, ratioRanking)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
       )}
+      </section>
     </div>
   )
 }

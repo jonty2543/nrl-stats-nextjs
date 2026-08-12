@@ -3373,7 +3373,7 @@ function ProjectionBreakevenMetricGrid({
             {metric.label}
           </div>
           <div
-            className={`mt-2 text-[1.35rem] font-bold leading-none tracking-tight sm:text-[1.85rem] ${metric.valueClassName} ${blurValue ? FANTASY_LOCKED_METRIC_TEXT_CLASS : ""}`}
+            className={`mt-2 text-[1.35rem] font-bold leading-none tracking-tight sm:text-[1.85rem] ${blurValue ? `${FANTASY_LOCKED_METRIC_TEXT_CLASS} text-nrl-text` : metric.valueClassName}`}
             aria-hidden={blurValue || undefined}
           >
             {metric.value}

@@ -10,7 +10,7 @@ interface HalvesPairingBarsProps {
   minimumGames: number;
 }
 
-const LEFT_COLOR = "#4f9cff";
+const LEFT_COLOR = "#a78bfa";
 const RIGHT_COLOR = "#10f08b";
 
 function normalisePlayerName(value: string): string {

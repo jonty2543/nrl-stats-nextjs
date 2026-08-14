@@ -1411,7 +1411,7 @@ function MatchStatsPanel({
       title: "Defence",
       rows: [
         { label: "Disruptions / 100 runs", description: "Opponent tackle breaks plus offloads for every 100 opposition runs. Lower is better for the defence.", home: homeModelMetrics?.contactDisruptionsPer100Runs, away: awayModelMetrics?.contactDisruptionsPer100Runs },
-        { label: "Defense rating", description: "A modelled line-break prevention rating centred around 50. Higher is better.", home: homeModelMetrics?.defenseRating, away: awayModelMetrics?.defenseRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
+        { label: "Line Defense Rating", description: "A context-adjusted line-break prevention rating centred around 50. Higher is better.", home: homeModelMetrics?.defenseRating, away: awayModelMetrics?.defenseRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
         { label: "Expected line breaks allowed", description: "The number of line breaks the model expected the opposition to make. Lower is better.", home: homeModelMetrics?.expectedLineBreaksAllowed, away: awayModelMetrics?.expectedLineBreaksAllowed },
         { label: "Line breaks prevented", description: "Expected opposition line breaks minus actual opposition line breaks. Positive is better.", home: homeModelMetrics?.lineBreaksPrevented, away: awayModelMetrics?.lineBreaksPrevented, shadeScale: MODEL_METRIC_SHADE_SCALES.lineBreaksPrevented },
       ],

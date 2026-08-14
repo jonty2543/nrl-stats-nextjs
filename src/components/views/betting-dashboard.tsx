@@ -7,6 +7,13 @@ import Link from "next/link";
 import { BillingPageLink } from "@/components/billing/billing-page-link";
 import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback";
 import { hasPremiumAccess } from "@/lib/access/pro-access";
+import {
+  BET_SCORE_SUSPICIOUS_EDGE_THRESHOLD_PP,
+  buildBetRatingMarketSignals,
+  calculateBetRatingScore,
+  eventProximityScore,
+  todayIsoInBrisbane,
+} from "@/lib/betting/bet-rating";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import {
   BETTING_BOOKIE_COLUMNS,
@@ -289,16 +296,7 @@ const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Tot
 const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Total"];
 const DEFAULT_BETTING_MARKET: BettingMarket = "Tryscorer";
 const TOTAL_MODEL_BETA_MARKET: BettingMarket = "Total";
-const SUSPICIOUS_EDGE_THRESHOLD_PP = 10;
 const DEFAULT_MAX_EDGE = 0.1;
-const SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP = 10;
-const BET_SCORE_ZERO_EDGE = 0.3;
-const BET_SCORE_POSITIVE_EDGE_RANGE = 0.58;
-const BET_SCORE_EDGE_CURVE_STEEPNESS_PP = 2.2;
-const BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP = 3.4;
-const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN = 0.72;
-const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX = 1;
-const BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION = 0.35;
 const SUSPICIOUS_EDGE_WARNING_COPY =
   "If the model has an edge > 6% on the market, this may be suspicious and suggest the market knows something the model doesn't";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
@@ -376,13 +374,6 @@ const BEST_BETS_CONFIG = {
   minEdgePp: 0.75,
   minBookies: 2,
   minArbitragePct: 0.05,
-  weights: {
-    edge: 0.48,
-    liquidity: 0.18,
-    efficiency: 0.12,
-    disagreement: 0.08,
-    timing: 0.14,
-  },
 };
 const BEST_BETS_FEATURED_OVERRIDE = {
   from: "2026-05-25",
@@ -1551,7 +1542,7 @@ function TeamLastFivePills({ values }: { values: string[] }) {
 }
 
 function isSuspiciousEdge(edgePp: number | null): boolean {
-  return edgePp != null && edgePp > SUSPICIOUS_EDGE_THRESHOLD_PP;
+  return edgePp != null && edgePp > BET_SCORE_SUSPICIOUS_EDGE_THRESHOLD_PP;
 }
 
 function formatBestBetMarketLabel(market: BettingMarket): string {
@@ -1834,53 +1825,20 @@ function impliedProbability(price: number | null): number | null {
   return 1 / price;
 }
 
-function isoDateDiffDays(fromIso: string, toIso: string): number | null {
-  const fromMs = Date.parse(`${fromIso}T00:00:00`);
-  const toMs = Date.parse(`${toIso}T00:00:00`);
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
-  return Math.round((toMs - fromMs) / (24 * 60 * 60 * 1000));
-}
-
-function eventProximityScore(eventDate: string, todayIso: string): number {
-  const daysUntil = isoDateDiffDays(todayIso, eventDate);
-  if (daysUntil == null) return 0.72;
-  if (daysUntil <= 0) return 0.3;
-  if (daysUntil === 1) return 0.5;
-  if (daysUntil === 2) return 0.68;
-  if (daysUntil === 3) return 0.84;
-  return 1;
-}
-
 function buildMarketSignals(row: OutcomeRow, marketEfficiencyPct: number | null) {
   const offers = BETTING_BOOKIE_COLUMNS
     .map((bookie) => row.bookieOffers[bookie])
     .filter((offer): offer is BookieOffer => offer != null);
-  const bestPrice = row.bestPriceComputed;
-  const lowerPrices = bestPrice == null
-    ? []
-    : offers
-        .map((offer) => offer.price)
-        .filter((price) => price > 1 && price < bestPrice - 1e-9);
-  const averageLowerPrice = lowerPrices.length > 0
-    ? lowerPrices.reduce((sum, price) => sum + price, 0) / lowerPrices.length
-    : null;
-  const marketDisagreementPct = bestPrice != null && averageLowerPrice != null && averageLowerPrice > 0
-    ? ((bestPrice / averageLowerPrice) - 1) * 100
-    : null;
-  const liquidityScore = clamp(offers.length / BETTING_BOOKIE_COLUMNS.length, 0, 1);
-  const efficiencyScore = marketEfficiencyPct != null
-    ? clamp(1 - Math.max(0, marketEfficiencyPct - 100) / 14, 0, 1)
-    : clamp(0.5 + liquidityScore * 0.35, 0, 1);
-  const lowerBookConsensusScore = offers.length > 1 ? clamp(lowerPrices.length / (offers.length - 1), 0, 1) : 0;
-  const disagreementScore = clamp((marketDisagreementPct ?? 0) / 14, 0, 1) * (0.35 + (lowerBookConsensusScore * 0.65));
+  const ratingSignals = buildBetRatingMarketSignals({
+    prices: offers.map((offer) => offer.price),
+    bestPrice: row.bestPriceComputed,
+    marketEfficiencyPct,
+  });
 
   return {
     offerCount: offers.length,
-    marketDisagreementPct,
     marketEfficiencyPct,
-    liquidityScore,
-    efficiencyScore,
-    disagreementScore,
+    ...ratingSignals,
   };
 }
 
@@ -1899,39 +1857,14 @@ function calculateBetScore({
   efficiencyScore: number;
   disagreementScore: number;
 }): number {
-  const timingScore = eventProximityScore(eventDate, todayIso);
-  const contextWeight =
-    BEST_BETS_CONFIG.weights.liquidity +
-    BEST_BETS_CONFIG.weights.efficiency +
-    BEST_BETS_CONFIG.weights.disagreement +
-    BEST_BETS_CONFIG.weights.timing;
-  const contextScore = contextWeight > 0 ? (
-    (liquidityScore * BEST_BETS_CONFIG.weights.liquidity) +
-    (efficiencyScore * BEST_BETS_CONFIG.weights.efficiency) +
-    (disagreementScore * BEST_BETS_CONFIG.weights.disagreement) +
-    (timingScore * BEST_BETS_CONFIG.weights.timing)
-  ) / contextWeight : 0.5;
-  const edgeCurve = 1 / (1 + Math.exp(-edgePp / (
-    edgePp < 0 ? BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP : BET_SCORE_EDGE_CURVE_STEEPNESS_PP
-  )));
-  const edgeScore = edgePp < 0
-    ? BET_SCORE_ZERO_EDGE * (edgeCurve / 0.5)
-    : BET_SCORE_ZERO_EDGE + (((edgeCurve - 0.5) / 0.5) * BET_SCORE_POSITIVE_EDGE_RANGE);
-  const contextAdjustment = (contextScore - 0.5) * 0.08;
-  const baseScore = edgePp <= 0
-    ? clamp(edgeScore + Math.min(contextAdjustment, 0), 0, BET_SCORE_ZERO_EDGE)
-    : clamp(edgeScore + contextAdjustment, BET_SCORE_ZERO_EDGE, 1);
-  if (edgePp <= SUSPICIOUS_EDGE_THRESHOLD_PP) return baseScore;
-
-  const decayProtection = clamp(
-    (efficiencyScore - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN) /
-      (BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN),
-    0,
-    1
-  );
-  const maxDecay = 0.65 - (decayProtection * BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION);
-  const decay = clamp((edgePp - SUSPICIOUS_EDGE_THRESHOLD_PP) / SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP, 0, maxDecay);
-  return clamp(baseScore * (1 - decay), 0, 1);
+  return calculateBetRatingScore({
+    edgePp,
+    eventDate,
+    todayIso,
+    liquidityScore,
+    efficiencyScore,
+    disagreementScore,
+  });
 }
 
 function adjustedKellyProbability({
@@ -2303,7 +2236,7 @@ export function BettingDashboard({
   const { isLoaded, userId } = useAuth();
   const { user } = useUser();
   const hasPremiumBettingAccess = canAccessPremium || hasPremiumAccess(userId, user?.publicMetadata);
-  const todayIso = useMemo(() => displayTodayIso ?? new Date().toISOString().slice(0, 10), [displayTodayIso]);
+  const todayIso = useMemo(() => displayTodayIso ?? todayIsoInBrisbane(), [displayTodayIso]);
   const [bankroll, setBankroll] = useState(1000);
   const [stakingMode, setStakingMode] = useState<StakingMode>("percentage");
   const [percentageStakePct, setPercentageStakePct] = useState(2);
@@ -2351,7 +2284,6 @@ export function BettingDashboard({
   const hasAutoSelectedMarketRef = useRef(false);
   const [tourStepIndex, setTourStepIndex] = useState<number | null>(null);
   const [tourTargetRect, setTourTargetRect] = useState<DOMRect | null>(null);
-  const [signedOutGuideNudgeDismissed, setSignedOutGuideNudgeDismissed] = useState(false);
   const [teamListStatusNowMs, setTeamListStatusNowMs] = useState(() => Date.now());
   useEffect(() => {
     const intervalId = window.setInterval(() => setTeamListStatusNowMs(Date.now()), 60_000);
@@ -2735,11 +2667,6 @@ export function BettingDashboard({
 
   const activeTourStep = tourStepIndex == null ? null : BETTING_TOUR_STEPS[tourStepIndex] ?? null;
   const tourIsOpen = activeTourStep != null;
-  const showSignedOutGuideNudge =
-    isLoaded &&
-    !userId &&
-    !signedOutGuideNudgeDismissed &&
-    !tourIsOpen;
   const tourPopupStyle = useMemo(() => {
     if (!tourTargetRect || typeof window === "undefined") {
       return {
@@ -2767,7 +2694,6 @@ export function BettingDashboard({
   }, [tourTargetRect]);
 
   const startBettingTour = () => {
-    setSignedOutGuideNudgeDismissed(true);
     setTourStepIndex(0);
   };
 
@@ -3609,20 +3535,6 @@ export function BettingDashboard({
           >
             i
           </button>
-          {showSignedOutGuideNudge ? (
-            <div className="absolute left-12 top-1/2 z-30 flex min-h-9 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-300/35 bg-[#10162f] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-300 shadow-[0_12px_32px_rgba(0,0,0,0.34)]">
-              <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-emerald-300/35 bg-[#10162f]" />
-              <span className="relative z-[1]">Guide</span>
-              <button
-                type="button"
-                onClick={() => setSignedOutGuideNudgeDismissed(true)}
-                aria-label="Dismiss guide prompt"
-                className="relative z-[1] grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded-full border border-white/10 text-xs leading-none text-nrl-muted transition-colors hover:text-nrl-text"
-              >
-                ×
-              </button>
-            </div>
-          ) : null}
         </div>
       </div>
 

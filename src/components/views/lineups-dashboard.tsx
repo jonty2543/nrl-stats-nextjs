@@ -5,6 +5,12 @@ import { createPortal } from "react-dom"
 import { BillingPageLink } from "@/components/billing/billing-page-link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback"
+import {
+  buildBetRatingMarketSignals,
+  calculateBetRatingScore,
+  todayIsoInBrisbane,
+} from "@/lib/betting/bet-rating"
+import { calculateEdgePercentagePoints } from "@/lib/betting/calculations"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
 import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
@@ -165,22 +171,6 @@ const DISPLAY_MODES: { key: DisplayMode; label: string; shortLabel: string }[] =
   { key: "Tackle Breaks", label: "Tackle Breaks Avg", shortLabel: "TB" },
   { key: "Offloads", label: "Offloads Avg", shortLabel: "OFF" },
 ]
-
-const BET_SCORE_ZERO_EDGE = 0.3
-const BET_SCORE_POSITIVE_EDGE_RANGE = 0.58
-const BET_SCORE_EDGE_CURVE_STEEPNESS_PP = 2.2
-const BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP = 3.4
-const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN = 0.72
-const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX = 1
-const BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION = 0.35
-const SUSPICIOUS_EDGE_THRESHOLD_PP = 6
-const SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP = 10
-const LINEUP_BET_RATING_WEIGHTS = {
-  liquidity: 0.18,
-  efficiency: 0.12,
-  disagreement: 0.08,
-  timing: 0.14,
-}
 
 const STATS_SOURCES: { key: StatsSource; label: string }[] = [
   { key: "nrl2026", label: "2026 NRL" },
@@ -790,51 +780,14 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function tryScorerEdge(odds: LineupTryscorerOdds | null | undefined): number | null {
-  if (odds?.bestPrice == null || odds.bestPrice <= 1 || odds.modelProbability == null) return null
-  return (odds.modelProbability - (1 / odds.bestPrice)) * 100
-}
-
-function isoDateDiffDays(fromIso: string, toIso: string): number | null {
-  const fromMs = Date.parse(`${fromIso}T00:00:00`)
-  const toMs = Date.parse(`${toIso}T00:00:00`)
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null
-  return Math.round((toMs - fromMs) / (24 * 60 * 60 * 1000))
-}
-
-function eventProximityScore(eventDate: string, todayIso: string): number {
-  const daysUntil = isoDateDiffDays(todayIso, eventDate)
-  if (daysUntil == null) return 0.72
-  if (daysUntil <= 0) return 0.3
-  if (daysUntil === 1) return 0.5
-  if (daysUntil === 2) return 0.68
-  if (daysUntil === 3) return 0.84
-  return 1
+  return calculateEdgePercentagePoints(odds?.modelProbability ?? null, odds?.bestPrice ?? null)
 }
 
 function lineupMarketSignals(odds: LineupTryscorerOdds | null | undefined) {
   const prices = BETTING_BOOKIE_COLUMNS
     .map((bookie) => odds?.bookiePrices?.[bookie])
     .filter((price): price is number => price != null && Number.isFinite(price) && price > 1)
-  const bestPrice = odds?.bestPrice ?? null
-  const lowerPrices = bestPrice == null
-    ? []
-    : prices.filter((price) => price < bestPrice - 1e-9)
-  const averageLowerPrice = lowerPrices.length > 0
-    ? lowerPrices.reduce((sum, price) => sum + price, 0) / lowerPrices.length
-    : null
-  const marketDisagreementPct = bestPrice != null && averageLowerPrice != null && averageLowerPrice > 0
-    ? ((bestPrice / averageLowerPrice) - 1) * 100
-    : null
-  const liquidityScore = clamp(prices.length / BETTING_BOOKIE_COLUMNS.length, 0, 1)
-  const efficiencyScore = clamp(0.5 + liquidityScore * 0.35, 0, 1)
-  const lowerBookConsensusScore = prices.length > 1 ? clamp(lowerPrices.length / (prices.length - 1), 0, 1) : 0
-  const disagreementScore = clamp((marketDisagreementPct ?? 0) / 14, 0, 1) * (0.35 + (lowerBookConsensusScore * 0.65))
-
-  return {
-    liquidityScore,
-    efficiencyScore,
-    disagreementScore,
-  }
+  return buildBetRatingMarketSignals({ prices, bestPrice: odds?.bestPrice ?? null })
 }
 
 function betScoreStarValue(scoreOutOfTen: number): number {
@@ -860,51 +813,17 @@ function betScoreStarColor(rating: number): string {
   return `hsl(148 ${saturation}% ${lightness}%)`
 }
 
-function todayIsoInBrisbane(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Australia/Brisbane",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date())
-}
-
 function lineupBetScore(edgePp: number | null, eventDate: string, odds: LineupTryscorerOdds | null | undefined): number | null {
   if (edgePp == null) return null
   const marketSignals = lineupMarketSignals(odds)
-  const timingScore = eventProximityScore(eventDate, todayIsoInBrisbane())
-  const contextWeight =
-    LINEUP_BET_RATING_WEIGHTS.liquidity +
-    LINEUP_BET_RATING_WEIGHTS.efficiency +
-    LINEUP_BET_RATING_WEIGHTS.disagreement +
-    LINEUP_BET_RATING_WEIGHTS.timing
-  const contextScore = contextWeight > 0 ? (
-    (marketSignals.liquidityScore * LINEUP_BET_RATING_WEIGHTS.liquidity) +
-    (marketSignals.efficiencyScore * LINEUP_BET_RATING_WEIGHTS.efficiency) +
-    (marketSignals.disagreementScore * LINEUP_BET_RATING_WEIGHTS.disagreement) +
-    (timingScore * LINEUP_BET_RATING_WEIGHTS.timing)
-  ) / contextWeight : 0.5
-  const edgeCurve = 1 / (1 + Math.exp(-edgePp / (
-    edgePp < 0 ? BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP : BET_SCORE_EDGE_CURVE_STEEPNESS_PP
-  )))
-  const edgeScore = edgePp < 0
-    ? BET_SCORE_ZERO_EDGE * (edgeCurve / 0.5)
-    : BET_SCORE_ZERO_EDGE + (((edgeCurve - 0.5) / 0.5) * BET_SCORE_POSITIVE_EDGE_RANGE)
-  const contextAdjustment = (contextScore - 0.5) * 0.08
-  const baseScore = edgePp <= 0
-    ? clamp(edgeScore + Math.min(contextAdjustment, 0), 0, BET_SCORE_ZERO_EDGE)
-    : clamp(edgeScore + contextAdjustment, BET_SCORE_ZERO_EDGE, 1)
-  if (edgePp <= SUSPICIOUS_EDGE_THRESHOLD_PP) return baseScore
-
-  const decayProtection = clamp(
-    (marketSignals.efficiencyScore - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN) /
-      (BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX - BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN),
-    0,
-    1
-  )
-  const maxDecay = 0.65 - (decayProtection * BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION)
-  const decay = clamp((edgePp - SUSPICIOUS_EDGE_THRESHOLD_PP) / SUSPICIOUS_EDGE_SCORE_DECAY_RANGE_PP, 0, maxDecay)
-  return clamp(baseScore * (1 - decay), 0, 1)
+  return calculateBetRatingScore({
+    edgePp,
+    eventDate,
+    todayIso: todayIsoInBrisbane(),
+    liquidityScore: marketSignals.liquidityScore,
+    efficiencyScore: marketSignals.efficiencyScore,
+    disagreementScore: marketSignals.disagreementScore,
+  })
 }
 
 function BetScoreStars({ score, compact }: { score: number | null; compact: boolean }) {
@@ -3589,7 +3508,7 @@ function LineupCard({
           </div>
           {showSplitScore ? (
             <div className="relative col-start-2 h-[5rem] sm:contents">
-              <div className={`absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 grid-cols-[2.1rem_7rem_2.1rem] items-center justify-center gap-x-2 sm:static sm:contents sm:translate-x-0 ${showLiveCardHeader ? "-translate-y-[62%] sm:-translate-y-0" : "-translate-y-1/2 sm:translate-y-0"}`}>
+              <div className={`absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 grid-cols-[2.1rem_6.5rem_2.1rem] items-center justify-center gap-x-1 sm:static sm:contents sm:translate-x-0 ${showLiveCardHeader ? "-translate-y-[62%] sm:-translate-y-0" : "-translate-y-1/2 sm:translate-y-0"}`}>
                 <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} lift={showLiveCardHeader} />
                 <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore lift={showLiveCardHeader} />
                 <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} lift={showLiveCardHeader} />

@@ -4004,90 +4004,59 @@ async function fetchLineupPlayerTryHistoryForKeys(playerKeys: string[]): Promise
   );
 }
 
-async function enrichLineupTryscorerOddsWithPredictions(
+async function alignLineupTryscorerOddsWithBettingSnapshot(
   match: LineupMatch,
   tryscorerOdds: Record<string, LineupTryscorerOdds>
 ): Promise<Record<string, LineupTryscorerOdds>> {
   const date = toIsoDate(match.matchDate);
   if (!date || Object.keys(tryscorerOdds).length === 0) return tryscorerOdds;
 
-  const supabase = createServerSupabaseClient("public");
-  const { data, error } = await supabase
-    .from("NRL Tryscorers")
-    .select("*")
-    .eq("Date", date)
-    .eq("Value", 1);
-  const rawRows = error ? [] : (data ?? []) as unknown as Record<string, unknown>[];
-  if (error) console.warn("Unable to fetch lineup raw tryscorer odds for bookie prices.", error);
-  const rows = rawRows
-    .flatMap((row) => mapBettingRows("NRL Tryscorers", row))
-    .filter((row) => row.market === "Tryscorer" && Math.round(row.value ?? 1) === 1);
-  const rowsByPlayer = new Map<string, BettingOddsRow>();
+  const bettingSnapshot = await fetchBettingOddsSnapshot();
+  const fixtureKey = matchKey(match.match);
+  const rows = bettingSnapshot.tryscorer.filter((row) =>
+    row.date === date &&
+    matchKey(row.match) === fixtureKey &&
+    Math.round(row.value ?? 1) === 1
+  );
+  const rowsByPlayer = new Map<string, BettingOddsRow[]>();
   for (const row of rows) {
     const keys = tryscorerPlayerLookupKeys(row.result);
     for (const key of keys) {
-      if (!rowsByPlayer.has(key)) rowsByPlayer.set(key, row);
+      const playerRows = rowsByPlayer.get(key) ?? [];
+      playerRows.push(row);
+      rowsByPlayer.set(key, playerRows);
     }
   }
-  const predictionSeedRows = rows.length > 0
-    ? rows
-    : Object.values(tryscorerOdds).map<BettingOddsRow>((odds) => ({
-        table: "NRL Tryscorers",
-        market: "Tryscorer",
-        date,
-        match: match.match,
-        result: odds.player,
-        value: 1,
-        model: null,
-        bestBookie: odds.bestBookie,
-        bestPrice: odds.bestPrice,
-        marketPercentage: null,
-        Sportsbet: null,
-        Pointsbet: null,
-        Unibet: null,
-        Palmerbet: null,
-        Betright: null,
-        Betr: null,
-      }));
-  const predictionRows = await fetchTryscorerPredictionRowsFromSupabase(predictionSeedRows).catch((predictionError) => {
-    console.warn("Unable to enrich lineup tryscorer odds with prediction rows.", predictionError);
-    return [];
-  });
-  const lookup = buildTryscorerPredictionLookup(predictionRows);
 
   return Object.fromEntries(
     Object.entries(tryscorerOdds).map(([key, odds]) => {
-      const rawRow = tryscorerPlayerLookupKeys(odds.player).flatMap((playerKey) => rowsByPlayer.get(playerKey) ?? []).at(0);
-      const enriched = applyTryscorerPredictionModelToRow(
-        rawRow ?? {
-          table: "NRL Tryscorers",
-          market: "Tryscorer",
-          date,
-          match: match.match,
-          result: odds.player,
-          value: 1,
-          model: null,
-          bestBookie: odds.bestBookie,
-          bestPrice: odds.bestPrice,
-          marketPercentage: null,
-          Sportsbet: null,
-          Pointsbet: null,
-          Unibet: null,
-          Palmerbet: null,
-          Betright: null,
-          Betr: null,
-        },
-        lookup
-      );
+      const playerRows = tryscorerPlayerLookupKeys(odds.player)
+        .flatMap((playerKey) => rowsByPlayer.get(playerKey) ?? []);
+      const bookiePrices = Object.fromEntries(
+        BETTING_BOOKIE_COLUMNS.flatMap((bookie) => {
+          const prices = playerRows
+            .map((row) => row[bookie])
+            .filter((price): price is number => price != null && Number.isFinite(price) && price > 1);
+          return prices.length > 0 ? [[bookie, Math.max(...prices)]] : [];
+        })
+      ) as Partial<Record<BettingBookie, number>>;
+      const bestBookie = BETTING_BOOKIE_COLUMNS.reduce<BettingBookie | null>((best, bookie) => {
+        const price = bookiePrices[bookie];
+        if (price == null) return best;
+        return best == null || price > (bookiePrices[best] ?? 0) ? bookie : best;
+      }, null);
+      const bestPrice = bestBookie == null ? null : bookiePrices[bestBookie] ?? null;
+      const bestRow = bestBookie == null
+        ? null
+        : playerRows.find((row) => row[bestBookie] === bestPrice) ?? null;
+
+      if (!bestRow || bestPrice == null) return [key, odds];
       return [key, {
         ...odds,
-        bestBookie: rawRow?.bestBookie ?? odds.bestBookie,
-        bestPrice: rawRow?.bestPrice ?? odds.bestPrice,
-        modelProbability: enriched.model == null ? null : enriched.model / 100,
-        bookiePrices: rawRow ? Object.fromEntries(
-          BETTING_BOOKIE_COLUMNS.map((bookie) => [bookie, rawRow[bookie]])
-            .filter(([, price]) => price != null)
-        ) : odds.bookiePrices,
+        bestBookie,
+        bestPrice,
+        modelProbability: bestRow.model == null ? null : bestRow.model / 100,
+        bookiePrices,
       }];
     })
   );
@@ -4136,7 +4105,7 @@ export async function fetchLineupsMatchDetailSummary(
     return {
       match,
       matchStats,
-      tryscorerOdds: await enrichLineupTryscorerOddsWithPredictions(match, tryscorerOdds),
+      tryscorerOdds: await alignLineupTryscorerOddsWithBettingSnapshot(match, tryscorerOdds),
       sportsbetOdds: Object.fromEntries(
         Object.entries(sportsbetOdds).filter(([key, odds]) =>
           key.includes(String(match.matchDate ?? "").slice(0, 10)) ||

@@ -809,16 +809,18 @@ function betScoreStarColor(rating: number): string {
   return `hsl(148 ${saturation}% ${lightness}%)`
 }
 
-function lineupBetScore(edgePp: number | null, eventDate: string, odds: LineupTryscorerOdds | null | undefined): number | null {
+function lineupBetScore(edgePp: number | null, eventTime: string, odds: LineupTryscorerOdds | null | undefined): number | null {
   if (edgePp == null) return null
   const marketSignals = lineupMarketSignals(odds)
   return calculateBetRatingScore({
     edgePp,
-    eventDate,
+    eventDate: eventTime.slice(0, 10),
+    eventKickoff: eventTime,
+    nowMs: Date.now(),
     todayIso: todayIsoInBrisbane(),
-    liquidityScore: marketSignals.liquidityScore,
     efficiencyScore: marketSignals.efficiencyScore,
     disagreementScore: marketSignals.disagreementScore,
+    teamListsProcessed: true,
   })
 }
 
@@ -3602,7 +3604,7 @@ function LineupCard({
               awayPlayers={awayPlayers}
               orientation="portrait"
               displayMode={displayMode}
-              matchDate={detailMatch.matchDate}
+              matchDate={detailMatch.kickoffUtc ?? detailMatch.matchDate}
               onDisplayModeChange={onDisplayModeChange}
               statsSource={statsSource}
               onStatsSourceChange={onStatsSourceChange}
@@ -3623,7 +3625,7 @@ function LineupCard({
               awayPlayers={awayPlayers}
               orientation="landscape"
               displayMode={displayMode}
-              matchDate={detailMatch.matchDate}
+              matchDate={detailMatch.kickoffUtc ?? detailMatch.matchDate}
               onDisplayModeChange={onDisplayModeChange}
               statsSource={statsSource}
               onStatsSourceChange={onStatsSourceChange}

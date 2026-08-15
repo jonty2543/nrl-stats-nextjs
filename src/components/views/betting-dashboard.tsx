@@ -1100,6 +1100,59 @@ function TryOpponentForm({ opponent, values }: { opponent: string | null; values
   );
 }
 
+function BetRatingExplainerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[140] grid place-items-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-labelledby="bet-rating-explainer-title" onClick={onClose}>
+      <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-lg border border-blue-300/20 bg-[#071024] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 border-b border-blue-300/15 bg-[#0b1630] px-4 py-3">
+          <div>
+            <h2 id="bet-rating-explainer-title" className="text-base font-bold text-nrl-text">How bet rating works</h2>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/10 bg-white/5 text-lg font-bold leading-none text-nrl-muted transition-colors hover:text-nrl-text" aria-label="Close bet rating explanation">
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-4 p-4 text-xs leading-relaxed text-nrl-muted">
+          <p>
+            The bet rating is centred around model edge: the predicted probability of a tryscorer using a machine-learning model versus the probability implied by the best bookmaker price. The rating is then influenced by these four factors:
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+              <div className="font-bold text-emerald-300">1. Market efficiency</div>
+              <p className="mt-1">If bookmaker odds are dispersed—meaning there is disagreement between bookmakers—the bet rating is increased.</p>
+              <p className="mt-2">For H2H, we calculate market percentage by summing the implied probability of each outcome. If bookmakers disagree heavily and this falls below 100%, it is a positive expected-value market and the bet rating will be high.</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+              <div className="font-bold text-emerald-300">2. Time to event</div>
+              <p className="mt-1">The market usually becomes more efficient and harder to beat closer to the event. The timing effect stays close to 1 through most of the week, then drops rapidly in the final hours: it is 0.5 three hours before kickoff and reaches its minimum of 0.3 at kickoff. Within hours of the event, there is often too much wisdom of the crowd priced into the market to profit—unless betting around late team news.</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+              <div className="font-bold text-emerald-300">3. Team-list announcement</div>
+              <p className="mt-1">Once announced team lists are factored into the model, bet ratings receive a boost.</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+              <div className="font-bold text-emerald-300">4. Edge drop-off</div>
+              <p className="mt-1">If edge becomes too high, it is likely a sign the model is missing information already processed by the market. The edge becomes less trustworthy, so the bet rating starts to diminish above 6 percentage points.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TryscorerProfileDialog({ selection, onClose }: { selection: TryscorerProfileSelection | null; onClose: () => void }) {
   if (!selection) return null;
   const { form, opponentLastFive, bestPrice, bestBookies, modelProbability, match, opponent } = selection;
@@ -1841,25 +1894,31 @@ function buildMarketSignals(row: OutcomeRow, marketEfficiencyPct: number | null)
 function calculateBetScore({
   edgePp,
   eventDate,
+  eventKickoff,
+  nowMs,
   todayIso,
-  liquidityScore,
   efficiencyScore,
   disagreementScore,
+  teamListsProcessed,
 }: {
   edgePp: number;
   eventDate: string;
+  eventKickoff: string | null;
+  nowMs: number;
   todayIso: string;
-  liquidityScore: number;
   efficiencyScore: number;
   disagreementScore: number;
+  teamListsProcessed: boolean;
 }): number {
   return calculateBetRatingScore({
     edgePp,
     eventDate,
+    eventKickoff,
+    nowMs,
     todayIso,
-    liquidityScore,
     efficiencyScore,
     disagreementScore,
+    teamListsProcessed,
   });
 }
 
@@ -1959,11 +2018,17 @@ function buildBestBets({
   bankroll,
   kellyScale,
   todayIso,
+  lineupPlayersByMatch,
+  kickoffsByMatch,
+  nowMs,
 }: {
   groups: EventGroup[];
   bankroll: number;
   kellyScale: number;
   todayIso: string;
+  lineupPlayersByMatch: Record<string, unknown>;
+  kickoffsByMatch: Record<string, string>;
+  nowMs: number;
 }): BestBetCandidate[] {
   const candidates: Array<Omit<BestBetCandidate, "tags">> = [];
 
@@ -1997,14 +2062,17 @@ function buildBestBets({
 
       const signals = buildMarketSignals(row, group.marketPctFromBest);
       if (signals.offerCount < BEST_BETS_CONFIG.minBookies) continue;
+      const kickoffKey = buildMatchKickoffKey(group.date, group.match);
 
       const score = calculateBetScore({
         edgePp,
         eventDate: group.date,
+        eventKickoff: kickoffKey ? kickoffsByMatch[kickoffKey] ?? null : null,
+        nowMs,
         todayIso,
-        liquidityScore: signals.liquidityScore,
         efficiencyScore: signals.efficiencyScore,
         disagreementScore: signals.disagreementScore,
+        teamListsProcessed: hasAnnouncedLineupsForGroup(group, lineupPlayersByMatch),
       });
       const kellyProbability = adjustedKellyProbability({
         modelProbability,
@@ -2281,6 +2349,7 @@ export function BettingDashboard({
   const [tourStepIndex, setTourStepIndex] = useState<number | null>(null);
   const [tourTargetRect, setTourTargetRect] = useState<DOMRect | null>(null);
   const [teamListStatusNowMs, setTeamListStatusNowMs] = useState(() => Date.now());
+  const [betRatingExplainerOpen, setBetRatingExplainerOpen] = useState(false);
   useEffect(() => {
     const intervalId = window.setInterval(() => setTeamListStatusNowMs(Date.now()), 60_000);
     return () => window.clearInterval(intervalId);
@@ -2353,8 +2422,11 @@ export function BettingDashboard({
       bankroll,
       kellyScale,
       todayIso,
+      lineupPlayersByMatch,
+      kickoffsByMatch: tryscorerKickoffsByMatch,
+      nowMs: teamListStatusNowMs,
     }),
-    [bankroll, h2hGroups, kellyScale, lineGroups, marginGroups, todayIso, totalGroups, tryscorerGroups]
+    [bankroll, h2hGroups, kellyScale, lineGroups, lineupPlayersByMatch, marginGroups, teamListStatusNowMs, todayIso, totalGroups, tryscorerGroups, tryscorerKickoffsByMatch]
   );
   const bestBetCountsByMarket = useMemo(() => countBestBetsByMarket(bestBets), [bestBets]);
   const marketGroupsByMarket = useMemo<Record<BettingMarket, EventGroup[]>>(() => ({
@@ -4514,19 +4586,28 @@ export function BettingDashboard({
       >
         <MarketTabsRail orderedMarkets={orderedMarkets} selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
         {selectedMarketGroups.length > 0 ? (
-          hasTeamListsInModel ? (
-            <div className="w-fit max-w-full rounded-lg border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-[10px] font-semibold text-emerald-300 sm:text-xs">
-              <span aria-hidden="true">🟢</span> Team lists processed by model.
-            </div>
-          ) : teamListsAnnouncementPassed ? (
-            <div className="rounded-lg border border-orange-400/30 bg-orange-400/[0.06] px-3 py-2 text-[10px] font-semibold text-orange-300 sm:text-xs">
-              <span aria-hidden="true">🟠</span> Team list info will be processed by the model shortly.
-            </div>
-          ) : (
-            <div className="rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
-              Note: edge and ratings are more accurate once team lists have been announced.
-            </div>
-          )
+          <div className="flex flex-wrap items-center gap-2">
+            {hasTeamListsInModel ? (
+              <div className="w-fit max-w-full rounded-lg border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-[10px] font-semibold text-emerald-300 sm:text-xs">
+                <span aria-hidden="true">🟢</span> Team lists processed by model.
+              </div>
+            ) : teamListsAnnouncementPassed ? (
+              <div className="rounded-lg border border-orange-400/30 bg-orange-400/[0.06] px-3 py-2 text-[10px] font-semibold text-orange-300 sm:text-xs">
+                <span aria-hidden="true">🟠</span> Team list info will be processed by the model shortly.
+              </div>
+            ) : (
+              <div className="rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
+                Note: edge and ratings are more accurate once team lists have been announced.
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setBetRatingExplainerOpen(true)}
+              className="rounded-lg border border-blue-300/25 bg-blue-300/[0.06] px-3 py-2 text-[10px] font-semibold text-blue-200 transition-colors hover:border-blue-300/45 hover:bg-blue-300/[0.1] sm:text-xs"
+            >
+              Bet rating explained
+            </button>
+          </div>
         ) : null}
         <section className="min-w-0">
           <MarketSection
@@ -4546,6 +4627,7 @@ export function BettingDashboard({
             tryscorerFormByPlayer={tryscorerFormByPlayer}
             tryscorerLastFiveVsOpponentByMatch={tryscorerLastFiveVsOpponentByMatch}
             tryscorerKickoffsByMatch={tryscorerKickoffsByMatch}
+            lineupPlayersByMatch={lineupPlayersByMatch}
             lineupLinksByMatchKey={lineupLinksByMatchKey}
             teamFormByMatchKey={teamFormByMatchKey}
             market={selectedMarket}
@@ -4557,6 +4639,7 @@ export function BettingDashboard({
             onOpenBetComposer={openBookieBetComposer}
           />
         </section>
+        <BetRatingExplainerDialog open={betRatingExplainerOpen} onClose={() => setBetRatingExplainerOpen(false)} />
       </div>
 
       {tourIsOpen && activeTourStep ? (
@@ -5556,6 +5639,7 @@ function MarketSection({
   tryscorerFormByPlayer,
   tryscorerLastFiveVsOpponentByMatch,
   tryscorerKickoffsByMatch,
+  lineupPlayersByMatch,
   lineupLinksByMatchKey,
   teamFormByMatchKey,
   market,
@@ -5582,6 +5666,7 @@ function MarketSection({
   tryscorerFormByPlayer: Record<string, TryscorerFormSummary>;
   tryscorerLastFiveVsOpponentByMatch: Record<string, unknown>;
   tryscorerKickoffsByMatch: Record<string, string>;
+  lineupPlayersByMatch: Record<string, unknown>;
   lineupLinksByMatchKey: Record<string, string>;
   teamFormByMatchKey: Record<string, string[]>;
   market: BettingMarket;
@@ -5719,6 +5804,9 @@ function MarketSection({
           {dateGroups.map((group, groupIndex) => {
             const { home, away } = parseMatch(group.match);
             const lineupHref = lineupLinksByMatchKey[`${group.date}|${buildMatchGroupKey(group.match)}`] ?? null;
+            const teamListsProcessed = hasAnnouncedLineupsForGroup(group, lineupPlayersByMatch);
+            const kickoffKey = buildMatchKickoffKey(group.date, group.match);
+            const eventKickoff = kickoffKey ? tryscorerKickoffsByMatch[kickoffKey] ?? null : null;
             const showModelColumns = group.market !== "Tryscorer" || group.outcomes.some((row) => row.bestModelComputed != null);
             const blurPremiumColumns = !canAccessPremium && showModelColumns;
             const collapsed = group.market === "Tryscorer" && (
@@ -5744,10 +5832,12 @@ function MarketSection({
               return calculateBetScore({
                 edgePp,
                 eventDate: group.date,
+                eventKickoff,
+                nowMs,
                 todayIso,
-                liquidityScore: marketSignals.liquidityScore,
                 efficiencyScore: marketSignals.efficiencyScore,
                 disagreementScore: marketSignals.disagreementScore,
+                teamListsProcessed,
               });
             };
             const visibleOutcomes = group.market === "Tryscorer"
@@ -5894,10 +5984,12 @@ function MarketSection({
                     const betScore = edgePp == null ? null : calculateBetScore({
                       edgePp,
                       eventDate: group.date,
+                      eventKickoff,
+                      nowMs,
                       todayIso,
-                      liquidityScore: marketSignals.liquidityScore,
                       efficiencyScore: marketSignals.efficiencyScore,
                       disagreementScore: marketSignals.disagreementScore,
+                      teamListsProcessed,
                     });
                     const kellyProbability = modelProbability != null && implied != null
                       ? adjustedKellyProbability({
@@ -6202,10 +6294,12 @@ function MarketSection({
                         const betScore = edgePp == null ? null : calculateBetScore({
                           edgePp,
                           eventDate: group.date,
+                          eventKickoff,
+                          nowMs,
                           todayIso,
-                          liquidityScore: marketSignals.liquidityScore,
                           efficiencyScore: marketSignals.efficiencyScore,
                           disagreementScore: marketSignals.disagreementScore,
+                          teamListsProcessed,
                         });
                         const kellyProbability = modelProbability != null && implied != null
                           ? adjustedKellyProbability({

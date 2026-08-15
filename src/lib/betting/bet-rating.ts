@@ -10,25 +10,28 @@ const BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION = 0.35;
 const BET_SCORE_SUSPICIOUS_EDGE_DECAY_RANGE_PP = 10;
 const BET_SCORE_CONTEXT_ADJUSTMENT_RANGE = 0.35;
 const BET_RATING_FULL_DISPARITY_SCORE_PP = 4;
+const BET_RATING_TIMING_MIN_SCORE = 0.3;
+const BET_RATING_TIMING_HALF_LIFE_HOURS = 3;
+const BET_RATING_TIMING_THREE_HOUR_DECAY = 5 / 7;
 
 export const BET_SCORE_SUSPICIOUS_EDGE_THRESHOLD_PP = 6;
 
 export const BET_RATING_WEIGHTS = {
-  liquidity: 0.06,
-  efficiency: 0.28,
-  disagreement: 0.28,
+  efficiency: 0.225,
+  disagreement: 0.225,
   timing: 0.3,
+  teamLists: 0.25,
 } as const;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function isoDateDiffDays(fromIso: string, toIso: string): number | null {
-  const fromMs = Date.parse(`${fromIso}T00:00:00`);
-  const toMs = Date.parse(`${toIso}T00:00:00`);
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
-  return Math.round((toMs - fromMs) / (24 * 60 * 60 * 1000));
+function eventTimeMs(eventTime: string): number | null {
+  const value = eventTime.includes("T")
+    ? Date.parse(eventTime)
+    : Date.parse(`${eventTime}T23:59:59+10:00`);
+  return Number.isFinite(value) ? value : null;
 }
 
 export function todayIsoInBrisbane(): string {
@@ -40,19 +43,25 @@ export function todayIsoInBrisbane(): string {
   }).format(new Date());
 }
 
-export function eventProximityScore(eventDate: string, todayIso: string): number {
-  const daysUntil = isoDateDiffDays(todayIso, eventDate);
-  if (daysUntil == null) return 0.5;
-  if (daysUntil < 0) return 0.1;
-  if (daysUntil === 0) return 0.2;
-  if (daysUntil === 1) return 0.4;
-  if (daysUntil === 2) return 0.6;
-  if (daysUntil === 3) return 0.8;
-  return 1;
+export function eventProximityScore(eventTime: string, nowMs = Date.now()): number {
+  const kickoffMs = eventTimeMs(eventTime);
+  if (kickoffMs == null || !Number.isFinite(nowMs)) return 0.5;
+  const hoursUntil = Math.max(0, (kickoffMs - nowMs) / (60 * 60 * 1000));
+  return clamp(
+    BET_RATING_TIMING_MIN_SCORE + ((1 - BET_RATING_TIMING_MIN_SCORE) * (
+      1 - Math.pow(BET_RATING_TIMING_THREE_HOUR_DECAY, hoursUntil / BET_RATING_TIMING_HALF_LIFE_HOURS)
+    )),
+    BET_RATING_TIMING_MIN_SCORE,
+    1
+  );
 }
 
 export function earlyMarketTimingScore(eventDate: string, todayIso: string): number {
-  const daysUntil = isoDateDiffDays(todayIso, eventDate);
+  const fromMs = Date.parse(`${todayIso}T00:00:00`);
+  const toMs = Date.parse(`${eventDate}T00:00:00`);
+  const daysUntil = Number.isFinite(fromMs) && Number.isFinite(toMs)
+    ? Math.round((toMs - fromMs) / (24 * 60 * 60 * 1000))
+    : null;
   if (daysUntil == null) return 0.72;
   if (daysUntil <= 0) return 0.3;
   if (daysUntil === 1) return 0.5;
@@ -80,7 +89,7 @@ export function buildBetRatingMarketSignals({
     : null;
   const liquidityScore = clamp(validPrices.length / BETTING_BOOKIE_COLUMNS.length, 0, 1);
   const efficiencyScore = marketEfficiencyPct != null
-    ? clamp(1 - Math.max(0, marketEfficiencyPct - 100) / 14, 0, 1)
+    ? clamp(0.5 + ((100 - marketEfficiencyPct) / 8), 0, 1)
     : 0.5;
   const disagreementScore = clamp(
     (marketDisparityPp ?? 0) / BET_RATING_FULL_DISPARITY_SCORE_PP,
@@ -99,29 +108,39 @@ export function buildBetRatingMarketSignals({
 export function calculateBetRatingScore({
   edgePp,
   eventDate,
+  eventKickoff,
+  nowMs,
   todayIso,
-  liquidityScore,
   efficiencyScore,
   disagreementScore,
+  teamListsProcessed = false,
 }: {
   edgePp: number;
   eventDate: string;
+  eventKickoff?: string | null;
+  nowMs?: number;
   todayIso: string;
-  liquidityScore: number;
   efficiencyScore: number;
   disagreementScore: number;
+  teamListsProcessed?: boolean;
 }): number {
-  const timingScore = eventProximityScore(eventDate, todayIso);
+  const referenceNowMs = nowMs ?? (
+    todayIso === todayIsoInBrisbane()
+      ? Date.now()
+      : Date.parse(`${todayIso}T00:00:00+10:00`)
+  );
+  const timingScore = eventProximityScore(eventKickoff ?? eventDate, referenceNowMs);
+  const teamListsScore = teamListsProcessed ? 1 : 0.5;
   const contextWeight =
-    BET_RATING_WEIGHTS.liquidity +
     BET_RATING_WEIGHTS.efficiency +
     BET_RATING_WEIGHTS.disagreement +
-    BET_RATING_WEIGHTS.timing;
+    BET_RATING_WEIGHTS.timing +
+    BET_RATING_WEIGHTS.teamLists;
   const contextScore = contextWeight > 0 ? (
-    (liquidityScore * BET_RATING_WEIGHTS.liquidity) +
     (efficiencyScore * BET_RATING_WEIGHTS.efficiency) +
     (disagreementScore * BET_RATING_WEIGHTS.disagreement) +
-    (timingScore * BET_RATING_WEIGHTS.timing)
+    (timingScore * BET_RATING_WEIGHTS.timing) +
+    (teamListsScore * BET_RATING_WEIGHTS.teamLists)
   ) / contextWeight : 0.5;
   const edgeCurve = 1 / (1 + Math.exp(-edgePp / (
     edgePp < 0 ? BET_SCORE_NEGATIVE_EDGE_CURVE_STEEPNESS_PP : BET_SCORE_EDGE_CURVE_STEEPNESS_PP

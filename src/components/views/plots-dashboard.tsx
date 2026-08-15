@@ -809,6 +809,7 @@ function coefficientOfDetermination(points: TeamQuadrantPoint[]): number | null 
 }
 
 const EFFICIENCY_BASE_UNITS: Record<PlayerEfficiencyBaseMetric, string> = {
+  Minutes: "minute",
   Receipts: "receipt",
   Runs: "run",
   Passes: "pass",
@@ -1078,6 +1079,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const isPlayerEfficiency = playerAttackPlot === "Efficiency";
   const isPlayerForm = playerSection === "Attack" && playerAttackPlot === "Form";
   const playerEfficiencyShowsVolume = isPlayerEfficiency && playerEfficiencyView === "Volume axis";
+  const playerEfficiencyUsesPer80 = playerUsesPer80 && playerEfficiencyBaseMetric !== "Minutes";
   const isPlayerTeamProportion = playerAttackPlot === "Team Proportion";
   const isPlayerGameMode = playerPlotMode === "games";
   const isPlayerStatsTotals = !isPlayerGameMode && playerAttackPlot === "Stats" && playerStatsAggregation === "Season total";
@@ -2070,9 +2072,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                     : isPlayerEfficiency
                       ? `${playerEfficiencyOutputMetric.toUpperCase()} PER ${playerEfficiencyUnit.toUpperCase()} · BETTER →`
                       : `${activePlayerComparisonXStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} →`}
-                  yAxisLabel={isPlayerForm ? `L${formWindow} ${playerFormStat.toUpperCase()}${playerFormPerStat === "None" ? " PER GAME" : ` PER ${playerFormPerStat.toUpperCase()}`} ↑` : playerSection === "Defense" ? "TACKLE EFFICIENCY · BETTER ↑" : isPlayerSingleStat ? "" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric.toUpperCase()} PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"} · MORE ↑` : `${effectivePlayerComparisonYStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} ↑`}
+                  yAxisLabel={isPlayerForm ? `L${formWindow} ${playerFormStat.toUpperCase()}${playerFormPerStat === "None" ? " PER GAME" : ` PER ${playerFormPerStat.toUpperCase()}`} ↑` : playerSection === "Defense" ? "TACKLE EFFICIENCY · BETTER ↑" : isPlayerSingleStat ? "" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric.toUpperCase()} PER ${playerEfficiencyUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"} · MORE ↑` : `${effectivePlayerComparisonYStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} ↑`}
                   xMetricLabel={isPlayerForm ? "Prior" : playerSection === "Defense" ? playerUsesPer80 ? "Tackles/80" : "Tackles/game" : isPlayerEfficiency ? `${playerEfficiencyOutputMetric}/${playerEfficiencyUnit}` : `${activePlayerComparisonXStat}${isPlayerTeamProportion ? " share" : isPlayerStatsTotals ? " total" : playerUsesPer80 ? "/80" : "/game"}`}
-                  yMetricLabel={isPlayerForm ? `L${formWindow}` : playerSection === "Defense" ? "Tackle efficiency" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric}/${playerUsesPer80 ? "80" : "game"}` : isPlayerSingleStat ? "" : `${effectivePlayerComparisonYStat}${isPlayerTeamProportion ? " share" : isPlayerStatsTotals ? " total" : playerUsesPer80 ? "/80" : "/game"}`}
+                  yMetricLabel={isPlayerForm ? `L${formWindow}` : playerSection === "Defense" ? "Tackle efficiency" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric}/${playerEfficiencyUsesPer80 ? "80" : "game"}` : isPlayerSingleStat ? "" : `${effectivePlayerComparisonYStat}${isPlayerTeamProportion ? " share" : isPlayerStatsTotals ? " total" : playerUsesPer80 ? "/80" : "/game"}`}
                   xValueSuffix={isPlayerTeamProportion ? "%" : ""}
                   yValueSuffix={playerSection === "Defense" || isPlayerTeamProportion ? "%" : ""}
                   xValueDecimals={isPlayerForm ? playerFormPerStat === "None" ? 1 : 2 : isPlayerEfficiency ? playerEfficiencyYDecimals : isPlayerStatsTotals ? 0 : 1}
@@ -2097,7 +2099,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                       ? playerSection === "Defense"
                         ? "Each point shows that game's tackle efficiency, with tackles normalised per 80 minutes for backs. Forwards exclude games below 60% of the player's median minutes in that position."
                         : isPlayerEfficiency
-                          ? `Each point shows that game's ${playerEfficiencyOutputMetric.toLowerCase()} divided by ${playerEfficiencyBaseMetric.toLowerCase()}. Volume is normalised per 80 minutes for backs and uses the game total for forwards.`
+                          ? playerEfficiencyBaseMetric === "Minutes"
+                            ? `Each point shows that game's ${playerEfficiencyOutputMetric.toLowerCase()} divided by minutes played. Volume is minutes played.`
+                            : `Each point shows that game's ${playerEfficiencyOutputMetric.toLowerCase()} divided by ${playerEfficiencyBaseMetric.toLowerCase()}. Volume is normalised per 80 minutes for backs and uses the game total for forwards.`
                           : isPlayerTeamProportion
                             ? "Each point shows the player's selected-stat share of their team's total in that game. Appearances below 40 minutes are excluded."
                             : "Each point shows that game's selected stats, normalised per 80 minutes for backs and using the game total for forwards."
@@ -2105,8 +2109,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                       ? "Backs are normalised to tackles per 80 minutes; tackle efficiency is averaged across qualifying games. Forwards exclude games below 60% of the player's median minutes in that position."
                       : isPlayerEfficiency
                         ? playerEfficiencyShowsVolume
-                          ? `${playerEfficiencyBaseMetric} are normalised per 80 minutes for backs and per qualifying game for forwards. Efficiency is total ${playerEfficiencyOutputMetric.toLowerCase()} divided by total ${playerEfficiencyBaseMetric.toLowerCase()}. Forwards exclude games below 60% of the player's median minutes in that position.`
-                          : `Efficiency is total ${playerEfficiencyOutputMetric.toLowerCase()} divided by total ${playerEfficiencyBaseMetric.toLowerCase()}. Enable Volume axis to compare it with ${playerEfficiencyBaseMetric.toLowerCase()} per ${playerUsesPer80 ? "80 minutes" : "qualifying game"}. Forwards exclude games below 60% of the player's median minutes in that position.`
+                          ? playerEfficiencyBaseMetric === "Minutes"
+                            ? `The volume axis shows average minutes played per qualifying game. Efficiency is total ${playerEfficiencyOutputMetric.toLowerCase()} divided by total minutes played. Forwards exclude games below 60% of the player's median minutes in that position.`
+                            : `${playerEfficiencyBaseMetric} are normalised per 80 minutes for backs and per qualifying game for forwards. Efficiency is total ${playerEfficiencyOutputMetric.toLowerCase()} divided by total ${playerEfficiencyBaseMetric.toLowerCase()}. Forwards exclude games below 60% of the player's median minutes in that position.`
+                          : `Efficiency is total ${playerEfficiencyOutputMetric.toLowerCase()} divided by total ${playerEfficiencyBaseMetric.toLowerCase()}. Enable Volume axis to compare it with ${playerEfficiencyBaseMetric.toLowerCase()} per ${playerEfficiencyUsesPer80 ? "80 minutes" : "qualifying game"}. Forwards exclude games below 60% of the player's median minutes in that position.`
                         : isPlayerTeamProportion
                           ? isPlayerSingleStat
                             ? `For each qualifying appearance of at least 40 minutes, the player's ${activePlayerComparisonXStat.toLowerCase()} are divided by their team's total from that same game. The game-level percentages are then averaged. Games where the team recorded zero are excluded. Forwards also exclude games below 60% of the player's median minutes in that position.`

@@ -4,7 +4,7 @@ export const PLAYER_ATTACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halv
 
 export type PlayerAttackPosition = (typeof PLAYER_ATTACK_POSITIONS)[number];
 export const PLAYER_BACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halves"] as const satisfies readonly PlayerAttackPosition[];
-export const PLAYER_EFFICIENCY_BASE_METRICS = ["Receipts", "Runs", "Passes"] as const;
+export const PLAYER_EFFICIENCY_BASE_METRICS = ["Minutes", "Receipts", "Runs", "Passes"] as const;
 export const PLAYER_EFFICIENCY_OUTPUT_METRICS = [
   "Run metres",
   "Post-contact metres",
@@ -128,6 +128,7 @@ export function canonicalPlayerName(value: unknown): string {
 }
 
 const EFFICIENCY_BASE_FIELDS: Record<PlayerEfficiencyBaseMetric, keyof PlayerStat> = {
+  Minutes: "Mins Played",
   Receipts: "Receipts",
   Runs: "All Runs",
   Passes: "Passes",
@@ -269,6 +270,7 @@ export function buildPlayerAttackPoints(
   }
 
   const isPer80 = BACK_POSITIONS.has(position);
+  const normaliseVolumePer80 = isPer80 && baseMetric !== "Minutes";
   const points: PlayerAttackPoint[] = [];
   for (const [player, positionRows] of players) {
     const usualMinutes = median(positionRows.map((row) => finite(row["Mins Played"])));
@@ -291,11 +293,11 @@ export function buildPlayerAttackPoints(
           team: String(row.Team ?? ""),
           position,
           games: 1,
-          volumeValue: isPer80 ? base * (80 / minutes) : base,
+          volumeValue: normaliseVolumePer80 ? base * (80 / minutes) : base,
           efficiencyValue: finite(row[outputField]) / base,
           averageMinutes: minutes,
           usualMinutes,
-          isPer80,
+          isPer80: normaliseVolumePer80,
           roundLabel: String(row.Round_Label || row.Round),
           opponent: row.Opponent,
         });
@@ -307,7 +309,7 @@ export function buildPlayerAttackPoints(
     const totalOutput = qualifyingRows.reduce((sum, row) => sum + finite(row[outputField]), 0);
     const volumeValue = qualifyingRows.reduce((sum, row) => {
       const value = finite(row[baseField]);
-      return sum + (isPer80 ? value * (80 / finite(row["Mins Played"])) : value);
+      return sum + (normaliseVolumePer80 ? value * (80 / finite(row["Mins Played"])) : value);
     }, 0) / qualifyingRows.length;
 
     points.push({
@@ -320,7 +322,7 @@ export function buildPlayerAttackPoints(
       efficiencyValue: totalOutput / totalBase,
       averageMinutes: qualifyingRows.reduce((sum, row) => sum + finite(row["Mins Played"]), 0) / qualifyingRows.length,
       usualMinutes,
-      isPer80,
+      isPer80: normaliseVolumePer80,
       roundLabel: "Season",
       opponent: null,
     });

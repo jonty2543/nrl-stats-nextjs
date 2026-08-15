@@ -67,7 +67,7 @@
                 {
                     "id": 0,
                     "name": "Support Winger",
-                    "count": 90,
+                    "count": 89,
                     "description": "These wingers tend to be less involved in the game, perhaps due to lack of skill or opportunity."
                 },
                 {
@@ -79,7 +79,7 @@
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 70,
+                    "count": 71,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -114,13 +114,13 @@
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 44,
+                    "count": 43,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 44,
+                    "count": 43,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
@@ -132,7 +132,7 @@
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 54,
+                    "count": 56,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],
@@ -175,13 +175,13 @@
                 {
                     "id": 1,
                     "name": "Running Half",
-                    "count": 55,
+                    "count": 54,
                     "description": "Halves with strong running games who look to break the line, usually Five-Eighths."
                 },
                 {
                     "id": 2,
                     "name": "Organising Half",
-                    "count": 90,
+                    "count": 91,
                     "description": "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
                 }
             ],
@@ -280,19 +280,19 @@
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 93,
+                    "count": 88,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 26,
+                    "count": 28,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 40,
+                    "count": 43,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],

@@ -73,13 +73,13 @@
                 {
                     "id": 1,
                     "name": "Finisher Winger",
-                    "count": 60,
+                    "count": 61,
                     "description": "Wingers who are specialist try scorers, often with great positional awareness and speed."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 71,
+                    "count": 70,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -220,13 +220,13 @@
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 34,
+                    "count": 33,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
                     "id": 1,
                     "name": "Running Hooker",
-                    "count": 22,
+                    "count": 23,
                     "description": "Strong ball running hookers who often look to run from dummy half."
                 },
                 {
@@ -274,19 +274,19 @@
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 65,
+                    "count": 61,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 94,
+                    "count": 95,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 23,
+                    "count": 26,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {

@@ -73,13 +73,13 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 1,
                     "name": "Finisher Winger",
-                    "count": 51,
+                    "count": 53,
                     "description": "Wingers who are specialist try scorers, often with great positional awareness and speed."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 77,
+                    "count": 75,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -169,13 +169,13 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 60,
+                    "count": 61,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
                     "id": 1,
                     "name": "Running Half",
-                    "count": 59,
+                    "count": 58,
                     "description": "Halves with strong running games who look to break the line, usually Five-Eighths."
                 },
                 {
@@ -220,13 +220,13 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 38,
+                    "count": 37,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
                     "id": 1,
                     "name": "Running Hooker",
-                    "count": 18,
+                    "count": 19,
                     "description": "Strong ball running hookers who often look to run from dummy half."
                 },
                 {
@@ -274,19 +274,19 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 58,
+                    "count": 56,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 100,
+                    "count": 98,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 28,
+                    "count": 32,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {

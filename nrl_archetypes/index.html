@@ -326,6 +326,7 @@
         }
 
         .rankings-card {
+            flex: 0 0 auto;
             padding: 0;
             overflow: hidden;
         }
@@ -378,6 +379,50 @@
             margin-bottom: 1rem;
         }
 
+        .rankings-toggle {
+            display: flex;
+            gap: 0.2rem;
+            padding: 0.2rem;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            background: var(--gray);
+        }
+
+        .rankings-toggle-btn {
+            appearance: none;
+            border: none;
+            border-radius: 999px;
+            background: transparent;
+            color: #8A9bb8;
+            cursor: pointer;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            padding: 0.38rem 0.65rem;
+            text-transform: uppercase;
+        }
+
+        .rankings-toggle-btn:hover {
+            color: var(--white);
+        }
+
+        .rankings-toggle-btn.active {
+            background: var(--lime);
+            color: var(--navy);
+        }
+
+        .rankings-filter[hidden] {
+            display: none;
+        }
+
+        .rankings-filter {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
         .rankings-label {
             color: #8A9bb8;
             font-size: 0.7rem;
@@ -422,6 +467,21 @@
             list-style: none;
             display: grid;
             gap: 0.45rem;
+            max-height: 8.1rem;
+            overflow-y: auto;
+            padding-right: 0.35rem;
+            scrollbar-color: #43547c transparent;
+            scrollbar-gutter: stable;
+            scrollbar-width: thin;
+        }
+
+        .ranking-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .ranking-list::-webkit-scrollbar-thumb {
+            border-radius: 999px;
+            background: #43547c;
         }
 
         .ranking-row {
@@ -429,6 +489,7 @@
             grid-template-columns: 1.35rem minmax(0, 1fr) auto;
             align-items: center;
             gap: 0.6rem;
+            min-height: 1.25rem;
             color: #d0d0d0;
             font-size: 0.78rem;
             font-weight: 700;
@@ -439,6 +500,18 @@
             color: #8A9bb8;
             font-size: 0.72rem;
             font-weight: 800;
+        }
+
+        .form-change.positive {
+            color: var(--lime);
+        }
+
+        .form-change.negative {
+            color: #ff6b7a;
+        }
+
+        .form-change.neutral {
+            color: #8A9bb8;
         }
 
         .ranking-player {
@@ -693,6 +766,13 @@
                     </button>
                     <div class="rankings-content">
                         <div class="rankings-controls">
+                            <div class="rankings-label">View</div>
+                            <div class="rankings-toggle" id="rankingsViewToggle" role="group" aria-label="Rankings view">
+                                <button class="rankings-toggle-btn active" type="button" data-rankings-view="rankings">Rankings</button>
+                                <button class="rankings-toggle-btn" type="button" data-rankings-view="form">Form</button>
+                            </div>
+                        </div>
+                        <div class="rankings-filter" id="rankingsYearFilter">
                             <div class="rankings-label">Year</div>
                             <select class="rankings-year-select" id="rankingsYearSelect" aria-label="Rankings year">
                                 <option value="All">All</option>
@@ -701,6 +781,13 @@
                                 <option value="2025">2025</option>
                                 <option value="2026">2026</option>
                             </select>
+                        </div>
+                        <div class="rankings-filter" id="rankingsFormFilter" hidden>
+                            <div class="rankings-label">Vs 2026 season</div>
+                            <div class="rankings-toggle" id="rankingsFormToggle" role="group" aria-label="Form window">
+                                <button class="rankings-toggle-btn active" type="button" data-form-window="l3">L3</button>
+                                <button class="rankings-toggle-btn" type="button" data-form-window="l5">L5</button>
+                            </div>
                         </div>
                         <div class="rankings-body" id="rankingsBody">
                             <div class="rankings-empty">Select a position to view rankings.</div>
@@ -732,7 +819,11 @@
         const windowToggle = document.getElementById('windowToggle');
         const rankingsCard = document.getElementById('rankingsCard');
         const rankingsHeader = document.getElementById('rankingsHeader');
+        const rankingsViewToggle = document.getElementById('rankingsViewToggle');
+        const rankingsYearFilter = document.getElementById('rankingsYearFilter');
         const rankingsYearSelect = document.getElementById('rankingsYearSelect');
+        const rankingsFormFilter = document.getElementById('rankingsFormFilter');
+        const rankingsFormToggle = document.getElementById('rankingsFormToggle');
 
         // State
         let currentPosition = null;
@@ -740,7 +831,9 @@
         let currentMode = 'production';
         let currentWindow = 'all';
         let rankingsOpen = false;
+        let rankingsView = 'rankings';
         let rankingsYear = 'All';
+        let rankingsFormWindow = 'l3';
         let rankingsRequestId = 0;
         let plotRequestId = 0;
         const rankingsCache = {};
@@ -791,6 +884,26 @@
                 if (currentPosition) renderArchetypes(currentPosition);
             };
 
+            rankingsViewToggle.querySelectorAll('.rankings-toggle-btn').forEach(btn => {
+                btn.onclick = () => {
+                    if (rankingsView === btn.dataset.rankingsView) return;
+                    rankingsView = btn.dataset.rankingsView;
+                    rankingsRequestId++;
+                    updateRankingsControls();
+                    if (currentPosition) renderArchetypes(currentPosition);
+                };
+            });
+
+            rankingsFormToggle.querySelectorAll('.rankings-toggle-btn').forEach(btn => {
+                btn.onclick = () => {
+                    if (rankingsFormWindow === btn.dataset.formWindow) return;
+                    rankingsFormWindow = btn.dataset.formWindow;
+                    rankingsRequestId++;
+                    updateRankingsControls();
+                    if (currentPosition) renderArchetypes(currentPosition);
+                };
+            });
+
             rankingsYearSelect.onchange = (event) => {
                 rankingsYear = event.target.value;
                 if (currentWindow !== 'all' && rankingsYear !== '2026') {
@@ -816,6 +929,17 @@
             if (positions.length > 0) {
                 selectPosition(positions[0]);
             }
+        }
+
+        function updateRankingsControls() {
+            rankingsViewToggle.querySelectorAll('.rankings-toggle-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.rankingsView === rankingsView);
+            });
+            rankingsFormToggle.querySelectorAll('.rankings-toggle-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.formWindow === rankingsFormWindow);
+            });
+            rankingsYearFilter.hidden = rankingsView !== 'rankings';
+            rankingsFormFilter.hidden = rankingsView !== 'form';
         }
 
         function selectMode(mode) {
@@ -975,6 +1099,7 @@
             rankingsCard.classList.toggle('active', rankingsOpen);
             rankingsHeader.setAttribute('aria-expanded', rankingsOpen ? 'true' : 'false');
             rankingsYearSelect.value = rankingsYear;
+            updateRankingsControls();
             if (rankingsOpen) {
                 void renderDimensionRankings(position, data);
             }
@@ -988,7 +1113,17 @@
             body.innerHTML = '<div class="rankings-empty">Loading rankings...</div>';
 
             try {
-                const rows = await loadRankings(position);
+                if (rankingsView === 'form') {
+                    const [seasonRows, recentRows] = await Promise.all([
+                        loadRankings(position, 'all'),
+                        loadRankings(position, rankingsFormWindow),
+                    ]);
+                    if (requestId !== rankingsRequestId) return;
+                    renderFormRankings(body, data, seasonRows, recentRows);
+                    return;
+                }
+
+                const rows = await loadRankings(position, currentWindow);
                 if (requestId !== rankingsRequestId) return;
 
                 const filteredRows = rows.filter(row => rankingsYear === 'All' || row.year === rankingsYear);
@@ -1006,8 +1141,7 @@
                 body.innerHTML = dimensions.map(dimension => {
                     const topRows = [...filteredRows]
                         .filter(row => Number.isFinite(row[dimension.key]))
-                        .sort((a, b) => b[dimension.key] - a[dimension.key])
-                        .slice(0, 5);
+                        .sort((a, b) => b[dimension.key] - a[dimension.key]);
 
                     if (!topRows.length) {
                         return `
@@ -1021,7 +1155,7 @@
                     return `
                         <div class="ranking-dimension">
                             <div class="ranking-title">${escapeHtml(dimension.label)}</div>
-                            <ol class="ranking-list">
+                            <ol class="ranking-list" tabindex="0" aria-label="${escapeHtml(dimension.label)} rankings">
                                 ${topRows.map((row, index) => `
                                     <li class="ranking-row">
                                         <span class="ranking-rank">${index + 1}</span>
@@ -1044,11 +1178,76 @@
             }
         }
 
-        async function loadRankings(position) {
-            const cacheKey = `${currentMode}:${currentWindow}:${position}`;
+        function renderFormRankings(body, data, seasonRows, recentRows) {
+            const seasonByPlayer = new Map(
+                seasonRows
+                    .filter(row => row.year === '2026')
+                    .map(row => [row.player, row])
+            );
+            const currentRows = recentRows.filter(row => row.year === '2026');
+            const dimensions = [
+                { key: 'x', label: data.pc_axes.pc1.name },
+                { key: 'y', label: data.pc_axes.pc2.name },
+                { key: 'z', label: data.pc_axes.pc3.name },
+            ];
+
+            body.innerHTML = dimensions.map(dimension => {
+                const formRows = currentRows
+                    .map(row => {
+                        const seasonRow = seasonByPlayer.get(row.player);
+                        const seasonScore = seasonRow && seasonRow[dimension.key];
+                        const recentScore = row[dimension.key];
+                        if (!Number.isFinite(seasonScore) || !Number.isFinite(recentScore)) return null;
+                        return {
+                            player: row.player,
+                            seasonScore,
+                            recentScore,
+                            change: recentScore - seasonScore,
+                        };
+                    })
+                    .filter(Boolean)
+                    .sort((a, b) => b.change - a.change);
+
+                if (!formRows.length) {
+                    return `
+                        <div class="ranking-dimension">
+                            <div class="ranking-title">${escapeHtml(dimension.label)}</div>
+                            <div class="rankings-empty">No comparable 2026 scores available.</div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="ranking-dimension">
+                        <div class="ranking-title">${escapeHtml(dimension.label)}</div>
+                        <ol class="ranking-list" tabindex="0" aria-label="${escapeHtml(dimension.label)} ${rankingsFormWindow.toUpperCase()} form">
+                            ${formRows.map((row, index) => {
+                                const direction = row.change > 0 ? 'positive' : row.change < 0 ? 'negative' : 'neutral';
+                                const prefix = row.change > 0 ? '+' : row.change < 0 ? '\u2212' : '';
+                                const formattedChange = `${prefix}${Math.abs(row.change).toFixed(2)}`;
+                                const detail = `${rankingsFormWindow.toUpperCase()} ${row.recentScore.toFixed(2)} vs season ${row.seasonScore.toFixed(2)}`;
+                                return `
+                                    <li class="ranking-row">
+                                        <span class="ranking-rank">${index + 1}</span>
+                                        <span class="ranking-player" title="${escapeHtml(`${row.player} — ${detail}`)}">${escapeHtml(row.player)}</span>
+                                        <span class="ranking-score form-change ${direction}" title="${escapeHtml(detail)}">${formattedChange}</span>
+                                    </li>
+                                `;
+                            }).join('')}
+                        </ol>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadRankings(position, windowName = currentWindow) {
+            const mode = currentMode;
+            const cacheKey = `${mode}:${windowName}:${position}`;
             if (rankingsCache[cacheKey]) return rankingsCache[cacheKey];
 
-            const plotFile = `nrl_cluster_plot_${position.toLowerCase().replace(' ', '_')}${getPlotSuffix()}_all.html`;
+            const modeSuffix = mode === 'teamShare' ? '_team_share' : '';
+            const windowSuffix = windowName === 'all' ? '' : `_${windowName}`;
+            const plotFile = `nrl_cluster_plot_${position.toLowerCase().replace(' ', '_')}${modeSuffix}${windowSuffix}_all.html`;
             const response = await fetch(plotFile);
             if (!response.ok) throw new Error(`Failed to fetch ${plotFile}`);
 

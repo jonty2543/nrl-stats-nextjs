@@ -11,7 +11,7 @@ import {
   BET_SCORE_SUSPICIOUS_EDGE_THRESHOLD_PP,
   buildBetRatingMarketSignals,
   calculateBetRatingScore,
-  eventProximityScore,
+  earlyMarketTimingScore,
   todayIsoInBrisbane,
 } from "@/lib/betting/bet-rating";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
@@ -132,7 +132,7 @@ interface BestBetCandidate {
   edgePp: number;
   kellyStake: number;
   score: number;
-  marketDisagreementPct: number | null;
+  marketDisparityPp: number | null;
   marketEfficiencyPct: number | null;
   tags: string[];
 }
@@ -296,7 +296,7 @@ const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Tot
 const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Total"];
 const DEFAULT_BETTING_MARKET: BettingMarket = "Tryscorer";
 const TOTAL_MODEL_BETA_MARKET: BettingMarket = "Total";
-const DEFAULT_MAX_EDGE = 0.1;
+const DEFAULT_MAX_EDGE = 0.08;
 const SUSPICIOUS_EDGE_WARNING_COPY =
   "If the model has an edge > 6% on the market, this may be suspicious and suggest the market knows something the model doesn't";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
@@ -1391,11 +1391,7 @@ function formatEventCountdown(
 }
 
 function betScoreStarValue(scoreOutOfTen: number): number {
-  if (scoreOutOfTen >= 8) return 3;
-  if (scoreOutOfTen >= 6) return 2.5 + ((scoreOutOfTen - 6) / 2) * 0.5;
-  if (scoreOutOfTen >= 4) return 2 + ((scoreOutOfTen - 4) / 2) * 0.5;
-  if (scoreOutOfTen >= 2) return 1 + ((scoreOutOfTen - 2) / 2);
-  return scoreOutOfTen / 2;
+  return clamp(scoreOutOfTen, 0, 10) * 0.3;
 }
 
 function betScoreStarColor(rating: number): string {
@@ -1887,7 +1883,7 @@ function adjustedKellyProbability({
   const edge = modelProbability - impliedProbability;
   if (edge <= 0) return modelProbability;
 
-  const timingScore = eventProximityScore(eventDate, todayIso);
+  const timingScore = earlyMarketTimingScore(eventDate, todayIso);
   const marketMaturityPressure = clamp(
     (liquidityScore * 0.55) +
     (efficiencyScore * 0.35) +
@@ -2040,7 +2036,7 @@ function buildBestBets({
         edgePp,
         kellyStake,
         score,
-        marketDisagreementPct: signals.marketDisagreementPct,
+        marketDisparityPp: signals.marketDisparityPp,
         marketEfficiencyPct: signals.marketEfficiencyPct,
       });
     }
@@ -2063,7 +2059,7 @@ function buildBestBets({
       const tags: string[] = [];
       if (index === 0) tags.push("Top Rated Bet");
       if (candidate.id === biggestEdgeId) tags.push("Highest Edge");
-      if ((candidate.marketDisagreementPct ?? 0) >= 5) tags.push("Best Value");
+      if ((candidate.marketDisparityPp ?? 0) >= 3) tags.push("Best Value");
       if (candidate.modelProbability >= 0.55 && candidate.market !== "Tryscorer") tags.push("Model Favourite");
       if (tags.length === 0) tags.push("Sharp Value");
 

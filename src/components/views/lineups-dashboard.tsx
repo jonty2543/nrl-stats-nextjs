@@ -791,11 +791,7 @@ function lineupMarketSignals(odds: LineupTryscorerOdds | null | undefined) {
 }
 
 function betScoreStarValue(scoreOutOfTen: number): number {
-  if (scoreOutOfTen >= 8) return 3
-  if (scoreOutOfTen >= 6) return 2.5 + ((scoreOutOfTen - 6) / 2) * 0.5
-  if (scoreOutOfTen >= 4) return 2 + ((scoreOutOfTen - 4) / 2) * 0.5
-  if (scoreOutOfTen >= 2) return 1 + ((scoreOutOfTen - 2) / 2)
-  return scoreOutOfTen / 2
+  return clamp(scoreOutOfTen, 0, 10) * 0.3
 }
 
 function betScoreStarColor(rating: number): string {

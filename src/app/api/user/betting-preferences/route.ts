@@ -111,7 +111,7 @@ export async function PUT(request: NextRequest) {
     percentage_stake_pct: sanitizeNumber(payload.percentageStakePct, 2, 0, 100),
     target_profit_pct: sanitizeNumber(payload.targetProfitPct, 2, 0, 100),
     kelly_scale: sanitizeNumber(payload.kellyScale, 0.5, 0, 1),
-    max_edge: sanitizeNumber(payload.maxEdge, 0.1, 0, 1),
+    max_edge: sanitizeNumber(payload.maxEdge, 0.08, 0, 1),
     updated_at: new Date().toISOString(),
   };
 

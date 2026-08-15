@@ -8,14 +8,16 @@ const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MIN = 0.72;
 const BET_SCORE_EFFICIENT_MARKET_DECAY_PROTECTION_MAX = 1;
 const BET_SCORE_EFFICIENT_MARKET_MAX_DECAY_REDUCTION = 0.35;
 const BET_SCORE_SUSPICIOUS_EDGE_DECAY_RANGE_PP = 10;
+const BET_SCORE_CONTEXT_ADJUSTMENT_RANGE = 0.35;
+const BET_RATING_FULL_DISPARITY_SCORE_PP = 4;
 
 export const BET_SCORE_SUSPICIOUS_EDGE_THRESHOLD_PP = 6;
 
 export const BET_RATING_WEIGHTS = {
-  liquidity: 0.18,
-  efficiency: 0.12,
-  disagreement: 0.08,
-  timing: 0.14,
+  liquidity: 0.06,
+  efficiency: 0.28,
+  disagreement: 0.28,
+  timing: 0.3,
 } as const;
 
 function clamp(value: number, min: number, max: number): number {
@@ -40,6 +42,17 @@ export function todayIsoInBrisbane(): string {
 
 export function eventProximityScore(eventDate: string, todayIso: string): number {
   const daysUntil = isoDateDiffDays(todayIso, eventDate);
+  if (daysUntil == null) return 0.5;
+  if (daysUntil < 0) return 0.1;
+  if (daysUntil === 0) return 0.2;
+  if (daysUntil === 1) return 0.4;
+  if (daysUntil === 2) return 0.6;
+  if (daysUntil === 3) return 0.8;
+  return 1;
+}
+
+export function earlyMarketTimingScore(eventDate: string, todayIso: string): number {
+  const daysUntil = isoDateDiffDays(todayIso, eventDate);
   if (daysUntil == null) return 0.72;
   if (daysUntil <= 0) return 0.3;
   if (daysUntil === 1) return 0.5;
@@ -58,27 +71,25 @@ export function buildBetRatingMarketSignals({
   marketEfficiencyPct?: number | null;
 }) {
   const validPrices = prices.filter((price) => Number.isFinite(price) && price > 1);
-  const lowerPrices = bestPrice == null
-    ? []
-    : validPrices.filter((price) => price < bestPrice - 1e-9);
-  const averageLowerPrice = lowerPrices.length > 0
-    ? lowerPrices.reduce((sum, price) => sum + price, 0) / lowerPrices.length
-    : null;
-  const marketDisagreementPct = bestPrice != null && averageLowerPrice != null && averageLowerPrice > 0
-    ? ((bestPrice / averageLowerPrice) - 1) * 100
+  const highestPrice = bestPrice != null && bestPrice > 1
+    ? bestPrice
+    : validPrices.length > 0 ? Math.max(...validPrices) : null;
+  const lowestPrice = validPrices.length > 1 ? Math.min(...validPrices) : null;
+  const marketDisparityPp = highestPrice != null && lowestPrice != null
+    ? ((1 / lowestPrice) - (1 / highestPrice)) * 100
     : null;
   const liquidityScore = clamp(validPrices.length / BETTING_BOOKIE_COLUMNS.length, 0, 1);
   const efficiencyScore = marketEfficiencyPct != null
     ? clamp(1 - Math.max(0, marketEfficiencyPct - 100) / 14, 0, 1)
-    : clamp(0.5 + liquidityScore * 0.35, 0, 1);
-  const lowerBookConsensusScore = validPrices.length > 1
-    ? clamp(lowerPrices.length / (validPrices.length - 1), 0, 1)
-    : 0;
-  const disagreementScore = clamp((marketDisagreementPct ?? 0) / 14, 0, 1)
-    * (0.35 + (lowerBookConsensusScore * 0.65));
+    : 0.5;
+  const disagreementScore = clamp(
+    (marketDisparityPp ?? 0) / BET_RATING_FULL_DISPARITY_SCORE_PP,
+    0,
+    1
+  );
 
   return {
-    marketDisagreementPct,
+    marketDisparityPp,
     liquidityScore,
     efficiencyScore,
     disagreementScore,
@@ -118,7 +129,7 @@ export function calculateBetRatingScore({
   const edgeScore = edgePp < 0
     ? BET_SCORE_ZERO_EDGE * (edgeCurve / 0.5)
     : BET_SCORE_ZERO_EDGE + (((edgeCurve - 0.5) / 0.5) * BET_SCORE_POSITIVE_EDGE_RANGE);
-  const contextAdjustment = (contextScore - 0.5) * 0.08;
+  const contextAdjustment = (contextScore - 0.5) * BET_SCORE_CONTEXT_ADJUSTMENT_RANGE;
   const baseScore = edgePp <= 0
     ? clamp(edgeScore + Math.min(contextAdjustment, 0), 0, BET_SCORE_ZERO_EDGE)
     : clamp(edgeScore + contextAdjustment, BET_SCORE_ZERO_EDGE, 1);

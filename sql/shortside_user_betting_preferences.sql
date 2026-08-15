@@ -11,10 +11,13 @@ create table if not exists shortside.user_betting_preferences (
   percentage_stake_pct numeric(6, 3) not null default 2 check (percentage_stake_pct >= 0 and percentage_stake_pct <= 100),
   target_profit_pct numeric(6, 3) not null default 2 check (target_profit_pct >= 0 and target_profit_pct <= 100),
   kelly_scale numeric(6, 4) not null default 0.5 check (kelly_scale >= 0 and kelly_scale <= 1),
-  max_edge numeric(8, 6) not null default 0.06 check (max_edge >= 0 and max_edge <= 1),
+  max_edge numeric(8, 6) not null default 0.08 check (max_edge >= 0 and max_edge <= 1),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+alter table shortside.user_betting_preferences
+  alter column max_edge set default 0.08;
 
 create or replace function shortside.set_updated_at_user_betting_preferences()
 returns trigger

@@ -69,6 +69,7 @@ interface OutcomeRow {
 
 type TryscorerSortKey = "betRating" | "edge" | "odds";
 type TryscorerSortDirection = "best" | "worst";
+type BestBetMarketFilter = BettingMarket | "All";
 
 const TRYS_CORER_SORT_OPTIONS: { key: TryscorerSortKey; label: string }[] = [
   { key: "betRating", label: "Bet Rating" },
@@ -298,15 +299,16 @@ const DEFAULT_BETTING_MARKET: BettingMarket = "Tryscorer";
 const TOTAL_MODEL_BETA_MARKET: BettingMarket = "Total";
 const DEFAULT_MAX_EDGE = 0.08;
 const SUSPICIOUS_EDGE_WARNING_COPY =
-  "If the model has an edge > 6% on the market, this may be suspicious and suggest the market knows something the model doesn't";
+  "If the model has an edge > 8% on the market, this may be suspicious and suggest the market knows something the model doesn't";
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
+const BET_TRACKER_INITIAL_VISIBLE_BETS = 6;
 const WEEKLY_FREE_BET_LOCAL_KEY_PREFIX = "weekly-free-bet-v1";
 const WEEKLY_FREE_BET_NONE_VALUE = "none";
 const FREE_BET_MIN_EDGE_PP = 3;
 const FREE_BET_MAX_EDGE_PP = 6;
 const BEST_BETS_TRYSCORER_MAX_ODDS = 8;
-const BEST_BETS_TRYSCORER_MIN_PREMIUM_STAR_RATING = 2;
+const BEST_BETS_MIN_PREMIUM_STAR_RATING = 1.5;
 const BETTING_PANEL_HEADER_CLASS = "text-[10px] font-bold uppercase tracking-[0.22em]";
 const BETTING_TOUR_HIGHLIGHT_CLASS = "relative z-[140] ring-2 ring-emerald-300/75 shadow-[0_20px_55px_rgba(0,0,0,0.38)]";
 const BETTING_TOUR_STEPS: Array<{
@@ -1144,7 +1146,7 @@ function BetRatingExplainerDialog({ open, onClose }: { open: boolean; onClose: (
             </div>
             <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
               <div className="font-bold text-emerald-300">4. Edge drop-off</div>
-              <p className="mt-1">If edge becomes too high, it is likely a sign the model is missing information already processed by the market. The edge becomes less trustworthy, so the bet rating starts to diminish above 6 percentage points.</p>
+              <p className="mt-1">If edge becomes too high, it is likely a sign the model is missing information already processed by the market. The edge becomes less trustworthy, so the bet rating starts to diminish above 8 percentage points.</p>
             </div>
           </div>
         </div>
@@ -2119,9 +2121,12 @@ function buildBestBets({
     const marketCandidates = sorted.filter((candidate) => candidate.market === market);
     const displaySorted = applyFeaturedBestBetOverride(marketCandidates, todayIso);
     const biggestEdgeId = [...marketCandidates].sort((a, b) => b.edgePp - a.edgePp)[0]?.id;
+    const premiumCandidates = displaySorted.filter(
+      (candidate) => betScoreStarRating(candidate.score).rating >= BEST_BETS_MIN_PREMIUM_STAR_RATING
+    );
     const displayCandidates = market === "Tryscorer"
-      ? displaySorted.filter((candidate) => betScoreStarRating(candidate.score).rating > BEST_BETS_TRYSCORER_MIN_PREMIUM_STAR_RATING)
-      : displaySorted.slice(0, BEST_BETS_CONFIG.maxCards);
+      ? premiumCandidates
+      : premiumCandidates.slice(0, BEST_BETS_CONFIG.maxCards);
 
     return displayCandidates.map((candidate, index) => {
       const tags: string[] = [];
@@ -2147,7 +2152,7 @@ function localIsoDateFromMs(value: number): string {
   return `${year}-${month}-${day}`;
 }
 
-function weeklyFreeBetKey(nowMs: number, market: BettingMarket): string {
+function weeklyFreeBetKey(nowMs: number, market: BestBetMarketFilter): string {
   const date = new Date(localIsoDateFromMs(nowMs));
   const day = date.getDay();
   const daysSinceMonday = (day + 6) % 7;
@@ -2311,6 +2316,7 @@ export function BettingDashboard({
   const [stakeOverrides, setStakeOverrides] = useState<Record<string, number>>({});
   const [oddsOverrides, setOddsOverrides] = useState<Record<string, number>>({});
   const [trackerOpen, setTrackerOpen] = useState(false);
+  const [trackerShowAll, setTrackerShowAll] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [bets, setBets] = useState<TrackedBet[]>([]);
   const [betsLoading, setBetsLoading] = useState(false);
@@ -3502,6 +3508,9 @@ export function BettingDashboard({
     () => [...bets].sort((a, b) => b.placedAt.localeCompare(a.placedAt)),
     [bets]
   );
+  const visibleTrackerBets = trackerShowAll
+    ? sortedBets
+    : sortedBets.slice(0, BET_TRACKER_INITIAL_VISIBLE_BETS);
   const trackerChart = useMemo(() => {
     const width = 640;
     const height = 154;
@@ -3759,7 +3768,10 @@ export function BettingDashboard({
               <button
                 type="button"
                 aria-label={trackerOpen ? "Collapse bet tracker" : "Expand bet tracker"}
-                onClick={() => setTrackerOpen((open) => !open)}
+                onClick={() => {
+                  if (trackerOpen) setTrackerShowAll(false);
+                  setTrackerOpen((open) => !open);
+                }}
                 className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-emerald-300/40 bg-emerald-400/12 text-sm font-bold text-emerald-300 transition-colors hover:border-emerald-300/40 hover:bg-emerald-400/12"
               >
                 <span aria-hidden="true">{trackerOpen ? "▴" : "▾"}</span>
@@ -3916,7 +3928,7 @@ export function BettingDashboard({
                   ) : (
                     <>
                       <div className="space-y-2">
-                        {sortedBets.map((bet) => (
+                        {visibleTrackerBets.map((bet) => (
                           <article key={`${bet.id}-card`} className="rounded-lg border border-white/8 bg-[#14213b] p-3 shadow-[0_10px_22px_rgba(0,0,0,0.16)]">
                             <div className="flex items-center gap-3">
                               <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-base font-black ${betStatusIconClass(bet.status)}`}>
@@ -4031,7 +4043,17 @@ export function BettingDashboard({
                           </article>
                         ))}
                       </div>
-
+                      {sortedBets.length > BET_TRACKER_INITIAL_VISIBLE_BETS ? (
+                        <div className="flex justify-center pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setTrackerShowAll((showAll) => !showAll)}
+                            className="cursor-pointer rounded-md border border-emerald-300/35 bg-emerald-400/[0.08] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/55 hover:bg-emerald-400/[0.14]"
+                          >
+                            {trackerShowAll ? "See less" : `See more (${sortedBets.length - BET_TRACKER_INITIAL_VISIBLE_BETS})`}
+                          </button>
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </>
@@ -4704,7 +4726,7 @@ function BestBetsHero({
   isTourActive?: boolean;
 }) {
   const [category, setCategory] = useState<"model" | "arbitrage">("model");
-  const [selectedModelMarket, setSelectedModelMarket] = useState<BettingMarket>(DEFAULT_BETTING_MARKET);
+  const [selectedModelMarket, setSelectedModelMarket] = useState<BestBetMarketFilter>("All");
   const [selectedBestBetIds, setSelectedBestBetIds] = useState<Partial<Record<"model" | "arbitrage", string>>>({});
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [weeklyFreeBetId, setWeeklyFreeBetId] = useState<string | null | undefined>(undefined);
@@ -4732,7 +4754,12 @@ function BestBetsHero({
     return counts;
   }, [modelBets]);
   const selectedModelBets = useMemo(
-    () => modelBets.filter((bet) => bet.market === selectedModelMarket),
+    () => selectedModelMarket === "All"
+      ? [...modelBets].sort((a, b) => {
+          if (Math.abs(a.score - b.score) > 1e-9) return b.score - a.score;
+          return b.edgePp - a.edgePp;
+        })
+      : modelBets.filter((bet) => bet.market === selectedModelMarket),
     [modelBets, selectedModelMarket]
   );
   const weeklyFreeBetCandidatesList = useMemo(
@@ -4795,7 +4822,7 @@ function BestBetsHero({
   }, []);
 
   useEffect(() => {
-    if (hasAutoSelectedModelMarketRef.current || isArbitrage || modelBetCountsByMarket[selectedModelMarket] > 0) return;
+    if (selectedModelMarket === "All" || hasAutoSelectedModelMarketRef.current || isArbitrage || modelBetCountsByMarket[selectedModelMarket] > 0) return;
     const firstMarketWithBets = orderedMarkets.find((market) => modelBetCountsByMarket[market] > 0);
     if (!firstMarketWithBets || firstMarketWithBets === selectedModelMarket) return;
 
@@ -4839,7 +4866,7 @@ function BestBetsHero({
     });
   };
 
-  const handleModelMarketChange = (market: BettingMarket) => {
+  const handleModelMarketChange = (market: BestBetMarketFilter) => {
     setSelectedModelMarket(market);
     window.requestAnimationFrame(() => {
       if (queueViewportRef.current) queueViewportRef.current.scrollTop = 0;
@@ -4909,6 +4936,17 @@ function BestBetsHero({
 
       {!isArbitrage ? (
         <div className="flex gap-2 overflow-x-auto border-b border-white/8 px-4 py-2 sm:px-5">
+          <button
+            type="button"
+            onClick={() => handleModelMarketChange("All")}
+            className={`shrink-0 rounded-md border px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] transition-colors ${
+              selectedModelMarket === "All"
+                ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent"
+                : "cursor-pointer border-white/10 bg-white/[0.03] text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
+            }`}
+          >
+            All <span className="ml-1 text-nrl-muted">{modelBets.length}</span>
+          </button>
           {orderedMarkets.map((market) => {
             const active = selectedModelMarket === market;
             return (
@@ -4939,7 +4977,9 @@ function BestBetsHero({
             ? "No arbitrage markets currently identified."
             : !canAccessPremium
               ? "No free bets available"
-              : `No strong ${formatBestBetMarketLabel(selectedModelMarket).toLowerCase()} model value currently identified.`}
+              : selectedModelMarket === "All"
+                ? "No strong model value currently identified."
+                : `No strong ${formatBestBetMarketLabel(selectedModelMarket).toLowerCase()} model value currently identified.`}
         </div>
       ) : (
         <div className="space-y-4 p-4">

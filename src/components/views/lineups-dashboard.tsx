@@ -1009,10 +1009,22 @@ function WeatherConditionIcon({ condition }: { condition: string }) {
   )
 }
 
-function ScoreNumber({ value, align, isWinner, lift = false }: { value: number | null; align: "left" | "right"; isWinner: boolean; lift?: boolean }) {
+function ScoreNumber({
+  value,
+  expectedPoints,
+  align,
+  isWinner,
+  lift = false,
+}: {
+  value: number | null
+  expectedPoints?: number | null
+  align: "left" | "right"
+  isWinner: boolean
+  lift?: boolean
+}) {
   return (
     <div
-      className={`min-w-[1.35rem] text-[1.5rem] leading-none tabular-nums text-nrl-text sm:min-w-[3.75rem] sm:text-4xl lg:text-5xl ${
+      className={`min-w-[1.35rem] tabular-nums text-nrl-text sm:min-w-[3.75rem] ${
         isWinner ? "font-black sm:font-semibold" : "font-normal"
       } ${
         align === "right" ? "justify-self-end text-right" : "justify-self-start text-left"
@@ -1020,7 +1032,14 @@ function ScoreNumber({ value, align, isWinner, lift = false }: { value: number |
         lift ? "sm:-translate-y-3" : ""
       }`}
     >
-      {value ?? "-"}
+      <div className="relative inline-block">
+        <div className="text-[1.5rem] leading-none sm:text-4xl lg:text-5xl">{value ?? "-"}</div>
+        {expectedPoints != null ? (
+          <div className="absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap text-[11px] font-bold leading-none text-violet-300 sm:text-[13px]" aria-label={`xPoints ${expectedPoints.toFixed(1)}`} title="xPoints">
+            {expectedPoints.toFixed(1)}
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -3928,6 +3947,7 @@ function LineupCard({
   onStatsSourceChange,
   selectedCompetition,
   canAccessFantasyProjections,
+  showMatchCardXPoints,
   canAccessPremiumBetting,
   matchPrediction,
   detail,
@@ -3945,6 +3965,7 @@ function LineupCard({
   onStatsSourceChange: (source: StatsSource) => void
   selectedCompetition: LineupCompetition
   canAccessFantasyProjections: boolean
+  showMatchCardXPoints: boolean
   canAccessPremiumBetting: boolean
   matchPrediction: LineupMatchPrediction | null
   detail: LineupMatchDetailData | null
@@ -3987,6 +4008,19 @@ function LineupCard({
   const isPostMatch =
     isCompletedMatchState(displayLiveMatch?.state?.matchState) ||
     (hasDisplayedScore && !isMatchLive(displayLiveMatch))
+  const headerMetricForTeam = (team: LineupTeam | null, isHome: boolean) => {
+    const metrics = detail?.postMatchMetrics ?? []
+    const sideMetric = metrics.find((metric) => metric.isHome === isHome)
+    if (sideMetric) return sideMetric
+    const aliases = new Set([team?.team, team?.teamName].flatMap(teamAliases))
+    return metrics.find((metric) => aliases.has(normaliseKey(metric.team))) ?? null
+  }
+  const homeHeaderXPoints = canAccessFantasyProjections && showMatchCardXPoints && isPostMatch
+    ? headerMetricForTeam(detailMatch.homeTeam, true)?.xpoints ?? null
+    : null
+  const awayHeaderXPoints = canAccessFantasyProjections && showMatchCardXPoints && isPostMatch
+    ? headerMetricForTeam(detailMatch.awayTeam, false)?.xpoints ?? null
+    : null
   const showSplitScore = headerScore.homeScore != null || headerScore.awayScore != null
   const homeScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.homeScore > headerScore.awayScore
   const awayScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.awayScore > headerScore.homeScore
@@ -4175,9 +4209,9 @@ function LineupCard({
           {showSplitScore ? (
             <div className="relative col-start-2 h-[5rem] sm:contents">
               <div className={`absolute left-1/2 top-1/2 grid w-max -translate-x-1/2 grid-cols-[2.1rem_6.5rem_2.1rem] items-center justify-center gap-x-1 sm:static sm:contents sm:translate-x-0 ${showLiveCardHeader ? "-translate-y-[62%] sm:-translate-y-0" : "-translate-y-1/2 sm:translate-y-0"}`}>
-                <ScoreNumber value={headerScore.homeScore} align="right" isWinner={homeScoreWins} lift={showLiveCardHeader} />
+                <ScoreNumber value={headerScore.homeScore} expectedPoints={homeHeaderXPoints} align="right" isWinner={homeScoreWins} lift={showLiveCardHeader} />
                 <LiveScoreHeader match={detailMatch} liveMatch={displayLiveMatch} splitScore lift={showLiveCardHeader} />
-                <ScoreNumber value={headerScore.awayScore} align="left" isWinner={awayScoreWins} lift={showLiveCardHeader} />
+                <ScoreNumber value={headerScore.awayScore} expectedPoints={awayHeaderXPoints} align="left" isWinner={awayScoreWins} lift={showLiveCardHeader} />
               </div>
             </div>
           ) : (
@@ -4381,15 +4415,36 @@ function LineupSelectors({
   selectedRound,
   selectedYear,
   selectedCompetition,
+  showXPointsToggle,
+  showMatchCardXPoints,
+  onShowMatchCardXPointsChange,
 }: {
   yearOptions: LineupYearOption[]
   roundOptions: LineupRoundOption[]
   selectedRound: string
   selectedYear: number
   selectedCompetition: LineupCompetition
+  showXPointsToggle: boolean
+  showMatchCardXPoints: boolean
+  onShowMatchCardXPointsChange: (show: boolean) => void
 }) {
   return (
     <div className="mb-3 flex flex-wrap justify-end gap-2 sm:mb-0">
+      {showXPointsToggle ? (
+        <div className="flex items-center gap-2 rounded-full border border-violet-300/35 bg-nrl-panel/90 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)]">
+          <span>xPoints</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showMatchCardXPoints}
+            aria-label="Show xPoints on match cards"
+            onClick={() => onShowMatchCardXPointsChange(!showMatchCardXPoints)}
+            className={`relative h-5 w-9 rounded-full border transition-colors ${showMatchCardXPoints ? "border-violet-300/60 bg-violet-400/45" : "border-white/20 bg-white/10"}`}
+          >
+            <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${showMatchCardXPoints ? "translate-x-4" : "translate-x-0"}`} />
+          </button>
+        </div>
+      ) : null}
       <label className="block w-36 sm:w-40">
         <span className="sr-only">Select competition</span>
         <select
@@ -4471,6 +4526,7 @@ export function LineupsDashboard({
 }: LineupsDashboardProps) {
   const [displayMode, setDisplayMode] = useState<DisplayMode>("Line Breaks")
   const [statsSource, setStatsSource] = useState<StatsSource>(selectedCompetition === "origin" ? "origin2026" : "nrl2026")
+  const [showMatchCardXPoints, setShowMatchCardXPoints] = useState(true)
   const [matchDetails, setMatchDetails] = useState<Record<string, { status: "loading" | "loaded" | "error"; detail: LineupMatchDetailData | null }>>({})
   const requestedMatchDetailsRef = useRef(new Set<string>())
   const [supplementalData, setSupplementalData] = useState<{
@@ -4604,6 +4660,9 @@ export function LineupsDashboard({
         selectedRound={selectedRound}
         selectedYear={selectedYear}
         selectedCompetition={selectedCompetition}
+        showXPointsToggle={canAccessFantasyProjections}
+        showMatchCardXPoints={showMatchCardXPoints}
+        onShowMatchCardXPointsChange={setShowMatchCardXPoints}
       />
       {matches.length > 0 ? (
         <div className="space-y-11">
@@ -4625,6 +4684,7 @@ export function LineupsDashboard({
                   onStatsSourceChange={setStatsSource}
                   selectedCompetition={selectedCompetition}
                   canAccessFantasyProjections={canAccessFantasyProjections}
+                  showMatchCardXPoints={showMatchCardXPoints}
                   canAccessPremiumBetting={canAccessPremiumBetting}
                   matchPrediction={matchPredictions[match.matchId] ?? null}
                   detail={matchDetails[match.matchId]?.detail ?? null}

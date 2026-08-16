@@ -1,13 +1,17 @@
 import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { getServerPremiumAccess, getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { fetchLineupsForRound } from "@/lib/lineups/nrl-lineups"
+import { fetchCompletedMatchStats, fetchLineupsForRound, fetchMatchStatDistributions } from "@/lib/lineups/nrl-lineups"
 import {
   fetchLineupPlayerAverageSources,
   fetchLineupsMatchDetailSummary,
   fetchPostMatchTeamMetricsWithRdr,
 } from "@/lib/supabase/queries"
-import type { PostMatchTeamMetricWithRdr } from "@/lib/data/post-match-team-metrics"
+import {
+  buildPostMatchModelMetricDistributions,
+  type PostMatchModelMetricDistributions,
+  type PostMatchTeamMetricWithRdr,
+} from "@/lib/data/post-match-team-metrics"
 import type { LineupMatch } from "@/lib/lineups/nrl-lineups"
 import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
 
@@ -202,6 +206,9 @@ export async function POST(request: NextRequest) {
         roundLineups.matchStats[matchId] ??
         hydratedMatchStats
     }
+    if (competition === "nrl" && !hydratedMatchStats && (hydratedMatch ?? detailMatch)) {
+      hydratedMatchStats = await fetchCompletedMatchStats((hydratedMatch ?? detailMatch) as LineupMatch)
+    }
 
     const fallbackDetail = shellMatch
       ? {
@@ -227,6 +234,7 @@ export async function POST(request: NextRequest) {
     if (!responseDetail) return NextResponse.json({ detail: null }, { status: 404 })
 
     let postMatchMetrics: PostMatchTeamMetricWithRdr[] = []
+    let postMatchMetricDistributions: PostMatchModelMetricDistributions | null = null
     const responseMatch = responseDetail.match
     const hasCompletedResult =
       (responseMatch.homeScore ?? responseDetail.matchStats?.home.score) != null &&
@@ -234,19 +242,23 @@ export async function POST(request: NextRequest) {
       responseMatch.matchDate.slice(0, 10) <= new Date().toISOString().slice(0, 10)
     if (hasProAccess && competition === "nrl" && hasCompletedResult) {
       try {
-        postMatchMetrics = postMatchMetricsForFixture(
-          await fetchPostMatchTeamMetricsWithRdr([String(year)]),
-          responseMatch
-        )
+        const seasonPostMatchMetrics = await fetchPostMatchTeamMetricsWithRdr([String(year)])
+        postMatchMetrics = postMatchMetricsForFixture(seasonPostMatchMetrics, responseMatch)
+        postMatchMetricDistributions = buildPostMatchModelMetricDistributions(seasonPostMatchMetrics)
       } catch (error) {
         console.warn("Unable to load lineup post-match model metrics.", error)
       }
     }
+    const matchStatDistributions = competition === "nrl" && hasCompletedResult
+      ? await fetchMatchStatDistributions(2026)
+      : null
 
     const accessFilteredDetail = {
       ...(hasPremiumAccess ? responseDetail : stripPremiumTryscorerOdds(responseDetail)),
       match: hasProAccess ? responseDetail.match : stripFantasyProjections(responseDetail.match),
       postMatchMetrics,
+      postMatchMetricDistributions,
+      matchStatDistributions,
     }
 
     return NextResponse.json({ detail: accessFilteredDetail })

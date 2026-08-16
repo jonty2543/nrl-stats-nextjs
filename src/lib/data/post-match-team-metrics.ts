@@ -65,6 +65,78 @@ export interface PostMatchTeamMetricWithRdr extends PostMatchTeamMetric {
   rdr: PostMatchRdrMetric | null;
 }
 
+export type PostMatchModelDistributionStatKey =
+  | "xpoints"
+  | "finishingDelta"
+  | "defenseRating"
+  | "lineBreaksPrevented"
+  | "attackingRuckRating"
+  | "defensiveRuckRating"
+  | "ruckDominanceRating"
+  | "expectedPostContactMetres"
+  | "actualPostContactMetres"
+  | "postContactMetresAboveExpected"
+  | "pcmAboveExpectedPer100Runs"
+  | "expectedPlayTheBallSpeed"
+  | "actualPlayTheBallSpeed"
+  | "playTheBallSpeedAboveExpected";
+
+export interface PostMatchModelMetricDistributions {
+  sampleCount: number;
+  stats: Record<PostMatchModelDistributionStatKey, number[]>;
+}
+
+export function postMatchModelMetricValues(
+  metric: PostMatchTeamMetricWithRdr
+): Record<PostMatchModelDistributionStatKey, number | null> {
+  return {
+    xpoints: metric.xpoints,
+    finishingDelta: metric.finishingDelta,
+    defenseRating: metric.defenseRating,
+    lineBreaksPrevented: metric.lineBreaksPrevented,
+    attackingRuckRating: metric.attackingRuckRating ?? metric.rdr?.attackingRuckRating ?? null,
+    defensiveRuckRating: metric.defensiveRuckRating ?? metric.rdr?.defensiveRuckRating ?? null,
+    ruckDominanceRating: metric.ruckDominanceRating ?? metric.rdr?.ruckDominanceRating ?? null,
+    expectedPostContactMetres: metric.rdr?.expectedPostContactMetres ?? null,
+    actualPostContactMetres: metric.rdr?.actualPostContactMetres ?? null,
+    postContactMetresAboveExpected: metric.rdr?.postContactMetresAboveExpected ?? null,
+    pcmAboveExpectedPer100Runs: metric.rdr?.pcmAboveExpectedPer100Runs ?? null,
+    expectedPlayTheBallSpeed: metric.rdr?.expectedPlayTheBallSpeed ?? null,
+    actualPlayTheBallSpeed: metric.rdr?.actualPlayTheBallSpeed ?? null,
+    playTheBallSpeedAboveExpected: metric.rdr?.playTheBallSpeedAboveExpected ?? null,
+  };
+}
+
+export function buildPostMatchModelMetricDistributions(
+  metrics: PostMatchTeamMetricWithRdr[]
+): PostMatchModelMetricDistributions {
+  const stats: Record<PostMatchModelDistributionStatKey, number[]> = {
+    xpoints: [],
+    finishingDelta: [],
+    defenseRating: [],
+    lineBreaksPrevented: [],
+    attackingRuckRating: [],
+    defensiveRuckRating: [],
+    ruckDominanceRating: [],
+    expectedPostContactMetres: [],
+    actualPostContactMetres: [],
+    postContactMetresAboveExpected: [],
+    pcmAboveExpectedPer100Runs: [],
+    expectedPlayTheBallSpeed: [],
+    actualPlayTheBallSpeed: [],
+    playTheBallSpeedAboveExpected: [],
+  };
+
+  for (const metric of metrics) {
+    const values = postMatchModelMetricValues(metric);
+    for (const key of Object.keys(stats) as PostMatchModelDistributionStatKey[]) {
+      const value = values[key];
+      if (value != null && Number.isFinite(value)) stats[key].push(value);
+    }
+  }
+  return { sampleCount: metrics.length, stats };
+}
+
 export interface XPointsPlotPoint {
   id: string;
   team: string;

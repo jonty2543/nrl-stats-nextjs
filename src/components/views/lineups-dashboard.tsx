@@ -11,6 +11,12 @@ import {
   todayIsoInBrisbane,
 } from "@/lib/betting/bet-rating"
 import { calculateEdgePercentagePoints } from "@/lib/betting/calculations"
+import {
+  postMatchModelMetricValues,
+  type PostMatchModelDistributionStatKey,
+  type PostMatchModelMetricDistributions,
+  type PostMatchTeamMetricWithRdr,
+} from "@/lib/data/post-match-team-metrics"
 import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
 import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
@@ -22,6 +28,10 @@ import type {
   LineupLivePlayerStats,
   LineupMatch,
   LineupMatchPrediction,
+  LineupMatchDistributionStatKey,
+  LineupMatchStatDistributions,
+  LineupPlayerDistributionStatKey,
+  LineupPlayerPositionGroup,
   LineupMatchStats,
   LineupPlayer,
   LineupRecentResult,
@@ -53,12 +63,14 @@ interface LineupsDashboardProps {
   summaryDiagnostic?: string | null
 }
 
-type LineupPostMatchMetric = import("@/lib/data/post-match-team-metrics").PostMatchTeamMetricWithRdr
+type LineupPostMatchMetric = PostMatchTeamMetricWithRdr
 
 interface LineupMatchDetailData {
   match: LineupMatch
   matchStats: LineupMatchStats | null
+  matchStatDistributions: LineupMatchStatDistributions | null
   postMatchMetrics: LineupPostMatchMetric[]
+  postMatchMetricDistributions: PostMatchModelMetricDistributions | null
   tryscorerOdds: Record<string, LineupTryscorerOdds>
   sportsbetOdds: Record<string, LineupSportsbetOdds>
   casualtyWardOuts: Record<string, LineupCasualtyOut[]>
@@ -72,7 +84,7 @@ type Slot = "FB" | "LW" | "LC" | "RW" | "RC" | "FE" | "HLF" | "LK" | "L2R" | "R2
 type Orientation = "landscape" | "portrait"
 type DisplayMode = "fantasy" | "odds" | "edge" | "betRating" | AverageStatKey
 type StatsSource = "nrl2026" | "origin2026" | "originLifetime"
-type LineupDetailView = "lineup" | "stats" | "insights"
+type LineupDetailView = "lineup" | "stats" | "player-stats" | "insights" | "plots"
 type PlayerStatsSelection = {
   player: LineupPlayer
   liveState: LineupLivePlayerState | null
@@ -114,7 +126,9 @@ function fallbackLineupMatchDetail(match: LineupMatch): LineupMatchDetailData {
   return {
     match,
     matchStats: null,
+    matchStatDistributions: null,
     postMatchMetrics: [],
+    postMatchMetricDistributions: null,
     tryscorerOdds: {},
     sportsbetOdds: {},
     casualtyWardOuts: {},
@@ -1179,6 +1193,10 @@ function sumLiveStats(
 
   const sum = (selector: (row: LineupLivePlayerStats) => number | null) =>
     stats.reduce((total, row) => total + (selector(row) ?? 0), 0)
+  const tacklesMade = sum((row) => row.tacklesMade)
+  const missedTackles = sum((row) => row.missedTackles)
+  const ineffectiveTackles = sum((row) => row.ineffectiveTackles)
+  const tackleAttempts = tacklesMade + missedTackles + ineffectiveTackles
 
   return {
     team: team.team,
@@ -1192,8 +1210,11 @@ function sumLiveStats(
     postContactMetres: sum((row) => row.postContactMetres),
     lineBreaks: sum((row) => row.lineBreaks),
     tackleBreaks: sum((row) => row.tackleBreaks),
-    tacklesMade: sum((row) => row.tacklesMade),
-    missedTackles: sum((row) => row.missedTackles),
+    tacklesMade,
+    missedTackles,
+    tackleEfficiency: tackleAttempts > 0 ? (tacklesMade / tackleAttempts) * 100 : fallback?.tackleEfficiency ?? null,
+    penalties: sum((row) => row.penalties),
+    ruckInfringements: fallback?.ruckInfringements ?? null,
     errors: sum((row) => row.errors),
     offloads: sum((row) => row.offloads),
   }
@@ -1223,7 +1244,7 @@ function MatchStatCompare({
 
   return (
     <div className="rounded-md border border-white/8 bg-nrl-panel-2/55 px-3 py-2">
-      <div className="mb-1 flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
+      <div className="mb-1 flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-wide text-nrl-text">
         <span className="rounded px-1 py-0.5" style={fixedMatchStatShade(home, shadeScale)}>{formatCompactStat(home, suffix)}</span>
         <span>{label}</span>
         <span className="rounded px-1 py-0.5" style={fixedMatchStatShade(away, shadeScale)}>{formatCompactStat(away, suffix)}</span>
@@ -1394,7 +1415,6 @@ function MatchStatsPanel({
   showPostMatchModel: boolean
   teamLogos: Record<string, string>
 }) {
-  const score = matchScore(match, liveMatch)
   const baseHome = stats?.home
   const baseAway = stats?.away
   const home = sumLiveStats(liveMatch, match.homeTeam, baseHome)
@@ -1424,16 +1444,13 @@ function MatchStatsPanel({
       title: "xPoints",
       rows: [
         { label: "xPoints", description: "The points the model expected from the team's attacking performance.", home: homeModelMetrics?.xpoints, away: awayModelMetrics?.xpoints },
-        { label: "xPoints margin", description: "The team's xPoints minus its opponent's xPoints. Positive is better.", home: homeModelMetrics?.xpointsMargin, away: awayModelMetrics?.xpointsMargin },
         { label: "Finishing vs xPoints", description: "Actual points minus xPoints. Positive means the team scored more than expected.", home: homeModelMetrics?.finishingDelta, away: awayModelMetrics?.finishingDelta, shadeScale: MODEL_METRIC_SHADE_SCALES.finishingDelta },
       ],
     },
     {
       title: "Defence",
       rows: [
-        { label: "Disruptions / 100 runs", description: "Opponent tackle breaks plus offloads for every 100 opposition runs. Lower is better for the defence.", home: homeModelMetrics?.contactDisruptionsPer100Runs, away: awayModelMetrics?.contactDisruptionsPer100Runs },
         { label: "Line Defense Rating", description: "A context-adjusted line-break prevention rating centred around 50. Higher is better.", home: homeModelMetrics?.defenseRating, away: awayModelMetrics?.defenseRating, shadeScale: MODEL_METRIC_SHADE_SCALES.rating },
-        { label: "Expected line breaks allowed", description: "The number of line breaks the model expected the opposition to make. Lower is better.", home: homeModelMetrics?.expectedLineBreaksAllowed, away: awayModelMetrics?.expectedLineBreaksAllowed },
         { label: "Line breaks prevented", description: "Expected opposition line breaks minus actual opposition line breaks. Positive is better.", home: homeModelMetrics?.lineBreaksPrevented, away: awayModelMetrics?.lineBreaksPrevented, shadeScale: MODEL_METRIC_SHADE_SCALES.lineBreaksPrevented },
       ],
     },
@@ -1449,6 +1466,7 @@ function MatchStatsPanel({
       title: "Post contact",
       rows: [
         { label: "Expected post contact", description: "Post-contact metres expected from the team's runs and match context.", home: homeModelMetrics?.rdr?.expectedPostContactMetres, away: awayModelMetrics?.rdr?.expectedPostContactMetres },
+        { label: "Actual post contact", description: "The team's actual post-contact metres.", home: homeModelMetrics?.rdr?.actualPostContactMetres, away: awayModelMetrics?.rdr?.actualPostContactMetres },
         { label: "Post contact vs expected", description: "Actual post-contact metres minus expected post-contact metres. Positive is better.", home: homeModelMetrics?.rdr?.postContactMetresAboveExpected, away: awayModelMetrics?.rdr?.postContactMetresAboveExpected, shadeScale: MODEL_METRIC_SHADE_SCALES.postContactDelta },
         { label: "PCM vs expected / 100 runs", description: "Post-contact metres above or below expectation, normalised to 100 runs. Positive is better.", home: homeModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, away: awayModelMetrics?.rdr?.pcmAboveExpectedPer100Runs, shadeScale: MODEL_METRIC_SHADE_SCALES.pcmDeltaPer100 },
       ],
@@ -1457,6 +1475,7 @@ function MatchStatsPanel({
       title: "Play-the-ball",
       rows: [
         { label: "Expected play-the-ball", description: "The average play-the-ball time expected from the team's runs and match context.", home: homeModelMetrics?.rdr?.expectedPlayTheBallSpeed, away: awayModelMetrics?.rdr?.expectedPlayTheBallSpeed },
+        { label: "Actual play-the-ball", description: "The team's actual average play-the-ball time.", home: homeModelMetrics?.rdr?.actualPlayTheBallSpeed, away: awayModelMetrics?.rdr?.actualPlayTheBallSpeed },
         { label: "PTB speed vs expected", description: "How much quicker or slower the team's play-the-ball was than expected. Positive is better.", home: homeModelMetrics?.rdr?.playTheBallSpeedAboveExpected, away: awayModelMetrics?.rdr?.playTheBallSpeedAboveExpected, shadeScale: MODEL_METRIC_SHADE_SCALES.ptbDelta },
       ],
     },
@@ -1478,17 +1497,9 @@ function MatchStatsPanel({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
-        <div className="truncate text-sm font-black text-nrl-text">{home.team}</div>
-        <div className="text-xl font-black tabular-nums text-nrl-text">
-          {score.homeScore ?? home.score ?? "-"} - {score.awayScore ?? away.score ?? "-"}
-        </div>
-        <div className="truncate text-sm font-black text-nrl-text">{away.team}</div>
-      </div>
+    <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 text-nrl-text shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
       <MatchStatCompare label="Possession" home={home.possessionPct} away={away.possessionPct} suffix="%" bar />
       <div className="grid gap-2 sm:grid-cols-2">
-        <MatchStatCompare label="Fantasy" home={home.fantasyPoints} away={away.fantasyPoints} />
         <MatchStatCompare label="Completion" home={home.completionRate} away={away.completionRate} suffix="%" />
         <MatchStatCompare label="Run metres" home={home.allRunMetres} away={away.allRunMetres} />
         <MatchStatCompare label="Kicking metres" home={home.kickingMetres} away={away.kickingMetres} />
@@ -1506,18 +1517,18 @@ function MatchStatsPanel({
             {modelMetricSections.map((section) => (
               <section key={section.title} className="relative rounded-lg border border-emerald-300/20 bg-emerald-400/[0.035] p-2.5">
                 <div className="mb-2 flex items-center justify-between gap-2 px-1">
-                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">{section.title}</div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-nrl-text">{section.title}</div>
                   <details className="relative">
-                    <summary className="grid h-5 w-5 cursor-pointer list-none place-items-center rounded-full border border-emerald-300/35 bg-emerald-300/8 text-[11px] font-black normal-case tracking-normal text-emerald-200 transition hover:border-emerald-300/60 hover:bg-emerald-300/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60 [&::-webkit-details-marker]:hidden" aria-label={`Explain ${section.title} metrics`}>
+                    <summary className="grid h-5 w-5 cursor-pointer list-none place-items-center rounded-full border border-emerald-300/35 bg-emerald-300/8 text-[11px] font-black normal-case tracking-normal text-nrl-text transition hover:border-emerald-300/60 hover:bg-emerald-300/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/60 [&::-webkit-details-marker]:hidden" aria-label={`Explain ${section.title} metrics`}>
                       i
                     </summary>
                     <div className={`absolute right-0 z-30 w-[min(19rem,calc(100vw-4rem))] rounded-lg border border-nrl-border bg-nrl-panel p-3 text-left shadow-[0_18px_46px_rgba(0,0,0,0.55)] ${section.title === "Play-the-ball" ? "bottom-7" : "top-7"}`}>
-                      <div className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-300">{section.title}</div>
+                      <div className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-nrl-text">{section.title}</div>
                       <div className="space-y-2.5">
                         {section.rows.map((row) => (
                           <div key={row.label}>
                             <div className="text-[10px] font-black uppercase tracking-wide text-nrl-text">{row.label}</div>
-                            <p className="mt-0.5 text-[11px] font-medium leading-relaxed normal-case tracking-normal text-nrl-muted">{row.description}</p>
+                            <p className="mt-0.5 text-[11px] font-medium leading-relaxed normal-case tracking-normal text-nrl-text">{row.description}</p>
                           </div>
                         ))}
                       </div>
@@ -1533,11 +1544,612 @@ function MatchStatsPanel({
             ))}
           </div>
           ) : (
-            <div className="rounded-lg border border-emerald-300/20 bg-emerald-400/[0.035] px-3 py-3 text-xs text-nrl-muted">
+            <div className="rounded-lg border border-emerald-300/20 bg-emerald-400/[0.035] px-3 py-3 text-xs text-nrl-text">
               Model metrics are still processing for this match.
             </div>
           )
       ) : null}
+    </div>
+  )
+}
+
+type PlayerMatchStatKey =
+  | "fantasyPointsTotal"
+  | "minutesPlayed"
+  | "points"
+  | "tries"
+  | "tryAssists"
+  | "allRuns"
+  | "allRunMetres"
+  | "postContactMetres"
+  | "lineBreaks"
+  | "lineBreakAssists"
+  | "tackleBreaks"
+  | "tacklesMade"
+  | "missedTackles"
+  | "offloads"
+  | "errors"
+  | "kickMetres"
+
+const PLAYER_MATCH_STAT_COLUMNS: Array<{ key: PlayerMatchStatKey; label: string; title: string }> = [
+  { key: "fantasyPointsTotal", label: "PTS", title: "Fantasy points" },
+  { key: "minutesPlayed", label: "MP", title: "Minutes played" },
+  { key: "points", label: "P", title: "Match points" },
+  { key: "tries", label: "T", title: "Tries" },
+  { key: "tryAssists", label: "TA", title: "Try assists" },
+  { key: "allRuns", label: "RUN", title: "Runs" },
+  { key: "allRunMetres", label: "RM", title: "Run metres" },
+  { key: "postContactMetres", label: "PCM", title: "Post-contact metres" },
+  { key: "lineBreaks", label: "LB", title: "Line breaks" },
+  { key: "lineBreakAssists", label: "LBA", title: "Line-break assists" },
+  { key: "tackleBreaks", label: "TB", title: "Tackle breaks" },
+  { key: "tacklesMade", label: "TK", title: "Tackles made" },
+  { key: "missedTackles", label: "MT", title: "Missed tackles" },
+  { key: "offloads", label: "OF", title: "Offloads" },
+  { key: "errors", label: "ERR", title: "Errors" },
+  { key: "kickMetres", label: "KM", title: "Kicking metres" },
+]
+
+function hasRecordedPlayerMatchStats(stats: LineupLivePlayerStats): boolean {
+  return PLAYER_MATCH_STAT_COLUMNS.some(({ key }) => {
+    const value = stats[key]
+    return value != null && value !== 0
+  })
+}
+
+function PlayerMatchStatsTable({
+  liveMatch,
+  players,
+  onPlayerSelect,
+}: {
+  liveMatch: LineupLiveMatch
+  players: LineupPlayer[]
+  onPlayerSelect: (player: LineupPlayer) => void
+}) {
+  const [sortKey, setSortKey] = useState<PlayerMatchStatKey>("fantasyPointsTotal")
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
+  const rows = useMemo(() => {
+    const profilesByTeamAndName = new Map(
+      players.map((player) => [`${normaliseKey(player.team)}|${normaliseKey(player.player)}`, player] as const)
+    )
+    const profilesByName = new Map(players.map((player) => [normaliseKey(player.player), player] as const))
+
+    return Object.values(liveMatch.playerStats)
+      .filter((stats) => Boolean(stats.player) && hasRecordedPlayerMatchStats(stats))
+      .map((stats) => {
+        const nameKey = normaliseKey(stats.player)
+        const profile = profilesByTeamAndName.get(`${normaliseKey(stats.team)}|${nameKey}`) ?? profilesByName.get(nameKey) ?? null
+        return {
+          id: stats.playerId != null ? String(stats.playerId) : `${normaliseKey(stats.team)}|${nameKey}`,
+          name: stats.player ?? "Unknown player",
+          profile,
+          stats,
+        }
+      })
+  }, [liveMatch.playerStats, players])
+  const sortedRows = useMemo(() => [...rows].sort((a, b) => {
+    const aValue = a.stats[sortKey]
+    const bValue = b.stats[sortKey]
+    if (aValue == null && bValue == null) return a.name.localeCompare(b.name)
+    if (aValue == null) return 1
+    if (bValue == null) return -1
+    const difference = aValue - bValue
+    return difference === 0
+      ? a.name.localeCompare(b.name)
+      : sortDirection === "desc" ? -difference : difference
+  }), [rows, sortDirection, sortKey])
+
+  const updateSort = (key: PlayerMatchStatKey) => {
+    if (key === sortKey) {
+      setSortDirection((direction) => direction === "desc" ? "asc" : "desc")
+      return
+    }
+    setSortKey(key)
+    setSortDirection("desc")
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-nrl-border">
+      <div className="overflow-x-auto overscroll-x-contain">
+        <table className="w-max min-w-full border-separate border-spacing-0 text-left">
+          <thead>
+            <tr className="bg-nrl-panel-2 text-[10px] font-black uppercase tracking-[0.1em] text-nrl-text">
+              <th className="sticky left-0 z-30 min-w-[12rem] border-b border-r border-white/10 bg-nrl-panel-2 px-3 py-2.5 sm:min-w-[15rem]">Player</th>
+              {PLAYER_MATCH_STAT_COLUMNS.map((column) => {
+                const selected = sortKey === column.key
+                return (
+                  <th key={column.key} className={`min-w-[4.25rem] border-b border-white/10 p-0 text-center ${selected ? "bg-nrl-panel text-nrl-text" : ""}`}>
+                    <button
+                      type="button"
+                      onClick={() => updateSort(column.key)}
+                      className="flex w-full items-center justify-center gap-1 px-2 py-2.5"
+                      title={column.title}
+                      aria-label={`Sort by ${column.title}`}
+                    >
+                      {column.label}
+                      {selected ? <span aria-hidden="true">{sortDirection === "desc" ? "↓" : "↑"}</span> : null}
+                    </button>
+                  </th>
+                )
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedRows.map((row) => {
+              const imageSources = row.profile
+                ? playerImageSources(row.profile.cachedHeadImage, row.profile.cachedBodyImage, row.profile.headImage, row.profile.bodyImage)
+                : []
+              const identity = (
+                <div className="flex min-w-0 items-center gap-2 text-left">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2">
+                    <PlayerImageWithFallback sources={imageSources} alt={`${row.name} player image`} className="h-full w-full object-cover object-top" />
+                  </div>
+                  <div className="min-w-0 truncate text-xs font-black text-nrl-text">{row.name}</div>
+                </div>
+              )
+
+              return (
+                <tr key={row.id} className="group even:bg-white/[0.018] hover:bg-white/[0.035]">
+                  <th className="sticky left-0 z-20 min-w-[12rem] border-b border-r border-white/[0.07] bg-nrl-panel-2 px-3 py-1.5 font-normal group-even:bg-[#1b2440] sm:min-w-[15rem]">
+                    {row.profile ? (
+                      <button type="button" onClick={() => onPlayerSelect(row.profile!)} className="block w-full rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
+                        {identity}
+                      </button>
+                    ) : identity}
+                  </th>
+                  {PLAYER_MATCH_STAT_COLUMNS.map((column) => (
+                    <td key={column.key} className={`border-b border-white/[0.07] px-3 py-1.5 text-center text-sm font-bold tabular-nums text-nrl-text ${sortKey === column.key ? "bg-black/20" : ""}`}>
+                      {formatStatValue(row.stats[column.key])}
+                    </td>
+                  ))}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+type TeamPlotCategory = "match" | "running" | "defence" | "pro"
+
+const TEAM_PLOT_CATEGORY_LABELS: Array<{ key: TeamPlotCategory; label: string }> = [
+  { key: "match", label: "Match" },
+  { key: "running", label: "Running" },
+  { key: "defence", label: "Defence" },
+  { key: "pro", label: "Pro" },
+]
+
+const TEAM_PLOT_STATS: Record<Exclude<TeamPlotCategory, "pro">, Array<{
+  key: LineupMatchDistributionStatKey
+  label: string
+  suffix?: string
+}>> = {
+  match: [
+    { key: "score", label: "Points" },
+    { key: "possessionPct", label: "Possession", suffix: "%" },
+    { key: "completionRate", label: "Completion", suffix: "%" },
+    { key: "penalties", label: "Penalties" },
+  ],
+  running: [
+    { key: "allRunMetres", label: "Run metres" },
+    { key: "postContactMetres", label: "Post contact" },
+    { key: "lineBreaks", label: "Line breaks" },
+    { key: "tackleBreaks", label: "Tackle breaks" },
+    { key: "offloads", label: "Offloads" },
+  ],
+  defence: [
+    { key: "tacklesMade", label: "Tackles" },
+    { key: "missedTackles", label: "Missed tackles" },
+    { key: "tackleEfficiency", label: "Tackle efficiency", suffix: "%" },
+    { key: "ruckInfringements", label: "Ruck infringements" },
+  ],
+}
+
+const POST_MATCH_MODEL_PLOT_STATS: Array<{
+  key: PostMatchModelDistributionStatKey
+  label: string
+}> = [
+  { key: "xpoints", label: "xPoints" },
+  { key: "finishingDelta", label: "Finishing vs xPoints" },
+  { key: "defenseRating", label: "Line defense rating" },
+  { key: "lineBreaksPrevented", label: "Line breaks prevented" },
+  { key: "attackingRuckRating", label: "Attacking ruck rating" },
+  { key: "defensiveRuckRating", label: "Defensive ruck rating" },
+  { key: "ruckDominanceRating", label: "Ruck dominance" },
+  { key: "expectedPostContactMetres", label: "Expected post contact" },
+  { key: "actualPostContactMetres", label: "Actual post contact" },
+  { key: "postContactMetresAboveExpected", label: "Post contact vs expected" },
+  { key: "pcmAboveExpectedPer100Runs", label: "PCM vs expected / 100 runs" },
+  { key: "expectedPlayTheBallSpeed", label: "Expected play-the-ball" },
+  { key: "actualPlayTheBallSpeed", label: "Actual play-the-ball" },
+  { key: "playTheBallSpeedAboveExpected", label: "PTB speed vs expected" },
+]
+
+const PLAYER_PLOT_STATS: Array<{
+  key: LineupPlayerDistributionStatKey
+  label: string
+}> = [
+  { key: "fantasyPointsTotal", label: "Fantasy points" },
+  { key: "allRuns", label: "Runs" },
+  { key: "allRunMetres", label: "Run metres" },
+  { key: "postContactMetres", label: "Post contact" },
+  { key: "kickMetres", label: "Kicking metres" },
+  { key: "tackleBreaks", label: "Tackle breaks" },
+  { key: "tacklesMade", label: "Tackles" },
+  { key: "tries", label: "Tries" },
+  { key: "tryAssists", label: "Try assists" },
+  { key: "lineBreaks", label: "Line breaks" },
+  { key: "lineBreakAssists", label: "Line-break assists" },
+  { key: "missedTackles", label: "Missed tackles" },
+  { key: "errors", label: "Errors" },
+  { key: "offloads", label: "Offloads" },
+]
+
+function playerPlotStatsForPosition(position: LineupPlayerPositionGroup | null) {
+  const excluded = new Set<LineupPlayerDistributionStatKey>()
+  if (position === "Middle" || position === "Edge" || position === "Hooker" || position === "Interchange") {
+    excluded.add("tries")
+    excluded.add("tryAssists")
+    excluded.add("kickMetres")
+    excluded.add("lineBreaks")
+    excluded.add("lineBreakAssists")
+  } else if (position === "Centre" || position === "Winger") {
+    excluded.add("tryAssists")
+    excluded.add("kickMetres")
+    excluded.add("lineBreakAssists")
+  }
+  return PLAYER_PLOT_STATS.filter((stat) => !excluded.has(stat.key))
+}
+
+function playerDistributionPositionGroup(
+  stats: LineupLivePlayerStats,
+  profile: LineupPlayer | null
+): LineupPlayerPositionGroup | null {
+  const position = String(stats.position ?? profile?.position ?? "").toLowerCase()
+  const number = stats.number ?? profile?.number ?? null
+  if (position.includes("interchange") || position.includes("reserve") || position.includes("bench")) return "Interchange"
+  if (position.includes("fullback")) return "Fullback"
+  if (position.includes("centre") || position.includes("center")) return "Centre"
+  if (position.includes("wing")) return "Winger"
+  if (position.includes("half") || position.includes("five-eighth") || position.includes("five eighth")) return "Half"
+  if (position.includes("hooker")) return "Hooker"
+  if (position.includes("row") || position.includes("edge")) return "Edge"
+  if (position.includes("prop") || position.includes("lock") || position.includes("middle")) return "Middle"
+  if (number != null && number >= 14) return "Interchange"
+  if (number === 1) return "Fullback"
+  if (number === 3 || number === 4) return "Centre"
+  if (number === 2 || number === 5) return "Winger"
+  if (number === 6 || number === 7) return "Half"
+  if (number === 9) return "Hooker"
+  if (number === 11 || number === 12) return "Edge"
+  if (number === 8 || number === 10 || number === 13) return "Middle"
+  return null
+}
+
+type DistributionPlotMarker = {
+  key: string
+  label: string
+  value: number | null
+  logoUrl?: string | null
+  playerImageSources?: string[]
+}
+
+function distributionMean(values: number[]): number | null {
+  const samples = values.filter(Number.isFinite)
+  if (samples.length < 3) return null
+  return samples.reduce((sum, value) => sum + value, 0) / samples.length
+}
+
+function ordinal(value: number): string {
+  const rounded = Math.max(0, Math.min(100, Math.round(value)))
+  const remainder = rounded % 100
+  const suffix = remainder >= 11 && remainder <= 13
+    ? "th"
+    : rounded % 10 === 1
+      ? "st"
+      : rounded % 10 === 2
+        ? "nd"
+        : rounded % 10 === 3
+          ? "rd"
+          : "th"
+  return `${rounded}${suffix}`
+}
+
+function NormalDistributionPlot({
+  label,
+  suffix = "",
+  values,
+  markers,
+  sampleLabel,
+}: {
+  label: string
+  suffix?: string
+  values: number[]
+  markers: DistributionPlotMarker[]
+  sampleLabel: string
+}) {
+  const mean = distributionMean(values)
+  if (mean == null || !markers.some((marker) => marker.value != null)) return null
+  const samples = values.filter(Number.isFinite)
+  const minimum = Math.min(...samples)
+  const maximum = Math.max(...samples)
+  const range = Math.max(maximum - minimum, 1)
+  const markerX = (value: number) => 14 + ((value - minimum) / range) * 292
+  const binCount = Math.min(24, Math.max(12, Math.round(Math.sqrt(samples.length) * 1.25)))
+  const binFor = (value: number) => Math.min(binCount - 1, Math.max(0, Math.floor(((value - minimum) / range) * binCount)))
+  const binSizes = Array.from({ length: binCount }, () => 0)
+  samples.forEach((value) => { binSizes[binFor(value)] += 1 })
+  const maxBinSize = Math.max(...binSizes, 1)
+  const stackSpacing = Math.min(4.2, 54 / Math.max(maxBinSize - 1, 1))
+  const dotRadius = Math.max(1.2, Math.min(2, stackSpacing * 0.43))
+  const binStacks = Array.from({ length: binCount }, () => 0)
+  const sampleDots = samples.map((value) => {
+    const bin = binFor(value)
+    const stack = binStacks[bin]++
+    const position = binCount === 1 ? 0.5 : bin / (binCount - 1)
+    return {
+      value,
+      x: 14 + position * 292,
+      y: 56 - stack * stackSpacing,
+      colour: `hsl(${4 + position * 145} 78% 59%)`,
+    }
+  })
+  const markerRows = markers.flatMap((marker) => marker.value != null && Number.isFinite(marker.value)
+    ? [{ ...marker, value: marker.value }]
+    : [])
+  const averageX = markerX(mean)
+  const columnX = (value: number) => {
+    const bin = binFor(value)
+    const position = binCount === 1 ? 0.5 : bin / (binCount - 1)
+    return 14 + position * 292
+  }
+  const gradientId = `distribution-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`
+  const markersOverlap = markerRows.length === 2 && Math.abs(columnX(markerRows[0].value) - columnX(markerRows[1].value)) < 16
+
+  return (
+    <article className="rounded-lg border border-white/8 bg-nrl-panel-2/55 p-3">
+      <div className="text-[11px] font-black uppercase tracking-[0.13em] text-nrl-text">{label}</div>
+      <svg viewBox="0 0 320 88" className="mt-2 h-auto w-full overflow-visible" role="img" aria-label={`${label} stacked dot distribution for ${samples.length} ${sampleLabel}`}>
+        <defs>
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#fb7185" />
+            <stop offset="38%" stopColor="#fbbf24" />
+            <stop offset="68%" stopColor="#4ade80" />
+            <stop offset="100%" stopColor="#10e7a2" />
+          </linearGradient>
+          {markerRows.map((marker, index) => marker.playerImageSources ? (
+            <clipPath key={marker.key} id={`${gradientId}-marker-${index}`}>
+              <circle cx={columnX(marker.value)} cy={markersOverlap ? 48 + index * 15 : 56} r="6.5" />
+            </clipPath>
+          ) : null)}
+        </defs>
+        {sampleDots.map((dot, index) => (
+          <circle key={`${dot.x}-${index}`} cx={dot.x} cy={dot.y} r={dotRadius} fill={dot.colour} opacity="0.82">
+            <title>{formatCompactStat(dot.value, suffix)}</title>
+          </circle>
+        ))}
+        <line x1="14" y1="72" x2="306" y2="72" stroke={`url(#${gradientId})`} strokeWidth="5" strokeLinecap="round" />
+        <line x1="14" y1="70" x2="14" y2="74" stroke="#c5cede" strokeWidth="1" />
+        <line x1={averageX} y1="70" x2={averageX} y2="74" stroke="#f8fafc" strokeWidth="1" />
+        <line x1="306" y1="70" x2="306" y2="74" stroke="#c5cede" strokeWidth="1" />
+        <text x="14" y="85" textAnchor="middle" fontSize="8" fill="currentColor" className="text-nrl-muted">{formatCompactStat(minimum, suffix)}</text>
+        <text x={averageX} y="85" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="#c5cede">Avg: {formatCompactStat(mean, suffix)}</text>
+        <text x="306" y="85" textAnchor="middle" fontSize="8" fill="currentColor" className="text-nrl-muted">{formatCompactStat(maximum, suffix)}</text>
+        {markerRows.map((row, index) => {
+          const x = columnX(row.value)
+          const y = markersOverlap ? 48 + index * 15 : 56
+          return (
+            <g key={row.key}>
+              <circle cx={x} cy={y} r="8" fill="#11182d" stroke="#4b5c7a" strokeWidth="1" />
+              {row.playerImageSources ? (
+                <image href={row.playerImageSources[0] ?? "/player-silhouette.svg"} x={x - 6.5} y={y - 6.5} width="13" height="13" preserveAspectRatio="xMidYMid slice" clipPath={`url(#${gradientId}-marker-${index})`} />
+              ) : row.logoUrl ? (
+                <image href={row.logoUrl} x={x - 6.5} y={y - 6.5} width="13" height="13" preserveAspectRatio="xMidYMid meet" />
+              ) : (
+                <text x={x} y={y + 2.5} textAnchor="middle" fontSize="7" fontWeight="800" fill="#f8fafc">{row.label.slice(0, 1)}</text>
+              )}
+              <title>{row.label}: {formatCompactStat(row.value, suffix)}</title>
+            </g>
+          )
+        })}
+      </svg>
+      <div className={markerRows.length === 1 ? "mt-4 flex justify-center" : "mt-4 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2"}>
+        {markerRows.map((row, index) => {
+          const percentile = samples.filter((sample) => sample <= row.value).length / samples.length
+          return (
+            <div key={row.key} className={`flex min-w-0 items-center gap-2 ${markerRows.length === 1 ? "justify-center" : index === 1 ? "col-start-3 flex-row-reverse text-right" : "col-start-1"}`}>
+              {row.playerImageSources ? (
+                <div className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel">
+                  <PlayerImageWithFallback sources={row.playerImageSources} alt={`${row.label} player image`} className="h-full w-full object-cover object-top" />
+                </div>
+              ) : row.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={row.logoUrl} alt="" className="h-7 w-7 shrink-0 object-contain" />
+              ) : (
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-nrl-border bg-nrl-panel text-[9px] font-black text-nrl-text">{row.label.slice(0, 1)}</span>
+              )}
+              <div className="min-w-0 text-[10px]">
+                <div className="truncate font-bold text-nrl-text">{row.label}</div>
+                <div className="font-semibold tabular-nums text-nrl-muted">
+                  {formatCompactStat(row.value, suffix)} · {ordinal(percentile * 100)} percentile
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        {markerRows.length > 1 ? <span className="col-start-2 row-start-1 text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted">vs</span> : null}
+      </div>
+    </article>
+  )
+}
+
+function MatchStatPlotsPanel({
+  stats,
+  distributions,
+  postMatchMetrics,
+  postMatchMetricDistributions,
+  showPostMatchModel,
+  teamLogos,
+  players,
+}: {
+  stats: LineupMatchStats
+  distributions: LineupMatchStatDistributions
+  postMatchMetrics: LineupPostMatchMetric[]
+  postMatchMetricDistributions: PostMatchModelMetricDistributions | null
+  showPostMatchModel: boolean
+  teamLogos: Record<string, string>
+  players: LineupPlayer[]
+}) {
+  const [mode, setMode] = useState<"teams" | "players">("teams")
+  const [teamPlotCategory, setTeamPlotCategory] = useState<TeamPlotCategory>("match")
+  const [selectedPlayerKey, setSelectedPlayerKey] = useState("")
+  const playerRows = useMemo(() => {
+    const profilesByTeamAndName = new Map(
+      players.map((player) => [`${normaliseKey(player.team)}|${normaliseKey(player.player)}`, player] as const)
+    )
+    const profilesByName = new Map(players.map((player) => [normaliseKey(player.player), player] as const))
+
+    return Object.values(stats.playerStats)
+      .filter((playerStats) => Boolean(playerStats.player) && hasRecordedPlayerMatchStats(playerStats))
+      .map((playerStats) => {
+        const nameKey = normaliseKey(playerStats.player)
+        const profile = profilesByTeamAndName.get(`${normaliseKey(playerStats.team)}|${nameKey}`) ?? profilesByName.get(nameKey) ?? null
+        const key = playerStats.playerId != null ? String(playerStats.playerId) : `${normaliseKey(playerStats.team)}|${nameKey}`
+        return {
+          key,
+          name: playerStats.player ?? "Unknown player",
+          team: playerStats.team ?? profile?.teamName ?? profile?.team ?? "",
+          profile,
+          stats: playerStats,
+          positionGroup: playerDistributionPositionGroup(playerStats, profile),
+          imageSources: profile
+            ? playerImageSources(profile.cachedHeadImage, profile.cachedBodyImage, profile.headImage, profile.bodyImage)
+            : [],
+        }
+      })
+      .sort((a, b) =>
+        (b.stats.fantasyPointsTotal ?? Number.NEGATIVE_INFINITY) - (a.stats.fantasyPointsTotal ?? Number.NEGATIVE_INFINITY)
+        || a.team.localeCompare(b.team)
+        || a.name.localeCompare(b.name)
+      )
+  }, [players, stats.playerStats])
+  const selectedPlayer = playerRows.find((player) => player.key === selectedPlayerKey) ?? playerRows[0] ?? null
+  const selectedPositionDistribution = selectedPlayer?.positionGroup
+    ? distributions.playerStatsByPosition[selectedPlayer.positionGroup]
+    : null
+  const modelMetricForTeam = (team: string, isHome: boolean) => {
+    const sideMetric = postMatchMetrics.find((metric) => metric.isHome === isHome)
+    if (sideMetric) return sideMetric
+    const aliases = new Set(teamAliases(team))
+    return postMatchMetrics.find((metric) => aliases.has(normaliseKey(metric.team))) ?? null
+  }
+  const homeModelMetric = modelMetricForTeam(stats.home.team, true)
+  const awayModelMetric = modelMetricForTeam(stats.away.team, false)
+  const homeModelValues = homeModelMetric ? postMatchModelMetricValues(homeModelMetric) : null
+  const awayModelValues = awayModelMetric ? postMatchModelMetricValues(awayModelMetric) : null
+
+  return (
+    <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
+      <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-nrl-panel-2/55 p-2">
+        <div className="inline-flex w-fit shrink-0 rounded-md border border-nrl-border bg-nrl-panel p-1 text-[10px] font-black uppercase tracking-wide">
+          <button
+            type="button"
+            onClick={() => setMode("teams")}
+            className={`rounded border px-3 py-1.5 transition-colors ${mode === "teams" ? "border-nrl-accent text-nrl-text" : "border-transparent text-nrl-muted hover:text-nrl-text"}`}
+          >
+            Teams
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("players")}
+            disabled={playerRows.length === 0}
+            className={`rounded border px-3 py-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode === "players" ? "border-nrl-accent text-nrl-text" : "border-transparent text-nrl-muted hover:text-nrl-text"}`}
+          >
+            Players
+          </button>
+        </div>
+        {mode === "teams" ? (
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <div className="inline-flex min-w-max rounded-md border border-nrl-border bg-nrl-panel p-1 text-[10px] font-black uppercase tracking-wide">
+              {TEAM_PLOT_CATEGORY_LABELS.filter((category) => category.key !== "pro" || (showPostMatchModel && postMatchMetricDistributions)).map((category) => (
+                <button
+                  key={category.key}
+                  type="button"
+                  onClick={() => setTeamPlotCategory(category.key)}
+                  className={`rounded border px-3 py-1.5 transition-colors ${teamPlotCategory === category.key ? "border-nrl-accent text-nrl-text" : "border-transparent text-nrl-muted hover:text-nrl-text"}`}
+                >
+                  {category.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : selectedPlayer ? (
+          <div className="min-w-0 flex-1">
+            <select
+              aria-label="Select player for plots"
+              value={selectedPlayer.key}
+              onChange={(event) => setSelectedPlayerKey(event.target.value)}
+              className="w-full min-w-0 rounded-md border border-nrl-border bg-nrl-panel px-3 py-2 text-xs font-bold text-nrl-text outline-none focus:border-nrl-accent"
+            >
+              {playerRows.map((player) => (
+                <option key={player.key} value={player.key}>{player.name}{player.team ? ` · ${player.team}` : ""}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+      </div>
+
+      {mode === "teams" ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {teamPlotCategory === "pro" && showPostMatchModel && postMatchMetricDistributions ? POST_MATCH_MODEL_PLOT_STATS.map((stat) => (
+            <NormalDistributionPlot
+              key={`model-${stat.key}`}
+              label={stat.label}
+              values={postMatchMetricDistributions.stats[stat.key]}
+              markers={[
+                { key: "model-home", label: stats.home.team, value: homeModelValues?.[stat.key] ?? null, logoUrl: resolveTeamLogo(stats.home.team, teamLogos) },
+                { key: "model-away", label: stats.away.team, value: awayModelValues?.[stat.key] ?? null, logoUrl: resolveTeamLogo(stats.away.team, teamLogos) },
+              ]}
+              sampleLabel="team performances"
+            />
+          )) : teamPlotCategory !== "pro" ? TEAM_PLOT_STATS[teamPlotCategory].map((stat) => (
+            <NormalDistributionPlot
+              key={stat.key}
+              label={stat.label}
+              suffix={stat.suffix}
+              values={distributions.stats[stat.key]}
+              markers={[
+                { key: "home", label: stats.home.team, value: stats.home[stat.key], logoUrl: resolveTeamLogo(stats.home.team, teamLogos) },
+                { key: "away", label: stats.away.team, value: stats.away[stat.key], logoUrl: resolveTeamLogo(stats.away.team, teamLogos) },
+              ]}
+              sampleLabel="team games"
+            />
+          )) : null}
+        </div>
+      ) : selectedPlayer && selectedPositionDistribution ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {playerPlotStatsForPosition(selectedPlayer.positionGroup).map((stat) => (
+            <NormalDistributionPlot
+              key={stat.key}
+              label={stat.label}
+              values={selectedPositionDistribution.stats[stat.key]}
+              markers={[{
+                key: selectedPlayer.key,
+                label: selectedPlayer.name,
+                value: selectedPlayer.stats[stat.key],
+                playerImageSources: selectedPlayer.imageSources,
+              }]}
+              sampleLabel={`${selectedPlayer.positionGroup ?? "position"} player performances`}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-nrl-border bg-nrl-panel-2/55 px-4 py-5 text-sm text-nrl-muted">
+          A position distribution is unavailable for this player.
+        </div>
+      )}
     </div>
   )
 }
@@ -3347,9 +3959,10 @@ function LineupCard({
   const hasOpenedHashTargetRef = useRef(false)
   const hasResultScore = detailMatch.homeScore != null || detailMatch.awayScore != null
   const headerScore = matchScore(detailMatch, displayLiveMatch)
+  const hasDisplayedScore = headerScore.homeScore != null && headerScore.awayScore != null
   const isPostMatch =
     isCompletedMatchState(displayLiveMatch?.state?.matchState) ||
-    (hasResultScore && !isMatchLive(displayLiveMatch))
+    (hasDisplayedScore && !isMatchLive(displayLiveMatch))
   const showSplitScore = headerScore.homeScore != null || headerScore.awayScore != null
   const homeScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.homeScore > headerScore.awayScore
   const awayScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.awayScore > headerScore.homeScore
@@ -3363,6 +3976,14 @@ function LineupCard({
     : showPregameContent
       ? ["insights", "stats"]
       : ["stats"]
+  const playerStatsPlayers = [...homePlayers, ...awayPlayers]
+  const hasPlayerMatchStats = Object.values(displayLiveMatch?.playerStats ?? {}).some(hasRecordedPlayerMatchStats)
+  if (hasPlayerMatchStats) {
+    const matchStatsIndex = availableDetailViews.indexOf("stats")
+    availableDetailViews.splice(matchStatsIndex + 1, 0, "player-stats")
+  }
+  const matchStatDistributions = detail?.matchStatDistributions ?? null
+  if (isPostMatch || hasResultScore) availableDetailViews.push("plots")
   const activeDetailView = detailView && availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
   const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
   const homeTryChart = tryChartsByTeam[statsinsiderTeamCode(detailMatch.homeTeam) ?? ""] ?? null
@@ -3571,18 +4192,20 @@ function LineupCard({
           <>
         <LiveTryScorersStrip match={detailMatch} liveMatch={displayLiveMatch} />
         {availableDetailViews.length > 0 ? (
-          <div className="mb-5 flex w-full justify-center sm:mb-3">
-            <div className="inline-flex max-w-full items-center overflow-x-auto rounded-lg border border-nrl-border bg-nrl-panel/80 p-1 text-[10px] font-black uppercase tracking-wide text-nrl-muted">
+          <div className="mb-5 w-full overflow-x-auto border-b border-white/10 sm:mb-3">
+            <div className="flex w-max min-w-full items-stretch justify-center">
               {availableDetailViews.map((view) => (
                 <button
                   key={view}
                   type="button"
                   onClick={() => setDetailView(view)}
-                  className={`shrink-0 rounded-md px-3 py-1.5 transition-colors ${
-                    activeDetailView === view ? "bg-nrl-accent text-nrl-bg" : "hover:text-nrl-text"
+                  aria-pressed={activeDetailView === view}
+                  className={`relative shrink-0 px-4 pb-3 pt-2 text-[11px] font-black transition-colors sm:px-6 sm:text-sm ${
+                    activeDetailView === view ? "text-nrl-text" : "text-nrl-muted hover:text-nrl-text"
                   }`}
                 >
-                  {view === "lineup" ? "Lineup" : view === "stats" ? "Match stats" : "Insights"}
+                  {view === "lineup" ? "Lineup" : view === "stats" ? "Match stats" : view === "player-stats" ? "Player stats" : view === "plots" ? "Plots" : "Insights"}
+                  {activeDetailView === view ? <span className="absolute inset-x-3 bottom-0 h-1 rounded-t-full bg-nrl-accent sm:inset-x-5" aria-hidden="true" /> : null}
                 </button>
               ))}
             </div>
@@ -3603,6 +4226,30 @@ function LineupCard({
               <SeasonFormGuide match={detailMatch} homeSummary={homeSummary} awaySummary={awaySummary} />
             ) : null}
           </div>
+        ) : activeDetailView === "player-stats" ? (
+          displayLiveMatch && hasPlayerMatchStats ? (
+            <PlayerMatchStatsTable liveMatch={displayLiveMatch} players={playerStatsPlayers} onPlayerSelect={setSelectedPlayer} />
+          ) : (
+            <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
+              Player stats are unavailable for this match.
+            </div>
+          )
+        ) : activeDetailView === "plots" ? (
+          matchStats && matchStatDistributions?.matchCount ? (
+            <MatchStatPlotsPanel
+              stats={matchStats}
+              distributions={matchStatDistributions}
+              postMatchMetrics={detail?.postMatchMetrics ?? []}
+              postMatchMetricDistributions={detail?.postMatchMetricDistributions ?? null}
+              showPostMatchModel={canAccessFantasyProjections && isPostMatch}
+              teamLogos={teamLogos}
+              players={playerStatsPlayers}
+            />
+          ) : (
+            <div className="rounded-lg border border-nrl-border bg-nrl-panel/70 px-4 py-5 text-sm text-nrl-muted">
+              The completed match stats or 2026 distributions are unavailable right now.
+            </div>
+          )
         ) : activeDetailView === "insights" ? (
           <div className="space-y-3">
             <DrivingPickPanel

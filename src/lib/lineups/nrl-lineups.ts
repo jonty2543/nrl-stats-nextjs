@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/client"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import type { Draw2026Row } from "@/lib/draw/types"
 import type { BettingBookie } from "@/lib/betting/types"
+import { unstable_cache } from "next/cache"
 
 export type LineupSide = "left" | "right" | "middle" | "spine" | "bench" | "unknown"
 export type LineupCompetition = "nrl" | "origin"
@@ -89,6 +90,9 @@ export interface LineupTeamMatchStats {
   tackleBreaks: number | null
   tacklesMade: number | null
   missedTackles: number | null
+  tackleEfficiency: number | null
+  penalties: number | null
+  ruckInfringements: number | null
   errors: number | null
   offloads: number | null
 }
@@ -101,6 +105,62 @@ export interface LineupMatchStats {
   away: LineupTeamMatchStats
   scoringEvents: LineupLiveScoringEvent[]
   playerStats: Record<string, LineupLivePlayerStats>
+}
+
+export type LineupMatchDistributionStatKey =
+  | "score"
+  | "possessionPct"
+  | "fantasyPoints"
+  | "completionRate"
+  | "allRunMetres"
+  | "kickingMetres"
+  | "postContactMetres"
+  | "lineBreaks"
+  | "tackleBreaks"
+  | "tacklesMade"
+  | "missedTackles"
+  | "tackleEfficiency"
+  | "penalties"
+  | "ruckInfringements"
+  | "errors"
+  | "offloads"
+
+export type LineupPlayerPositionGroup =
+  | "Fullback"
+  | "Centre"
+  | "Winger"
+  | "Half"
+  | "Middle"
+  | "Edge"
+  | "Hooker"
+  | "Interchange"
+
+export type LineupPlayerDistributionStatKey =
+  | "fantasyPointsTotal"
+  | "minutesPlayed"
+  | "points"
+  | "tries"
+  | "tryAssists"
+  | "allRuns"
+  | "allRunMetres"
+  | "postContactMetres"
+  | "kickMetres"
+  | "lineBreaks"
+  | "lineBreakAssists"
+  | "tackleBreaks"
+  | "tacklesMade"
+  | "missedTackles"
+  | "errors"
+  | "offloads"
+
+export interface LineupMatchStatDistributions {
+  year: number
+  matchCount: number
+  stats: Record<LineupMatchDistributionStatKey, number[]>
+  playerStatsByPosition: Record<LineupPlayerPositionGroup, {
+    sampleCount: number
+    stats: Record<LineupPlayerDistributionStatKey, number[]>
+  }>
 }
 
 export interface LineupRoundMatchesResult {
@@ -887,6 +947,19 @@ export async function fetchLineupYearOptions(competition: LineupCompetition = "n
   }
 }
 
+function tackleEfficiencyFromCounts(
+  tacklesMadeValue: unknown,
+  missedTacklesValue: unknown,
+  ineffectiveTacklesValue: unknown
+): number | null {
+  const tacklesMade = numberOrNull(tacklesMadeValue)
+  const missedTackles = numberOrNull(missedTacklesValue)
+  const ineffectiveTackles = numberOrNull(ineffectiveTacklesValue) ?? 0
+  if (tacklesMade == null || missedTackles == null) return null
+  const attempts = tacklesMade + missedTackles + ineffectiveTackles
+  return attempts > 0 ? (tacklesMade / attempts) * 100 : null
+}
+
 function teamStatsFromMatchRow(row: RawRow, fantasyPoints: number | null): LineupTeamMatchStats {
   return {
     team: text(row.team),
@@ -903,8 +976,434 @@ function teamStatsFromMatchRow(row: RawRow, fantasyPoints: number | null): Lineu
     tackleBreaks: numberOrNull(row.tackle_breaks),
     tacklesMade: numberOrNull(row.tackles_made),
     missedTackles: numberOrNull(row.missed_tackles),
+    tackleEfficiency: tackleEfficiencyFromCounts(row.tackles_made, row.missed_tackles, row.ineffective_tackles),
+    penalties: numberOrNull(row.penalties_conceded),
+    ruckInfringements: numberOrNull(row.ruck_infringements),
     errors: numberOrNull(row.errors),
     offloads: numberOrNull(row.offloads),
+  }
+}
+
+function opponentTeamStatsFromMatchRow(row: RawRow, fantasyPoints: number | null): LineupTeamMatchStats {
+  return {
+    team: text(row.opponent_team),
+    score: numberOrNull(row.opponent_score),
+    possessionPct:
+      numberOrNull(row.opponent_possession_pct) ??
+      possessionPctFromTimes(row.opponent_time_in_possession, row.time_in_possession),
+    completionRate: numberOrNull(row.opponent_completion_rate),
+    fantasyPoints,
+    tries: numberOrNull(row.opponent_tries),
+    allRunMetres: numberOrNull(row.opponent_all_run_metres),
+    kickingMetres: numberOrNull(row.opponent_kicking_metres),
+    postContactMetres: numberOrNull(row.opponent_post_contact_metres),
+    lineBreaks: numberOrNull(row.opponent_line_breaks),
+    tackleBreaks: numberOrNull(row.opponent_tackle_breaks),
+    tacklesMade: numberOrNull(row.opponent_tackles_made),
+    missedTackles: numberOrNull(row.opponent_missed_tackles),
+    tackleEfficiency: tackleEfficiencyFromCounts(row.opponent_tackles_made, row.opponent_missed_tackles, row.opponent_ineffective_tackles),
+    penalties: numberOrNull(row.opponent_penalties_conceded),
+    ruckInfringements: numberOrNull(row.opponent_ruck_infringements),
+    errors: numberOrNull(row.opponent_errors),
+    offloads: numberOrNull(row.opponent_offloads),
+  }
+}
+
+const MATCH_DISTRIBUTION_STAT_KEYS: LineupMatchDistributionStatKey[] = [
+  "score",
+  "possessionPct",
+  "fantasyPoints",
+  "completionRate",
+  "allRunMetres",
+  "kickingMetres",
+  "postContactMetres",
+  "lineBreaks",
+  "tackleBreaks",
+  "tacklesMade",
+  "missedTackles",
+  "tackleEfficiency",
+  "penalties",
+  "ruckInfringements",
+  "errors",
+  "offloads",
+]
+
+const PLAYER_POSITION_GROUPS: LineupPlayerPositionGroup[] = [
+  "Fullback",
+  "Centre",
+  "Winger",
+  "Half",
+  "Middle",
+  "Edge",
+  "Hooker",
+  "Interchange",
+]
+
+const PLAYER_DISTRIBUTION_STAT_KEYS: LineupPlayerDistributionStatKey[] = [
+  "fantasyPointsTotal",
+  "minutesPlayed",
+  "points",
+  "tries",
+  "tryAssists",
+  "allRuns",
+  "allRunMetres",
+  "postContactMetres",
+  "kickMetres",
+  "lineBreaks",
+  "lineBreakAssists",
+  "tackleBreaks",
+  "tacklesMade",
+  "missedTackles",
+  "errors",
+  "offloads",
+]
+
+function emptyPlayerDistributionStats(): Record<LineupPlayerDistributionStatKey, number[]> {
+  return {
+    fantasyPointsTotal: [],
+    minutesPlayed: [],
+    points: [],
+    tries: [],
+    tryAssists: [],
+    allRuns: [],
+    allRunMetres: [],
+    postContactMetres: [],
+    kickMetres: [],
+    lineBreaks: [],
+    lineBreakAssists: [],
+    tackleBreaks: [],
+    tacklesMade: [],
+    missedTackles: [],
+    errors: [],
+    offloads: [],
+  }
+}
+
+function distributionPlayerPositionGroup(positionValue: unknown, numberValue: unknown): LineupPlayerPositionGroup | null {
+  const position = text(positionValue).toLowerCase()
+  const number = numberOrNull(numberValue)
+  if (position.includes("interchange") || position.includes("reserve") || position.includes("bench")) return "Interchange"
+  if (position.includes("fullback")) return "Fullback"
+  if (position.includes("centre") || position.includes("center")) return "Centre"
+  if (position.includes("wing")) return "Winger"
+  if (position.includes("half") || position.includes("five-eighth") || position.includes("five eighth")) return "Half"
+  if (position.includes("hooker")) return "Hooker"
+  if (position.includes("row") || position.includes("edge")) return "Edge"
+  if (position.includes("prop") || position.includes("lock") || position.includes("middle")) return "Middle"
+  if (number != null && number >= 14) return "Interchange"
+  if (number === 1) return "Fullback"
+  if (number === 3 || number === 4) return "Centre"
+  if (number === 2 || number === 5) return "Winger"
+  if (number === 6 || number === 7) return "Half"
+  if (number === 9) return "Hooker"
+  if (number === 11 || number === 12) return "Edge"
+  if (number === 8 || number === 10 || number === 13) return "Middle"
+  return null
+}
+
+function playerDistributionValues(row: RawRow): Record<LineupPlayerDistributionStatKey, number | null> {
+  return {
+    fantasyPointsTotal: numberOrNull(row.total_points),
+    minutesPlayed: numberOrNull(row.mins_played),
+    points: numberOrNull(row.points),
+    tries: numberOrNull(row.tries),
+    tryAssists: numberOrNull(row.try_assists),
+    allRuns: numberOrNull(row.all_runs),
+    allRunMetres: numberOrNull(row.all_run_metres),
+    postContactMetres: numberOrNull(row.post_contact_metres),
+    kickMetres: numberOrNull(row.kicking_metres),
+    lineBreaks: numberOrNull(row.line_breaks),
+    lineBreakAssists: numberOrNull(row.line_break_assists),
+    tackleBreaks: numberOrNull(row.tackle_breaks),
+    tacklesMade: numberOrNull(row.tackles_made),
+    missedTackles: numberOrNull(row.missed_tackles),
+    errors: numberOrNull(row.errors),
+    offloads: numberOrNull(row.offloads),
+  }
+}
+
+function emptyMatchStatDistributions(year: number): LineupMatchStatDistributions {
+  return {
+    year,
+    matchCount: 0,
+    stats: {
+      score: [],
+      possessionPct: [],
+      fantasyPoints: [],
+      completionRate: [],
+      allRunMetres: [],
+      kickingMetres: [],
+      postContactMetres: [],
+      lineBreaks: [],
+      tackleBreaks: [],
+      tacklesMade: [],
+      missedTackles: [],
+      tackleEfficiency: [],
+      penalties: [],
+      ruckInfringements: [],
+      errors: [],
+      offloads: [],
+    },
+    playerStatsByPosition: Object.fromEntries(
+      PLAYER_POSITION_GROUPS.map((position) => [position, { sampleCount: 0, stats: emptyPlayerDistributionStats() }])
+    ) as LineupMatchStatDistributions["playerStatsByPosition"],
+  }
+}
+
+function distributionTeamKey(matchDate: unknown, team: unknown): string {
+  return `${text(matchDate).slice(0, 10)}|${canonicalTeamKey(text(team))}`
+}
+
+async function fetchMatchStatDistributionsUncached(year: number): Promise<LineupMatchStatDistributions> {
+  try {
+    const supabase = createServerSupabaseClient("nrl")
+    const matchRows: RawRow[] = []
+    const playerRows: RawRow[] = []
+
+    await Promise.all([
+      (async () => {
+        for (let from = 0; ; from += PAGE_SIZE) {
+          const { data, error } = await supabase
+            .from(LINEUP_COMPETITION_TABLES.nrl.matches)
+            .select([
+              "match_date",
+              "team",
+              "opponent_team",
+              "is_home",
+              "score",
+              "opponent_score",
+              "possession_pct",
+              "opponent_possession_pct",
+              "time_in_possession",
+              "opponent_time_in_possession",
+              "completion_rate",
+              "opponent_completion_rate",
+              "all_run_metres",
+              "opponent_all_run_metres",
+              "kicking_metres",
+              "opponent_kicking_metres",
+              "post_contact_metres",
+              "opponent_post_contact_metres",
+              "line_breaks",
+              "opponent_line_breaks",
+              "tackle_breaks",
+              "opponent_tackle_breaks",
+              "tackles_made",
+              "opponent_tackles_made",
+              "missed_tackles",
+              "opponent_missed_tackles",
+              "ineffective_tackles",
+              "opponent_ineffective_tackles",
+              "penalties_conceded",
+              "opponent_penalties_conceded",
+              "ruck_infringements",
+              "opponent_ruck_infringements",
+              "errors",
+              "opponent_errors",
+              "offloads",
+              "opponent_offloads",
+            ].join(","))
+            .eq("is_home", 1)
+            .gte("match_date", `${year}-01-01`)
+            .lt("match_date", `${year + 1}-01-01`)
+            .not("score", "is", null)
+            .not("opponent_score", "is", null)
+            .range(from, from + PAGE_SIZE - 1)
+          if (error || !data) throw new Error(`Unable to fetch ${year} match distribution rows.`)
+          matchRows.push(...(data as unknown as RawRow[]))
+          if (data.length < PAGE_SIZE) break
+        }
+      })(),
+      (async () => {
+        for (let from = 0; ; from += PAGE_SIZE) {
+          const { data, error } = await supabase
+            .from(LINEUP_COMPETITION_TABLES.nrl.playerStats)
+            .select([
+              "match_date",
+              "team",
+              "number",
+              "position",
+              "mins_played",
+              "total_points",
+              "points",
+              "tries",
+              "try_assists",
+              "all_runs",
+              "all_run_metres",
+              "post_contact_metres",
+              "kicking_metres",
+              "line_breaks",
+              "line_break_assists",
+              "tackle_breaks",
+              "tackles_made",
+              "missed_tackles",
+              "errors",
+              "offloads",
+            ].join(","))
+            .gte("match_date", `${year}-01-01`)
+            .lt("match_date", `${year + 1}-01-01`)
+            .range(from, from + PAGE_SIZE - 1)
+          if (error || !data) throw new Error(`Unable to fetch ${year} fantasy distribution rows.`)
+          playerRows.push(...(data as unknown as RawRow[]))
+          if (data.length < PAGE_SIZE) break
+        }
+      })(),
+    ])
+
+    const fantasyTotals = new Map<string, number>()
+    for (const row of playerRows) {
+      const points = numberOrNull(row.total_points)
+      const key = distributionTeamKey(row.match_date, row.team)
+      if (points == null || key.endsWith("|")) continue
+      fantasyTotals.set(key, (fantasyTotals.get(key) ?? 0) + points)
+    }
+
+    const result = emptyMatchStatDistributions(year)
+    result.matchCount = matchRows.length
+    const addTeamSample = (stats: LineupTeamMatchStats) => {
+      for (const key of MATCH_DISTRIBUTION_STAT_KEYS) {
+        const value = stats[key]
+        if (value != null && Number.isFinite(value)) result.stats[key].push(value)
+      }
+    }
+
+    for (const row of matchRows) {
+      const homeTeam = text(row.team)
+      const awayTeam = text(row.opponent_team)
+      const home = teamStatsFromMatchRow(row, fantasyTotals.get(distributionTeamKey(row.match_date, homeTeam)) ?? null)
+      const away = opponentTeamStatsFromMatchRow(
+        row,
+        fantasyTotals.get(distributionTeamKey(row.match_date, awayTeam)) ?? null
+      )
+      addTeamSample(home)
+      addTeamSample(away)
+    }
+
+    for (const row of playerRows) {
+      const minutesPlayed = numberOrNull(row.mins_played)
+      const position = distributionPlayerPositionGroup(row.position, row.number)
+      if (!position || minutesPlayed == null || minutesPlayed <= 0) continue
+      const distribution = result.playerStatsByPosition[position]
+      const values = playerDistributionValues(row)
+      distribution.sampleCount += 1
+      for (const key of PLAYER_DISTRIBUTION_STAT_KEYS) {
+        const value = values[key]
+        if (value != null && Number.isFinite(value)) distribution.stats[key].push(value)
+      }
+    }
+    return result
+  } catch (error) {
+    console.warn(`Unable to build ${year} match stat distributions.`, error)
+    return emptyMatchStatDistributions(year)
+  }
+}
+
+export async function fetchMatchStatDistributions(year = 2026): Promise<LineupMatchStatDistributions> {
+  return unstable_cache(
+    () => fetchMatchStatDistributionsUncached(year),
+    ["lineup-match-stat-distributions-v5", String(year)],
+    { revalidate: 60 * 60 }
+  )()
+}
+
+export async function fetchCompletedMatchStats(match: LineupMatch): Promise<LineupMatchStats | null> {
+  try {
+    const matchDate = match.matchDate.slice(0, 10)
+    const nextDateValue = new Date(`${matchDate}T00:00:00Z`)
+    nextDateValue.setUTCDate(nextDateValue.getUTCDate() + 1)
+    const nextDate = nextDateValue.toISOString().slice(0, 10)
+    const [fallbackHome, fallbackAway] = match.match.split(/\s+vs\s+/i).map((part) => part.trim())
+    const expectedHome = match.homeTeam?.team ?? fallbackHome
+    const expectedAway = match.awayTeam?.team ?? fallbackAway
+    if (!expectedHome || !expectedAway) return null
+
+    const supabase = createServerSupabaseClient("nrl")
+    const [{ data, error }, { data: playerData, error: playerError }] = await Promise.all([
+      supabase
+        .from(LINEUP_COMPETITION_TABLES.nrl.matches)
+        .select([
+          "match_date",
+          "team",
+          "opponent_team",
+          "is_home",
+          "score",
+          "opponent_score",
+          "tries_summary",
+          "opponent_tries_summary",
+          "possession_pct",
+          "opponent_possession_pct",
+          "time_in_possession",
+          "opponent_time_in_possession",
+          "completion_rate",
+          "opponent_completion_rate",
+          "tries",
+          "opponent_tries",
+          "all_run_metres",
+          "opponent_all_run_metres",
+          "kicking_metres",
+          "opponent_kicking_metres",
+          "post_contact_metres",
+          "opponent_post_contact_metres",
+          "line_breaks",
+          "opponent_line_breaks",
+          "tackle_breaks",
+          "opponent_tackle_breaks",
+          "tackles_made",
+          "opponent_tackles_made",
+          "missed_tackles",
+          "opponent_missed_tackles",
+          "ineffective_tackles",
+          "opponent_ineffective_tackles",
+          "penalties_conceded",
+          "opponent_penalties_conceded",
+          "ruck_infringements",
+          "opponent_ruck_infringements",
+          "errors",
+          "opponent_errors",
+          "offloads",
+          "opponent_offloads",
+        ].join(","))
+        .eq("is_home", 1)
+        .gte("match_date", matchDate)
+        .lt("match_date", nextDate),
+      supabase
+        .from(LINEUP_COMPETITION_TABLES.nrl.playerStats)
+        .select("team,total_points")
+        .gte("match_date", matchDate)
+        .lt("match_date", nextDate),
+    ])
+    if (error || playerError || !data) return null
+
+    const row = (data as unknown as RawRow[]).find((candidate) =>
+      canonicalTeamKey(text(candidate.team)) === canonicalTeamKey(expectedHome) &&
+      canonicalTeamKey(text(candidate.opponent_team)) === canonicalTeamKey(expectedAway)
+    )
+    if (!row) return null
+
+    const fantasyTotals = new Map<string, number>()
+    for (const playerRow of (playerData ?? []) as unknown as RawRow[]) {
+      const team = canonicalTeamKey(text(playerRow.team))
+      const points = numberOrNull(playerRow.total_points)
+      if (!team || points == null) continue
+      fantasyTotals.set(team, (fantasyTotals.get(team) ?? 0) + points)
+    }
+    const homeTeam = text(row.team)
+    const awayTeam = text(row.opponent_team)
+    return {
+      matchId: match.matchId,
+      homeTeam,
+      awayTeam,
+      home: teamStatsFromMatchRow(row, fantasyTotals.get(canonicalTeamKey(homeTeam)) ?? null),
+      away: opponentTeamStatsFromMatchRow(row, fantasyTotals.get(canonicalTeamKey(awayTeam)) ?? null),
+      scoringEvents: [
+        ...historicalTryEvents(match.matchId, homeTeam, nullableText(row.tries_summary), "home"),
+        ...historicalTryEvents(match.matchId, awayTeam, nullableText(row.opponent_tries_summary), "away"),
+      ].sort((a, b) => (a.matchMinute ?? 9999) - (b.matchMinute ?? 9999)),
+      playerStats: {},
+    }
+  } catch (error) {
+    console.warn(`Unable to fetch completed match stats for ${match.matchId}.`, error)
+    return null
   }
 }
 
@@ -1145,6 +1644,8 @@ export async function fetchLineupsForRound({
             "opponent_tries",
             "all_run_metres",
             "opponent_all_run_metres",
+            "kicking_metres",
+            "opponent_kicking_metres",
             "post_contact_metres",
             "opponent_post_contact_metres",
             "line_breaks",
@@ -1155,6 +1656,12 @@ export async function fetchLineupsForRound({
             "opponent_tackles_made",
             "missed_tackles",
             "opponent_missed_tackles",
+            "ineffective_tackles",
+            "opponent_ineffective_tackles",
+            "penalties_conceded",
+            "opponent_penalties_conceded",
+            "ruck_infringements",
+            "opponent_ruck_infringements",
             "errors",
             "opponent_errors",
             "offloads",
@@ -1256,6 +1763,9 @@ export async function fetchLineupsForRound({
           tackleBreaks: numberOrNull(row.opponent_tackle_breaks),
           tacklesMade: numberOrNull(row.opponent_tackles_made),
           missedTackles: numberOrNull(row.opponent_missed_tackles),
+          tackleEfficiency: tackleEfficiencyFromCounts(row.opponent_tackles_made, row.opponent_missed_tackles, row.opponent_ineffective_tackles),
+          penalties: numberOrNull(row.opponent_penalties_conceded),
+          ruckInfringements: numberOrNull(row.opponent_ruck_infringements),
           errors: numberOrNull(row.opponent_errors),
           offloads: numberOrNull(row.opponent_offloads),
         },

@@ -1252,7 +1252,7 @@ function MatchStatCompare({
       {bar ? (
         <div className="flex h-2 overflow-hidden rounded-full bg-white/10">
           <div className="bg-nrl-accent" style={{ width: `${homePct}%` }} />
-          <div className="bg-sky-400" style={{ width: `${100 - homePct}%` }} />
+          <div className="bg-violet-400" style={{ width: `${100 - homePct}%` }} />
         </div>
       ) : null}
     </div>
@@ -2155,6 +2155,9 @@ function MatchStatPlotsPanel({
 }
 
 const FANTASY_BASELINE_RATIO_MAX = 2
+const FANTASY_POINTS_BASELINE = 50
+const MIDDLE_POINTS_WEIGHT = 0.6
+const FULL_MATCH_MINUTES = 80
 
 function fantasyPointsPerMinute(liveStats: LineupLivePlayerStats | null | undefined): number | null {
   const minutes = liveStats?.minutesPlayed
@@ -2165,11 +2168,22 @@ function fantasyPointsPerMinute(liveStats: LineupLivePlayerStats | null | undefi
 
 function fantasyBaselineRatio(
   liveStats: LineupLivePlayerStats | null | undefined,
-  baselinePpm: number | null | undefined
+  baselinePpm: number | null | undefined,
+  baselineLabel: string | null | undefined
 ): number | null {
   const ppm = fantasyPointsPerMinute(liveStats)
   if (ppm == null || baselinePpm == null || baselinePpm <= 0) return null
-  return ppm / baselinePpm
+  const ppmRatio = ppm / baselinePpm
+  const isMiddle = baselineLabel === "Prop" || baselineLabel === "Lock"
+  const fantasyPoints = liveStats?.fantasyPointsTotal
+  const minutes = liveStats?.minutesPlayed
+  if (fantasyPoints == null || minutes == null) return ppmRatio
+  const pointsRatio = fantasyPoints / FANTASY_POINTS_BASELINE
+  const shortAppearancePointsWeight = Math.max(0, Math.min(1, 1 - minutes / FULL_MATCH_MINUTES))
+  const pointsWeight = isMiddle
+    ? Math.max(MIDDLE_POINTS_WEIGHT, shortAppearancePointsWeight)
+    : shortAppearancePointsWeight
+  return ppmRatio * (1 - pointsWeight) + pointsRatio * pointsWeight
 }
 
 function fantasyBaselinePercent(value: number): number {
@@ -2200,11 +2214,15 @@ function FantasyBaselineBar({
 }) {
   if (!stats) return null
   const ppm = fantasyPointsPerMinute(stats)
-  const ratio = fantasyBaselineRatio(stats, baselinePpm)
+  const ratio = fantasyBaselineRatio(stats, baselinePpm, baselineLabel)
+  const isMiddle = baselineLabel === "Prop" || baselineLabel === "Lock"
+  const usesBlendedScore = isMiddle || (stats.minutesPlayed ?? FULL_MATCH_MINUTES) < FULL_MATCH_MINUTES
   const title =
     ppm == null || ratio == null
       ? "Fantasy points per minute baseline unavailable"
-      : `${baselineLabel ?? "Position"} PPM: ${ppm.toFixed(2)} vs ${baselinePpm?.toFixed(2)} baseline (${ratio.toFixed(2)}x)`
+      : usesBlendedScore
+        ? `${baselineLabel ?? "Position"} performance: ${stats.fantasyPointsTotal ?? 0} points in ${stats.minutesPlayed ?? 0} min, ${ppm.toFixed(2)} PPM vs ${baselinePpm?.toFixed(2)} baseline (${ratio.toFixed(2)}x blended)`
+        : `${baselineLabel ?? "Position"} PPM: ${ppm.toFixed(2)} vs ${baselinePpm?.toFixed(2)} baseline (${ratio.toFixed(2)}x)`
 
   return (
     <div className={`${compact ? "h-2 w-11" : "h-2.5 w-16"} ${className}`} title={title} aria-label={title}>

@@ -1597,6 +1597,12 @@ function hasRecordedPlayerMatchStats(stats: LineupLivePlayerStats): boolean {
   })
 }
 
+function playerTableDisplayName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return name
+  return `${parts[0].slice(0, 1)}. ${parts.slice(1).join(" ")}`
+}
+
 function PlayerMatchStatsTable({
   liveMatch,
   players,
@@ -1654,7 +1660,7 @@ function PlayerMatchStatsTable({
         <table className="w-max min-w-full border-separate border-spacing-0 text-left">
           <thead>
             <tr className="bg-nrl-panel-2 text-[10px] font-black uppercase tracking-[0.1em] text-nrl-text">
-              <th className="sticky left-0 z-30 w-44 min-w-44 max-w-44 border-b border-r border-white/10 bg-nrl-panel-2 px-3 py-2.5 sm:w-52 sm:min-w-52 sm:max-w-52">Player</th>
+              <th className="sticky left-0 z-30 w-[10.5rem] min-w-[10.5rem] max-w-[10.5rem] border-b border-r border-white/10 bg-nrl-panel-2 px-3 py-2.5 sm:w-48 sm:min-w-48 sm:max-w-48">Player</th>
               {PLAYER_MATCH_STAT_COLUMNS.map((column) => {
                 const selected = sortKey === column.key
                 return (
@@ -1684,13 +1690,13 @@ function PlayerMatchStatsTable({
                   <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2">
                     <PlayerImageWithFallback sources={imageSources} alt={`${row.name} player image`} className="h-full w-full object-cover object-top" />
                   </div>
-                  <div className="min-w-0 truncate text-[11px] font-black text-nrl-text">{row.name}</div>
+                  <div className="min-w-0 truncate text-[11px] font-black text-nrl-text">{playerTableDisplayName(row.name)}</div>
                 </div>
               )
 
               return (
                 <tr key={row.id} className="group even:bg-white/[0.018] hover:bg-white/[0.035]">
-                  <th className="sticky left-0 z-20 w-44 min-w-44 max-w-44 border-b border-r border-white/[0.07] bg-nrl-panel-2 px-3 py-1.5 font-normal group-even:bg-[#1b2440] sm:w-52 sm:min-w-52 sm:max-w-52">
+                  <th className="sticky left-0 z-20 w-[10.5rem] min-w-[10.5rem] max-w-[10.5rem] border-b border-r border-white/[0.07] bg-nrl-panel-2 px-3 py-1.5 font-normal group-even:bg-[#1b2440] sm:w-48 sm:min-w-48 sm:max-w-48">
                     {row.profile ? (
                       <button type="button" onClick={() => onPlayerSelect(row.profile!)} className="block w-full rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
                         {identity}

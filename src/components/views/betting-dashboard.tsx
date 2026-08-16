@@ -5733,7 +5733,6 @@ function MarketSection({
   const activeGroups = groups
     .filter((group) => {
       if (showPastMarkets) return true;
-      if (group.market !== "Tryscorer") return true;
       const kickoffKey = buildMatchKickoffKey(group.date, group.match);
       const kickoff = kickoffKey ? tryscorerKickoffsByMatch[kickoffKey] : null;
       if (!kickoff) {
@@ -5741,7 +5740,7 @@ function MarketSection({
         return !Number.isFinite(groupDateMs) || nowMs <= groupDateMs;
       }
       const kickoffMs = Date.parse(kickoff);
-      return !Number.isFinite(kickoffMs) || nowMs < kickoffMs + 5 * 60 * 1000;
+      return !Number.isFinite(kickoffMs) || nowMs < kickoffMs;
     })
     .sort((a, b) => compareGroupsByKickoff(a, b, tryscorerKickoffsByMatch));
 
@@ -5923,7 +5922,7 @@ function MarketSection({
                         href={lineupHref}
                         className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
                       >
-                        Lineups
+                        Matches
                       </Link>
                     ) : null}
                     {group.market === "Tryscorer" ? (

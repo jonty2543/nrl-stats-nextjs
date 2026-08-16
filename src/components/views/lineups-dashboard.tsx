@@ -959,17 +959,40 @@ function LiveStatusIcon({ type, compact = false }: { type: "off" | "on"; compact
   )
 }
 
-function weatherConditionEmoji(condition: string): string {
+function WeatherConditionIcon({ condition }: { condition: string }) {
   const value = condition.toLowerCase()
-  if (value.includes("storm")) return "⛈️"
-  if (value.includes("drizzle")) return "🌦️"
-  if (value.includes("rain")) return "🌧️"
-  if (value.includes("snow")) return "🌨️"
-  if (value.includes("fog")) return "🌫️"
-  if (value.includes("partly") || value.includes("mostly")) return "🌤️"
-  if (value.includes("cloud")) return "☁️"
-  if (value.includes("clear")) return "☀️"
-  return "🌤️"
+  const isStorm = value.includes("storm")
+  const isRain = isStorm || value.includes("drizzle") || value.includes("rain")
+  const isSnow = value.includes("snow")
+  const isFog = value.includes("fog")
+  const isCloudy = isRain || isSnow || value.includes("partly") || value.includes("mostly") || value.includes("cloud")
+  const showSun = value.includes("clear") || value.includes("partly") || value.includes("mostly") || !isCloudy
+
+  return (
+    <svg viewBox="0 0 20 20" className="block h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {isFog ? (
+        <path d="M3 6h11M6 10h11M3 14h11" />
+      ) : showSun && !isCloudy ? (
+        <>
+          <circle cx="10" cy="10" r="3.25" fill="currentColor" stroke="none" />
+          <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.35 4.35l1.4 1.4M14.25 14.25l1.4 1.4M15.65 4.35l-1.4 1.4M5.75 14.25l-1.4 1.4" />
+        </>
+      ) : (
+        <>
+          {showSun ? (
+            <>
+              <circle cx="6.5" cy="6.5" r="2.5" fill="currentColor" stroke="none" />
+              <path d="M6.5 2v1M2 6.5h1M3.3 3.3l.8.8M9.7 3.3l-.8.8" />
+            </>
+          ) : null}
+          {isCloudy ? <path d="M5.25 13.5h8.5a2.75 2.75 0 0 0 .2-5.5 4.25 4.25 0 0 0-8-1 3.25 3.25 0 0 0-.7 6.5Z" fill="currentColor" stroke="none" /> : null}
+          {isStorm ? <path d="m10.75 13-2.5 3.5h2l-1 2.5 3-4h-2Z" fill="currentColor" stroke="none" /> : null}
+          {isRain && !isStorm ? <path d="m6.5 15.25-.75 1.5M10.5 15.25l-.75 1.5M14.5 15.25l-.75 1.5" /> : null}
+          {isSnow ? <path d="M7 15v2M6 16h2M13 15v2M12 16h2" /> : null}
+        </>
+      )}
+    </svg>
+  )
 }
 
 function ScoreNumber({ value, align, isWinner, lift = false }: { value: number | null; align: "left" | "right"; isWinner: boolean; lift?: boolean }) {
@@ -3487,8 +3510,8 @@ function LineupCard({
             <div className="mx-auto flex max-w-[18rem] items-center justify-center gap-1.5 truncate text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted/85 sm:max-w-md sm:text-[10px]">
               {detailMatch.venue ? <span className="min-w-0 truncate">{detailMatch.venue}</span> : null}
               {weatherForecast ? (
-                <span className="flex-none text-xs leading-none sm:text-sm" aria-hidden="true">
-                  {weatherConditionEmoji(weatherForecast.condition)}
+                <span className="inline-flex flex-none items-center self-center leading-none" aria-hidden="true">
+                  <WeatherConditionIcon condition={weatherForecast.condition} />
                 </span>
               ) : null}
             </div>

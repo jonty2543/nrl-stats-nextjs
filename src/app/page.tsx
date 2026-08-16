@@ -187,12 +187,12 @@ export default function Home() {
                 ctaLabel: "Fantasy",
               },
               {
-                eyebrow: "Lineups",
+                eyebrow: "Matches",
                 title: "Team lists with lane insights, matchup history, and try scorer prices",
-                description: "Use Lineups after teams are named to check who has been named, compare left, middle, and right scoring lanes, and check the AI generated match insights",
+                description: "Use Matches after teams are named to check who has been named, compare left, middle, and right scoring lanes, and check the AI generated match insights",
                 bullets: ["Interactive field view", "Left / middle / right insights", "Scored vs conceded lane chart", "AI Generated match insights"],
                 ctaHref: "/dashboard/lineups",
-                ctaLabel: "Lineups",
+                ctaLabel: "Matches",
               },
               {
                 eyebrow: "NRL AI",

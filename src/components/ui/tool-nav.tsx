@@ -10,7 +10,7 @@ const tools = [
   { label: "Betting", href: "/dashboard/betting" },
   { label: "Stats", href: "/dashboard/plots" },
   { label: "Fantasy", href: "/dashboard/fantasy" },
-  { label: "Lineups", href: "/dashboard/lineups" },
+  { label: "Matches", href: "/dashboard/lineups" },
   { label: "NRL AI", href: "/dashboard/ai" },
   { label: "Articles", href: "/dashboard/articles" },
   { label: "About", href: "/dashboard/about" },

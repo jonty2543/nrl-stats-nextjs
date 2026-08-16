@@ -264,13 +264,14 @@ function teamStatHigherIsBetter(stat: TeamStatsComparisonStat, conceded: boolean
 
 function defenceStatLabel(stat: TeamDefenceConcededStat): string {
   if (stat === "Possession") return "Opponent possession";
+  if (stat === "Completion rate") return "Opponent completion rate";
   if (stat === "Time in possession") return "Opponent time in possession";
   if (stat === "PTB") return "Opponent play-the-ball time";
   return DEFENSIVE_RATING_STATS.has(stat) ? stat : `${stat} conceded`;
 }
 
 function defenceStatAxisLabel(stat: TeamDefenceConcededStat, axisLabel: string): string {
-  if (stat === "Possession" || stat === "Time in possession") return `OPPONENT ${axisLabel}`;
+  if (stat === "Possession" || stat === "Completion rate" || stat === "Time in possession") return `OPPONENT ${axisLabel}`;
   return `${axisLabel}${DEFENSIVE_RATING_STATS.has(stat) ? "" : " CONCEDED"}`;
 }
 
@@ -302,12 +303,26 @@ const TEAM_ATTACK_STAT_META: Record<TeamStatsComparisonStat, {
   },
   Tries: perGameAttackStat("Tries"),
   Points: perGameAttackStat("Points"),
+  Margin: {
+    axisLabel: "AVERAGE MARGIN",
+    metricLabel: "Margin/game",
+    description: "Average points differential per game. Positive is better.",
+    minPadding: 1,
+    value: (point) => point.margin,
+  },
   Possession: {
     axisLabel: "POSSESSION",
     metricLabel: "Possession",
     description: "Average possession percentage per game.",
     minPadding: 1,
     value: (point) => point.games > 0 ? point.totals.Possession / point.games : 0,
+  },
+  "Completion rate": {
+    axisLabel: "COMPLETION RATE",
+    metricLabel: "Completion rate",
+    description: "Average completion rate per game.",
+    minPadding: 1,
+    value: (point) => point.completionRate,
   },
   "Time in possession": {
     axisLabel: "TIME IN POSSESSION PER GAME (MIN)",
@@ -583,6 +598,8 @@ const STAT_SEARCH_ALIASES: Record<string, string[]> = {
   "Missed tackles": ["missed tackle", "missed tackles"],
   Penalties: ["penalty", "penalties"],
   Errors: ["error", "errors"],
+  Margin: ["margin", "point differential", "points differential"],
+  "Completion rate": ["completion rate", "completions", "set completion", "set completions"],
   PTB: ["ptb", "play the ball", "play-the-ball", "ruck speed"],
   "Attacking Ruck Rating": ["attacking ruck rating", "attacking ruck", "attack ruck", "ruck attack"],
   "Defensive Ruck Rating": ["defensive ruck rating", "defensive ruck", "defence ruck", "ruck defence"],
@@ -655,6 +672,9 @@ function teamStatQuestion(stat: TeamStatsComparisonStat, defensive: boolean) {
   const higherIsBetter = teamStatHigherIsBetter(stat, defensive);
   if (stat.endsWith("Rating")) {
     return `Which teams have the ${higherIsBetter ? "highest" : "lowest"} ${stat.toLowerCase()}?`;
+  }
+  if (stat === "Completion rate") {
+    return defensive ? "Which teams allow the lowest opponent completion rate?" : "Which teams have the highest completion rate?";
   }
   if (defensive) {
     return higherIsBetter
@@ -1048,11 +1068,11 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const isTeamSingleStat = isRuckDominancePlot || (isTeamAttackEfficiency && !teamEfficiencyShowsVolume) || (isTeamDefenceEfficiency && !teamDefenceEfficiencyShowsVolume) || (isTeamStatsComparison && activeTeamYStat === "None");
   const effectiveTeamYStat = activeTeamYStat === "None" ? activeTeamXStat : activeTeamYStat;
   const teamXValueSuffix = isForVsAgainstPlot
-    ? teamForStat === "Possession" ? "%" : ""
-    : isTeamStatsComparison && activeTeamXStat === "Possession" ? "%" : "";
+    ? teamForStat === "Possession" || teamForStat === "Completion rate" ? "%" : ""
+    : isTeamStatsComparison && (activeTeamXStat === "Possession" || activeTeamXStat === "Completion rate") ? "%" : "";
   const teamYValueSuffix = isForVsAgainstPlot
-    ? teamAgainstStat === "Possession" ? "%" : ""
-    : isTeamStatsComparison && effectiveTeamYStat === "Possession" ? "%" : "";
+    ? teamAgainstStat === "Possession" || teamAgainstStat === "Completion rate" ? "%" : ""
+    : isTeamStatsComparison && (effectiveTeamYStat === "Possession" || effectiveTeamYStat === "Completion rate") ? "%" : "";
   const activeTeamXMeta = TEAM_ATTACK_STAT_META[activeTeamXStat];
   const activeTeamYMeta = TEAM_ATTACK_STAT_META[effectiveTeamYStat];
   const activeTeamXHigherIsBetter = teamStatHigherIsBetter(activeTeamXStat, isTeamDefenceStatsConceded);

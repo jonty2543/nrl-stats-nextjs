@@ -7,7 +7,9 @@ export const TEAM_ATTACK_COMPARISON_STATS = [
   "Run metres per run",
   "Tries",
   "Points",
+  "Margin",
   "Possession",
+  "Completion rate",
   "Time in possession",
   "Runs",
   "Passes",
@@ -37,6 +39,7 @@ export const TEAM_DEFENCE_CONCEDED_STATS = [
   "Tries",
   "Points",
   "Possession",
+  "Completion rate",
   "Time in possession",
   "Runs",
   "Passes",
@@ -113,6 +116,8 @@ export interface AttackRatingPoint {
   disruptionRate: number;
   lineBreakRate: number;
   runMetresPerRun: number;
+  margin: number;
+  completionRate: number;
   triesPer100Runs: number;
   disruptions: number;
   lineBreaks: number;
@@ -199,6 +204,8 @@ export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode,
       disruptionRate: (disruptions / runs) * 100,
       lineBreakRate: (lineBreaks / runs) * 100,
       runMetresPerRun: runMetres / runs,
+      margin: finite(row["Point Differential"]),
+      completionRate: finite(row["Completion Rate"]),
       triesPer100Runs: (tries / runs) * 100,
       disruptions,
       lineBreaks,
@@ -245,6 +252,8 @@ export function buildAttackRatingPoints(rows: TeamStat[], mode: DefencePlotMode,
       disruptionRate: runs > 0 ? (disruptions / runs) * 100 : 0,
       lineBreakRate: runs > 0 ? (lineBreaks / runs) * 100 : 0,
       runMetresPerRun: runs > 0 ? runMetres / runs : 0,
+      margin: points.reduce((sum, point) => sum + point.margin, 0) / points.length,
+      completionRate: points.reduce((sum, point) => sum + point.completionRate, 0) / points.length,
       triesPer100Runs: runs > 0 ? (tries / runs) * 100 : 0,
       disruptions,
       lineBreaks,

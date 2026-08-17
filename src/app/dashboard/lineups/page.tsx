@@ -8,9 +8,10 @@ import {
   fetchLineupsForRound,
   type LineupPlayer,
 } from "@/lib/lineups/nrl-lineups"
-import { fetchLatestLineupsPageShellSummary, fetchLineupsMatchPredictions, fetchLineupsPageShellSummary, fetchPlayerImages, fetchStatsinsiderTryCharts, fetchTeamLogos, type PlayerImageRecord } from "@/lib/supabase/queries"
+import { fetchLatestLineupsPageShellSummary, fetchLineupsMatchPredictions, fetchLineupsPageShellSummary, fetchPlayerImages, fetchPostMatchTeamMetrics, fetchStatsinsiderTryCharts, fetchTeamLogos, type PlayerImageRecord } from "@/lib/supabase/queries"
 import type { LineupMatch, LineupRoundOption, LineupYearOption } from "@/lib/lineups/nrl-lineups"
 import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
+import type { PostMatchTeamMetric } from "@/lib/data/post-match-team-metrics"
 
 export const dynamic = "force-dynamic"
 
@@ -174,6 +175,67 @@ function normalisePlayerImageLookupKey(value: string | null | undefined): string
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
 }
 
+function postMatchMetricTeamKey(value: string | null | undefined): string {
+  const key = normalisePlayerImageLookupKey(value)
+  if (key.includes("broncos") || key === "brisbane") return "broncos"
+  if (key.includes("raiders") || key === "canberra") return "raiders"
+  if (key.includes("bulldogs") || key.includes("canterbury")) return "bulldogs"
+  if (key.includes("sharks") || key.includes("cronulla")) return "sharks"
+  if (key.includes("dolphins")) return "dolphins"
+  if (key.includes("titans") || key.includes("gold coast")) return "titans"
+  if (key.includes("sea eagles") || key.includes("manly")) return "sea eagles"
+  if (key.includes("storm") || key.includes("melbourne")) return "storm"
+  if (key.includes("knights") || key.includes("newcastle")) return "knights"
+  if (key.includes("warriors") || key.includes("zealand")) return "warriors"
+  if (key.includes("cowboys") || key.includes("north queensland")) return "cowboys"
+  if (key.includes("eels") || key.includes("parramatta")) return "eels"
+  if (key.includes("panthers") || key.includes("penrith")) return "panthers"
+  if (key.includes("rabbitohs") || key.includes("south sydney") || key === "souths") return "rabbitohs"
+  if (key.includes("dragons") || key.includes("st george")) return "dragons"
+  if (key.includes("roosters") || key === "sydney") return "roosters"
+  if (key.includes("tigers") || key.includes("wests")) return "tigers"
+  return key
+}
+
+function addSummaryXPoints(match: LineupMatch, metrics: PostMatchTeamMetric[]): LineupMatch {
+  if (match.homeXPoints != null && match.awayXPoints != null) return match
+  const matchUrl = normalisePlayerImageLookupKey(match.matchUrl)
+  const matchDate = match.matchDate.slice(0, 10)
+  const urlMetrics = matchUrl
+    ? metrics.filter((metric) => normalisePlayerImageLookupKey(metric.url) === matchUrl)
+    : []
+  const fixtureTeamKeys = new Set([
+    postMatchMetricTeamKey(match.homeTeam?.team),
+    postMatchMetricTeamKey(match.homeTeam?.teamName),
+    postMatchMetricTeamKey(match.awayTeam?.team),
+    postMatchMetricTeamKey(match.awayTeam?.teamName),
+  ].filter(Boolean))
+  const fixtureMetrics = urlMetrics.length > 0
+    ? urlMetrics
+    : metrics.filter((metric) =>
+        metric.matchDate.slice(0, 10) === matchDate &&
+        (fixtureTeamKeys.has(postMatchMetricTeamKey(metric.team)) || fixtureTeamKeys.has(postMatchMetricTeamKey(metric.opponentTeam)))
+      )
+  const metricForTeam = (team: LineupMatch["homeTeam"], isHome: boolean) => {
+    const teamKeys = new Set([postMatchMetricTeamKey(team?.team), postMatchMetricTeamKey(team?.teamName)].filter(Boolean))
+    return fixtureMetrics.find((metric) => metric.isHome === isHome) ??
+      fixtureMetrics.find((metric) => teamKeys.has(postMatchMetricTeamKey(metric.team))) ??
+      null
+  }
+  return {
+    ...match,
+    homeXPoints: match.homeXPoints ?? metricForTeam(match.homeTeam, true)?.xpoints ?? null,
+    awayXPoints: match.awayXPoints ?? metricForTeam(match.awayTeam, false)?.xpoints ?? null,
+  }
+}
+
+function stripSummaryXPoints(match: LineupMatch): LineupMatch {
+  const safeMatch = { ...match }
+  delete safeMatch.homeXPoints
+  delete safeMatch.awayXPoints
+  return safeMatch
+}
+
 function buildPlayerImageLookup(rows: PlayerImageRecord[]): Map<string, PlayerImageRecord> {
   const lookup = new Map<string, PlayerImageRecord>()
   for (const row of rows) {
@@ -302,7 +364,9 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   })()
   const shouldUseShellMatches = process.env.NODE_ENV === "production"
   const matches = (summary?.matches ?? fallbackData?.matches ?? []).map((match) =>
-    shouldUseShellMatches ? matchShell(match) : match
+    hasProAccess
+      ? shouldUseShellMatches ? matchShell(match) : match
+      : stripSummaryXPoints(shouldUseShellMatches ? matchShell(match) : match)
   )
   const playerImages = matches.some((match) => (match.homeTeam?.players.length ?? 0) > 0 || (match.awayTeam?.players.length ?? 0) > 0)
     ? await withFallback(fetchPlayerImages(), [], "Lineups player images")
@@ -315,7 +379,16 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const teamLogos = Object.keys(summaryTeamLogos).length > 0
     ? summaryTeamLogos
     : fallbackData?.teamLogos ?? await withFallback(fetchTeamLogos(), {}, "Lineups team logos")
-  const visibleMatches = imageEnrichedMatches.filter((match) => match.homeTeam || match.awayTeam || isDrawFallbackMatch(match) || !isPastMatch(match))
+  const visibleMatchesWithoutXPoints = imageEnrichedMatches.filter((match) => match.homeTeam || match.awayTeam || isDrawFallbackMatch(match) || !isPastMatch(match))
+  const needsXPointsFallback = hasProAccess && selectedCompetition === "nrl" && visibleMatchesWithoutXPoints.some(
+    (match) => match.homeScore != null && match.awayScore != null && (match.homeXPoints == null || match.awayXPoints == null)
+  )
+  const postMatchMetrics = needsXPointsFallback
+    ? await withFallback(fetchPostMatchTeamMetrics([String(selectedYear)]), [], "Lineups xPoints summary fallback")
+    : []
+  const visibleMatches = postMatchMetrics.length > 0
+    ? visibleMatchesWithoutXPoints.map((match) => addSummaryXPoints(match, postMatchMetrics))
+    : visibleMatchesWithoutXPoints
   const matchPredictions = selectedCompetition === "nrl" && visibleMatches.length > 0
     ? await withFallback(fetchLineupsMatchPredictions(visibleMatches), {}, "Lineups match predictions")
     : {}

@@ -50,10 +50,14 @@ export const PLAYER_ATTACK_COMPARISON_STATS = [
   "Errors",
 ] as const;
 
+export const PLAYER_ATTACK_STAT_COMPARISON_STATS = [
+  ...PLAYER_ATTACK_COMPARISON_STATS,
+  "Play-the-ball speed",
+] as const;
+
 export type PlayerEfficiencyBaseMetric = (typeof PLAYER_EFFICIENCY_BASE_METRICS)[number];
 export type PlayerEfficiencyOutputMetric = (typeof PLAYER_EFFICIENCY_OUTPUT_METRICS)[number];
-export type PlayerAttackComparisonStat = (typeof PLAYER_ATTACK_COMPARISON_STATS)[number];
-export const PLAYER_ATTACK_STAT_COMPARISON_STATS: readonly PlayerAttackComparisonStat[] = PLAYER_ATTACK_COMPARISON_STATS;
+export type PlayerAttackComparisonStat = (typeof PLAYER_ATTACK_STAT_COMPARISON_STATS)[number];
 export type PlayerAttackComparisonMode = "per-game" | "team-proportion" | "totals";
 export type PlayerPlotMode = "players" | "games";
 export type HalvesPairingSort = "ascending" | "descending";
@@ -178,7 +182,10 @@ const ATTACK_COMPARISON_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerS
   "Missed tackles": "Missed Tackles",
   Penalties: "Penalties",
   Errors: "Errors",
+  "Play-the-ball speed": "Average Play The Ball Speed",
 };
+
+const PLAYER_RATE_STATS = new Set<PlayerAttackComparisonStat>(["Play-the-ball speed"]);
 
 function finite(value: unknown): number {
   const number = typeof value === "number" ? value : Number(value);
@@ -342,6 +349,8 @@ export function buildPlayerAttackComparisonPoints(
 ): PlayerAttackComparisonPoint[] {
   const xField = ATTACK_COMPARISON_FIELDS[xStat];
   const yField = ATTACK_COMPARISON_FIELDS[yStat];
+  const xIsRate = PLAYER_RATE_STATS.has(xStat);
+  const yIsRate = PLAYER_RATE_STATS.has(yStat);
   const teamGameTotals = new Map<string, { x: number; y: number }>();
   const players = new Map<string, PlayerStat[]>();
 
@@ -375,16 +384,23 @@ export function buildPlayerAttackComparisonPoints(
     const isPer80 = BACK_POSITIONS.has(position);
     const comparisonXTotal = qualifyingRows.reduce((sum, row) => {
       const value = finite(row[xField]);
-      return sum + (isPer80 ? value * (80 / finite(row["Mins Played"])) : value);
+      return sum + (isPer80 && !xIsRate ? value * (80 / finite(row["Mins Played"])) : value);
     }, 0);
     const comparisonYTotal = qualifyingRows.reduce((sum, row) => {
       const value = finite(row[yField]);
-      return sum + (isPer80 ? value * (80 / finite(row["Mins Played"])) : value);
+      return sum + (isPer80 && !yIsRate ? value * (80 / finite(row["Mins Played"])) : value);
     }, 0);
-    const comparisonX = mode === "totals"
+    const xRateValues = xIsRate ? qualifyingRows.map((row) => finite(row[xField])).filter((value) => value > 0) : [];
+    const yRateValues = yIsRate ? qualifyingRows.map((row) => finite(row[yField])).filter((value) => value > 0) : [];
+    if ((xIsRate && xRateValues.length === 0) || (yIsRate && yRateValues.length === 0)) continue;
+    const comparisonX = xIsRate
+      ? xRateValues.reduce((sum, value) => sum + value, 0) / xRateValues.length
+      : mode === "totals"
       ? qualifyingRows.reduce((sum, row) => sum + finite(row[xField]), 0)
       : comparisonXTotal / qualifyingRows.length;
-    const comparisonY = mode === "totals"
+    const comparisonY = yIsRate
+      ? yRateValues.reduce((sum, value) => sum + value, 0) / yRateValues.length
+      : mode === "totals"
       ? qualifyingRows.reduce((sum, row) => sum + finite(row[yField]), 0)
       : comparisonYTotal / qualifyingRows.length;
     const xShares = qualifyingRows.flatMap((row) => {
@@ -406,14 +422,15 @@ export function buildPlayerAttackComparisonPoints(
         if (mode === "team-proportion" && (xTeamTotal <= 0 || yTeamTotal <= 0)) continue;
         const xValue = finite(row[xField]);
         const yValue = finite(row[yField]);
+        if ((xIsRate && xValue <= 0) || (yIsRate && yValue <= 0)) continue;
         points.push({
           id: `${player}|${row.Year}|${row.Round_Label || row.Round}|${row.Team}|${mode}|${xStat}|${yStat}`,
           player,
           team: String(row.Team ?? ""),
           position,
           games: 1,
-          xValue: mode === "team-proportion" ? (xValue / xTeamTotal) * 100 : isPer80 ? xValue * (80 / minutes) : xValue,
-          yValue: mode === "team-proportion" ? (yValue / yTeamTotal) * 100 : isPer80 ? yValue * (80 / minutes) : yValue,
+          xValue: mode === "team-proportion" ? (xValue / xTeamTotal) * 100 : isPer80 && !xIsRate ? xValue * (80 / minutes) : xValue,
+          yValue: mode === "team-proportion" ? (yValue / yTeamTotal) * 100 : isPer80 && !yIsRate ? yValue * (80 / minutes) : yValue,
           roundLabel: String(row.Round_Label || row.Round),
           opponent: row.Opponent,
         });

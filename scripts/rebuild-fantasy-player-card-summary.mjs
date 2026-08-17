@@ -1086,6 +1086,43 @@ async function fetchRecentMatchResultsSummary(supabase, year) {
   return [...results.values()];
 }
 
+async function fetchLineupsSummaryXPoints(supabase, year) {
+  return fetchAllRows(
+    supabase,
+    "post_match_team_metrics",
+    "url,team,match_date,is_home,xpoints",
+    (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`)
+  );
+}
+
+function addLineupsSummaryXPoints(match, metrics) {
+  const matchUrl = normaliseTeamKey(match.matchUrl);
+  const date = String(match.matchDate ?? "").slice(0, 10);
+  const urlMetrics = matchUrl
+    ? metrics.filter((metric) => normaliseTeamKey(metric.url) === matchUrl)
+    : [];
+  const fixtureTeamKeys = new Set([
+    teamGroup(match.homeTeam?.team ?? match.homeTeam?.teamName),
+    teamGroup(match.awayTeam?.team ?? match.awayTeam?.teamName),
+  ].filter(Boolean));
+  const fixtureMetrics = urlMetrics.length > 0
+    ? urlMetrics
+    : metrics.filter((metric) =>
+      String(metric.match_date ?? "").slice(0, 10) === date && fixtureTeamKeys.has(teamGroup(metric.team))
+    );
+  const metricForTeam = (team, isHome) => {
+    const teamKey = teamGroup(team?.team ?? team?.teamName);
+    return fixtureMetrics.find((metric) => booleanValue(metric.is_home) === isHome) ??
+      fixtureMetrics.find((metric) => teamKey && teamGroup(metric.team) === teamKey) ??
+      null;
+  };
+  return {
+    ...match,
+    homeXPoints: toNum(metricForTeam(match.homeTeam, true)?.xpoints),
+    awayXPoints: toNum(metricForTeam(match.awayTeam, false)?.xpoints),
+  };
+}
+
 async function fetchLineupRoundOptionsSummary(supabase, year) {
   const matchRows = await fetchAllRows(
     supabase,
@@ -1581,8 +1618,11 @@ async function main() {
     fetchLineupsSummaryTryscorerOdds(supabasePublic, today).catch(() => ({})),
     fetchLineupsSummarySportsbetOdds(supabasePublic, today).catch(() => ({})),
     fetchLineupsSummaryCasualtyOuts(supabaseNrl).catch(() => ({})),
-  ]).then(([lineupMatches, fixtureMatches, recentResults, lineupsTeamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts]) => {
-    const matches = mergeFixtureAndLineupMatches(fixtureMatches, lineupMatches).map((match) => addRecentResults(match, recentResults));
+    fetchLineupsSummaryXPoints(supabaseNrl, currentYear).catch(() => []),
+  ]).then(([lineupMatches, fixtureMatches, recentResults, lineupsTeamLogos, tryscorerOdds, sportsbetOdds, casualtyWardOuts, xpointsMetrics]) => {
+    const matches = mergeFixtureAndLineupMatches(fixtureMatches, lineupMatches)
+      .map((match) => addRecentResults(match, recentResults))
+      .map((match) => addLineupsSummaryXPoints(match, xpointsMetrics));
     if (matches.length === 0) return { lineupsPageSummaryRow: null, bettingPageSummaryRow: null };
     return {
       lineupsPageSummaryRow: {

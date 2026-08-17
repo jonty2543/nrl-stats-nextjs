@@ -4016,10 +4016,10 @@ function LineupCard({
     return metrics.find((metric) => aliases.has(normaliseKey(metric.team))) ?? null
   }
   const homeHeaderXPoints = canAccessFantasyProjections && showMatchCardXPoints && isPostMatch
-    ? headerMetricForTeam(detailMatch.homeTeam, true)?.xpoints ?? null
+    ? match.homeXPoints ?? detailMatch.homeXPoints ?? headerMetricForTeam(detailMatch.homeTeam, true)?.xpoints ?? null
     : null
   const awayHeaderXPoints = canAccessFantasyProjections && showMatchCardXPoints && isPostMatch
-    ? headerMetricForTeam(detailMatch.awayTeam, false)?.xpoints ?? null
+    ? match.awayXPoints ?? detailMatch.awayXPoints ?? headerMetricForTeam(detailMatch.awayTeam, false)?.xpoints ?? null
     : null
   const showSplitScore = headerScore.homeScore != null || headerScore.awayScore != null
   const homeScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.homeScore > headerScore.awayScore
@@ -4444,7 +4444,14 @@ function LineupSelectors({
             <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${showMatchCardXPoints ? "translate-x-4" : "translate-x-0"}`} />
           </button>
         </div>
-      ) : null}
+      ) : (
+        <BillingPageLink
+          className="inline-flex items-center rounded-full border border-violet-300/35 bg-nrl-panel/90 px-4 py-2 text-[10px] font-black uppercase tracking-wide text-violet-200 shadow-[0_14px_30px_rgba(0,0,0,0.24)] transition-colors hover:border-violet-300/70 hover:bg-violet-400/10 hover:text-white"
+          aria-label="Upgrade to Pro"
+        >
+          Pro
+        </BillingPageLink>
+      )}
       <label className="block w-36 sm:w-40">
         <span className="sr-only">Select competition</span>
         <select

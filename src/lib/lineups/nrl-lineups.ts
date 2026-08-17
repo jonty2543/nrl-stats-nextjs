@@ -48,6 +48,8 @@ export interface LineupMatch {
   awayTeam: LineupTeam | null
   homeScore?: number | null
   awayScore?: number | null
+  homeXPoints?: number | null
+  awayXPoints?: number | null
   recentHeadToHead?: LineupRecentResult[]
   homeRecentResults?: LineupRecentResult[]
   awayRecentResults?: LineupRecentResult[]

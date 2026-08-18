@@ -1,6 +1,6 @@
 import type { PlayerStat } from "@/lib/data/types";
 
-export const PLAYER_ATTACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halves", "Hookers", "Edges", "Middles"] as const;
+export const PLAYER_ATTACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halves", "Hookers", "Edges", "Middles", "Interchange"] as const;
 
 export type PlayerAttackPosition = (typeof PLAYER_ATTACK_POSITIONS)[number];
 export const PLAYER_BACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halves"] as const satisfies readonly PlayerAttackPosition[];
@@ -206,6 +206,7 @@ function positionFromNumber(value: unknown): PlayerAttackPosition | null {
   if (number === 9) return "Hookers";
   if (number === 11 || number === 12) return "Edges";
   if (number === 8 || number === 10 || number === 13) return "Middles";
+  if (number >= 14) return "Interchange";
   return null;
 }
 
@@ -218,6 +219,7 @@ function positionFromRow(row: PlayerStat): PlayerAttackPosition | null {
   if (["HK", "HOK", "HOOKER"].includes(position)) return "Hookers";
   if (["SR", "2RF", "2ND ROW", "2ND-ROW", "SECOND ROW", "SECOND-ROW", "EDG", "EDGE"].includes(position)) return "Edges";
   if (["PR", "PROP", "LK", "LOCK", "MID", "MIDDLE"].includes(position)) return "Middles";
+  if (["INT", "INTERCHANGE", "BENCH", "RESERVE", "REPLACEMENT"].includes(position)) return "Interchange";
 
   return position && !["UNKNOWN"].includes(position) ? null : positionFromNumber(row.Number);
 }

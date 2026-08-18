@@ -168,6 +168,7 @@ function formPositionFromRow(row: PlayerStat): PlayerAttackPosition | null {
   if (["HK", "HOK", "HOOKER"].includes(position)) return "Hookers";
   if (["SR", "2RF", "2ND ROW", "2ND-ROW", "SECOND ROW", "SECOND-ROW", "EDG", "EDGE"].includes(position)) return "Edges";
   if (["PR", "PROP", "LK", "LOCK", "MID", "MIDDLE"].includes(position)) return "Middles";
+  if (["INT", "INTERCHANGE", "BENCH", "RESERVE", "REPLACEMENT"].includes(position)) return "Interchange";
   const number = Number(String(row.Number ?? "").match(/\d+/)?.[0]);
   if (number === 1) return "Fullbacks";
   if (number === 2 || number === 5) return "Wingers";
@@ -176,6 +177,7 @@ function formPositionFromRow(row: PlayerStat): PlayerAttackPosition | null {
   if (number === 9) return "Hookers";
   if (number === 11 || number === 12) return "Edges";
   if (number === 8 || number === 10 || number === 13) return "Middles";
+  if (number >= 14) return "Interchange";
   return null;
 }
 
@@ -580,6 +582,7 @@ const POSITION_SEARCH_ALIASES: Array<{ position: PlayerAttackPosition; aliases: 
   { position: "Hookers", aliases: ["hooker", "hookers", "dummy half"] },
   { position: "Edges", aliases: ["edge", "edges", "second row", "second-row"] },
   { position: "Middles", aliases: ["middle", "middles", "prop", "props", "lock forward"] },
+  { position: "Interchange", aliases: ["interchange", "bench", "reserve", "replacement", "number 14"] },
 ];
 
 const STAT_SEARCH_ALIASES: Record<string, string[]> = {

@@ -206,7 +206,7 @@ function positionFromNumber(value: unknown): PlayerAttackPosition | null {
   if (number === 9) return "Hookers";
   if (number === 11 || number === 12) return "Edges";
   if (number === 8 || number === 10 || number === 13) return "Middles";
-  if (number >= 14) return "Interchange";
+  if (number !== null && number >= 14) return "Interchange";
   return null;
 }
 

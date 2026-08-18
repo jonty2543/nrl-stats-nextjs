@@ -271,6 +271,8 @@ BASE_PLAYER_COLUMNS = {
     'all_runs',
     'passes_to_run_ratio',
     'tackle_efficiency',
+    'missed_tackles',
+    'ineffective_tackles',
 }
 
 RATIO_FEATURES = {'pass_run_ratio', 'passes_to_run_ratio', 'tackle_efficiency'}
@@ -389,6 +391,26 @@ def load_and_process_data(configs, player_data, stat_mode='production', recent_g
     player_df['position'] = player_df.apply(
         lambda row: f.map_position(row.get('position'), row.get('number')),
         axis=1,
+    )
+
+    # Some match feeds publish 0/null tackle efficiency despite supplying the
+    # tackle counts. Rebuild only those invalid values so one bad row cannot
+    # collapse a player's recent defensive archetype score.
+    tackle_counts = player_df[
+        ['tackles_made', 'missed_tackles', 'ineffective_tackles']
+    ].apply(pd.to_numeric, errors='coerce')
+    tackle_attempts = tackle_counts.fillna(0).sum(axis=1)
+    reported_efficiency = pd.to_numeric(player_df['tackle_efficiency'], errors='coerce')
+    invalid_efficiency = (
+        reported_efficiency.isna()
+        | (reported_efficiency <= 0)
+        | (reported_efficiency > 100)
+    ) & (tackle_attempts > 0)
+    player_df['tackle_efficiency'] = reported_efficiency
+    player_df.loc[invalid_efficiency, 'tackle_efficiency'] = (
+        tackle_counts.loc[invalid_efficiency, 'tackles_made'].fillna(0)
+        / tackle_attempts.loc[invalid_efficiency]
+        * 100
     )
 
     if stat_mode == 'team_share':

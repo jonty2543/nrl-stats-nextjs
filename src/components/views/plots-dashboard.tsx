@@ -40,18 +40,19 @@ function comparisonQuadrants(xStat: string, yStat: string, suffix = "", xHigherO
   };
 }
 
-function GameWindowButtons({ value, onChange }: { value: PlayerGameWindow; onChange: (value: PlayerGameWindow) => void }) {
+function GameWindowButtons({ value, onChange, disabled = false }: { value: PlayerGameWindow; onChange: (value: PlayerGameWindow) => void; disabled?: boolean }) {
   return (
-    <div className="flex shrink-0 flex-col gap-0.5">
+    <div className={`flex shrink-0 flex-col gap-0.5 ${disabled ? "opacity-50" : ""}`} aria-disabled={disabled}>
       <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Sample</span>
       <div className="flex h-8 rounded-md border border-nrl-border bg-nrl-panel-2 p-0.5" aria-label="Qualifying game window">
         {([{ label: "All", value: null }, { label: "L3", value: 3 }, { label: "L5", value: 5 }, { label: "L10", value: 10 }] as const).map((option) => (
           <button
             key={option.label}
             type="button"
+            disabled={disabled}
             aria-pressed={value === option.value}
             onClick={() => onChange(option.value)}
-            className={`rounded px-2 py-1 text-[9px] font-black uppercase tracking-wide transition-colors ${value === option.value ? "bg-nrl-accent text-[#07111f]" : "text-nrl-muted hover:text-nrl-text"}`}
+            className={`rounded px-2 py-1 text-[9px] font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed ${value === option.value ? "bg-nrl-accent text-[#07111f]" : "text-nrl-muted hover:text-nrl-text"}`}
           >
             {option.label}
           </button>
@@ -59,6 +60,10 @@ function GameWindowButtons({ value, onChange }: { value: PlayerGameWindow; onCha
       </div>
     </div>
   );
+}
+
+function withGameWindow(label: string, gameWindow: PlayerGameWindow): string {
+  return label && gameWindow !== null ? `L${gameWindow} ${label}` : label;
 }
 
 function PlotSummary({ title, children }: { title: string; children?: ReactNode }) {
@@ -109,7 +114,7 @@ function VolumeAxisToggle({ checked, onChange }: { checked: boolean; onChange: (
   );
 }
 
-const LOWER_IS_BETTER_STATS = new Set(["Missed tackles", "Penalties", "Errors", "PTB", "Play-the-ball speed"]);
+const LOWER_IS_BETTER_STATS = new Set(["Missed tackles", "Ineffective tackles", "Penalties", "Ruck infringements", "Inside 10 metres", "Errors", "Handling errors", "One on one lost", "Kicked dead", "On report", "Sin bins", "Send offs", "PTB", "Play-the-ball speed"]);
 const LOCKED_TEAM_STATS = new Set(["Attacking Ruck Rating", "Defensive Ruck Rating", "Ruck Dominance Rating", "PTB Rating", "Line Defense Rating"]);
 const DEFENSIVE_RATING_STATS = new Set(["Contact Rating", "Line Defense Rating", "Defensive Ruck Rating"]);
 const TEAM_FOR_AGAINST_STATS = TEAM_ATTACK_COMPARISON_STATS.filter((stat) => !LOCKED_TEAM_STATS.has(stat));
@@ -140,6 +145,7 @@ const FORM_STAT_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerStat> = {
   "Missed tackles": "Missed Tackles",
   Penalties: "Penalties",
   Errors: "Errors",
+  Fantasy: "Fantasy",
   "Play-the-ball speed": "Average Play The Ball Speed",
 };
 
@@ -593,6 +599,7 @@ const STAT_SEARCH_ALIASES: Record<string, string[]> = {
   "Post-contact metres": ["post contact metre", "post contact metres", "post-contact metre", "post-contact metres", "pcm"],
   "Kick return metres": ["kick return metre", "kick return metres"],
   "Dummy half run metres": ["dummy half run metre", "dummy half run metres"],
+  Fantasy: ["fantasy", "fantasy points", "supercoach", "nrl fantasy"],
   Points: ["point", "points", "score", "scoring"],
   Tries: ["try", "tries"],
   "Try assists": ["try assist", "try assists"],
@@ -600,12 +607,32 @@ const STAT_SEARCH_ALIASES: Record<string, string[]> = {
   "Line break assists": ["line break assist", "line break assists"],
   Offloads: ["offload", "offloads"],
   "Tackle breaks": ["tackle break", "tackle breaks", "broken tackle", "broken tackles"],
+  "Play the balls": ["play the ball", "play the balls", "ptb"],
+  "One on one steals": ["one on one steal", "one-on-one steal", "steals"],
+  "Dummy passes": ["dummy pass", "dummy passes"],
   Kicks: ["kick", "kicks"],
   "Kicking metres": ["kicking metre", "kicking metres", "kick metre", "kick metres"],
   "Forced drop outs": ["forced drop out", "forced drop outs", "repeat set", "repeat sets"],
+  "Bomb kicks": ["bomb kick", "bomb kicks", "bombs"],
+  Grubbers: ["grubber", "grubbers"],
+  "40/20s": ["40/20", "40 20", "forty twenty"],
+  "20/40s": ["20/40", "20 40", "twenty forty"],
+  "Cross field kicks": ["cross field kick", "cross field kicks"],
+  "Kicked dead": ["kicked dead"],
+  "Tackles made": ["tackle", "tackles", "tackles made"],
   "Missed tackles": ["missed tackle", "missed tackles"],
+  "Ineffective tackles": ["ineffective tackle", "ineffective tackles"],
+  Intercepts: ["intercept", "intercepts"],
+  "Kicks defused": ["kick defused", "kicks defused"],
   Penalties: ["penalty", "penalties"],
+  "Ruck infringements": ["ruck infringement", "ruck infringements"],
+  "Inside 10 metres": ["inside 10", "inside ten", "inside 10 metres"],
   Errors: ["error", "errors"],
+  "Handling errors": ["handling error", "handling errors"],
+  "One on one lost": ["one on one lost", "one-on-one lost"],
+  "On report": ["on report"],
+  "Sin bins": ["sin bin", "sin bins"],
+  "Send offs": ["send off", "send offs"],
   Margin: ["margin", "point differential", "points differential"],
   "Completion rate": ["completion rate", "completions", "set completion", "set completions"],
   PTB: ["ptb", "play the ball", "play-the-ball", "ruck speed"],
@@ -819,6 +846,33 @@ function normalisePlayerName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function roundNumber(value: string | number | null | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const match = value?.match(/\d+/);
+  return match ? Number(match[0]) : null;
+}
+
+function forSelectedRound<T>(rows: T[], selectedRound: string, getRound: (row: T) => string | number | null | undefined): T[] {
+  if (selectedRound === "all") return rows;
+  const requestedRound = Number(selectedRound);
+  return rows.filter((row) => {
+    const value = roundNumber(getRound(row));
+    return value === requestedRound;
+  });
+}
+
+function roundSelectOptions(entries: Array<{ value: string | number | null | undefined; label?: string | null }>): Array<{ value: string; label: string }> {
+  const labels = new Map<number, string>();
+  entries.forEach((entry) => {
+    const value = roundNumber(entry.value);
+    if (value !== null && !labels.has(value)) labels.set(value, entry.label || `Round ${value}`);
+  });
+  return [
+    ...[...labels.entries()].sort(([left], [right]) => left - right).map(([value, label]) => ({ value: String(value), label })),
+    { value: "all", label: "All" },
+  ];
+}
+
 function teamModelPointKey(team: string, year: string, roundLabel: string): string {
   const roundNumber = roundLabel.match(/\d+/)?.[0] ?? normalisePlayerName(roundLabel);
   return `${year}|${normalisePlayerName(team)}|${roundNumber}`;
@@ -906,6 +960,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const [halvesPairingSort, setHalvesPairingSort] = useState<HalvesPairingSort>("ascending");
   const [playerPosition, setPlayerPosition] = useState<PlayerAttackPosition>("Fullbacks");
   const [playerPlotMode, setPlayerPlotMode] = useState<PlayerPlotMode>("players");
+  const [playerMinimumMinutes, setPlayerMinimumMinutes] = useState(10);
   const [gameWindow, setGameWindow] = useState<PlayerGameWindow>(null);
   const [playerInfoOpen, setPlayerInfoOpen] = useState(false);
   const [teamInfoOpen, setTeamInfoOpen] = useState(false);
@@ -937,9 +992,11 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const [teamShareMetric, setTeamShareMetric] = useState<TeamShareMetric>("Runs");
   const [mode, setMode] = useState<DefencePlotMode>("season");
   const [year, setYear] = useState(initialYear);
+  const [round, setRound] = useState("all");
   const [proPlot, setProPlot] = useState<ProModelPlotId>("expected-points");
   const [proMode, setProMode] = useState<DefencePlotMode>("season");
   const [proYear, setProYear] = useState(initialYear);
+  const [proRound, setProRound] = useState("all");
   const [proGameWindow, setProGameWindow] = useState<PlayerGameWindow>(null);
   const [proInfoOpen, setProInfoOpen] = useState(false);
   const [proFiltersOpen, setProFiltersOpen] = useState(false);
@@ -1003,8 +1060,30 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     };
   }, [canAccessModelPlots, postMatchMetricsByYear, proYear]);
 
-  const currentRows = useMemo(() => rowsByYear[year] ?? [], [rowsByYear, year]);
-  const currentPostMatchMetrics = useMemo(() => postMatchMetricsByYear[year] ?? [], [postMatchMetricsByYear, year]);
+  const roundOptions = useMemo(() => roundSelectOptions([
+    ...(playerRowsByYear[year] ?? []).map((row) => ({ value: row.Round, label: row.Round_Label })),
+    ...(rowsByYear[year] ?? []).map((row) => ({ value: row.Round, label: row.Round_Label })),
+    ...(postMatchMetricsByYear[year] ?? []).map((row) => ({ value: row.round, label: row.round })),
+  ]), [playerRowsByYear, postMatchMetricsByYear, rowsByYear, year]);
+  const proRoundOptions = useMemo(() => roundSelectOptions(
+    (postMatchMetricsByYear[proYear] ?? []).map((row) => ({ value: row.round, label: row.round }))
+  ), [postMatchMetricsByYear, proYear]);
+  const currentPlayerRows = useMemo(
+    () => forSelectedRound(playerRowsByYear[year] ?? [], round, (row) => row.Round),
+    [playerRowsByYear, round, year]
+  );
+  const currentPlayerPlotRows = useMemo(
+    () => currentPlayerRows.filter((row) => Number(row["Mins Played"]) >= playerMinimumMinutes),
+    [currentPlayerRows, playerMinimumMinutes]
+  );
+  const currentRows = useMemo(
+    () => forSelectedRound(rowsByYear[year] ?? [], round, (row) => row.Round),
+    [round, rowsByYear, year]
+  );
+  const currentPostMatchMetrics = useMemo(
+    () => forSelectedRound(postMatchMetricsByYear[year] ?? [], round, (row) => row.round),
+    [postMatchMetricsByYear, round, year]
+  );
   const defencePoints = useMemo(() => buildDefenceRatingPoints(entity === "Teams" ? currentRows : [], mode, currentPostMatchMetrics, gameWindow), [currentPostMatchMetrics, currentRows, entity, gameWindow, mode]);
   const attackPoints = useMemo(() => buildAttackRatingPoints(entity === "Teams" ? currentRows : [], mode, gameWindow), [currentRows, entity, gameWindow, mode]);
   const concededPoints = useMemo(() => buildConcededRatingPoints(entity === "Teams" ? currentRows : [], mode, gameWindow), [currentRows, entity, gameWindow, mode]);
@@ -1110,11 +1189,13 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const playerEfficiencyUsesPer80 = playerUsesPer80 && playerEfficiencyBaseMetric !== "Minutes";
   const isPlayerTeamProportion = playerAttackPlot === "Team Proportion";
   const isPlayerGameMode = playerPlotMode === "games";
+  const playerMinimumGames = round === "all" ? undefined : 1;
   const isPlayerStatsTotals = !isPlayerGameMode && playerAttackPlot === "Stats" && playerStatsAggregation === "Season total";
   const activePlayerComparisonXStat = isPlayerTeamProportion ? playerTeamProportionXStat : playerComparisonXStat;
   const activePlayerComparisonYStat = isPlayerTeamProportion ? playerTeamProportionYStat : playerComparisonYStat;
   const isPlayerSingleStat = playerSection === "Attack" && ((isPlayerEfficiency && !playerEfficiencyShowsVolume) || (!isPlayerEfficiency && activePlayerComparisonYStat === "None"));
   const effectivePlayerComparisonYStat = activePlayerComparisonYStat === "None" ? activePlayerComparisonXStat : activePlayerComparisonYStat;
+  const playerEfficiencyHigherIsBetter = !LOWER_IS_BETTER_STATS.has(playerEfficiencyOutputMetric);
   const playerComparisonXHigherIsBetter = !LOWER_IS_BETTER_STATS.has(activePlayerComparisonXStat);
   const playerComparisonYHigherIsBetter = !LOWER_IS_BETTER_STATS.has(effectivePlayerComparisonYStat);
   const playerComparisonXIsPtbSpeed = activePlayerComparisonXStat === "Play-the-ball speed";
@@ -1130,9 +1211,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     : (["Tries", "Try assists", "Line breaks", "Line break assists", "Forced drop outs"] as PlayerEfficiencyOutputMetric[]).includes(playerEfficiencyOutputMetric) ? 3 : 2;
   const teamShareSeries = useMemo(
     () => entity === "Teams" && isTeamSharePlot
-      ? buildTeamShareSeries(playerRowsByYear[year] ?? [], teamShareMetric, gameWindow)
+      ? buildTeamShareSeries(currentPlayerRows, teamShareMetric, gameWindow)
       : [],
-    [entity, gameWindow, isTeamSharePlot, playerRowsByYear, teamShareMetric, year]
+    [currentPlayerRows, entity, gameWindow, isTeamSharePlot, teamShareMetric]
   );
   const xPointsData = useMemo(
     () => entity === "Teams" && isXPoints
@@ -1162,7 +1243,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     ])),
   }), [currentPostMatchMetrics, entity, gameWindow, mode]);
   const activeProPlot = PRO_MODEL_PLOTS.find((plot) => plot.id === proPlot) ?? PRO_MODEL_PLOTS[0];
-  const proMetrics = useMemo(() => postMatchMetricsByYear[proYear] ?? [], [postMatchMetricsByYear, proYear]);
+  const proMetrics = useMemo(
+    () => forSelectedRound(postMatchMetricsByYear[proYear] ?? [], proRound, (row) => row.round),
+    [postMatchMetricsByYear, proRound, proYear]
+  );
   const proModelStats = useMemo(() => ({
     attack: buildTeamPostMatchStatPoints(proMetrics, proMode, "attack", proGameWindow),
     defense: buildTeamPostMatchStatPoints(proMetrics, proMode, "defense", proGameWindow),
@@ -1240,41 +1324,42 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
         : "";
   const playerAttackData = useMemo(
     () => entity === "Players" && playerSection === "Attack" && isPlayerEfficiency
-      ? buildPlayerAttackPoints(playerRowsByYear[year] ?? [], playerPosition, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, gameWindow, playerPlotMode)
+      ? buildPlayerAttackPoints(currentPlayerPlotRows, playerPosition, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, gameWindow, playerPlotMode, playerMinimumGames)
       : [],
-    [entity, gameWindow, isPlayerEfficiency, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, playerPlotMode, playerPosition, playerRowsByYear, playerSection, year]
+    [currentPlayerPlotRows, entity, gameWindow, isPlayerEfficiency, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, playerMinimumGames, playerPlotMode, playerPosition, playerSection]
   );
   const playerFormPoints = useMemo(
     () => entity === "Players" && isPlayerForm
-      ? buildPlayerFormPoints(playerRowsByYear[year] ?? [], playerPosition, playerFormStat, playerFormPerStat, formWindow, minPriorGames, year)
+      ? buildPlayerFormPoints(currentPlayerPlotRows, playerPosition, playerFormStat, playerFormPerStat, formWindow, minPriorGames, year)
       : [],
-    [entity, formWindow, isPlayerForm, minPriorGames, playerFormPerStat, playerFormStat, playerPosition, playerRowsByYear, year]
+    [currentPlayerPlotRows, entity, formWindow, isPlayerForm, minPriorGames, playerFormPerStat, playerFormStat, playerPosition, year]
   );
   const playerAttackComparisonData = useMemo(
     () => entity === "Players" && playerSection === "Attack" && !isPlayerEfficiency
       ? buildPlayerAttackComparisonPoints(
-          playerRowsByYear[year] ?? [],
+          currentPlayerPlotRows,
           playerPosition,
           activePlayerComparisonXStat,
           effectivePlayerComparisonYStat,
           isPlayerTeamProportion ? "team-proportion" : isPlayerStatsTotals ? "totals" : "per-game",
           gameWindow,
-          playerPlotMode
+          playerPlotMode,
+          playerMinimumGames
         )
       : [],
-    [activePlayerComparisonXStat, effectivePlayerComparisonYStat, entity, gameWindow, isPlayerEfficiency, isPlayerStatsTotals, isPlayerTeamProportion, playerPlotMode, playerPosition, playerRowsByYear, playerSection, year]
+    [activePlayerComparisonXStat, currentPlayerPlotRows, effectivePlayerComparisonYStat, entity, gameWindow, isPlayerEfficiency, isPlayerStatsTotals, isPlayerTeamProportion, playerMinimumGames, playerPlotMode, playerPosition, playerSection]
   );
   const playerDefenceData = useMemo(
     () => entity === "Players" && playerSection === "Defense"
-      ? buildPlayerDefencePoints(playerRowsByYear[year] ?? [], playerPosition, gameWindow, playerPlotMode)
+      ? buildPlayerDefencePoints(currentPlayerPlotRows, playerPosition, gameWindow, playerPlotMode, playerMinimumGames)
       : [],
-    [entity, gameWindow, playerPlotMode, playerPosition, playerRowsByYear, playerSection, year]
+    [currentPlayerPlotRows, entity, gameWindow, playerMinimumGames, playerPlotMode, playerPosition, playerSection]
   );
   const halvesPairings = useMemo(
     () => entity === "Players" && playerSection === "Other"
-      ? buildHalvesPairingPoints(playerRowsByYear[year] ?? [], halvesPairingStat, halvesPairingSort, gameWindow)
+      ? buildHalvesPairingPoints(currentPlayerRows, halvesPairingStat, halvesPairingSort, gameWindow, playerMinimumGames)
       : [],
-    [entity, gameWindow, halvesPairingSort, halvesPairingStat, playerRowsByYear, playerSection, year]
+    [currentPlayerRows, entity, gameWindow, halvesPairingSort, halvesPairingStat, playerMinimumGames, playerSection]
   );
   const playerAttackPoints = useMemo<TeamQuadrantPoint[]>(() => playerAttackData.map((point) => ({
     id: point.id,
@@ -1562,6 +1647,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     if (nextYear !== CURRENT_GAME_WINDOW_YEAR && gameWindow !== null) {
       setGameWindow(null);
     }
+    setRound("all");
     setYear(nextYear);
     if (entity === "Players") {
       await loadPlayerYear(nextYear);
@@ -1581,14 +1667,31 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     }
   };
 
+  const changeRound = (nextRound: string) => {
+    setRound(nextRound);
+    if (nextRound === "all") return;
+    setPlayerPlotMode("games");
+    setPlayerStatsAggregation("Per game");
+    setMode("games");
+    setGameWindow(null);
+  };
+
   const changeProYear = (nextYear: string) => {
     if (nextYear !== CURRENT_GAME_WINDOW_YEAR && proGameWindow !== null) setProGameWindow(null);
+    setProRound("all");
     setProYear(nextYear);
   };
 
   const changeProGameWindow = (nextWindow: PlayerGameWindow) => {
     setProGameWindow(nextWindow);
     if (nextWindow !== null && proYear !== CURRENT_GAME_WINDOW_YEAR) setProYear(CURRENT_GAME_WINDOW_YEAR);
+  };
+
+  const changeProRound = (nextRound: string) => {
+    setProRound(nextRound);
+    if (nextRound === "all") return;
+    setProMode("games");
+    setProGameWindow(null);
   };
 
   const changePlotView = (value: string) => {
@@ -1916,6 +2019,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
               ? activeTeamXDisplayName
               : `${activeTeamXDisplayName} vs ${activeTeamYDisplayName}`
             : "Contact vs line defense rating";
+  const playerPlotDisplayTitle = `${playerPlotTitle}${gameWindow !== null && !isPlayerForm ? ` · L${gameWindow}` : ""}`;
+  const teamPlotDisplayTitle = `${teamPlotTitle}${gameWindow !== null && !isTeamForm ? ` · L${gameWindow}` : ""}`;
+  const proPlotDisplayTitle = `${activeProPlot.title}${proGameWindow !== null ? ` · L${proGameWindow}` : ""}`;
 
   return (
     <div className="space-y-4">
@@ -2008,15 +2114,16 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                 <div className="flex min-w-0 flex-1 items-end gap-2 overflow-x-auto [scrollbar-width:thin]">
                   <div className="w-32 shrink-0"><Select label="Stat" compact value={halvesPairingStat} options={[...PLAYER_ATTACK_COMPARISON_STATS]} onChange={(value) => setHalvesPairingStat(value as PlayerAttackComparisonStat)} /></div>
                   <div className="w-48 shrink-0"><Select label="Sort" compact value={halvesPairingSort === "ascending" ? "Ascending · most different" : "Descending · closest to 50/50"} options={[...HALVES_PAIRING_SORT_OPTIONS]} onChange={(value) => setHalvesPairingSort((value as HalvesPairingSortLabel).startsWith("Ascending") ? "ascending" : "descending")} /></div>
+                  <div className="w-24 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={changeRound} /></div>
                 </div>
               </div>
-              <PlotSummary title={playerPlotTitle}>
+              <PlotSummary title={playerPlotDisplayTitle}>
                 <InfoCircleButton open={playerInfoOpen} onClick={() => setPlayerInfoOpen((current) => !current)} controls="player-plot-info" />
                 <FiltersButton open={playerFiltersOpen} onClick={() => setPlayerFiltersOpen((current) => !current)} controls="player-plot-filters" />
               </PlotSummary>
               {playerFiltersOpen ? (
                 <div id="player-plot-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
-                  <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} />
+                  <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} disabled={round !== "all"} />
                   <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={availableYears} onChange={(value) => void changeYear(value)} /></div>
                 </div>
               ) : null}
@@ -2026,11 +2133,11 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                     <span aria-label="Loading season" role="status" className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/25 border-t-nrl-accent" />
                   </div>
                 ) : null}
-                <HalvesPairingBars pairings={halvesPairings} stat={halvesPairingStat} playerFaceImages={playerFaceImages} minimumGames={gameWindow ?? 4} />
+                <HalvesPairingBars pairings={halvesPairings} stat={halvesPairingStat} playerFaceImages={playerFaceImages} minimumGames={round === "all" ? gameWindow ?? 4 : 1} />
               </div>
               {playerInfoOpen ? (
                 <div id="player-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-3">
-                  <div><span className="font-black text-nrl-text">Pairing sample</span><br />The recorded five-eighth and halfback from the same team-game, with both playing at least 60 minutes. Jersey 6 and 7 are used only when position data is unavailable. A pairing needs at least {gameWindow ?? 4} qualifying shared games in the selected season.</div>
+                  <div><span className="font-black text-nrl-text">Pairing sample</span><br />The recorded five-eighth and halfback from the same team-game, with both playing at least 60 minutes. Jersey 6 and 7 are used only when position data is unavailable. {round === "all" ? `A pairing needs at least ${gameWindow ?? 4} qualifying shared games in the selected season.` : `Only Round ${round} is included.`}</div>
                   <div><span className="font-black text-nrl-text">Contribution split</span><br />Each player&apos;s selected-stat total across shared games is divided by the pair&apos;s combined total. The most common halfback is blue on the left; the most common five-eighth is green on the right.</div>
                   <div><span className="font-black text-nrl-text">Sorting</span><br />Ascending puts the most uneven pairings first. Descending puts the pairings closest to a 50/50 split first.</div>
                   <div><span className="font-black text-nrl-text">Game window</span><br />{gameWindow === null ? "All qualifying shared games are included." : `L${gameWindow} uses each pairing's latest ${gameWindow} qualifying shared games from 2026 and requires that full sample.`}</div>
@@ -2049,22 +2156,34 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                   {playerSection === "Attack" && !isPlayerEfficiency && !isPlayerForm ? <div className="w-36"><Select label="Comparison stat" compact value={activePlayerComparisonYStat} options={isPlayerTeamProportion ? [{ value: "None", label: "Add comparison" }, ...PLAYER_ATTACK_COMPARISON_STATS] : [{ value: "None", label: "Add comparison" }, ...PLAYER_ATTACK_STAT_COMPARISON_STATS]} onChange={(value) => isPlayerTeamProportion ? setPlayerTeamProportionYStat(value as OptionalPlayerComparisonStat) : setPlayerComparisonYStat(value as OptionalPlayerComparisonStat)} /></div> : null}
                   {isPlayerForm ? <div className="shrink-0"><span className="mb-0.5 block text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Form sample</span><PillRadio options={["L3", "L5"]} value={`L${formWindow}`} onChange={(value) => setFormWindow(value === "L3" ? 3 : 5)} /></div> : null}
                   <div className="w-24"><Select label="Position" compact value={playerPosition} options={[...PLAYER_ATTACK_POSITIONS]} onChange={(value) => setPlayerPosition(value as PlayerAttackPosition)} /></div>
+                  <div className="w-24 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={changeRound} /></div>
                 </div>
               </div>
-              <PlotSummary title={playerPlotTitle}>
+              <PlotSummary title={playerPlotDisplayTitle}>
                 <InfoCircleButton open={playerInfoOpen} onClick={() => setPlayerInfoOpen((current) => !current)} controls="player-plot-info" />
                 <FiltersButton open={playerFiltersOpen} onClick={() => setPlayerFiltersOpen((current) => !current)} controls="player-plot-filters" />
               </PlotSummary>
               {playerFiltersOpen ? (
                 <div id="player-plot-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
-                  {!isPlayerForm ? <div className="w-32 shrink-0"><Select label="Plot points" compact value={isPlayerGameMode ? "Games" : "Player"} options={[{ value: "Player", label: "One per player" }, { value: "Games", label: "One per game" }]} onChange={(value) => setPlayerPlotMode(value === "Games" ? "games" : "players")} /></div> : null}
+                  {!isPlayerForm ? <div className="w-32 shrink-0"><Select label="Plot points" compact value={isPlayerGameMode ? "Games" : "Player"} options={[{ value: "Player", label: "One per player" }, { value: "Games", label: "One per game" }]} onChange={(value) => setPlayerPlotMode(value === "Games" ? "games" : "players")} disabled={round !== "all"} /></div> : null}
                   {playerSection === "Attack" && isPlayerEfficiency ? <VolumeAxisToggle checked={playerEfficiencyShowsVolume} onChange={(checked) => setPlayerEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
-                  {!isPlayerForm ? <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} /> : null}
+                  <label className="flex w-24 shrink-0 flex-col gap-0.5">
+                    <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min mins</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={80}
+                      value={playerMinimumMinutes}
+                      onChange={(event) => setPlayerMinimumMinutes(Math.min(80, Math.max(0, Number(event.target.value) || 0)))}
+                      className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent"
+                    />
+                  </label>
+                  {!isPlayerForm ? <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} disabled={round !== "all"} /> : null}
                   {isPlayerForm ? <label className="flex w-24 shrink-0 flex-col gap-0.5"><span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min prior games</span><input type="number" min={1} max={20} value={minPriorGames} onChange={(event) => setMinPriorGames(Math.min(20, Math.max(1, Number(event.target.value) || 1)))} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" /></label> : null}
-                  {playerSection === "Attack" && playerAttackPlot === "Stats" && !isPlayerGameMode ? (
-                    <div className="flex shrink-0 flex-col gap-0.5">
+                  {playerSection === "Attack" && playerAttackPlot === "Stats" && (!isPlayerGameMode || round !== "all") ? (
+                    <div className={`flex shrink-0 flex-col gap-0.5 ${round !== "all" ? "opacity-50" : ""}`}>
                       <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Values</span>
-                      <PillRadio options={["Per game", "Season total"]} value={playerStatsAggregation} onChange={(value) => setPlayerStatsAggregation(value as PlayerStatsAggregation)} />
+                      <PillRadio options={["Per game", "Season total"]} value={playerStatsAggregation} onChange={(value) => setPlayerStatsAggregation(value as PlayerStatsAggregation)} disabled={round !== "all"} />
                     </div>
                   ) : null}
                   <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={availableYears} onChange={(value) => void changeYear(value)} /></div>
@@ -2081,9 +2200,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                   points={isPlayerForm ? playerFormPoints : playerSection === "Defense" ? playerDefencePoints : isPlayerEfficiency ? playerAttackPoints : playerAttackComparisonPoints}
                   teamLogos={{}}
                   useLogos={false}
-                  pointImages={isPlayerForm ? playerFormPointImages : isPlayerGameMode ? undefined : playerPointImages}
+                  pointImages={isPlayerForm ? playerFormPointImages : isPlayerGameMode && round === "all" ? undefined : playerPointImages}
                   searchEntityLabel="players"
-                  emptyMessage={isPlayerForm ? `No ${playerPosition.toLowerCase()} have L${formWindow} plus ${minPriorGames} prior games this season.` : `No ${playerPosition.toLowerCase()} have ${gameWindow ?? 4} qualifying games this season.`}
+                  emptyMessage={isPlayerForm ? `No ${playerPosition.toLowerCase()} have L${formWindow} plus ${minPriorGames} prior games this season.` : round !== "all" ? `No ${playerPosition.toLowerCase()} recorded a qualifying appearance in Round ${round}.` : `No ${playerPosition.toLowerCase()} have ${gameWindow ?? 4} qualifying games this season.`}
                   ariaLabel={isPlayerForm
                     ? `${playerPosition} ${playerFormStat.toLowerCase()} prior average against L${formWindow} form scatter plot`
                     : playerSection === "Defense"
@@ -2095,24 +2214,24 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                       : isPlayerSingleStat
                         ? `${playerPosition} ${activePlayerComparisonXStat.toLowerCase()} ${isPlayerTeamProportion ? "team proportion" : isPlayerStatsTotals ? "totals" : playerUsesPer80 ? "per 80 minutes" : "per qualifying game"} dot plot`
                         : `${playerPosition} ${activePlayerComparisonXStat.toLowerCase()} against ${effectivePlayerComparisonYStat.toLowerCase()} ${isPlayerTeamProportion ? "team proportion" : isPlayerStatsTotals ? "totals" : playerUsesPer80 ? "per 80 minutes" : "per qualifying game"} scatter plot`}
-                  xAxisLabel={isPlayerForm
+                  xAxisLabel={withGameWindow(isPlayerForm
                     ? `PRIOR ${playerFormStat.toUpperCase()}${playerFormPerStat === "None" ? " PER GAME" : ` PER ${playerFormPerStat.toUpperCase()}`} →`
                     : playerSection === "Defense"
                     ? playerUsesPer80 ? "TACKLES PER 80 MINUTES · MORE →" : "TACKLES PER QUALIFYING GAME · MORE →"
                     : isPlayerEfficiency
-                      ? `${playerEfficiencyOutputMetric.toUpperCase()} PER ${playerEfficiencyUnit.toUpperCase()} · BETTER →`
+                      ? `${playerEfficiencyOutputMetric.toUpperCase()} PER ${playerEfficiencyUnit.toUpperCase()} · ${playerEfficiencyHigherIsBetter ? "BETTER" : "WORSE"} →`
                       : playerComparisonXIsPtbSpeed
                         ? "PLAY-THE-BALL SPEED · AVERAGE SECONDS · FASTER ←"
-                        : `${activePlayerComparisonXStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} →`}
-                  yAxisLabel={isPlayerForm ? `L${formWindow} ${playerFormStat.toUpperCase()}${playerFormPerStat === "None" ? " PER GAME" : ` PER ${playerFormPerStat.toUpperCase()}`} ↑` : playerSection === "Defense" ? "TACKLE EFFICIENCY · BETTER ↑" : isPlayerSingleStat ? "" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric.toUpperCase()} PER ${playerEfficiencyUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"} · MORE ↑` : playerComparisonYIsPtbSpeed ? "PLAY-THE-BALL SPEED · AVERAGE SECONDS · SLOWER ↑" : `${effectivePlayerComparisonYStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} ↑`}
+                        : `${activePlayerComparisonXStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} →`, isPlayerForm ? null : gameWindow)}
+                  yAxisLabel={withGameWindow(isPlayerForm ? `L${formWindow} ${playerFormStat.toUpperCase()}${playerFormPerStat === "None" ? " PER GAME" : ` PER ${playerFormPerStat.toUpperCase()}`} ↑` : playerSection === "Defense" ? "TACKLE EFFICIENCY · BETTER ↑" : isPlayerSingleStat ? "" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric.toUpperCase()} PER ${playerEfficiencyUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"} · MORE ↑` : playerComparisonYIsPtbSpeed ? "PLAY-THE-BALL SPEED · AVERAGE SECONDS · SLOWER ↑" : `${effectivePlayerComparisonYStat.toUpperCase()} ${isPlayerTeamProportion ? "TEAM SHARE · %" : isPlayerStatsTotals ? "TOTAL" : `PER ${playerUsesPer80 ? "80 MINUTES" : "QUALIFYING GAME"}`} ↑`, isPlayerForm ? null : gameWindow)}
                   xMetricLabel={isPlayerForm ? "Prior" : playerSection === "Defense" ? playerUsesPer80 ? "Tackles/80" : "Tackles/game" : isPlayerEfficiency ? `${playerEfficiencyOutputMetric}/${playerEfficiencyUnit}` : playerComparisonXIsPtbSpeed ? "PTB speed" : `${activePlayerComparisonXStat}${isPlayerTeamProportion ? " share" : isPlayerStatsTotals ? " total" : playerUsesPer80 ? "/80" : "/game"}`}
                   yMetricLabel={isPlayerForm ? `L${formWindow}` : playerSection === "Defense" ? "Tackle efficiency" : isPlayerEfficiency ? `${playerEfficiencyBaseMetric}/${playerEfficiencyUsesPer80 ? "80" : "game"}` : isPlayerSingleStat ? "" : playerComparisonYIsPtbSpeed ? "PTB speed" : `${effectivePlayerComparisonYStat}${isPlayerTeamProportion ? " share" : isPlayerStatsTotals ? " total" : playerUsesPer80 ? "/80" : "/game"}`}
                   xValueSuffix={isPlayerForm ? playerFormStat === "Play-the-ball speed" && playerFormPerStat === "None" ? "s" : "" : isPlayerTeamProportion ? "%" : playerComparisonXIsPtbSpeed ? "s" : ""}
                   yValueSuffix={isPlayerForm ? playerFormStat === "Play-the-ball speed" && playerFormPerStat === "None" ? "s" : "" : playerSection === "Defense" || isPlayerTeamProportion ? "%" : playerComparisonYIsPtbSpeed ? "s" : ""}
                   xValueDecimals={isPlayerForm ? playerFormStat === "Play-the-ball speed" && playerFormPerStat === "None" ? 2 : playerFormPerStat === "None" ? 1 : 2 : isPlayerEfficiency ? playerEfficiencyYDecimals : playerComparisonXIsPtbSpeed ? 2 : isPlayerStatsTotals ? 0 : 1}
                   yValueDecimals={isPlayerForm ? playerFormStat === "Play-the-ball speed" && playerFormPerStat === "None" ? 2 : playerFormPerStat === "None" ? 1 : 2 : playerSection === "Defense" ? 1 : isPlayerEfficiency ? 1 : playerComparisonYIsPtbSpeed ? 2 : isPlayerStatsTotals ? 0 : 1}
-                  xHigherIsBetter={isPlayerForm || playerSection !== "Attack" || isPlayerEfficiency || playerComparisonXHigherIsBetter}
-                  yHigherIsBetter={playerSection !== "Attack" || isPlayerEfficiency || playerComparisonYHigherIsBetter}
+                  xHigherIsBetter={isPlayerForm || playerSection !== "Attack" || (isPlayerEfficiency ? playerEfficiencyHigherIsBetter : playerComparisonXHigherIsBetter)}
+                  yHigherIsBetter={playerSection !== "Attack" || (isPlayerEfficiency ? true : playerComparisonYHigherIsBetter)}
                   quadrants={playerSection === "Defense" ? PLAYER_TACKLE_QUADRANTS : isPlayerEfficiency ? PLAYER_EFFICIENCY_QUADRANTS : playerComparisonQuadrants}
                   minXPadding={isPlayerEfficiency ? playerEfficiencyMinYPadding : isPlayerTeamProportion ? 0.5 : 1}
                   minYPadding={playerSection === "Defense" ? 2 : isPlayerEfficiency && playerEfficiencyShowsVolume ? 1 : isPlayerEfficiency ? playerEfficiencyMinYPadding : isPlayerTeamProportion ? 0.5 : 1}
@@ -2123,9 +2242,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
               </div>
               {playerInfoOpen ? (
                 <div id="player-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-2">
-                  <div><span className="font-black text-nrl-text">Position sample</span><br />{playerPosition} with at least {isPlayerForm ? formWindow + minPriorGames : gameWindow ?? 4} qualifying games in position. Recorded positions are used, with jersey number only used when position data is unavailable.</div>
+                  <div><span className="font-black text-nrl-text">Position sample</span><br />{round !== "all" && !isPlayerForm ? `${playerPosition} with a qualifying appearance in Round ${round}.` : `${playerPosition} with at least ${isPlayerForm ? formWindow + minPriorGames : gameWindow ?? 4} qualifying games in position.`} Games below {playerMinimumMinutes} minutes are excluded. Recorded positions are used, with jersey number only used when position data is unavailable.</div>
                   <div><span className="font-black text-nrl-text">{isPlayerForm ? "Prior" : "Player / Games"}</span><br />{isPlayerForm ? `The horizontal value averages every qualifying season game before the latest ${formWindow}. At least ${minPriorGames} prior games are required.` : "Player mode combines each player's qualifying sample into one point. Games mode shows every game from that same sample as its own point."}</div>
-                  <div><span className="font-black text-nrl-text">{isPlayerForm ? `L${formWindow} form` : "Game window"}</span><br />{isPlayerForm ? `The vertical value averages the latest ${formWindow} games. The diagonal is no change; point colour shows whether the selected stat improved or worsened.` : gameWindow === null ? "All qualifying games are included for players with at least four appearances." : `L${gameWindow} uses each player's latest ${gameWindow} qualifying games from 2026 and requires that full sample.`}</div>
+                  <div><span className="font-black text-nrl-text">{isPlayerForm ? `L${formWindow} form` : "Game window"}</span><br />{isPlayerForm ? `The vertical value averages the latest ${formWindow} games. The diagonal is no change; point colour shows whether the selected stat improved or worsened.` : round !== "all" ? `Only qualifying appearances from Round ${round} are included.` : gameWindow === null ? "All qualifying games are included for players with at least four appearances." : `L${gameWindow} uses each player's latest ${gameWindow} qualifying games from 2026 and requires that full sample.`}</div>
                   <div><span className="font-black text-nrl-text">Minutes adjustment</span><br />{
                     isPlayerGameMode
                       ? playerSection === "Defense"
@@ -2162,7 +2281,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
         </section>
       ) : (
         <section className="overflow-hidden rounded-2xl border border-nrl-border bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
-          {isTeamStatsComparison || isTeamEfficiency || isTeamForm || isForVsAgainstPlot || isTeamSharePlot ? (
+          {entity === "Teams" ? (
             <div className="flex items-end gap-3 border-b border-nrl-border px-4 py-3">
               <div className="flex min-w-0 flex-1 items-end gap-2 overflow-x-auto [scrollbar-width:thin]">
                 {isTeamStatsComparison ? <div className="w-36 shrink-0"><Select label="Primary stat" compact value={activeTeamXStat} options={teamStatSelectOptions(isTeamDefenceStatsConceded ? TEAM_DEFENCE_CONCEDED_STATS : TEAM_ATTACK_COMPARISON_STATS, canAccessModelPlots)} onChange={(value) => { if (isTeamDefenceStatsConceded) setTeamDefenceXStat(value as TeamDefenceConcededStat); else setTeamAttackXStat(value as TeamAttackComparisonStat); refreshSelectedTeamModelStat(value); }} /></div> : null}
@@ -2175,20 +2294,21 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                 {isForVsAgainstPlot ? <div className="w-36 shrink-0"><Select label="For stat" compact value={teamForStat} options={[...TEAM_FOR_AGAINST_STATS]} onChange={(value) => setTeamForStat(value as TeamAttackComparisonStat)} /></div> : null}
                 {isForVsAgainstPlot ? <div className="w-36 shrink-0"><Select label="Against stat" compact value={teamAgainstStat} options={[...TEAM_FOR_AGAINST_STATS]} onChange={(value) => setTeamAgainstStat(value as TeamAttackComparisonStat)} /></div> : null}
                 {isTeamSharePlot ? <div className="w-28 shrink-0"><Select label="Stat" compact value={teamShareMetric} options={[...TEAM_SHARE_METRICS]} onChange={(value) => setTeamShareMetric(value as TeamShareMetric)} /></div> : null}
+                <div className="w-24 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={changeRound} /></div>
               </div>
             </div>
           ) : null}
 
-          <PlotSummary title={teamPlotTitle}>
+          <PlotSummary title={teamPlotDisplayTitle}>
             <InfoCircleButton open={teamInfoOpen} onClick={() => setTeamInfoOpen((current) => !current)} controls="team-plot-info" />
             <FiltersButton open={teamFiltersOpen} onClick={() => setTeamFiltersOpen((current) => !current)} controls="team-plot-filters" />
           </PlotSummary>
           {teamFiltersOpen ? (
             <div id="team-plot-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
-              {(!isOther || isRuckDominancePlot || isForVsAgainstPlot) && !isTeamForm ? <div className="w-32 shrink-0"><Select label="Plot points" compact value={mode === "season" ? "Team" : "Games"} options={[{ value: "Team", label: "One per team" }, { value: "Games", label: "One per game" }]} onChange={(value) => setMode(value === "Team" ? "season" : "games")} /></div> : null}
+              {(!isOther || isRuckDominancePlot || isForVsAgainstPlot) && !isTeamForm ? <div className="w-32 shrink-0"><Select label="Plot points" compact value={mode === "season" ? "Team" : "Games"} options={[{ value: "Team", label: "One per team" }, { value: "Games", label: "One per game" }]} onChange={(value) => setMode(value === "Team" ? "season" : "games")} disabled={round !== "all"} /></div> : null}
               {isTeamAttackEfficiency ? <VolumeAxisToggle checked={teamEfficiencyShowsVolume} onChange={(checked) => setTeamEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
               {isTeamDefenceEfficiency ? <VolumeAxisToggle checked={teamDefenceEfficiencyShowsVolume} onChange={(checked) => setTeamDefenceEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
-              {!isTeamForm ? <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} /> : null}
+              {!isTeamForm ? <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} disabled={round !== "all"} /> : null}
               {isTeamForm ? <label className="flex w-24 shrink-0 flex-col gap-0.5"><span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min prior games</span><input type="number" min={1} max={20} value={minPriorGames} onChange={(event) => setMinPriorGames(Math.min(20, Math.max(1, Number(event.target.value) || 1)))} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" /></label> : null}
               <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={availableYears} onChange={(value) => void changeYear(value)} /></div>
             </div>
@@ -2209,8 +2329,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                 points={plottedTeamPoints}
                 teamLogos={teamLogos}
                 ariaLabel={teamScatterAriaLabel}
-                xAxisLabel={teamXAxisLabel}
-                yAxisLabel={teamYAxisLabel}
+                xAxisLabel={withGameWindow(teamXAxisLabel, isTeamForm ? null : gameWindow)}
+                yAxisLabel={withGameWindow(teamYAxisLabel, isTeamForm ? null : gameWindow)}
                 xMetricLabel={teamXMetricLabel}
                 yMetricLabel={teamYMetricLabel}
                 xValueSuffix={teamXValueSuffix}
@@ -2329,18 +2449,19 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
               }}
             />
           </div>
+          <div className="w-24 shrink-0"><Select label="Round" compact value={proRound} options={proRoundOptions} onChange={changeProRound} /></div>
           <span className="mb-1 shrink-0 rounded-full border border-violet-300/35 bg-violet-400/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.14em] text-violet-200">Pro</span>
         </div>
 
-        <PlotSummary title={activeProPlot.title}>
+        <PlotSummary title={proPlotDisplayTitle}>
           <InfoCircleButton open={proInfoOpen} onClick={() => setProInfoOpen((current) => !current)} controls="pro-plot-info" />
           <FiltersButton open={proFiltersOpen} onClick={() => setProFiltersOpen((current) => !current)} controls="pro-plot-filters" />
         </PlotSummary>
 
         {proFiltersOpen ? (
           <div id="pro-plot-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
-            <div className="w-32 shrink-0"><Select label="Plot points" compact value={proMode === "season" ? "Team" : "Games"} options={[{ value: "Team", label: "One per team" }, { value: "Games", label: "One per game" }]} onChange={(value) => setProMode(value === "Team" ? "season" : "games")} /></div>
-            <GameWindowButtons value={proGameWindow} onChange={changeProGameWindow} />
+            <div className="w-32 shrink-0"><Select label="Plot points" compact value={proMode === "season" ? "Team" : "Games"} options={[{ value: "Team", label: "One per team" }, { value: "Games", label: "One per game" }]} onChange={(value) => setProMode(value === "Team" ? "season" : "games")} disabled={proRound !== "all"} /></div>
+            <GameWindowButtons value={proGameWindow} onChange={changeProGameWindow} disabled={proRound !== "all"} />
             <div className="w-20 shrink-0"><Select label="Season" compact value={proYear} options={availableYears} onChange={changeProYear} /></div>
           </div>
         ) : null}
@@ -2360,8 +2481,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
               teamLogos={teamLogos}
               emptyMessage="No model data is available for this selection."
               ariaLabel={`${activeProPlot.title} ${proIsSingleAxis ? "dot" : "scatter"} plot`}
-              xAxisLabel={proXAxisLabel}
-              yAxisLabel={proYAxisLabel}
+              xAxisLabel={withGameWindow(proXAxisLabel, proGameWindow)}
+              yAxisLabel={withGameWindow(proYAxisLabel, proGameWindow)}
               xMetricLabel={proIsXPoints ? proIsConceded ? "Actual points conceded" : "xPoints" : proIsContactDefense ? "Contact disruptions allowed" : proMetricName}
               yMetricLabel={proIsXPoints ? proIsConceded ? "xPoints conceded" : "Actual points" : proIsContactDefense ? "Line Defense Rating" : ""}
               xValueDecimals={1}

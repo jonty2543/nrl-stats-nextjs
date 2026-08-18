@@ -11,6 +11,7 @@ export const PLAYER_EFFICIENCY_OUTPUT_METRICS = [
   "Kick return metres",
   "Dummy half run metres",
   "Kicking metres",
+  "Fantasy",
   "Points",
   "Tries",
   "Try assists",
@@ -21,8 +22,31 @@ export const PLAYER_EFFICIENCY_OUTPUT_METRICS = [
   "Line engaged runs",
   "Hit ups",
   "Dummy half runs",
+  "Play the balls",
+  "One on one steals",
+  "Dummy passes",
   "Kicks",
   "Forced drop outs",
+  "Bomb kicks",
+  "Grubbers",
+  "40/20s",
+  "20/40s",
+  "Cross field kicks",
+  "Kicked dead",
+  "Tackles made",
+  "Missed tackles",
+  "Ineffective tackles",
+  "Intercepts",
+  "Kicks defused",
+  "Errors",
+  "Handling errors",
+  "One on one lost",
+  "Penalties",
+  "Ruck infringements",
+  "Inside 10 metres",
+  "On report",
+  "Sin bins",
+  "Send offs",
 ] as const;
 export const PLAYER_ATTACK_COMPARISON_STATS = [
   "Receipts",
@@ -52,6 +76,7 @@ export const PLAYER_ATTACK_COMPARISON_STATS = [
 
 export const PLAYER_ATTACK_STAT_COMPARISON_STATS = [
   ...PLAYER_ATTACK_COMPARISON_STATS,
+  "Fantasy",
   "Play-the-ball speed",
 ] as const;
 
@@ -144,6 +169,7 @@ const EFFICIENCY_OUTPUT_FIELDS: Record<PlayerEfficiencyOutputMetric, keyof Playe
   "Kick return metres": "Kick Return Metres",
   "Dummy half run metres": "Dummy Half Run Metres",
   "Kicking metres": "Kicking Metres",
+  Fantasy: "Fantasy",
   Points: "Points",
   Tries: "Tries",
   "Try assists": "Try Assists",
@@ -154,8 +180,31 @@ const EFFICIENCY_OUTPUT_FIELDS: Record<PlayerEfficiencyOutputMetric, keyof Playe
   "Line engaged runs": "Line Engaged Runs",
   "Hit ups": "Hit Ups",
   "Dummy half runs": "Dummy Half Runs",
+  "Play the balls": "Play The Ball",
+  "One on one steals": "One on One Steal",
+  "Dummy passes": "Dummy Passes",
   Kicks: "Kicks",
   "Forced drop outs": "Forced Drop Outs",
+  "Bomb kicks": "Bomb Kicks",
+  Grubbers: "Grubbers",
+  "40/20s": "40/20",
+  "20/40s": "20/40",
+  "Cross field kicks": "Cross Field Kicks",
+  "Kicked dead": "Kicked Dead",
+  "Tackles made": "Tackles Made",
+  "Missed tackles": "Missed Tackles",
+  "Ineffective tackles": "Ineffective Tackles",
+  Intercepts: "Intercepts",
+  "Kicks defused": "Kicks Defused",
+  Errors: "Errors",
+  "Handling errors": "Handling Errors",
+  "One on one lost": "One on One Lost",
+  Penalties: "Penalties",
+  "Ruck infringements": "Ruck Infringements",
+  "Inside 10 metres": "Inside 10 Metres",
+  "On report": "On Report",
+  "Sin bins": "Sin Bins",
+  "Send offs": "Send Offs",
 };
 
 const ATTACK_COMPARISON_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerStat> = {
@@ -182,6 +231,7 @@ const ATTACK_COMPARISON_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerS
   "Missed tackles": "Missed Tackles",
   Penalties: "Penalties",
   Errors: "Errors",
+  Fantasy: "Fantasy",
   "Play-the-ball speed": "Average Play The Ball Speed",
 };
 
@@ -268,7 +318,8 @@ export function buildPlayerAttackPoints(
   baseMetric: PlayerEfficiencyBaseMetric,
   outputMetric: PlayerEfficiencyOutputMetric,
   gameWindow: PlayerGameWindow = null,
-  plotMode: PlayerPlotMode = "players"
+  plotMode: PlayerPlotMode = "players",
+  minimumGamesOverride?: number
 ): PlayerAttackPoint[] {
   const players = new Map<string, PlayerStat[]>();
   for (const row of rows) {
@@ -287,7 +338,7 @@ export function buildPlayerAttackPoints(
       ? positionRows
       : positionRows.filter((row) => finite(row["Mins Played"]) >= usualMinutes * 0.6);
     const qualifyingRows = latestQualifyingRows(positionQualifyingRows, gameWindow);
-    if (qualifyingRows.length < minimumQualifyingGames(gameWindow)) continue;
+    if (qualifyingRows.length < (minimumGamesOverride ?? minimumQualifyingGames(gameWindow))) continue;
 
     const baseField = EFFICIENCY_BASE_FIELDS[baseMetric];
     const outputField = EFFICIENCY_OUTPUT_FIELDS[outputMetric];
@@ -347,7 +398,8 @@ export function buildPlayerAttackComparisonPoints(
   yStat: PlayerAttackComparisonStat,
   mode: PlayerAttackComparisonMode,
   gameWindow: PlayerGameWindow = null,
-  plotMode: PlayerPlotMode = "players"
+  plotMode: PlayerPlotMode = "players",
+  minimumGamesOverride?: number
 ): PlayerAttackComparisonPoint[] {
   const xField = ATTACK_COMPARISON_FIELDS[xStat];
   const yField = ATTACK_COMPARISON_FIELDS[yStat];
@@ -381,7 +433,7 @@ export function buildPlayerAttackComparisonPoints(
       ? positionQualifyingRows.filter((row) => finite(row["Mins Played"]) >= 40)
       : positionQualifyingRows;
     const qualifyingRows = latestQualifyingRows(modeQualifyingRows, gameWindow);
-    if (qualifyingRows.length < minimumQualifyingGames(gameWindow)) continue;
+    if (qualifyingRows.length < (minimumGamesOverride ?? minimumQualifyingGames(gameWindow))) continue;
 
     const isPer80 = BACK_POSITIONS.has(position);
     const comparisonXTotal = qualifyingRows.reduce((sum, row) => {
@@ -460,7 +512,8 @@ export function buildHalvesPairingPoints(
   rows: PlayerStat[],
   stat: PlayerAttackComparisonStat,
   sort: HalvesPairingSort,
-  gameWindow: PlayerGameWindow = null
+  gameWindow: PlayerGameWindow = null,
+  minimumGamesOverride?: number
 ): HalvesPairingPoint[] {
   const field = ATTACK_COMPARISON_FIELDS[stat];
   const games = new Map<string, PlayerStat[]>();
@@ -512,7 +565,7 @@ export function buildHalvesPairingPoints(
     const samples = gameWindow === null
       ? sortedSamples
       : sortedSamples.length >= gameWindow ? sortedSamples.slice(-gameWindow) : [];
-    if (samples.length < minimumQualifyingGames(gameWindow)) return [];
+    if (samples.length < (minimumGamesOverride ?? minimumQualifyingGames(gameWindow))) return [];
     const playerAValue = samples.reduce((sum, sample) => sum + sample.playerAValue, 0);
     const playerBValue = samples.reduce((sum, sample) => sum + sample.playerBValue, 0);
     const playerAHalfbackGames = samples.filter((sample) => sample.playerAIsHalfback).length;
@@ -547,7 +600,8 @@ export function buildPlayerDefencePoints(
   rows: PlayerStat[],
   position: PlayerAttackPosition,
   gameWindow: PlayerGameWindow = null,
-  plotMode: PlayerPlotMode = "players"
+  plotMode: PlayerPlotMode = "players",
+  minimumGamesOverride?: number
 ): PlayerDefencePoint[] {
   const players = new Map<string, PlayerStat[]>();
   for (const row of rows) {
@@ -565,7 +619,7 @@ export function buildPlayerDefencePoints(
       ? positionRows
       : positionRows.filter((row) => finite(row["Mins Played"]) >= usualMinutes * 0.6);
     const qualifyingRows = latestQualifyingRows(positionQualifyingRows, gameWindow);
-    if (qualifyingRows.length < minimumQualifyingGames(gameWindow)) continue;
+    if (qualifyingRows.length < (minimumGamesOverride ?? minimumQualifyingGames(gameWindow))) continue;
 
     if (plotMode === "games") {
       for (const row of qualifyingRows) {

@@ -12,7 +12,7 @@ const clusterDataL3 = {
                 {
                     "id": 1,
                     "name": "Balanced Fullback",
-                    "count": 9,
+                    "count": 8,
                     "description": "These well rounded fullbacks balance workrate, playmaking and elusiveness making them the complete package."
                 },
                 {
@@ -24,7 +24,7 @@ const clusterDataL3 = {
                 {
                     "id": 3,
                     "name": "Playmaker Fullback",
-                    "count": 27,
+                    "count": 28,
                     "description": "These playmakers save their energy for the big moments, with reduced workrates but high involvement in tries and try assists."
                 },
                 {
@@ -274,25 +274,25 @@ const clusterDataL3 = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 54,
+                    "count": 66,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 120,
+                    "count": 90,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 51,
+                    "count": 42,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 30,
+                    "count": 57,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],

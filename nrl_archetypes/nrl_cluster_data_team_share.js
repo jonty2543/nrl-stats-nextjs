@@ -274,19 +274,19 @@ const clusterDataTeamShare = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 85,
+                    "count": 51,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 66,
+                    "count": 92,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 32,
+                    "count": 40,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {

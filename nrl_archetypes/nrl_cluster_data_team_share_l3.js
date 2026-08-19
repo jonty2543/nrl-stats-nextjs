@@ -114,7 +114,7 @@ const clusterDataTeamShareL3 = {
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 61,
+                    "count": 62,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
@@ -126,7 +126,7 @@ const clusterDataTeamShareL3 = {
                 {
                     "id": 2,
                     "name": "Support Centre",
-                    "count": 101,
+                    "count": 100,
                     "description": "These players are less involved with ball in hand and may play other roles for the team."
                 },
                 {
@@ -274,25 +274,25 @@ const clusterDataTeamShareL3 = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 73,
+                    "count": 62,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 96,
+                    "count": 108,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 34,
+                    "count": 48,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 52,
+                    "count": 37,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],

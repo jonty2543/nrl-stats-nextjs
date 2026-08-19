@@ -393,9 +393,10 @@ def load_and_process_data(configs, player_data, stat_mode='production', recent_g
         axis=1,
     )
 
-    # Some match feeds publish 0/null tackle efficiency despite supplying the
-    # tackle counts. Rebuild only those invalid values so one bad row cannot
-    # collapse a player's recent defensive archetype score.
+    # Some match feeds publish null tackle efficiency, or fractional positive
+    # values such as 0.94 instead of 94, despite supplying the tackle counts.
+    # Rebuild only those invalid values so one bad row cannot collapse a
+    # player's recent defensive archetype score. A true 0% efficiency is valid.
     tackle_counts = player_df[
         ['tackles_made', 'missed_tackles', 'ineffective_tackles']
     ].apply(pd.to_numeric, errors='coerce')
@@ -403,7 +404,7 @@ def load_and_process_data(configs, player_data, stat_mode='production', recent_g
     reported_efficiency = pd.to_numeric(player_df['tackle_efficiency'], errors='coerce')
     invalid_efficiency = (
         reported_efficiency.isna()
-        | (reported_efficiency <= 0)
+        | ((reported_efficiency > 0) & (reported_efficiency <= 1))
         | (reported_efficiency > 100)
     ) & (tackle_attempts > 0)
     player_df['tackle_efficiency'] = reported_efficiency

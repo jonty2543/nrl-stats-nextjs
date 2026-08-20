@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "rebuild:betting-odds-snapshot": "node scripts/rebuild-betting-odds-snapshot.mjs",
     "rebuild:fantasy-card-summary": "node scripts/rebuild-fantasy-player-card-summary.mjs",
     "sync:player-images": "node scripts/sync-player-images.mjs"
   },

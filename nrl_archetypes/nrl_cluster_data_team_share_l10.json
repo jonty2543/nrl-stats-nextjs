@@ -73,13 +73,13 @@
                 {
                     "id": 1,
                     "name": "Finisher Winger",
-                    "count": 52,
+                    "count": 53,
                     "description": "Wingers who are specialist try scorers, often with great positional awareness and speed."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 76,
+                    "count": 75,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -114,13 +114,13 @@
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 52,
+                    "count": 51,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 51,
+                    "count": 53,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
@@ -132,7 +132,7 @@
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 48,
+                    "count": 47,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],
@@ -169,13 +169,13 @@
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 60,
+                    "count": 59,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
                     "id": 1,
                     "name": "Running Half",
-                    "count": 59,
+                    "count": 60,
                     "description": "Halves with strong running games who look to break the line, usually Five-Eighths."
                 },
                 {
@@ -226,13 +226,13 @@
                 {
                     "id": 1,
                     "name": "Running Hooker",
-                    "count": 18,
+                    "count": 17,
                     "description": "Strong ball running hookers who often look to run from dummy half."
                 },
                 {
                     "id": 2,
                     "name": "Link Hooker",
-                    "count": 21,
+                    "count": 22,
                     "description": "Hookers that look to pass rather than run, usually having strong ball playing."
                 },
                 {
@@ -274,25 +274,25 @@
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 52,
+                    "count": 78,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 99,
+                    "count": 61,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 40,
+                    "count": 44,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 27,
+                    "count": 35,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -328,19 +328,19 @@
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 23,
+                    "count": 7,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 55,
+                    "count": 58,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 189,
+                    "count": 202,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

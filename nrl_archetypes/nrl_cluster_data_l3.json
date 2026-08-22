@@ -220,7 +220,7 @@
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 43,
+                    "count": 42,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
@@ -238,7 +238,7 @@
                 {
                     "id": 3,
                     "name": "Crafty Hooker",
-                    "count": 19,
+                    "count": 20,
                     "description": "Creative types who specialise in finding the right pass for their forwards."
                 }
             ],
@@ -248,7 +248,8 @@
                     "features": [
                         "all_run_metres",
                         "tackle_breaks",
-                        "line_breaks"
+                        "line_breaks",
+                        "tries"
                     ]
                 },
                 "pc2": {

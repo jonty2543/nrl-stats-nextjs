@@ -248,7 +248,8 @@ const clusterData = {
                     "features": [
                         "all_run_metres",
                         "tackle_breaks",
-                        "line_breaks"
+                        "line_breaks",
+                        "tries"
                     ]
                 },
                 "pc2": {

@@ -208,7 +208,7 @@ POSITION_CONFIGS = [
     ),
     PositionConfig(
         name='Hooker',
-        features1=['all_run_metres', 'tackle_breaks', 'line_breaks'],
+        features1=['all_run_metres', 'tackle_breaks', 'line_breaks', 'tries'],
         features2=['try_assists', 'line_break_assists', 'forty_twenty', 'forced_drop_outs'],
         features3=['passes_to_run_ratio'],
         pc_names=['Ball Running', 'Creativity', 'Pass - Run Ratio'],

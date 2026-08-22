@@ -226,7 +226,7 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 1,
                     "name": "Running Hooker",
-                    "count": 18,
+                    "count": 19,
                     "description": "Strong ball running hookers who often look to run from dummy half."
                 },
                 {
@@ -238,7 +238,7 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 3,
                     "name": "Crafty Hooker",
-                    "count": 20,
+                    "count": 19,
                     "description": "Creative types who specialise in finding the right pass for their forwards."
                 }
             ],
@@ -248,7 +248,8 @@ const clusterDataTeamShareL5 = {
                     "features": [
                         "all_run_metres_team_share",
                         "tackle_breaks_team_share",
-                        "line_breaks_team_share"
+                        "line_breaks_team_share",
+                        "tries_team_share"
                     ]
                 },
                 "pc2": {

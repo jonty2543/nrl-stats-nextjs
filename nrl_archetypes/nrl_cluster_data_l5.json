@@ -220,13 +220,13 @@
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 34,
+                    "count": 31,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
                     "id": 1,
                     "name": "Running Hooker",
-                    "count": 15,
+                    "count": 19,
                     "description": "Strong ball running hookers who often look to run from dummy half."
                 },
                 {
@@ -238,7 +238,7 @@
                 {
                     "id": 3,
                     "name": "Crafty Hooker",
-                    "count": 22,
+                    "count": 21,
                     "description": "Creative types who specialise in finding the right pass for their forwards."
                 }
             ],
@@ -248,7 +248,8 @@
                     "features": [
                         "all_run_metres",
                         "tackle_breaks",
-                        "line_breaks"
+                        "line_breaks",
+                        "tries"
                     ]
                 },
                 "pc2": {

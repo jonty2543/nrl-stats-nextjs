@@ -248,7 +248,8 @@ const clusterDataTeamShareL3 = {
                     "features": [
                         "all_run_metres_team_share",
                         "tackle_breaks_team_share",
-                        "line_breaks_team_share"
+                        "line_breaks_team_share",
+                        "tries_team_share"
                     ]
                 },
                 "pc2": {

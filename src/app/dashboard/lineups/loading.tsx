@@ -1,4 +1,6 @@
 export default function LineupsLoading() {
+  const skeletonGroups = [1, 2, 3, 2]
+
   return (
     <div className="space-y-8" role="status" aria-label="Loading team lists">
       <div className="grid grid-cols-3 gap-2 sm:ml-auto sm:max-w-md">
@@ -6,10 +8,10 @@ export default function LineupsLoading() {
           <div key={index} className="h-9 animate-pulse rounded-full border border-nrl-border bg-white/[0.06]" />
         ))}
       </div>
-      {[1, 2].map((group) => (
-        <section key={group} className="space-y-5">
+      {skeletonGroups.map((matchCount, groupIndex) => (
+        <section key={groupIndex} className="space-y-5">
           <div className="h-3 w-40 animate-pulse rounded bg-white/[0.06]" />
-          {Array.from({ length: group === 1 ? 1 : 2 }, (_, cardIndex) => (
+          {Array.from({ length: matchCount }, (_, cardIndex) => (
             <div key={cardIndex} className="relative overflow-hidden rounded-lg border border-nrl-border bg-nrl-panel px-4 pb-7 pt-3">
               <div className="mx-auto h-2 w-36 animate-pulse rounded bg-white/[0.08]" />
               <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-4">

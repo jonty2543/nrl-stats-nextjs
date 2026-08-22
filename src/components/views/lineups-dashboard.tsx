@@ -3936,6 +3936,14 @@ function DisplayModeControl({
   )
 }
 
+function predictedTeamPoints(matchPrediction: LineupMatchPrediction | null, side: "home" | "away"): number | null {
+  const total = matchPrediction?.predTotal
+  const margin = matchPrediction?.predMargin
+  if (total == null || margin == null) return null
+  const value = side === "home" ? (total + margin) / 2 : (total - margin) / 2
+  return Number.isFinite(value) ? value : null
+}
+
 function LineupCard({
   match,
   liveMatch,
@@ -4015,11 +4023,15 @@ function LineupCard({
     const aliases = new Set([team?.team, team?.teamName].flatMap(teamAliases))
     return metrics.find((metric) => aliases.has(normaliseKey(metric.team))) ?? null
   }
-  const homeHeaderXPoints = canAccessFantasyProjections && showMatchCardXPoints && isPostMatch
-    ? match.homeXPoints ?? detailMatch.homeXPoints ?? headerMetricForTeam(detailMatch.homeTeam, true)?.xpoints ?? null
+  const homeHeaderXPoints = canAccessFantasyProjections && showMatchCardXPoints
+    ? isPostMatch
+      ? match.homeXPoints ?? detailMatch.homeXPoints ?? headerMetricForTeam(detailMatch.homeTeam, true)?.xpoints ?? null
+      : predictedTeamPoints(matchPrediction, "home")
     : null
-  const awayHeaderXPoints = canAccessFantasyProjections && showMatchCardXPoints && isPostMatch
-    ? match.awayXPoints ?? detailMatch.awayXPoints ?? headerMetricForTeam(detailMatch.awayTeam, false)?.xpoints ?? null
+  const awayHeaderXPoints = canAccessFantasyProjections && showMatchCardXPoints
+    ? isPostMatch
+      ? match.awayXPoints ?? detailMatch.awayXPoints ?? headerMetricForTeam(detailMatch.awayTeam, false)?.xpoints ?? null
+      : predictedTeamPoints(matchPrediction, "away")
     : null
   const showSplitScore = headerScore.homeScore != null || headerScore.awayScore != null
   const homeScoreWins = headerScore.homeScore != null && headerScore.awayScore != null && headerScore.homeScore > headerScore.awayScore

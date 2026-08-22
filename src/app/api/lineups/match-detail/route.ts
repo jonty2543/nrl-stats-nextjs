@@ -12,7 +12,7 @@ import {
   type PostMatchModelMetricDistributions,
   type PostMatchTeamMetricWithRdr,
 } from "@/lib/data/post-match-team-metrics"
-import type { LineupMatch } from "@/lib/lineups/nrl-lineups"
+import type { LineupMatch, LineupMatchStats } from "@/lib/lineups/nrl-lineups"
 import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
 
 function text(value: unknown): string {
@@ -159,6 +159,16 @@ function mergeHydratedMatch(base: LineupMatch | null, hydrated: LineupMatch | nu
   }
 }
 
+function needsCompletedMatchStats(stats: LineupMatchStats | null | undefined): boolean {
+  if (!stats) return true
+  return (
+    stats.home?.possessionPct == null ||
+    stats.away?.possessionPct == null ||
+    stats.home?.completionRate == null ||
+    stats.away?.completionRate == null
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
@@ -206,8 +216,8 @@ export async function POST(request: NextRequest) {
         roundLineups.matchStats[matchId] ??
         hydratedMatchStats
     }
-    if (competition === "nrl" && !hydratedMatchStats && (hydratedMatch ?? detailMatch)) {
-      hydratedMatchStats = await fetchCompletedMatchStats((hydratedMatch ?? detailMatch) as LineupMatch)
+    if (competition === "nrl" && needsCompletedMatchStats(hydratedMatchStats) && (hydratedMatch ?? detailMatch)) {
+      hydratedMatchStats = await fetchCompletedMatchStats((hydratedMatch ?? detailMatch) as LineupMatch) ?? hydratedMatchStats
     }
 
     const fallbackDetail = shellMatch

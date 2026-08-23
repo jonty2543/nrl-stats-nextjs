@@ -114,7 +114,7 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 52,
+                    "count": 53,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
@@ -126,7 +126,7 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 2,
                     "name": "Support Centre",
-                    "count": 62,
+                    "count": 61,
                     "description": "These players are less involved with ball in hand and may play other roles for the team."
                 },
                 {
@@ -169,7 +169,7 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 59,
+                    "count": 60,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
@@ -181,7 +181,7 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 2,
                     "name": "Organising Half",
-                    "count": 83,
+                    "count": 82,
                     "description": "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
                 }
             ],
@@ -220,13 +220,13 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 40,
+                    "count": 41,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
                     "id": 1,
                     "name": "Running Hooker",
-                    "count": 17,
+                    "count": 16,
                     "description": "Strong ball running hookers who often look to run from dummy half."
                 },
                 {
@@ -275,19 +275,19 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 81,
+                    "count": 79,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 60,
+                    "count": 65,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 45,
+                    "count": 42,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
@@ -329,19 +329,19 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 26,
+                    "count": 29,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 55,
+                    "count": 56,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 186,
+                    "count": 184,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

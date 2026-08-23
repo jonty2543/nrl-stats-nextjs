@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
+import { CompetitionToggle } from "@/components/ui/competition-toggle"
 import { PillRadio } from "@/components/ui/pill-radio"
 import { PlayerImageWithFallback } from "@/components/ui/player-image-with-fallback"
 import { Select } from "@/components/ui/select"
@@ -16,6 +17,9 @@ interface RankingsDashboardProps {
   teamRows: TeamStat[]
   playerImages: PlayerImageRecord[]
   teamLogos: Record<string, string>
+  availableYears: string[]
+  cupAvailableYears: string[]
+  canAccessCup: boolean
 }
 
 type ValueMode = "average" | "total"
@@ -638,7 +642,12 @@ function buildTeamRankings(
     .sort(compareRankingEntries(sortDirection))
 }
 
-export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerImages, teamLogos }: RankingsDashboardProps) {
+export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerImages, teamLogos, availableYears, cupAvailableYears, canAccessCup }: RankingsDashboardProps) {
+  const [competition, setCompetition] = useState<"nrl" | "cup">("nrl")
+  const [activeYear, setActiveYear] = useState(selectedYear)
+  const [activePlayerRows, setActivePlayerRows] = useState<PlayerStat[]>(playerRows)
+  const [activeTeamRows, setActiveTeamRows] = useState<TeamStat[]>(teamRows)
+  const [competitionLoading, setCompetitionLoading] = useState(false)
   const [view, setView] = useState<RankingView>("players")
   const [section, setSection] = useState<RankingSection>("rankings")
   const [mode, setMode] = useState<ValueMode>("average")
@@ -662,6 +671,33 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   const effectiveMode = section === "form" ? "average" : mode
   const rankingFinderSuggestions = useMemo(() => buildRankingSuggestions(rankingFinderQuery), [rankingFinderQuery])
 
+  const changeCompetition = async (nextCompetition: "nrl" | "cup") => {
+    if (nextCompetition === competition) return
+    if (nextCompetition === "cup" && !canAccessCup) return
+    const yearOptions = nextCompetition === "cup" ? cupAvailableYears : availableYears
+    const nextYear = yearOptions.includes(selectedYear) ? selectedYear : yearOptions[0] ?? selectedYear
+    setCompetition(nextCompetition)
+    setActiveYear(nextYear)
+    if (nextCompetition === "nrl" && nextYear === selectedYear) {
+      setActivePlayerRows(playerRows)
+      setActiveTeamRows(teamRows)
+      return
+    }
+    setCompetitionLoading(true)
+    try {
+      const query = new URLSearchParams({ years: nextYear, competition: nextCompetition })
+      const [playersResponse, teamsResponse] = await Promise.all([
+        fetch(`/api/player-stats?${query.toString()}`),
+        fetch(`/api/team-stats?${query.toString()}`),
+      ])
+      if (!playersResponse.ok || !teamsResponse.ok) return
+      setActivePlayerRows((await playersResponse.json()) as PlayerStat[])
+      setActiveTeamRows((await teamsResponse.json()) as TeamStat[])
+    } finally {
+      setCompetitionLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!rankingFinderOpen) return
     const closeOnOutsideClick = (event: PointerEvent) => {
@@ -679,12 +715,12 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   }, [rankingFinderOpen])
 
   const playerRankings = useMemo(
-    () => buildPlayerRankings(playerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames),
-    [playerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames]
+    () => buildPlayerRankings(activePlayerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames),
+    [activePlayerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames]
   )
   const teamRankings = useMemo(
-    () => buildTeamRankings(teamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames),
-    [teamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames]
+    () => buildTeamRankings(activeTeamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames),
+    [activeTeamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames]
   )
   const statHeading = effectivePerStatKey
     ? `${statInitials(effectiveStatKey, activeStatOptions)} / ${statInitials(effectivePerStatKey, activeStatOptions)}`
@@ -722,7 +758,8 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-end gap-3">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-end gap-2">
+          <CompetitionToggle value={competition} onChange={(value) => void changeCompetition(value)} canAccessCup={canAccessCup} />
           <Select
             label="View"
             compact
@@ -814,7 +851,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             ) : null}
             <div className="flex shrink-0 flex-col gap-0.5">
               <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Season</span>
-              <div className="grid h-8 min-w-20 place-items-center rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text">{selectedYear || "Latest"}</div>
+              <div className="grid h-8 min-w-20 place-items-center rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text">{competitionLoading ? "Loading" : activeYear || "Latest"}</div>
             </div>
           </div>
         ) : null}

@@ -35,6 +35,7 @@ import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-t
 import { PillRadio } from "@/components/ui/pill-radio";
 import { Select } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { CompetitionToggle } from "@/components/ui/competition-toggle";
 import { hasProPlotAccess } from "@/lib/access/pro-access";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 
@@ -45,9 +46,11 @@ interface PlayerComparisonProps {
   playerImages: PlayerImageRecord[];
   teamLogos: Record<string, string>;
   availableYears: string[];
+  cupAvailableYears: string[];
   defaultYears: string[];
   initialCanAccessLoginSeason?: boolean;
   canBypassPlotGate?: boolean;
+  canAccessCup?: boolean;
 }
 
 type PlayerStatsTableSortDirection = "asc" | "desc";
@@ -129,21 +132,25 @@ function statsTableQueryKey({
   team,
   position,
   minGames,
+  competition,
 }: {
   years: string[];
   groupBy: PlayerStatsTableGroupBy;
   team: string;
   position: string;
   minGames: string;
+  competition?: "nrl" | "cup";
 }): string {
-  return new URLSearchParams({
+  const params = new URLSearchParams({
     dataset: "player",
     years: years.join(","),
     groupBy,
     team,
     position,
     minGames: String(minGamesValue(minGames)),
-  }).toString();
+  });
+  if (competition === "cup") params.set("competition", "cup");
+  return params.toString();
 }
 
 const MINUTES_FILTER_OPTIONS = [
@@ -891,9 +898,11 @@ export function PlayerComparison({
   playerImages,
   teamLogos,
   availableYears,
+  cupAvailableYears,
   defaultYears,
   initialCanAccessLoginSeason = false,
   canBypassPlotGate = false,
+  canAccessCup = false,
 }: PlayerComparisonProps) {
   type TeammateMode = "both" | "with" | "without";
   type PercentileScope = "Position" | "All Players";
@@ -904,14 +913,17 @@ export function PlayerComparison({
     : initialCanAccessLoginSeason;
   const hasClientProPlotAccess =
     canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata);
+  const hasClientCupAccess = canAccessCup || hasClientProPlotAccess;
+  const [competition, setCompetition] = useState<"nrl" | "cup">("nrl");
+  const activeAvailableYears = competition === "cup" ? cupAvailableYears : availableYears;
 
   const [allData, setAllData] = useState<PlayerStat[]>(initialData);
   const unlockedYears = useMemo(
     () =>
-      availableYears.filter((year) =>
+      activeAvailableYears.filter((year) =>
         isAccessibleSeason(year, canAccessLoginSeason, "stats", hasClientProPlotAccess)
       ),
-    [availableYears, canAccessLoginSeason, hasClientProPlotAccess]
+    [activeAvailableYears, canAccessLoginSeason, hasClientProPlotAccess]
   );
   const initialYears = useMemo(() => {
     if (unlockedYears.includes(DEFAULT_STATS_TABLE_YEAR)) return [DEFAULT_STATS_TABLE_YEAR];
@@ -966,7 +978,9 @@ export function PlayerComparison({
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/player-stats?years=${validYears.join(",")}`);
+      const params = new URLSearchParams({ years: validYears.join(",") });
+      if (competition === "cup") params.set("competition", "cup");
+      const res = await fetch(`/api/player-stats?${params.toString()}`);
       if (res.ok) {
         const data = (await res.json()) as PlayerStat[];
         const fetchedYears = new Set(validYears);
@@ -978,7 +992,7 @@ export function PlayerComparison({
     } finally {
       setLoading(false);
     }
-  }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
+  }, [competition, ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
 
   const handleYearsChange = useCallback(async (years: string[]) => {
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
@@ -988,6 +1002,40 @@ export function PlayerComparison({
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
     setStatsTableYears(validYears);
   }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
+  const handleCompetitionChange = useCallback(async (nextCompetition: "nrl" | "cup") => {
+    if (nextCompetition === competition) return;
+    if (nextCompetition === "cup" && !hasClientCupAccess) return;
+    const yearOptions = nextCompetition === "cup" ? cupAvailableYears : availableYears;
+    const nextUnlockedYears = yearOptions.filter((year) =>
+      isAccessibleSeason(year, canAccessLoginSeason, "stats", hasClientProPlotAccess)
+    );
+    const preferredYears = yearOptions.includes(DEFAULT_STATS_TABLE_YEAR)
+      ? [DEFAULT_STATS_TABLE_YEAR]
+      : defaultYears;
+    const nextYears = preferredYears.filter((year) => nextUnlockedYears.includes(year));
+    setCompetition(nextCompetition);
+    setSelectedYears(nextYears);
+    setStatsTableYears(nextYears);
+    setStatsTablePosition("All Positions");
+    setStatsTableTeam("All Teams");
+    if (nextCompetition === "nrl" && nextYears.every((year) => initialYears.includes(year))) {
+      setAllData(initialData);
+      return;
+    }
+    if (nextYears.length === 0) {
+      setAllData([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ years: nextYears.join(",") });
+      if (nextCompetition === "cup") params.set("competition", "cup");
+      const res = await fetch(`/api/player-stats?${params.toString()}`);
+      if (res.ok) setAllData((await res.json()) as PlayerStat[]);
+    } finally {
+      setLoading(false);
+    }
+  }, [availableYears, canAccessLoginSeason, competition, cupAvailableYears, defaultYears, hasClientCupAccess, hasClientProPlotAccess, initialData, initialYears]);
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any");
   const [minutesUnderFilter, setMinutesUnderFilter] = useState<string>("Any");
@@ -1085,9 +1133,10 @@ export function PlayerComparison({
       team: statsTableTeam,
       position: statsTablePosition,
       minGames: statsTableMinGames,
+      competition,
     });
 
-    if (initialStatsTable && queryKey === initialStatsTableQueryKey) {
+    if (competition === "nrl" && initialStatsTable && queryKey === initialStatsTableQueryKey) {
       setStatsTableRowsLoading(false);
       setStatsTableFilterOptions(initialStatsTable.filterOptions);
       setStatsTableAggregateRows(
@@ -1133,6 +1182,7 @@ export function PlayerComparison({
     statsTablePosition,
     statsTableTeam,
     statsTableYears,
+    competition,
   ]);
 
   const sortedStatsTableRows = useMemo(() => {
@@ -2076,6 +2126,9 @@ export function PlayerComparison({
 
   return (
     <div className="space-y-4">
+      <div className="flex items-end gap-3">
+        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} />
+      </div>
       {loading && (
         <div className="flex justify-center py-6 md:py-8">
           <span
@@ -2142,7 +2195,7 @@ export function PlayerComparison({
           {statsTableFiltersOpen ? (
             <div className="grid gap-3 border-b border-nrl-border bg-nrl-accent/10 px-3 py-3 md:grid-cols-[minmax(220px,320px)_150px_150px_130px]">
               <FilterBar
-                years={availableYears}
+                years={activeAvailableYears}
                 selectedYears={statsTableYears}
                 onYearsChange={handleStatsTableYearsChange}
                 finalsMode="Yes"
@@ -2402,7 +2455,7 @@ export function PlayerComparison({
                 Analysis Filters
               </div>
               <FilterBar
-                years={availableYears}
+                years={activeAvailableYears}
                 selectedYears={selectedYears}
                 onYearsChange={handleYearsChange}
                 finalsMode={finalsMode}

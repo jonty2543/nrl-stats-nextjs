@@ -31,6 +31,9 @@ export default async function PlotsPage() {
   const canAccessLoginSeason = Boolean(userId);
   const proAccessPromise = getServerProPlotAccess(userId);
   const availableYearsPromise = fetchAvailableYears();
+  const cupAvailableYearsPromise = proAccessPromise.then((canAccess) =>
+    canAccess ? fetchAvailableYears("cup") : Promise.resolve([])
+  );
   const teamLogosPromise = fetchTeamLogos();
   const playerImagesPromise = fetchPlayerImages();
   const [canAccessProSeason, availableYears] = await Promise.all([proAccessPromise, availableYearsPromise]);
@@ -40,11 +43,12 @@ export default async function PlotsPage() {
   const yearOptions = unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1);
   const initialYear = yearOptions[0] ?? "";
   const initialPlayerDataPromise = initialYear ? fetchPlayerStats([initialYear]) : Promise.resolve([]);
-  const [teamLogos, playerImages, initialPlayerData] = await Promise.all([
+  const [teamLogos, playerImages, initialPlayerData, cupAvailableYears] = await Promise.all([
     teamLogosPromise,
     playerImagesPromise,
     initialPlayerDataPromise,
+    cupAvailableYearsPromise,
   ]);
 
-  return <PlotsDashboard initialPlayerData={initialPlayerData} availableYears={yearOptions} initialYear={initialYear} teamLogos={teamLogos} playerFaceImages={buildPlayerFaceImages(playerImages)} canAccessModelPlots={canAccessProSeason} />;
+  return <PlotsDashboard initialPlayerData={initialPlayerData} availableYears={yearOptions} cupAvailableYears={cupAvailableYears} initialYear={initialYear} teamLogos={teamLogos} playerFaceImages={buildPlayerFaceImages(playerImages)} canAccessModelPlots={canAccessProSeason} canAccessCup={canAccessProSeason} />;
 }

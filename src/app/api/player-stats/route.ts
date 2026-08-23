@@ -15,6 +15,10 @@ export async function GET(request: NextRequest) {
     const yearsParam = searchParams.get("years");
     const playerParam = searchParams.get("player")?.trim();
     const isFantasyContext = searchParams.get("context") === "fantasy";
+    const competition = searchParams.get("competition") === "cup" ? "cup" : "nrl";
+    if (competition === "cup" && !canAccessProSeason) {
+      return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
+    }
     const requestedYears = yearsParam
       ? yearsParam
           .split(",")
@@ -29,8 +33,8 @@ export async function GET(request: NextRequest) {
             isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
           )
       : isFantasyContext
-        ? await fetchAvailableYears()
-        : (await fetchAvailableYears()).filter((year) =>
+        ? await fetchAvailableYears(competition)
+        : (await fetchAvailableYears(competition)).filter((year) =>
             isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
           );
 
@@ -40,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     const data = playerParam
       ? await fetchFantasyPlayerStatsForYears(playerParam, allowedYears)
-      : await fetchPlayerStats(allowedYears);
+      : await fetchPlayerStats(allowedYears, competition);
     const dataResolvedAt = performance.now();
     const response = NextResponse.json(data);
     response.headers.set("x-player-stats-mode", playerParam ? "player" : "bulk");

@@ -12,8 +12,10 @@ export default async function RankingsPage() {
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
-  const [availableYears, playerImages, teamLogos] = await Promise.all([
+  const cupAvailableYearsPromise = canBypassPlotGate ? fetchAvailableYears("cup") : Promise.resolve([])
+  const [availableYears, cupAvailableYears, playerImages, teamLogos] = await Promise.all([
     fetchAvailableYears(),
+    cupAvailableYearsPromise,
     fetchPlayerImages(),
     fetchTeamLogos(),
   ])
@@ -40,6 +42,9 @@ export default async function RankingsPage() {
       teamRows={teamRows}
       playerImages={playerImages}
       teamLogos={teamLogos}
+      availableYears={yearPool}
+      cupAvailableYears={cupAvailableYears}
+      canAccessCup={canBypassPlotGate}
     />
   )
 }

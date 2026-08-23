@@ -22,13 +22,16 @@ import { FantasyGameLogTrendBrush } from "@/components/charts/fantasy-game-log-t
 import { hasProPlotAccess } from "@/lib/access/pro-access";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 import { resolveTeamLogoUrl } from "@/components/views/player-comparison";
+import { CompetitionToggle } from "@/components/ui/competition-toggle";
 
 interface TeamComparisonProps {
   initialData: TeamStat[];
   availableYears: string[];
+  cupAvailableYears: string[];
   defaultYears: string[];
   teamLogos: Record<string, string>;
   canBypassPlotGate?: boolean;
+  canAccessCup?: boolean;
 }
 
 type TeamPerspective = "For" | "Against";
@@ -135,22 +138,27 @@ function buildAgainstTeamStats(rows: TeamStat[]): TeamStat[] {
 export function TeamComparison({
   initialData,
   availableYears,
+  cupAvailableYears,
   defaultYears,
   teamLogos,
   canBypassPlotGate = false,
+  canAccessCup = false,
 }: TeamComparisonProps) {
   const { userId } = useAuth();
   const { user } = useUser();
   const canAccessLoginSeason = Boolean(userId);
   const hasClientProPlotAccess =
     canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata);
+  const hasClientCupAccess = canAccessCup || hasClientProPlotAccess;
+  const [competition, setCompetition] = useState<"nrl" | "cup">("nrl");
+  const activeAvailableYears = competition === "cup" ? cupAvailableYears : availableYears;
   const [allData, setAllData] = useState<TeamStat[]>(initialData);
   const unlockedYears = useMemo(
     () =>
-      availableYears.filter((year) =>
+      activeAvailableYears.filter((year) =>
         isAccessibleSeason(year, canAccessLoginSeason, "stats", hasClientProPlotAccess)
       ),
-    [availableYears, canAccessLoginSeason, hasClientProPlotAccess]
+    [activeAvailableYears, canAccessLoginSeason, hasClientProPlotAccess]
   );
   const initialYears = useMemo(() => {
     const validDefaultYears = defaultYears.filter((year) => unlockedYears.includes(year));
@@ -187,7 +195,9 @@ export function TeamComparison({
     }
     setLoading(allData.length === 0);
     try {
-      const res = await fetch(`/api/team-stats?years=${unlockedYears.join(",")}`);
+      const params = new URLSearchParams({ years: unlockedYears.join(",") });
+      if (competition === "cup") params.set("competition", "cup");
+      const res = await fetch(`/api/team-stats?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setAllData(data);
@@ -195,7 +205,7 @@ export function TeamComparison({
     } finally {
       setLoading(false);
     }
-  }, [allData.length, unlockedYears]);
+  }, [allData.length, competition, unlockedYears]);
 
   const loadTeamYears = useCallback(async (years: string[]) => {
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
@@ -207,7 +217,9 @@ export function TeamComparison({
 
     setLoading(allData.length === 0);
     try {
-      const res = await fetch(`/api/team-stats?years=${missingYears.join(",")}`);
+      const params = new URLSearchParams({ years: missingYears.join(",") });
+      if (competition === "cup") params.set("competition", "cup");
+      const res = await fetch(`/api/team-stats?${params.toString()}`);
       if (!res.ok) return;
       const data = (await res.json()) as TeamStat[];
       const fetchedYears = new Set(missingYears);
@@ -218,7 +230,7 @@ export function TeamComparison({
     } finally {
       setLoading(false);
     }
-  }, [allData, ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
+  }, [allData, competition, ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
 
   const handleYearsChange = useCallback(async (years: string[]) => {
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
@@ -230,6 +242,36 @@ export function TeamComparison({
     await loadTeamYears(validYears);
     setTeamStatsTableYears(validYears);
   }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears, loadTeamYears]);
+  const handleCompetitionChange = useCallback(async (nextCompetition: "nrl" | "cup") => {
+    if (nextCompetition === competition) return;
+    if (nextCompetition === "cup" && !hasClientCupAccess) return;
+    const yearOptions = nextCompetition === "cup" ? cupAvailableYears : availableYears;
+    const nextUnlockedYears = yearOptions.filter((year) =>
+      isAccessibleSeason(year, canAccessLoginSeason, "stats", hasClientProPlotAccess)
+    );
+    const nextDefaultYears = defaultYears.filter((year) => nextUnlockedYears.includes(year));
+    const nextYears = nextDefaultYears.length > 0 ? nextDefaultYears : nextUnlockedYears.slice(0, 1);
+    setCompetition(nextCompetition);
+    setSelectedYears(nextYears);
+    setTeamStatsTableYears(nextYears);
+    setTeamStatsTableTeam("All Teams");
+    if (nextCompetition === "nrl") {
+      setAllData(initialData);
+      return;
+    }
+    if (nextYears.length === 0) {
+      setAllData([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ years: nextYears.join(","), competition: "cup" });
+      const res = await fetch(`/api/team-stats?${params.toString()}`);
+      if (res.ok) setAllData((await res.json()) as TeamStat[]);
+    } finally {
+      setLoading(false);
+    }
+  }, [availableYears, canAccessLoginSeason, competition, cupAvailableYears, defaultYears, hasClientCupAccess, hasClientProPlotAccess, initialData]);
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minMinutes, setMinMinutes] = useState(0);
   const [minutesMode, setMinutesMode] = useState("All");
@@ -723,6 +765,9 @@ export function TeamComparison({
 
   return (
     <div className="space-y-4">
+      <div className="flex items-end gap-3">
+        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} />
+      </div>
       {TEAM_STATS_TABLE_ENABLED && allData.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
           <div className="flex min-h-[44px] items-center justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-5 py-1.5">
@@ -765,7 +810,7 @@ export function TeamComparison({
           {teamStatsTableFiltersOpen ? (
             <div className="grid gap-3 border-b border-nrl-border bg-nrl-accent/10 px-3 py-3 md:grid-cols-[minmax(220px,320px)_150px]">
               <FilterBar
-                years={availableYears}
+                years={activeAvailableYears}
                 selectedYears={teamStatsTableYears}
                 onYearsChange={handleTeamStatsTableYearsChange}
                 finalsMode="Yes"
@@ -934,7 +979,7 @@ export function TeamComparison({
         {comparisonFiltersOpen ? (
           <div className="mt-3 border-t border-nrl-border pt-3">
             <FilterBar
-              years={availableYears}
+              years={activeAvailableYears}
               selectedYears={selectedYears}
               onYearsChange={handleYearsChange}
               finalsMode={finalsMode}

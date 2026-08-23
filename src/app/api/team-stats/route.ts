@@ -11,6 +11,10 @@ export async function GET(request: NextRequest) {
     const canAccessProSeason = await getServerProPlotAccess(userId);
     const { searchParams } = request.nextUrl;
     const yearsParam = searchParams.get("years");
+    const competition = searchParams.get("competition") === "cup" ? "cup" : "nrl";
+    if (competition === "cup" && !canAccessProSeason) {
+      return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
+    }
     const requestedYears = yearsParam
       ? yearsParam
           .split(",")
@@ -22,7 +26,7 @@ export async function GET(request: NextRequest) {
       ? requestedYears.filter((year) =>
           isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
         )
-      : (await fetchAvailableYears()).filter((year) =>
+      : (await fetchAvailableYears(competition)).filter((year) =>
           isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
         );
 
@@ -30,7 +34,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
 
-    const data = await fetchTeamStats(allowedYears);
+    const data = await fetchTeamStats(allowedYears, competition);
     return NextResponse.json(data);
   } catch (error) {
     console.error("Error fetching team stats:", error);

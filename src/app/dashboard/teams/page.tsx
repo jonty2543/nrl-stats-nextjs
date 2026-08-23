@@ -14,8 +14,10 @@ export default async function TeamsPage() {
   const { userId } = await auth();
   const canAccessLoginSeason = Boolean(userId);
   const canBypassPlotGate = await getServerProPlotAccess(userId);
-  const [availableYears, teamLogos] = await Promise.all([
+  const cupAvailableYearsPromise = canBypassPlotGate ? fetchAvailableYears("cup") : Promise.resolve([]);
+  const [availableYears, cupAvailableYears, teamLogos] = await Promise.all([
     fetchAvailableYears(),
+    cupAvailableYearsPromise,
     fetchTeamLogos(),
   ]);
   const unlockedYears = availableYears.filter((year) =>
@@ -30,9 +32,11 @@ export default async function TeamsPage() {
     <TeamComparison
       initialData={initialData}
       availableYears={availableYears}
+      cupAvailableYears={cupAvailableYears}
       defaultYears={initialYears}
       teamLogos={teamLogos}
       canBypassPlotGate={canBypassPlotGate}
+      canAccessCup={canBypassPlotGate}
     />
   );
 }

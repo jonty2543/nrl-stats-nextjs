@@ -27,11 +27,16 @@ function defaultRecentYears(years: string[], maxYears = 4): string[] {
 export default async function PlayersPage() {
   const { userId } = await auth();
   const canAccessLoginSeason = Boolean(userId);
-  const canBypassPlotGate = await getServerProPlotAccess(userId);
-  const [availableYears, playerImages, teamLogos] = await Promise.all([
-    fetchAvailableYears(),
-    fetchPlayerImages(),
-    fetchTeamLogos(),
+  const proAccessPromise = getServerProPlotAccess(userId);
+  const availableYearsPromise = fetchAvailableYears();
+  const cupAvailableYearsPromise = proAccessPromise.then((canAccess) =>
+    canAccess ? fetchAvailableYears("cup") : Promise.resolve([])
+  );
+  const playerImagesPromise = fetchPlayerImages();
+  const teamLogosPromise = fetchTeamLogos();
+  const [canBypassPlotGate, availableYears] = await Promise.all([
+    proAccessPromise,
+    availableYearsPromise,
   ]);
   const unlockedYears = availableYears.filter((year) =>
     isAccessibleSeason(year, canAccessLoginSeason, "stats", canBypassPlotGate)
@@ -40,7 +45,13 @@ export default async function PlayersPage() {
   const initialYears = yearPool.includes(DEFAULT_STATS_TABLE_YEAR)
     ? [DEFAULT_STATS_TABLE_YEAR]
     : defaultRecentYears(yearPool);
-  const initialData = initialYears.length > 0 ? await fetchPlayerStats(initialYears) : [];
+  const initialDataPromise = initialYears.length > 0 ? fetchPlayerStats(initialYears) : Promise.resolve([]);
+  const [playerImages, teamLogos, initialData, cupAvailableYears] = await Promise.all([
+    playerImagesPromise,
+    teamLogosPromise,
+    initialDataPromise,
+    cupAvailableYearsPromise,
+  ]);
   const initialStatsTable =
     initialYears.length > 0
       ? {
@@ -63,9 +74,11 @@ export default async function PlayersPage() {
       playerImages={playerImages}
       teamLogos={teamLogos}
       availableYears={availableYears}
+      cupAvailableYears={cupAvailableYears}
       defaultYears={initialYears}
       initialCanAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}
+      canAccessCup={canBypassPlotGate}
     />
   );
 }

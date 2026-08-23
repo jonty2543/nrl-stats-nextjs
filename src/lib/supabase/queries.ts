@@ -49,6 +49,12 @@ const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
 
+export type StatsCompetition = "nrl" | "cup";
+
+function isCupCompetition(competition?: StatsCompetition): boolean {
+  return competition === "cup";
+}
+
 function currentBrisbaneYear(): string {
   return new Intl.DateTimeFormat("en-AU", {
     timeZone: "Australia/Brisbane",
@@ -1710,6 +1716,44 @@ function normalizeYearFilters(years?: string[]): string[] {
   return [...new Set((years ?? []).map((year) => year.trim()).filter(Boolean))].sort();
 }
 
+function normalizeCupPlayerStatsRow(raw: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...raw,
+    mins_played: raw.minutes_played ?? raw.mins_played,
+    total_points: raw.fantasy_points_total ?? raw.total_points,
+    kicking_metres: raw.kick_metres ?? raw.kicking_metres,
+    forced_drop_outs: raw.forced_drop_out_kicks ?? raw.forced_drop_outs,
+    forty_twenty: raw.forty_twenty_kicks ?? raw.forty_twenty,
+    twenty_forty: raw.twenty_forty_kicks ?? raw.twenty_forty,
+    grubbers: raw.grubber_kicks ?? raw.grubbers,
+    kicked_dead: raw.kicks_dead ?? raw.kicked_dead,
+    play_the_ball: raw.play_the_ball_total ?? raw.play_the_ball,
+    average_play_the_ball_speed: raw.play_the_ball_average_speed ?? raw.average_play_the_ball_speed,
+    stint_one: raw.stint_one_seconds ?? raw.stint_one,
+    stint_two: raw.stint_two_seconds ?? raw.stint_two,
+  };
+}
+
+function normalizePlayerStatsRowsForCompetition(
+  rows: Record<string, unknown>[],
+  competition?: StatsCompetition
+): Record<string, unknown>[] {
+  return isCupCompetition(competition) ? rows.map(normalizeCupPlayerStatsRow) : rows;
+}
+
+function cupMatchRowsForOpponentLookup(rawMatches: Record<string, unknown>[]): Record<string, unknown>[] {
+  return rawMatches.flatMap((raw) => {
+    const matchDate = raw.match_date;
+    const home = String(raw.home_team ?? "").replace(/-/g, " ");
+    const away = String(raw.away_team ?? "").replace(/-/g, " ");
+    if (!home || !away) return [];
+    return [
+      { match_date: matchDate, team: home, opponent_team: away, is_home: 1 },
+      { match_date: matchDate, team: away, opponent_team: home, is_home: 0 },
+    ];
+  });
+}
+
 function monthRangesForYear(year: string): Array<{ dateFrom: string; dateTo: string }> {
   const parsedYear = Number.parseInt(year, 10);
   if (!Number.isFinite(parsedYear)) return [];
@@ -1726,57 +1770,82 @@ function monthRangesForYear(year: string): Array<{ dateFrom: string; dateTo: str
 }
 
 async function fetchPlayerStatsRowsFromSupabase(
-  years?: string[]
+  years?: string[],
+  competition: StatsCompetition = "nrl"
 ): Promise<Record<string, unknown>[]> {
   const normalizedYears = normalizeYearFilters(years);
+  const table = isCupCompetition(competition) ? "state_cup_player_stats" : "player_stats";
+  const orderBy = isCupCompetition(competition)
+    ? ["match_date", "team", "player", "scraped_at"]
+    : ["match_date", "team", "player", "created_at"];
   if (normalizedYears.length === 0) {
-    return fetchAllRows<Record<string, unknown>>("player_stats", {
-      orderBy: ["match_date", "team", "player", "created_at"],
-    });
+    const rows = await fetchAllRows<Record<string, unknown>>(table, { orderBy });
+    return normalizePlayerStatsRowsForCompetition(rows, competition);
   }
 
   const rows: Record<string, unknown>[] = [];
   for (const year of normalizedYears) {
     try {
-      rows.push(...(await fetchAllRows<Record<string, unknown>>("player_stats", {
+      rows.push(...(await fetchAllRows<Record<string, unknown>>(table, {
         years: [year],
-        orderBy: ["match_date", "team", "player", "created_at"],
+        orderBy,
       })));
       continue;
     } catch (error) {
       if (!isStatementTimeoutError(error)) throw error;
-      console.warn(`Supabase fetch player_stats for ${year} timed out; retrying by month.`, error);
+      console.warn(`Supabase fetch ${table} for ${year} timed out; retrying by month.`, error);
     }
 
     for (const range of monthRangesForYear(year)) {
-      rows.push(...(await fetchAllRows<Record<string, unknown>>("player_stats", {
+      rows.push(...(await fetchAllRows<Record<string, unknown>>(table, {
         ...range,
-        orderBy: ["match_date", "team", "player", "created_at"],
+        orderBy,
       })));
     }
   }
 
-  return rows;
+  return normalizePlayerStatsRowsForCompetition(rows, competition);
 }
 
 // ---------------------------------------------------------------------------
 // fetchPlayerStats — main entry point
 // ---------------------------------------------------------------------------
-export async function fetchPlayerStatsFromSupabase(years?: string[]): Promise<PlayerStat[]> {
+export async function fetchPlayerStatsFromSupabase(
+  years?: string[],
+  competition: StatsCompetition = "nrl"
+): Promise<PlayerStat[]> {
   const opts = years && years.length > 0 ? { years } : undefined;
-  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches", {
+  const rawMatches = await fetchAllRows<Record<string, unknown>>(
+    isCupCompetition(competition) ? "state_cup_matches" : "matches",
+    {
     ...opts,
-    columns: "match_date,team,opponent_team,is_home",
-  });
-  const rawPlayers = await fetchPlayerStatsRowsFromSupabase(years);
-  return buildPlayerStatsRows(rawPlayers, rawMatches);
+    columns: isCupCompetition(competition)
+      ? "match_date,home_team,away_team"
+      : "match_date,team,opponent_team,is_home",
+    }
+  );
+  const rawPlayers = await fetchPlayerStatsRowsFromSupabase(years, competition);
+  return buildPlayerStatsRows(
+    rawPlayers,
+    isCupCompetition(competition) ? cupMatchRowsForOpponentLookup(rawMatches) : rawMatches
+  );
 }
 
-export async function fetchPlayerStats(years?: string[]): Promise<PlayerStat[]> {
+export async function fetchPlayerStats(
+  years?: string[],
+  competition: StatsCompetition = "nrl"
+): Promise<PlayerStat[]> {
   const normalizedYears = (years ?? []).filter(Boolean).sort();
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
   const hasLiveSeason = includesCurrentBrisbaneYear(normalizedArg);
+  if (isCupCompetition(competition)) {
+    const fetchCup = async () => fetchPlayerStatsFromSupabase(normalizedArg, competition);
+    if (process.env.NODE_ENV !== "production") return fetchCup();
+    return unstable_cache(fetchCup, ["cup-player-stats-v1", key], {
+      revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
+    })();
+  }
   const serverCache =
     process.env.NODE_ENV !== "production" || hasLiveSeason
       ? null
@@ -1892,10 +1961,101 @@ function buildTeamStatsRowsFromMatches(rawMatches: Record<string, unknown>[]): T
   })
 }
 
-export async function fetchTeamStatsFromSupabase(years?: string[]): Promise<TeamStat[]> {
-  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches", {
+function cupTeamStatValue(raw: Record<string, unknown>, title: string, side: "home" | "away"): number {
+  const groups = Array.isArray(raw.team_stats) ? raw.team_stats : [];
+  for (const group of groups) {
+    if (!group || typeof group !== "object") continue;
+    const stats = Array.isArray((group as { stats?: unknown }).stats)
+      ? (group as { stats: unknown[] }).stats
+      : [];
+    for (const stat of stats) {
+      if (!stat || typeof stat !== "object") continue;
+      const record = stat as Record<string, unknown>;
+      if (record.title !== title) continue;
+      const sideValue = record[`${side}Value`];
+      if (!sideValue || typeof sideValue !== "object") return 0;
+      return toNum((sideValue as Record<string, unknown>).value);
+    }
+  }
+  return 0;
+}
+
+function buildCupTeamMatchRows(rawMatches: Record<string, unknown>[]): Record<string, unknown>[] {
+  const statMap: Record<string, string> = {
+    possession_pct: "Possession %",
+    time_in_possession: "Time In Possession",
+    completion_rate: "Completion Rate",
+    all_runs: "All Runs",
+    all_run_metres: "All Run Metres",
+    kick_return_metres: "Kick Return Metres",
+    post_contact_metres: "Post Contact Metres",
+    average_play_the_ball_speed: "Average Play The Ball Speed",
+    line_breaks: "Line Breaks",
+    tackle_breaks: "Tackle Breaks",
+    offloads: "Offloads",
+    receipts: "Receipts",
+    total_passes: "Total Passes",
+    dummy_passes: "Dummy Passes",
+    kicks: "Kicks",
+    kicking_metres: "Kicking Metres",
+    forced_drop_outs: "Forced Drop Outs",
+    bombs: "Bombs",
+    grubbers: "Grubbers",
+    tackles_made: "Tackles Made",
+    missed_tackles: "Missed Tackles",
+    intercepts: "Intercepts",
+    ineffective_tackles: "Ineffective Tackles",
+    errors: "Errors",
+    penalties_conceded: "Penalties Conceded",
+    ruck_infringements: "Ruck Infringements",
+    inside_10_metres: "Inside 10 Metres",
+    on_reports: "On Reports",
+    sin_bins: "Sin Bins",
+  };
+
+  return rawMatches.flatMap((raw) => {
+    const home = String(raw.home_team ?? "").replace(/-/g, " ");
+    const away = String(raw.away_team ?? "").replace(/-/g, " ");
+    if (!home || !away) return [];
+    const homeScore = toNum(raw.home_score);
+    const awayScore = toNum(raw.away_score);
+
+    return ([
+      { side: "home" as const, team: home, opponent_team: away, score: homeScore, opponent_score: awayScore, is_home: 1 },
+      { side: "away" as const, team: away, opponent_team: home, score: awayScore, opponent_score: homeScore, is_home: 0 },
+    ]).map(({ side, ...base }) => {
+      const row: Record<string, unknown> = {
+        match_date: raw.match_date,
+        round: raw.round,
+        ...base,
+        tries: 0,
+        conversions_made: 0,
+        conversions_attempted: 0,
+        penalty_goals_made: 0,
+        field_goals_made: 0,
+        line_break_assists: 0,
+        try_assists: 0,
+      };
+      for (const [column, title] of Object.entries(statMap)) {
+        row[column] = cupTeamStatValue(raw, title, side);
+      }
+      row.opponent_possession_pct = cupTeamStatValue(raw, "Possession %", side === "home" ? "away" : "home");
+      row.opponent_time_in_possession = cupTeamStatValue(raw, "Time In Possession", side === "home" ? "away" : "home");
+      row.opponent_completion_rate = cupTeamStatValue(raw, "Completion Rate", side === "home" ? "away" : "home");
+      return row;
+    });
+  });
+}
+
+export async function fetchTeamStatsFromSupabase(
+  years?: string[],
+  competition: StatsCompetition = "nrl"
+): Promise<TeamStat[]> {
+  const rawMatches = await fetchAllRows<Record<string, unknown>>(
+    isCupCompetition(competition) ? "state_cup_matches" : "matches",
+    {
     years,
-    columns: [
+    columns: isCupCompetition(competition) ? "*" : [
       "match_date",
       "round",
       "team",
@@ -1943,11 +2103,13 @@ export async function fetchTeamStatsFromSupabase(years?: string[]): Promise<Team
       "on_reports",
       "sin_bins",
     ].join(","),
-  })
+    }
+  )
 
   if (rawMatches.length === 0) return [];
 
-  return buildTeamStatsRowsFromMatches(rawMatches)
+  const matchRows = isCupCompetition(competition) ? buildCupTeamMatchRows(rawMatches) : rawMatches;
+  return buildTeamStatsRowsFromMatches(matchRows)
     .filter((row) => row.Team && row.Year)
     .sort((a, b) => {
       if (a.Year !== b.Year) return b.Year.localeCompare(a.Year)
@@ -1956,11 +2118,21 @@ export async function fetchTeamStatsFromSupabase(years?: string[]): Promise<Team
     })
 }
 
-export async function fetchTeamStats(years?: string[]): Promise<TeamStat[]> {
+export async function fetchTeamStats(
+  years?: string[],
+  competition: StatsCompetition = "nrl"
+): Promise<TeamStat[]> {
   const normalizedYears = (years ?? []).filter(Boolean).sort()
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all"
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined
   const hasLiveSeason = includesCurrentBrisbaneYear(normalizedArg)
+  if (isCupCompetition(competition)) {
+    const fetchCup = async () => fetchTeamStatsFromSupabase(normalizedArg, competition);
+    if (process.env.NODE_ENV !== "production") return fetchCup();
+    return unstable_cache(fetchCup, ["cup-team-stats-v1", key], {
+      revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
+    })();
+  }
 
   if (process.env.NODE_ENV !== "production") {
     return fetchTeamStatsFromSupabase(normalizedArg)
@@ -2401,12 +2573,15 @@ export async function fetchFantasyPlayerStatsAllYears(
 // ---------------------------------------------------------------------------
 // fetchAvailableYears — lightweight query for year list
 // ---------------------------------------------------------------------------
-export async function fetchAvailableYearsFromSupabase(): Promise<string[]> {
+export async function fetchAvailableYearsFromSupabase(competition: StatsCompetition = "nrl"): Promise<string[]> {
   // Avoid expensive min/max scans on the large player_stats table.
   // matches is much smaller and still covers the available season range.
-  const rawMatches = await fetchAllRows<Record<string, unknown>>("matches", {
+  const rawMatches = await fetchAllRows<Record<string, unknown>>(
+    isCupCompetition(competition) ? "state_cup_matches" : "matches",
+    {
     columns: "match_date",
-  });
+    }
+  );
   if (rawMatches.length === 0) return [];
 
   const years = Array.from(
@@ -2431,7 +2606,15 @@ const fetchAvailableYearsCached = unstable_cache(
   { revalidate: DAILY_REVALIDATE_SECONDS }
 );
 
-export async function fetchAvailableYears(): Promise<string[]> {
+export async function fetchAvailableYears(competition: StatsCompetition = "nrl"): Promise<string[]> {
+  if (isCupCompetition(competition)) {
+    if (process.env.NODE_ENV !== "production") return fetchAvailableYearsFromSupabase(competition);
+    return unstable_cache(
+      async (): Promise<string[]> => fetchAvailableYearsFromSupabase(competition),
+      ["cup-available-years-v1"],
+      { revalidate: DAILY_REVALIDATE_SECONDS }
+    )();
+  }
   const serverCacheMeta =
     process.env.NODE_ENV !== "production"
       ? await readPlayerStatsServerCacheMetadata()

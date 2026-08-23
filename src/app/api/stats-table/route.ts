@@ -46,10 +46,12 @@ function parseMinGames(value: string | null): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
-async function allowedYearsForRequest(request: NextRequest): Promise<string[]> {
+async function allowedYearsForRequest(
+  request: NextRequest,
+  canAccessProSeason: boolean
+): Promise<string[]> {
   const { userId } = await auth();
   const canAccessLoginSeason = Boolean(userId);
-  const canAccessProSeason = await getServerProPlotAccess(userId);
   const requestedYears = parseYears(request.nextUrl.searchParams.get("years"));
   return requestedYears.filter((year) =>
     isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)
@@ -61,7 +63,13 @@ export async function GET(request: NextRequest) {
     const startedAt = performance.now();
     const searchParams = request.nextUrl.searchParams;
     const dataset = searchParams.get("dataset");
-    const allowedYears = await allowedYearsForRequest(request);
+    const { userId } = await auth();
+    const canAccessProSeason = await getServerProPlotAccess(userId);
+    const competition = searchParams.get("competition") === "cup" ? "cup" : "nrl";
+    if (competition === "cup" && !canAccessProSeason) {
+      return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
+    }
+    const allowedYears = await allowedYearsForRequest(request, canAccessProSeason);
     const includesLiveSeason = allowedYears.includes(currentBrisbaneYear());
 
     if (allowedYears.length === 0) {
@@ -74,14 +82,14 @@ export async function GET(request: NextRequest) {
     }
 
     const cached = includesLiveSeason ? null : await readStatsTableCache();
-    const cacheCoversRequest = cached
+    const cacheCoversRequest = competition === "nrl" && cached
       ? allowedYears.every((year) => cached.years.includes(year))
       : false;
     const cache = cacheCoversRequest && cached
       ? cached
       : buildStatsTableCache(
-          dataset === "player" ? await fetchPlayerStats(allowedYears) : [],
-          dataset === "team" ? await fetchTeamStats(allowedYears) : []
+          dataset === "player" ? await fetchPlayerStats(allowedYears, competition) : [],
+          dataset === "team" ? await fetchTeamStats(allowedYears, competition) : []
         );
     const source = cacheCoversRequest ? "cache" : "fallback";
 
@@ -99,7 +107,7 @@ export async function GET(request: NextRequest) {
       let responseSource: "cache" | "fallback" = source;
 
       if (cacheCoversRequest && result.rows.length === 0) {
-        const freshCache = buildStatsTableCache(await fetchPlayerStats(allowedYears), []);
+        const freshCache = buildStatsTableCache(await fetchPlayerStats(allowedYears, competition), []);
         result = selectPlayerStatsTableRows(freshCache, params);
         responseSource = "fallback";
       }
@@ -124,7 +132,7 @@ export async function GET(request: NextRequest) {
       let responseSource: "cache" | "fallback" = source;
 
       if (cacheCoversRequest && result.rows.length === 0) {
-        const freshCache = buildStatsTableCache([], await fetchTeamStats(allowedYears));
+        const freshCache = buildStatsTableCache([], await fetchTeamStats(allowedYears, competition));
         result = selectTeamStatsTableRows(freshCache, params);
         responseSource = "fallback";
       }

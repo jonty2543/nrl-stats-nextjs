@@ -11,6 +11,7 @@ import { buildTeamPostMatchStatPoints, buildXPointsPlotPoints, type PostMatchTea
 import type { QuadrantLabels, TeamQuadrantPoint } from "@/components/charts/defence-scatter";
 import { HalvesPairingBars } from "@/components/charts/halves-pairing-bars";
 import { BillingPageLink } from "@/components/billing/billing-page-link";
+import { CompetitionToggle } from "@/components/ui/competition-toggle";
 import { PillRadio } from "@/components/ui/pill-radio";
 import { Select } from "@/components/ui/select";
 
@@ -836,10 +837,12 @@ function buildPlotRequestSuggestions(query: string): PlotDiscoveryOption[] {
 interface PlotsDashboardProps {
   initialPlayerData: PlayerStat[];
   availableYears: string[];
+  cupAvailableYears: string[];
   initialYear: string;
   teamLogos: Record<string, string>;
   playerFaceImages: Record<string, string>;
   canAccessModelPlots: boolean;
+  canAccessCup: boolean;
 }
 
 function normalisePlayerName(value: string): string {
@@ -941,7 +944,8 @@ function ModelPlotLock({ plotName }: { plotName: string }) {
   );
 }
 
-export function PlotsDashboard({ initialPlayerData, availableYears, initialYear, teamLogos, playerFaceImages, canAccessModelPlots }: PlotsDashboardProps) {
+export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailableYears, initialYear, teamLogos, playerFaceImages, canAccessModelPlots, canAccessCup }: PlotsDashboardProps) {
+  const [competition, setCompetition] = useState<"nrl" | "cup">("nrl");
   const [entity, setEntity] = useState("Players");
   const [teamSection, setTeamSection] = useState<TeamSection>("Attack");
   const [playerSection, setPlayerSection] = useState<PlayerSection>("Attack");
@@ -1003,8 +1007,11 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   const [proLoading, setProLoading] = useState(false);
   const [rowsByYear, setRowsByYear] = useState<Record<string, TeamStat[]>>({});
   const [postMatchMetricsByYear, setPostMatchMetricsByYear] = useState<Record<string, PostMatchTeamMetricWithRdr[]>>({});
-  const [playerRowsByYear, setPlayerRowsByYear] = useState<Record<string, PlayerStat[]>>({ [initialYear]: initialPlayerData });
+  const [playerRowsByYear, setPlayerRowsByYear] = useState<Record<string, PlayerStat[]>>({ [`nrl:${initialYear}`]: initialPlayerData });
   const [loading, setLoading] = useState(false);
+  const activeAvailableYears = competition === "cup" ? cupAvailableYears : availableYears;
+  const competitionQuery = competition === "cup" ? "&competition=cup" : "";
+  const dataKey = (targetYear: string) => `${competition}:${targetYear}`;
   const plotFinderSuggestions = useMemo(() => {
     const popular = POPULAR_PLOT_DISCOVERY_IDS
       .map((id) => PLOT_DISCOVERY_OPTIONS.find((option) => option.id === id))
@@ -1060,29 +1067,30 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
     };
   }, [canAccessModelPlots, postMatchMetricsByYear, proYear]);
 
+  const activeYearKey = dataKey(year);
   const roundOptions = useMemo(() => roundSelectOptions([
-    ...(playerRowsByYear[year] ?? []).map((row) => ({ value: row.Round, label: row.Round_Label })),
-    ...(rowsByYear[year] ?? []).map((row) => ({ value: row.Round, label: row.Round_Label })),
-    ...(postMatchMetricsByYear[year] ?? []).map((row) => ({ value: row.round, label: row.round })),
-  ]), [playerRowsByYear, postMatchMetricsByYear, rowsByYear, year]);
+    ...(playerRowsByYear[activeYearKey] ?? []).map((row) => ({ value: row.Round, label: row.Round_Label })),
+    ...(rowsByYear[activeYearKey] ?? []).map((row) => ({ value: row.Round, label: row.Round_Label })),
+    ...(postMatchMetricsByYear[activeYearKey] ?? []).map((row) => ({ value: row.round, label: row.round })),
+  ]), [activeYearKey, playerRowsByYear, postMatchMetricsByYear, rowsByYear]);
   const proRoundOptions = useMemo(() => roundSelectOptions(
     (postMatchMetricsByYear[proYear] ?? []).map((row) => ({ value: row.round, label: row.round }))
   ), [postMatchMetricsByYear, proYear]);
   const currentPlayerRows = useMemo(
-    () => forSelectedRound(playerRowsByYear[year] ?? [], round, (row) => row.Round),
-    [playerRowsByYear, round, year]
+    () => forSelectedRound(playerRowsByYear[activeYearKey] ?? [], round, (row) => row.Round),
+    [activeYearKey, playerRowsByYear, round]
   );
   const currentPlayerPlotRows = useMemo(
     () => currentPlayerRows.filter((row) => Number(row["Mins Played"]) >= playerMinimumMinutes),
     [currentPlayerRows, playerMinimumMinutes]
   );
   const currentRows = useMemo(
-    () => forSelectedRound(rowsByYear[year] ?? [], round, (row) => row.Round),
-    [round, rowsByYear, year]
+    () => forSelectedRound(rowsByYear[activeYearKey] ?? [], round, (row) => row.Round),
+    [activeYearKey, round, rowsByYear]
   );
   const currentPostMatchMetrics = useMemo(
-    () => forSelectedRound(postMatchMetricsByYear[year] ?? [], round, (row) => row.round),
-    [postMatchMetricsByYear, round, year]
+    () => forSelectedRound(postMatchMetricsByYear[activeYearKey] ?? [], round, (row) => row.round),
+    [activeYearKey, postMatchMetricsByYear, round]
   );
   const defencePoints = useMemo(() => buildDefenceRatingPoints(entity === "Teams" ? currentRows : [], mode, currentPostMatchMetrics, gameWindow), [currentPostMatchMetrics, currentRows, entity, gameWindow, mode]);
   const attackPoints = useMemo(() => buildAttackRatingPoints(entity === "Teams" ? currentRows : [], mode, gameWindow), [currentRows, entity, gameWindow, mode]);
@@ -1592,22 +1600,24 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   );
 
   const loadTeamYear = async (targetYear: string, manageLoading = true, includeMetrics = false, refreshMetrics = false) => {
-    if (rowsByYear[targetYear] && (!includeMetrics || !canAccessModelPlots || (postMatchMetricsByYear[targetYear] && !refreshMetrics))) return;
+    const key = dataKey(targetYear);
+    const canLoadMetrics = competition === "nrl" && canAccessModelPlots;
+    if (rowsByYear[key] && (!includeMetrics || !canLoadMetrics || (postMatchMetricsByYear[key] && !refreshMetrics))) return;
     if (manageLoading) setLoading(true);
     try {
       const [teamResponse, metricsResponse] = await Promise.all([
-        rowsByYear[targetYear] ? null : fetch(`/api/team-stats?years=${encodeURIComponent(targetYear)}`),
-        !includeMetrics || !canAccessModelPlots || (postMatchMetricsByYear[targetYear] && !refreshMetrics)
+        rowsByYear[key] ? null : fetch(`/api/team-stats?years=${encodeURIComponent(targetYear)}${competitionQuery}`),
+        !includeMetrics || !canLoadMetrics || (postMatchMetricsByYear[key] && !refreshMetrics)
           ? null
           : fetch(`/api/post-match-team-metrics?years=${encodeURIComponent(targetYear)}`, { cache: "no-store" }),
       ]);
       if (teamResponse?.ok) {
         const rows = await teamResponse.json() as TeamStat[];
-        setRowsByYear((current) => ({ ...current, [targetYear]: rows }));
+        setRowsByYear((current) => ({ ...current, [key]: rows }));
       }
       if (metricsResponse?.ok) {
         const metrics = await metricsResponse.json() as PostMatchTeamMetricWithRdr[];
-        setPostMatchMetricsByYear((current) => ({ ...current, [targetYear]: metrics }));
+        setPostMatchMetricsByYear((current) => ({ ...current, [key]: metrics }));
       }
     } finally {
       if (manageLoading) setLoading(false);
@@ -1615,13 +1625,14 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   };
 
   const loadPlayerYear = async (targetYear: string, manageLoading = true) => {
-    if (playerRowsByYear[targetYear]) return;
+    const key = dataKey(targetYear);
+    if (playerRowsByYear[key]) return;
     if (manageLoading) setLoading(true);
     try {
-      const response = await fetch(`/api/player-stats?years=${encodeURIComponent(targetYear)}`);
+      const response = await fetch(`/api/player-stats?years=${encodeURIComponent(targetYear)}${competitionQuery}`);
       if (!response.ok) return;
       const rows = await response.json() as PlayerStat[];
-      setPlayerRowsByYear((current) => ({ ...current, [targetYear]: rows }));
+      setPlayerRowsByYear((current) => ({ ...current, [key]: rows }));
     } finally {
       if (manageLoading) setLoading(false);
     }
@@ -1634,7 +1645,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
   };
 
   const loadOtherYear = async (targetYear: string, includeMetrics = false) => {
-    if (playerRowsByYear[targetYear] && rowsByYear[targetYear] && (!includeMetrics || !canAccessModelPlots || postMatchMetricsByYear[targetYear])) return;
+    const key = dataKey(targetYear);
+    if (playerRowsByYear[key] && rowsByYear[key] && (!includeMetrics || competition !== "nrl" || !canAccessModelPlots || postMatchMetricsByYear[key])) return;
     setLoading(true);
     try {
       await Promise.all([loadPlayerYear(targetYear, false), loadTeamYear(targetYear, false, includeMetrics)]);
@@ -1658,6 +1670,36 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
       return;
     }
     await loadTeamYear(nextYear, true, isModelPlot || selectedModelStatLocked);
+  };
+
+  const changeCompetition = async (nextCompetition: "nrl" | "cup") => {
+    if (nextCompetition === competition) return;
+    if (nextCompetition === "cup" && !canAccessCup) return;
+    const nextYears = nextCompetition === "cup" ? cupAvailableYears : availableYears;
+    const nextYear = nextYears.includes(year) ? year : nextYears[0] ?? year;
+    setCompetition(nextCompetition);
+    setYear(nextYear);
+    setRound("all");
+    if (gameWindow !== null && nextYear !== CURRENT_GAME_WINDOW_YEAR) setGameWindow(null);
+    const key = `${nextCompetition}:${nextYear}`;
+    const query = nextCompetition === "cup" ? "&competition=cup" : "";
+    setLoading(true);
+    try {
+      const [playersResponse, teamsResponse] = await Promise.all([
+        playerRowsByYear[key] ? null : fetch(`/api/player-stats?years=${encodeURIComponent(nextYear)}${query}`),
+        rowsByYear[key] ? null : fetch(`/api/team-stats?years=${encodeURIComponent(nextYear)}${query}`),
+      ]);
+      if (playersResponse?.ok) {
+        const rows = await playersResponse.json() as PlayerStat[];
+        setPlayerRowsByYear((current) => ({ ...current, [key]: rows }));
+      }
+      if (teamsResponse?.ok) {
+        const rows = await teamsResponse.json() as TeamStat[];
+        setRowsByYear((current) => ({ ...current, [key]: rows }));
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const changeGameWindow = async (nextWindow: PlayerGameWindow) => {
@@ -2065,7 +2107,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
             </div>
           ) : null}
         </div>
-        <div className="col-start-1 row-start-1 min-w-0">
+        <div className="col-start-1 row-start-1 flex min-w-0 items-end gap-2">
+          <CompetitionToggle value={competition} onChange={(value) => void changeCompetition(value)} canAccessCup={canAccessCup} />
           <Select
             label="View"
             compact
@@ -2124,7 +2167,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
               {playerFiltersOpen ? (
                 <div id="player-plot-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
                   <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} disabled={round !== "all"} />
-                  <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={availableYears} onChange={(value) => void changeYear(value)} /></div>
+                  <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={activeAvailableYears} onChange={(value) => void changeYear(value)} /></div>
                 </div>
               ) : null}
               <div className="relative">
@@ -2186,7 +2229,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
                       <PillRadio options={["Per game", "Season total"]} value={playerStatsAggregation} onChange={(value) => setPlayerStatsAggregation(value as PlayerStatsAggregation)} disabled={round !== "all"} />
                     </div>
                   ) : null}
-                  <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={availableYears} onChange={(value) => void changeYear(value)} /></div>
+                  <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={activeAvailableYears} onChange={(value) => void changeYear(value)} /></div>
                 </div>
               ) : null}
               <div className="relative p-2 sm:p-4">
@@ -2310,7 +2353,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, initialYear,
               {isTeamDefenceEfficiency ? <VolumeAxisToggle checked={teamDefenceEfficiencyShowsVolume} onChange={(checked) => setTeamDefenceEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
               {!isTeamForm ? <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} disabled={round !== "all"} /> : null}
               {isTeamForm ? <label className="flex w-24 shrink-0 flex-col gap-0.5"><span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min prior games</span><input type="number" min={1} max={20} value={minPriorGames} onChange={(event) => setMinPriorGames(Math.min(20, Math.max(1, Number(event.target.value) || 1)))} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" /></label> : null}
-              <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={availableYears} onChange={(value) => void changeYear(value)} /></div>
+              <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={activeAvailableYears} onChange={(value) => void changeYear(value)} /></div>
             </div>
           ) : null}
 

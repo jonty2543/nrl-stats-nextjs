@@ -90,13 +90,36 @@ function normalise(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+const TEAM_LOGO_ALIASES: Record<string, string[]> = {
+  "sea eagles": ["manly sea eagles", "manly warringah sea eagles"],
+  "wm seagulls": ["wynnum manly seagulls", "wynnum manly"],
+  bulldogs: ["canterbury bulldogs", "canterbury bankstown bulldogs"],
+  eels: ["parramatta eels"],
+  panthers: ["penrith panthers"],
+  rabbitohs: ["south sydney rabbitohs"],
+  dragons: ["st george illawarra dragons", "st george dragons"],
+  roosters: ["sydney roosters", "eastern suburbs roosters"],
+  warriors: ["new zealand warriors"],
+  tigers: ["wests tigers"],
+  dolphins: ["the dolphins"],
+};
+
 function formatRoundLabel(value: string): string {
   const label = value.trim();
   return /^\d+$/.test(label) ? `Rd${label}` : label;
 }
 
 function logoFor(team: string, logos: Record<string, string>): string | null {
-  return logos[team] ?? logos[normalise(team)] ?? logos[team.toLowerCase()] ?? null;
+  const key = normalise(team);
+  const direct = logos[team] ?? logos[key] ?? logos[team.toLowerCase()];
+  if (direct) return direct;
+
+  for (const alias of TEAM_LOGO_ALIASES[key] ?? []) {
+    const logo = logos[alias] ?? logos[normalise(alias)];
+    if (logo) return logo;
+  }
+
+  return Object.entries(logos).find(([logoKey]) => normalise(logoKey).includes(key))?.[1] ?? null;
 }
 
 function ticks(min: number, max: number, count = 5): number[] {
@@ -341,7 +364,7 @@ export function TeamQuadrantScatter({
     const ratio = singleAxis ? Math.max(0, Math.min(1, rawRatio)) : rawRatio;
     return xScaleLeft + (xHigherIsBetter ? ratio : 1 - ratio) * xScaleWidth;
   };
-  const showTeamLogos = useLogos && points.length <= 20;
+  const showTeamLogos = useLogos && points.length <= 28;
   const usesLargeMarkers = Boolean(pointImages) || showTeamLogos;
   const singleAxisGroups = singleAxis
     ? stackNearbyPoints(points, xScale, usesLargeMarkers ? isMobile ? 56 : 38 : isMobile ? 18 : 10)

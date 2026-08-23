@@ -149,7 +149,7 @@ export function TeamComparison({
   const canAccessLoginSeason = Boolean(userId);
   const hasClientProPlotAccess =
     canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata);
-  const hasClientCupAccess = canAccessCup || hasClientProPlotAccess;
+  const hasClientCupAccess = canAccessCup;
   const [competition, setCompetition] = useState<"nrl" | "cup">("nrl");
   const activeAvailableYears = competition === "cup" ? cupAvailableYears : availableYears;
   const [allData, setAllData] = useState<TeamStat[]>(initialData);

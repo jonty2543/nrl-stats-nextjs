@@ -913,7 +913,7 @@ export function PlayerComparison({
     : initialCanAccessLoginSeason;
   const hasClientProPlotAccess =
     canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata);
-  const hasClientCupAccess = canAccessCup || hasClientProPlotAccess;
+  const hasClientCupAccess = canAccessCup;
   const [competition, setCompetition] = useState<"nrl" | "cup">("nrl");
   const activeAvailableYears = competition === "cup" ? cupAvailableYears : availableYears;
 

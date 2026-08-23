@@ -672,18 +672,20 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   const rankingFinderSuggestions = useMemo(() => buildRankingSuggestions(rankingFinderQuery), [rankingFinderQuery])
 
   const changeCompetition = async (nextCompetition: "nrl" | "cup") => {
+    if (competitionLoading) return
     if (nextCompetition === competition) return
     if (nextCompetition === "cup" && !canAccessCup) return
     const yearOptions = nextCompetition === "cup" ? cupAvailableYears : availableYears
     const nextYear = yearOptions.includes(selectedYear) ? selectedYear : yearOptions[0] ?? selectedYear
+    setCompetitionLoading(true)
     setCompetition(nextCompetition)
     setActiveYear(nextYear)
     if (nextCompetition === "nrl" && nextYear === selectedYear) {
       setActivePlayerRows(playerRows)
       setActiveTeamRows(teamRows)
+      setCompetitionLoading(false)
       return
     }
-    setCompetitionLoading(true)
     try {
       const query = new URLSearchParams({ years: nextYear, competition: nextCompetition })
       const [playersResponse, teamsResponse] = await Promise.all([
@@ -735,6 +737,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
       : playerRankings.length > 0
   const ratioRanking = Boolean(effectivePerStatKey)
   const rankingTitle = `${statLabel(effectiveStatKey, activeStatOptions)}${effectivePerStatKey ? ` per ${perStatUnitLabel(effectivePerStatKey, activeStatOptions)}` : ""} — ${view === "teams" ? "Teams" : positionFilter === "All Positions" ? "All players" : positionFilter}${section === "form" ? ` · L${formWindow} form` : ""}`
+  const loadingLabel = competition === "cup" ? "Loading Cup rankings" : "Loading NRL rankings"
   const changeView = (value: string) => {
     const [nextView, nextSection] = value.split("_") as [RankingView, RankingSection]
     setView(nextView)
@@ -807,7 +810,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-nrl-border bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
+      <section className="relative overflow-hidden rounded-2xl border border-nrl-border bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]" aria-busy={competitionLoading}>
         <div className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border px-4 py-3 [scrollbar-width:thin]">
           <div className="w-40 shrink-0">
             <Select label="Primary stat" compact value={effectiveStatKey} options={activeStatOptions.map((option) => ({ value: option.key, label: option.label }))} onChange={setStatKey} />
@@ -830,6 +833,18 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
           <h1 className="min-w-0 truncate text-sm font-black text-nrl-text sm:text-base">{rankingTitle}</h1>
           <FiltersButton open={filtersOpen} onClick={() => setFiltersOpen((current) => !current)} />
         </div>
+
+        {competitionLoading ? (
+          <div className="border-b border-nrl-border bg-nrl-panel-2 px-4 py-2 sm:px-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-nrl-accent">{loadingLabel}</div>
+              <div className="text-[10px] font-semibold text-nrl-muted">{activeYear || "Latest"}</div>
+            </div>
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-nrl-border/70">
+              <div className="h-full w-1/3 animate-[ranking-load_1.1s_ease-in-out_infinite] rounded-full bg-nrl-accent" />
+            </div>
+          </div>
+        ) : null}
 
         {filtersOpen ? (
           <div id="ranking-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
@@ -856,7 +871,8 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
           </div>
         ) : null}
 
-        {!hasEntries ? (
+        <div className={competitionLoading ? "pointer-events-none opacity-45 transition-opacity" : "transition-opacity"}>
+        {!hasEntries && !competitionLoading ? (
           <div className="p-8 text-center text-xs font-bold text-nrl-muted">No {view} match the current {section} filters.</div>
         ) : view === "teams" ? (
 
@@ -984,7 +1000,15 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             </table>
           </div>
       )}
+        </div>
       </section>
+      <style jsx>{`
+        @keyframes ranking-load {
+          0% { transform: translateX(-120%); }
+          50% { transform: translateX(110%); }
+          100% { transform: translateX(320%); }
+        }
+      `}</style>
     </div>
   )
 }

@@ -2067,7 +2067,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[max-content_minmax(7rem,12rem)] items-end gap-3 sm:grid-cols-[max-content_minmax(12rem,20rem)] lg:grid-cols-[max-content_minmax(16rem,28rem)]">
+      <div className="grid grid-cols-[max-content_minmax(10rem,1fr)] items-end gap-3 sm:grid-cols-[max-content_minmax(14rem,24rem)] lg:grid-cols-[max-content_minmax(18rem,30rem)]">
         <div ref={plotFinderRef} className="relative col-start-2 row-start-1 min-w-0">
           <label htmlFor="plot-finder-input" className="sr-only">Find a plot</label>
           <input
@@ -2109,43 +2109,45 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
         </div>
         <div className="col-start-1 row-start-1 flex min-w-0 items-end gap-2">
           <CompetitionToggle value={competition} onChange={(value) => void changeCompetition(value)} canAccessCup={canAccessCup} />
-          <Select
-            label="View"
-            compact
-            value={activePlotView}
-            options={[
-              { label: "Players · Attack", options: [
-                { value: "player_attack_stats", label: "Player stats" },
-                { value: "player_attack_efficiency", label: "Player efficiency" },
-                { value: "player_attack_share", label: "Player team share" },
-              ] },
-              { label: "Players · Form", options: [
-                { value: "player_form", label: "Player form" },
-              ] },
-              { label: "Players · Defense", options: [
-                { value: "player_defense_tackles", label: "Tackling effectiveness" },
-              ] },
-              { label: "Players · Combinations", options: [
-                { value: "player_combinations_halves", label: "Halves contribution split" },
-              ] },
-              { label: "Teams · Attack", options: [
-                { value: "team_attack_stats", label: "Team stats" },
-                { value: "team_attack_efficiency", label: "Team efficiency" },
-              ] },
-              { label: "Teams · Form", options: [
-                { value: "team_form", label: "Team form" },
-              ] },
-              { label: "Teams · Defense", options: [
-                { value: "team_defense_stats", label: "Stats conceded" },
-                { value: "team_defense_efficiency", label: "Defensive efficiency" },
-              ] },
-              { label: "Teams · Team context", options: [
-                { value: "team_context_for_against", label: "For vs against" },
-                { value: "team_context_position_share", label: "Share by starting position" },
-              ] },
-            ]}
-            onChange={changePlotView}
-          />
+          <div className="w-20 shrink-0 sm:w-24">
+            <Select
+              label="View"
+              compact
+              value={activePlotView}
+              options={[
+                { label: "Players · Attack", options: [
+                  { value: "player_attack_stats", label: "Player stats" },
+                  { value: "player_attack_efficiency", label: "Player efficiency" },
+                  { value: "player_attack_share", label: "Player team share" },
+                ] },
+                { label: "Players · Form", options: [
+                  { value: "player_form", label: "Player form" },
+                ] },
+                { label: "Players · Defense", options: [
+                  { value: "player_defense_tackles", label: "Tackling effectiveness" },
+                ] },
+                { label: "Players · Combinations", options: [
+                  { value: "player_combinations_halves", label: "Halves contribution split" },
+                ] },
+                { label: "Teams · Attack", options: [
+                  { value: "team_attack_stats", label: "Team stats" },
+                  { value: "team_attack_efficiency", label: "Team efficiency" },
+                ] },
+                { label: "Teams · Form", options: [
+                  { value: "team_form", label: "Team form" },
+                ] },
+                { label: "Teams · Defense", options: [
+                  { value: "team_defense_stats", label: "Stats conceded" },
+                  { value: "team_defense_efficiency", label: "Defensive efficiency" },
+                ] },
+                { label: "Teams · Team context", options: [
+                  { value: "team_context_for_against", label: "For vs against" },
+                  { value: "team_context_position_share", label: "Share by starting position" },
+                ] },
+              ]}
+              onChange={changePlotView}
+            />
+          </div>
         </div>
       </div>
 

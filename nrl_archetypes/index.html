@@ -735,6 +735,11 @@
 
         <div class="controls-row">
             <div class="control-frame">
+                <div class="mode-toggle" id="competitionToggle" aria-label="Competition">
+                    <button class="mode-btn active" data-competition="nrl">NRL</button>
+                    <button class="mode-btn" data-competition="cup">Cup</button>
+                </div>
+                <span class="control-divider" aria-hidden="true"></span>
                 <div class="mode-toggle" id="modeToggle">
                     <button class="mode-btn active" data-mode="production">Production</button>
                     <button class="mode-btn" data-mode="teamShare">Team Share</button>
@@ -809,12 +814,21 @@
     <script src="nrl_cluster_data_team_share_l3.js"></script>
     <script src="nrl_cluster_data_team_share_l5.js"></script>
     <script src="nrl_cluster_data_team_share_l10.js"></script>
+    <script src="cup_cluster_data.js"></script>
+    <script src="cup_cluster_data_team_share.js"></script>
+    <script src="cup_cluster_data_l3.js"></script>
+    <script src="cup_cluster_data_l5.js"></script>
+    <script src="cup_cluster_data_l10.js"></script>
+    <script src="cup_cluster_data_team_share_l3.js"></script>
+    <script src="cup_cluster_data_team_share_l5.js"></script>
+    <script src="cup_cluster_data_team_share_l10.js"></script>
     <script>
 
         // DOM Elements
         const tabsContainer = document.getElementById('positionTabs');
         const plotContainer = document.getElementById('plotContainer');
         const archetypeList = document.getElementById('archetypeList');
+        const competitionToggle = document.getElementById('competitionToggle');
         const modeToggle = document.getElementById('modeToggle');
         const windowToggle = document.getElementById('windowToggle');
         const rankingsCard = document.getElementById('rankingsCard');
@@ -828,6 +842,7 @@
         // State
         let currentPosition = null;
         let currentYear = 'All';
+        let currentCompetition = 'nrl';
         let currentMode = 'production';
         let currentWindow = 'all';
         let rankingsOpen = false;
@@ -839,23 +854,63 @@
         const rankingsCache = {};
         const rankingYearOptions = ['All', '2023', '2024', '2025', '2026'];
 
-        function getActiveClusterData() {
-            if (currentMode === 'teamShare') {
-                if (currentWindow === 'l3' && typeof clusterDataTeamShareL3 !== 'undefined') return clusterDataTeamShareL3;
-                if (currentWindow === 'l5' && typeof clusterDataTeamShareL5 !== 'undefined') return clusterDataTeamShareL5;
-                if (currentWindow === 'l10' && typeof clusterDataTeamShareL10 !== 'undefined') return clusterDataTeamShareL10;
-                return clusterDataTeamShare;
+        function getCompetitionDataSource() {
+            if (currentCompetition === 'cup') {
+                return {
+                    prefix: 'cup',
+                    production: typeof cupClusterData !== 'undefined' ? cupClusterData : null,
+                    teamShare: typeof cupClusterDataTeamShare !== 'undefined' ? cupClusterDataTeamShare : null,
+                    productionL3: typeof cupClusterDataL3 !== 'undefined' ? cupClusterDataL3 : null,
+                    productionL5: typeof cupClusterDataL5 !== 'undefined' ? cupClusterDataL5 : null,
+                    productionL10: typeof cupClusterDataL10 !== 'undefined' ? cupClusterDataL10 : null,
+                    teamShareL3: typeof cupClusterDataTeamShareL3 !== 'undefined' ? cupClusterDataTeamShareL3 : null,
+                    teamShareL5: typeof cupClusterDataTeamShareL5 !== 'undefined' ? cupClusterDataTeamShareL5 : null,
+                    teamShareL10: typeof cupClusterDataTeamShareL10 !== 'undefined' ? cupClusterDataTeamShareL10 : null,
+                };
             }
-            if (currentWindow === 'l3' && typeof clusterDataL3 !== 'undefined') return clusterDataL3;
-            if (currentWindow === 'l5' && typeof clusterDataL5 !== 'undefined') return clusterDataL5;
-            if (currentWindow === 'l10' && typeof clusterDataL10 !== 'undefined') return clusterDataL10;
-            return clusterData;
+            return {
+                prefix: 'nrl',
+                production: typeof clusterData !== 'undefined' ? clusterData : null,
+                teamShare: typeof clusterDataTeamShare !== 'undefined' ? clusterDataTeamShare : null,
+                productionL3: typeof clusterDataL3 !== 'undefined' ? clusterDataL3 : null,
+                productionL5: typeof clusterDataL5 !== 'undefined' ? clusterDataL5 : null,
+                productionL10: typeof clusterDataL10 !== 'undefined' ? clusterDataL10 : null,
+                teamShareL3: typeof clusterDataTeamShareL3 !== 'undefined' ? clusterDataTeamShareL3 : null,
+                teamShareL5: typeof clusterDataTeamShareL5 !== 'undefined' ? clusterDataTeamShareL5 : null,
+                teamShareL10: typeof clusterDataTeamShareL10 !== 'undefined' ? clusterDataTeamShareL10 : null,
+            };
+        }
+
+        function hasCompetitionData(competition) {
+            const previousCompetition = currentCompetition;
+            currentCompetition = competition;
+            const data = getCompetitionDataSource().production;
+            currentCompetition = previousCompetition;
+            return Boolean(data && data[currentYear] && Object.keys(data[currentYear]).length);
+        }
+
+        function getActiveClusterData() {
+            const source = getCompetitionDataSource();
+            if (currentMode === 'teamShare') {
+                if (currentWindow === 'l3' && source.teamShareL3) return source.teamShareL3;
+                if (currentWindow === 'l5' && source.teamShareL5) return source.teamShareL5;
+                if (currentWindow === 'l10' && source.teamShareL10) return source.teamShareL10;
+                return source.teamShare;
+            }
+            if (currentWindow === 'l3' && source.productionL3) return source.productionL3;
+            if (currentWindow === 'l5' && source.productionL5) return source.productionL5;
+            if (currentWindow === 'l10' && source.productionL10) return source.productionL10;
+            return source.production;
         }
 
         function getPlotSuffix() {
             const modeSuffix = currentMode === 'teamShare' ? '_team_share' : '';
             const windowSuffix = currentWindow === 'all' ? '' : `_${currentWindow}`;
             return `${modeSuffix}${windowSuffix}`;
+        }
+
+        function getPlotPrefix() {
+            return getCompetitionDataSource().prefix;
         }
 
         // Initialize
@@ -865,13 +920,20 @@
                 console.error("Cluster data not loaded or invalid format");
                 return;
             }
-            const hasTeamShareData = typeof clusterDataTeamShare !== 'undefined' && clusterDataTeamShare[currentYear];
+            const hasCupData = hasCompetitionData('cup');
+
+            competitionToggle.querySelectorAll('.mode-btn').forEach(btn => {
+                if (btn.dataset.competition === 'cup' && !hasCupData) {
+                    btn.disabled = true;
+                    btn.title = 'Cup archetype data is unavailable';
+                } else {
+                    btn.disabled = false;
+                    btn.title = '';
+                }
+                btn.onclick = () => selectCompetition(btn.dataset.competition);
+            });
 
             modeToggle.querySelectorAll('.mode-btn').forEach(btn => {
-                if (btn.dataset.mode === 'teamShare' && !hasTeamShareData) {
-                    btn.disabled = true;
-                    btn.title = 'Team Share data is unavailable';
-                }
                 btn.onclick = () => selectMode(btn.dataset.mode);
             });
 
@@ -913,22 +975,24 @@
                 if (currentPosition) renderArchetypes(currentPosition);
             };
 
-            const positions = Object.keys(getActiveClusterData()[currentYear]);
+            updateModeAvailability();
 
-            // Create Tabs
-            tabsContainer.innerHTML = '';
-            positions.forEach(pos => {
-                const btn = document.createElement('button');
-                btn.className = 'tab-btn';
-                btn.textContent = pos;
-                btn.onclick = () => selectPosition(pos);
-                tabsContainer.appendChild(btn);
-            });
+            const positions = rebuildPositionTabs(getActiveClusterData()[currentYear] || {});
 
             // Select first position by default
             if (positions.length > 0) {
                 selectPosition(positions[0]);
+            } else {
+                renderNoCompetitionData();
             }
+        }
+
+        function renderNoCompetitionData() {
+            tabsContainer.innerHTML = '';
+            plotContainer.innerHTML = `<div class="loading">${currentCompetition === 'cup' ? 'Cup archetype data is unavailable.' : 'Archetype data is unavailable.'}</div>`;
+            archetypeList.innerHTML = '';
+            const body = document.getElementById('rankingsBody');
+            if (body) body.innerHTML = '<div class="rankings-empty">No rankings available.</div>';
         }
 
         function updateRankingsControls() {
@@ -942,8 +1006,62 @@
             rankingsFormFilter.hidden = rankingsView !== 'form';
         }
 
+        function rebuildPositionTabs(activeYearData) {
+            const positions = Object.keys(activeYearData || {});
+            tabsContainer.innerHTML = '';
+            positions.forEach(pos => {
+                const btn = document.createElement('button');
+                btn.className = 'tab-btn';
+                btn.textContent = pos;
+                btn.onclick = () => selectPosition(pos);
+                tabsContainer.appendChild(btn);
+            });
+            return positions;
+        }
+
+        function updateModeAvailability() {
+            const source = getCompetitionDataSource();
+            const hasTeamShareData = Boolean(source.teamShare && source.teamShare[currentYear]);
+            modeToggle.querySelectorAll('.mode-btn').forEach(btn => {
+                const unavailable = btn.dataset.mode === 'teamShare' && !hasTeamShareData;
+                btn.disabled = unavailable;
+                btn.title = unavailable ? 'Team Share data is unavailable' : '';
+                if (unavailable && currentMode === 'teamShare') currentMode = 'production';
+                btn.classList.toggle('active', btn.dataset.mode === currentMode);
+            });
+        }
+
+        function selectCompetition(competition) {
+            if (currentCompetition === competition) return;
+            if (competition === 'cup' && !hasCompetitionData('cup')) return;
+            currentCompetition = competition;
+            currentMode = 'production';
+            currentWindow = 'all';
+            rankingsRequestId++;
+            plotRequestId++;
+
+            competitionToggle.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.competition === competition);
+            });
+            windowToggle.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.window === currentWindow);
+            });
+            updateModeAvailability();
+
+            const activeYearData = getActiveClusterData()[currentYear] || {};
+            const selectedPosition = activeYearData[currentPosition] ? currentPosition : Object.keys(activeYearData)[0];
+            currentPosition = null;
+            if (selectedPosition) {
+                rebuildPositionTabs(activeYearData);
+                selectPosition(selectedPosition);
+            } else {
+                renderNoCompetitionData();
+            }
+        }
+
         function selectMode(mode) {
-            if (mode === 'teamShare' && (typeof clusterDataTeamShare === 'undefined' || !clusterDataTeamShare[currentYear])) return;
+            const source = getCompetitionDataSource();
+            if (mode === 'teamShare' && (!source.teamShare || !source.teamShare[currentYear])) return;
             if (currentMode === mode) return;
             currentMode = mode;
             rankingsRequestId++;
@@ -952,10 +1070,10 @@
                 btn.classList.toggle('active', btn.dataset.mode === mode);
             });
 
-            const activeYearData = getActiveClusterData()[currentYear];
+            const activeYearData = getActiveClusterData()[currentYear] || {};
             const selectedPosition = activeYearData[currentPosition] ? currentPosition : Object.keys(activeYearData)[0];
             currentPosition = null;
-            selectPosition(selectedPosition);
+            if (selectedPosition) selectPosition(selectedPosition);
         }
 
         function selectWindow(windowName) {
@@ -971,10 +1089,10 @@
                 btn.classList.toggle('active', btn.dataset.window === windowName);
             });
 
-            const activeYearData = getActiveClusterData()[currentYear];
+            const activeYearData = getActiveClusterData()[currentYear] || {};
             const selectedPosition = activeYearData[currentPosition] ? currentPosition : Object.keys(activeYearData)[0];
             currentPosition = null;
-            selectPosition(selectedPosition);
+            if (selectedPosition) selectPosition(selectedPosition);
         }
 
         // Select Position
@@ -993,7 +1111,7 @@
             });
 
             // Update Plot
-            const plotFile = `nrl_cluster_plot_${position.toLowerCase().replace(' ', '_')}${getPlotSuffix()}_all.html`;
+            const plotFile = `${getPlotPrefix()}_cluster_plot_${position.toLowerCase().replace(' ', '_')}${getPlotSuffix()}_all.html`;
             const requestId = ++plotRequestId;
             const nextFrame = document.createElement('iframe');
             nextFrame.src = plotFile;
@@ -1242,12 +1360,12 @@
 
         async function loadRankings(position, windowName = currentWindow) {
             const mode = currentMode;
-            const cacheKey = `${mode}:${windowName}:${position}`;
+            const cacheKey = `${currentCompetition}:${mode}:${windowName}:${position}`;
             if (rankingsCache[cacheKey]) return rankingsCache[cacheKey];
 
             const modeSuffix = mode === 'teamShare' ? '_team_share' : '';
             const windowSuffix = windowName === 'all' ? '' : `_${windowName}`;
-            const plotFile = `nrl_cluster_plot_${position.toLowerCase().replace(' ', '_')}${modeSuffix}${windowSuffix}_all.html`;
+            const plotFile = `${getPlotPrefix()}_cluster_plot_${position.toLowerCase().replace(' ', '_')}${modeSuffix}${windowSuffix}_all.html`;
             const response = await fetch(plotFile);
             if (!response.ok) throw new Error(`Failed to fetch ${plotFile}`);
 

@@ -11,6 +11,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 import os
+import argparse
 from pathlib import Path
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
@@ -21,6 +22,10 @@ supabase: Client = create_client(f.SUPABASE_URL, f.SUPABASE_KEY)
 
 YEARS_TO_PROCESS = [2023, 2024, 2025, 2026]
 ARCHETYPE_TABLE = "player_archetypes"
+PLAYER_STATS_TABLE = "player_stats"
+MATCHES_TABLE = "matches"
+OUTPUT_PREFIX = "nrl"
+CACHE_FILE_PREFIX = "player_stats"
 UPSERT_BATCH_SIZE = 500
 PLAYER_NAME_ALIASES = {
     "Nicholas Hynes": "Nicho Hynes",
@@ -276,6 +281,10 @@ BASE_PLAYER_COLUMNS = {
 }
 
 RATIO_FEATURES = {'pass_run_ratio', 'passes_to_run_ratio', 'tackle_efficiency'}
+REQUIRED_PLAYER_COLUMNS = {'player', 'team', 'match_date', 'mins_played'}
+SOURCE_COLUMN_ALIASES = {
+    "mins_played": ["mins_played", "minutes_played"],
+}
 
 
 def _base_stat_name(feature):
@@ -321,21 +330,61 @@ def _player_stat_columns(configs):
     return sorted(columns)
 
 
-def fetch_player_stats_for_years(years, configs, batch=500):
+def table_column_exists(table, column):
+    try:
+        (
+            supabase
+            .schema("nrl")
+            .table(table)
+            .select(column)
+            .limit(1)
+            .execute()
+        )
+        return True
+    except Exception:
+        return False
+
+
+def resolve_source_columns(table, columns):
+    resolved = {}
+    missing = []
+    for column in columns:
+        candidates = SOURCE_COLUMN_ALIASES.get(column, [column])
+        source = next((candidate for candidate in candidates if table_column_exists(table, candidate)), None)
+        if source:
+            resolved[column] = source
+        else:
+            missing.append(column)
+    return resolved, missing
+
+
+def fetch_player_stats_for_years(years, configs, table=PLAYER_STATS_TABLE, batch=500):
     columns = _player_stat_columns(configs)
+    source_columns, missing_columns = resolve_source_columns(table, columns)
+    available_columns = sorted(set(source_columns.values()))
+    missing_required = sorted(REQUIRED_PLAYER_COLUMNS & set(missing_columns))
+    if missing_required:
+        raise RuntimeError(f"nrl.{table} is missing required columns: {', '.join(missing_required)}")
+    if missing_columns:
+        print(f"nrl.{table} is missing optional archetype columns; filling as neutral zeros: {', '.join(missing_columns)}")
+    minutes_source_column = source_columns["mins_played"]
+
     cache_dir = os.getenv("ARCHETYPE_PLAYER_STATS_CACHE_DIR")
     if cache_dir:
         frames = []
-        for cache_file in sorted(Path(cache_dir).glob("player_stats_*.json")):
+        for cache_file in sorted(Path(cache_dir).glob(f"{CACHE_FILE_PREFIX}_*.json")):
             with cache_file.open() as f:
                 data = json.load(f)
             if data:
-                frames.append(pd.DataFrame(data))
+                frame = pd.DataFrame(data).rename(columns={source: column for column, source in source_columns.items()})
+                for column in missing_columns:
+                    frame[column] = None if column in {'number', 'position'} else 0
+                frames.append(frame)
         if not frames:
             return pd.DataFrame(columns=columns)
         return pd.concat(frames, ignore_index=True)
 
-    select_cols = ','.join(columns)
+    select_cols = ','.join(available_columns)
     frames = []
 
     for year in sorted(set(years)):
@@ -347,11 +396,11 @@ def fetch_player_stats_for_years(years, configs, batch=500):
             response = (
                 supabase
                 .schema("nrl")
-                .table("player_stats")
+                .table(table)
                 .select(select_cols)
                 .gte("match_date", start_date)
                 .lt("match_date", end_date)
-                .gte("mins_played", 40)
+                .gte(minutes_source_column, 40)
                 .order("match_date")
                 .range(offset, offset + batch - 1)
                 .execute()
@@ -360,7 +409,10 @@ def fetch_player_stats_for_years(years, configs, batch=500):
             if not data:
                 break
 
-            frames.append(pd.DataFrame(data))
+            frame = pd.DataFrame(data).rename(columns={source: column for column, source in source_columns.items()})
+            for column in missing_columns:
+                frame[column] = None if column in {'number', 'position'} else 0
+            frames.append(frame)
             offset += batch
 
     if not frames:
@@ -677,6 +729,10 @@ def build_player_archetype_record(row, config, features):
 
 
 def upsert_player_archetypes(records):
+    if not ARCHETYPE_TABLE:
+        print("\nSkipped player archetype upsert: no target table configured.")
+        return
+
     if not records:
         print("\nNo player archetype rows to upsert.")
         return
@@ -725,6 +781,25 @@ def upsert_player_archetypes(records):
         )
         print(f"Removed stale player aliases: {', '.join(stale_aliases)}.")
     print(f"Upserted {len(records)} rows to nrl.{ARCHETYPE_TABLE}.")
+
+
+def configure_competition(competition):
+    global ARCHETYPE_TABLE, PLAYER_STATS_TABLE, MATCHES_TABLE, OUTPUT_PREFIX, CACHE_FILE_PREFIX
+
+    if competition == "cup":
+        PLAYER_STATS_TABLE = "state_cup_player_stats"
+        MATCHES_TABLE = "state_cup_matches"
+        ARCHETYPE_TABLE = os.getenv("CUP_ARCHETYPE_TABLE", "")
+        OUTPUT_PREFIX = "cup"
+        CACHE_FILE_PREFIX = "state_cup_player_stats"
+        return
+
+    PLAYER_STATS_TABLE = "player_stats"
+    MATCHES_TABLE = "matches"
+    ARCHETYPE_TABLE = "player_archetypes"
+    OUTPUT_PREFIX = "nrl"
+    CACHE_FILE_PREFIX = "player_stats"
+
 
 def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="production", game_window=None):
     full_cluster_data_export = {}
@@ -968,7 +1043,7 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
             )
             
             suffix = f"_{plot_suffix}" if plot_suffix else ""
-            filename = f"nrl_cluster_plot_{export_name.lower().replace(' ', '_')}{suffix}_{str(year).lower()}.html"
+            filename = f"{OUTPUT_PREFIX}_cluster_plot_{export_name.lower().replace(' ', '_')}{suffix}_{str(year).lower()}.html"
             
             # Inject custom CSS and JS to fix Plotly button styling, add mobile responsiveness,
             # and allow projecting the 3D archetype space onto any 2D plane.
@@ -1368,12 +1443,52 @@ def save_cluster_exports(data, file_stem, variable_name):
         output_file.write(f"const {variable_name} = {json.dumps(data, indent=4)};")
     print(f"Exported {file_stem}.json and {file_stem}.js")
 
+
+def save_empty_competition_exports():
+    variable_base = "clusterData" if OUTPUT_PREFIX == "nrl" else "cupClusterData"
+    save_cluster_exports({}, f'{OUTPUT_PREFIX}_cluster_data', variable_base)
+    save_cluster_exports({}, f'{OUTPUT_PREFIX}_cluster_data_team_share', f'{variable_base}TeamShare')
+    for game_window in (3, 5, 10):
+        window_label = f'l{game_window}'
+        variable_suffix = f'L{game_window}'
+        save_cluster_exports({}, f'{OUTPUT_PREFIX}_cluster_data_{window_label}', f'{variable_base}{variable_suffix}')
+        save_cluster_exports({}, f'{OUTPUT_PREFIX}_cluster_data_team_share_{window_label}', f'{variable_base}TeamShare{variable_suffix}')
+
+
+def fetch_table_count(table):
+    try:
+        response = (
+            supabase
+            .schema("nrl")
+            .table(table)
+            .select("match_date", count="exact")
+            .limit(1)
+            .execute()
+        )
+        return response.count
+    except Exception as error:
+        print(f"Unable to count nrl.{table}: {error}")
+        return None
+
 # --- Main Execution ---
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate NRL or State Cup player archetype outputs.")
+    parser.add_argument("--competition", choices=["nrl", "cup"], default=os.getenv("ARCHETYPE_COMPETITION", "nrl"))
+    args = parser.parse_args()
+    configure_competition(args.competition)
+
     # 1. Load Data
-    print("Fetching player stats...")
-    player_data = fetch_player_stats_for_years(YEARS_TO_PROCESS, POSITION_CONFIGS)
+    match_count = fetch_table_count(MATCHES_TABLE)
+    if match_count == 0:
+        print(f"nrl.{MATCHES_TABLE} has no rows.")
+    print(f"Fetching {args.competition.upper()} player stats from nrl.{PLAYER_STATS_TABLE}...")
+    player_data = fetch_player_stats_for_years(YEARS_TO_PROCESS, POSITION_CONFIGS, table=PLAYER_STATS_TABLE)
+    if player_data.empty:
+        print(f"No rows found in nrl.{PLAYER_STATS_TABLE}; writing empty {OUTPUT_PREFIX.upper()} archetype data.")
+        save_empty_competition_exports()
+        raise SystemExit(0)
+
     training_agg = load_and_process_data(POSITION_CONFIGS, player_data, stat_mode='production')
     
     # 2. Train Models (Global)
@@ -1383,7 +1498,7 @@ if __name__ == "__main__":
     full_data, player_archetype_records = generate_outputs(training_agg, models, POSITION_CONFIGS)
     
     # 4. Save JSON and browser data
-    save_cluster_exports(full_data, 'nrl_cluster_data', 'clusterData')
+    save_cluster_exports(full_data, f'{OUTPUT_PREFIX}_cluster_data', 'clusterData' if OUTPUT_PREFIX == 'nrl' else 'cupClusterData')
 
     # 5. Upsert player-level archetype outputs
     if os.getenv("SKIP_ARCHETYPE_UPSERT") == "1":
@@ -1402,7 +1517,11 @@ if __name__ == "__main__":
         plot_suffix="team_share",
         stat_mode="team_share",
     )
-    save_cluster_exports(team_share_data, 'nrl_cluster_data_team_share', 'clusterDataTeamShare')
+    save_cluster_exports(
+        team_share_data,
+        f'{OUTPUT_PREFIX}_cluster_data_team_share',
+        'clusterDataTeamShare' if OUTPUT_PREFIX == 'nrl' else 'cupClusterDataTeamShare',
+    )
 
     # 7. Generate recent qualifying-game views.
     for game_window in (3, 5, 10):
@@ -1423,7 +1542,11 @@ if __name__ == "__main__":
             plot_suffix=window_label,
             game_window=game_window,
         )
-        save_cluster_exports(window_data, f'nrl_cluster_data_{window_label}', f'clusterData{variable_suffix}')
+        save_cluster_exports(
+            window_data,
+            f'{OUTPUT_PREFIX}_cluster_data_{window_label}',
+            f'clusterData{variable_suffix}' if OUTPUT_PREFIX == 'nrl' else f'cupClusterData{variable_suffix}',
+        )
 
         window_team_share_agg = load_and_process_data(
             team_share_configs,
@@ -1442,6 +1565,6 @@ if __name__ == "__main__":
         )
         save_cluster_exports(
             window_team_share_data,
-            f'nrl_cluster_data_team_share_{window_label}',
-            f'clusterDataTeamShare{variable_suffix}',
+            f'{OUTPUT_PREFIX}_cluster_data_team_share_{window_label}',
+            f'clusterDataTeamShare{variable_suffix}' if OUTPUT_PREFIX == 'nrl' else f'cupClusterDataTeamShare{variable_suffix}',
         )

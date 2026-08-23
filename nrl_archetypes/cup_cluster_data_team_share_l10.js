@@ -1,0 +1,1 @@
+const cupClusterDataTeamShareL10 = {};

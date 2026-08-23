@@ -281,19 +281,19 @@ const clusterDataL5 = {
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 72,
+                    "count": 70,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 34,
+                    "count": 35,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 57,
+                    "count": 58,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],

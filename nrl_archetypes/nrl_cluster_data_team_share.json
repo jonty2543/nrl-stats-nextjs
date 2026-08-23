@@ -275,19 +275,19 @@
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 78,
+                    "count": 82,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 60,
+                    "count": 58,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 45,
+                    "count": 43,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
@@ -329,19 +329,19 @@
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 26,
+                    "count": 27,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 57,
+                    "count": 59,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 184,
+                    "count": 181,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

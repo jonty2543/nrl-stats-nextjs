@@ -275,19 +275,19 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 78,
+                    "count": 81,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 62,
+                    "count": 60,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 46,
+                    "count": 45,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
@@ -329,7 +329,7 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 23,
+                    "count": 26,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
@@ -341,7 +341,7 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 189,
+                    "count": 186,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

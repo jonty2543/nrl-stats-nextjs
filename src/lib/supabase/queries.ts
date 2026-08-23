@@ -79,6 +79,47 @@ export interface PlayerImageRecord {
   last_seen_match_date: string | null;
 }
 
+function textOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function playerImageUrlOrNull(value: unknown): string | null {
+  const url = textOrNull(value);
+  if (!url) return null;
+  const lowerUrl = url.toLowerCase();
+  if (
+    lowerUrl.includes("/resources/images/fallback/head-shot.png") ||
+    lowerUrl.includes("/resources/images/fallback/body-shot.png")
+  ) {
+    return null;
+  }
+  return url;
+}
+
+function imageRecordSeenValue(row: PlayerImageRecord): string {
+  return row.last_seen_match_date ?? "";
+}
+
+function dedupePlayerImageRows(rows: PlayerImageRecord[]): PlayerImageRecord[] {
+  const seen = new Set<string>();
+  return [...rows]
+    .sort((left, right) => imageRecordSeenValue(right).localeCompare(imageRecordSeenValue(left)))
+    .filter((row) => {
+      if (!row.player || !(row.head_image || row.body_image || row.cached_head_image || row.cached_body_image)) {
+        return false;
+      }
+      const key = [
+        normalisePlayerAliasKey(row.player),
+        normaliseTeamKey(row.team),
+        row.head_image ?? row.cached_head_image ?? "",
+        row.body_image ?? row.cached_body_image ?? "",
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 export interface BettingSummaryGame {
   round: number | null;
   matchDate: string;
@@ -1601,6 +1642,13 @@ function cleanPlayerRow(row: Record<string, unknown>): Record<string, unknown> {
   ];
   for (const col of floatCols) {
     if (col in row) row[col] = toNum(row[col]);
+  }
+
+  const tacklesMade = toNum(row["Tackles Made"]);
+  const tackleAttempts = tacklesMade + toNum(row["Missed Tackles"]) + toNum(row["Ineffective Tackles"]);
+  const tackleEfficiency = toNum(row["Tackle Efficiency"]);
+  if (tackleAttempts > 0 && (tackleEfficiency > 100 || (tackleEfficiency <= 1 && tacklesMade > 0))) {
+    row["Tackle Efficiency"] = (tacklesMade / tackleAttempts) * 100;
   }
 
   return row;
@@ -4392,25 +4440,67 @@ export async function fetchTopWeeklyFantasyPlayerCardSummaries(): Promise<Fantas
 
 export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord[]> {
   const raw = await fetchAllRows<Record<string, unknown>>("player_images");
-  return raw.map((row) => {
+  const rows: PlayerImageRecord[] = raw.map((row) => {
     const lastSeen = typeof row.last_seen_match_date === "string" ? row.last_seen_match_date : null;
     return {
       player: typeof row.player === "string" ? row.player : "",
       team: typeof row.team === "string" ? row.team : null,
       number: row.number == null ? null : String(row.number),
       position: typeof row.position === "string" ? row.position : null,
-      cached_head_image: typeof row.cached_head_image === "string" ? row.cached_head_image : null,
-      cached_body_image: typeof row.cached_body_image === "string" ? row.cached_body_image : null,
-      head_image: typeof row.head_image === "string" ? row.head_image : null,
-      body_image: typeof row.body_image === "string" ? row.body_image : null,
+      cached_head_image: playerImageUrlOrNull(row.cached_head_image),
+      cached_body_image: playerImageUrlOrNull(row.cached_body_image),
+      head_image: playerImageUrlOrNull(row.head_image),
+      body_image: playerImageUrlOrNull(row.body_image),
       last_seen_match_date: lastSeen,
     };
   });
+
+  try {
+    const cupInfoRows = await fetchAllRows<Record<string, unknown>>("state_cup_player_info", {
+      columns: "player,team,position,head_image,body_image",
+      orderBy: ["player"],
+    });
+    rows.push(...cupInfoRows.map((row) => ({
+      player: typeof row.player === "string" ? row.player : "",
+      team: typeof row.team === "string" ? row.team : null,
+      number: row.number == null ? null : String(row.number),
+      position: typeof row.position === "string" ? row.position : null,
+      cached_head_image: null,
+      cached_body_image: null,
+      head_image: playerImageUrlOrNull(row.head_image),
+      body_image: playerImageUrlOrNull(row.body_image),
+      last_seen_match_date: null,
+    })));
+  } catch (error) {
+    console.warn("Unable to fetch state_cup_player_info images; using NRL player images only for those players.", error);
+  }
+
+  try {
+    const cupStatRows = await fetchAllRows<Record<string, unknown>>("state_cup_player_stats", {
+      columns: "player,team,number,position,head_image,body_image,match_date",
+      orderBy: ["match_date", "team", "player"],
+    });
+    rows.push(...cupStatRows.map((row) => ({
+      player: typeof row.player === "string" ? row.player : "",
+      team: typeof row.team === "string" ? row.team : null,
+      number: row.number == null ? null : String(row.number),
+      position: typeof row.position === "string" ? row.position : null,
+      cached_head_image: null,
+      cached_body_image: null,
+      head_image: playerImageUrlOrNull(row.head_image),
+      body_image: playerImageUrlOrNull(row.body_image),
+      last_seen_match_date: typeof row.match_date === "string" ? row.match_date : null,
+    })));
+  } catch (error) {
+    console.warn("Unable to fetch state_cup_player_stats images; using player info images only for Cup players.", error);
+  }
+
+  return dedupePlayerImageRows(rows);
 }
 
 const fetchPlayerImagesCached = unstable_cache(
   async (): Promise<PlayerImageRecord[]> => fetchPlayerImagesFromSupabase(),
-  ["player-images-v3"],
+  ["player-images-v4"],
   { revalidate: 3600 }
 );
 
@@ -4469,36 +4559,52 @@ export async function fetchTeamLogosFromSupabase(): Promise<Record<string, strin
   const raw = await fetchAllRows<Record<string, unknown>>("team_logos");
   const logos = new Map<string, string>();
 
-  for (const row of raw) {
-    const candidates = [
-      row.short_side_logo_url,
-      row.side_logo_url,
-      row.short_logo_url,
-      row.logo_url,
-    ];
-    const logoUrl = candidates.find(
-      (value): value is string => typeof value === "string" && value.trim().length > 0
-    )?.trim();
+  const addLogoRows = (rows: Record<string, unknown>[]) => {
+    for (const row of rows) {
+      const candidates = [
+        row.short_side_logo_url,
+        row.side_logo_url,
+        row.short_logo_url,
+        row.logo_url,
+      ];
+      const logoUrl = candidates.find(
+        (value): value is string => typeof value === "string" && value.trim().length > 0
+      )?.trim();
 
-    if (!logoUrl) continue;
+      if (!logoUrl) continue;
 
-    const teamNameCandidates = [
-      row.team,
-      row.team_name,
-      row.name,
-      row.display_name,
-      row.full_name,
-      row.short_name,
-      row.club,
-      row.nickname,
-      row.abbreviation,
-    ];
+      const teamNameCandidates = [
+        row.team,
+        row.team_name,
+        row.team_url,
+        row.theme_key,
+        row.name,
+        row.display_name,
+        row.full_name,
+        row.short_name,
+        row.club,
+        row.nickname,
+        row.abbreviation,
+      ];
 
-    for (const teamKey of teamNameCandidates.flatMap(teamLogoAliasKeys)) {
-      if (!logos.has(teamKey)) {
-        logos.set(teamKey, logoUrl);
+      for (const teamKey of teamNameCandidates.flatMap(teamLogoAliasKeys)) {
+        if (!logos.has(teamKey)) {
+          logos.set(teamKey, logoUrl);
+        }
       }
     }
+  };
+
+  addLogoRows(raw);
+
+  try {
+    const cupRows = await fetchAllRows<Record<string, unknown>>("state_cup_team_logos", {
+      columns: "team,team_name,team_url,theme_key,logo_url,logos",
+      orderBy: ["competition", "team"],
+    });
+    addLogoRows(cupRows);
+  } catch (error) {
+    console.warn("Unable to fetch state_cup_team_logos; using NRL team logos only for those teams.", error);
   }
 
   return Object.fromEntries(logos);
@@ -4506,7 +4612,7 @@ export async function fetchTeamLogosFromSupabase(): Promise<Record<string, strin
 
 const fetchTeamLogosCached = unstable_cache(
   async (): Promise<Record<string, string>> => fetchTeamLogosFromSupabase(),
-  ["team-logos-v1"],
+  ["team-logos-v2"],
   { revalidate: 3600 }
 );
 

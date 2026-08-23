@@ -22,11 +22,11 @@ export function CompetitionToggle({ value, onChange, canAccessCup }: Competition
               aria-pressed={active}
               title={locked ? "Cup stats require Pro or Premium access" : undefined}
               onClick={() => onChange(option)}
-              className={`rounded px-2 py-1 text-[9px] font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-                active ? "bg-nrl-accent text-[#07111f]" : "text-nrl-muted hover:text-nrl-text"
+              className={`rounded border px-2 py-1 text-[9px] font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                active ? "border-nrl-accent text-nrl-accent" : "border-transparent text-nrl-muted hover:text-nrl-text"
               }`}
             >
-              {option === "nrl" ? "NRL" : locked ? "Cup Lock" : "Cup"}
+              {option === "nrl" ? "NRL" : "Cup"}
             </button>
           );
         })}

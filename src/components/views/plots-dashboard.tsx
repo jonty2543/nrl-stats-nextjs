@@ -2067,7 +2067,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-end gap-3">
+      <div className="grid grid-cols-[max-content_minmax(7rem,12rem)] items-end gap-3 sm:grid-cols-[max-content_minmax(12rem,20rem)] lg:grid-cols-[max-content_minmax(16rem,28rem)]">
         <div ref={plotFinderRef} className="relative col-start-2 row-start-1 min-w-0">
           <label htmlFor="plot-finder-input" className="sr-only">Find a plot</label>
           <input

@@ -389,6 +389,8 @@ export function TeamQuadrantScatter({
   const singleAxisHeatBarHeight = isMobile ? 14 : 10;
   const singleAxisHeatBarX = xPlotLeft;
   const singleAxisHeatBarWidth = xPlotWidth;
+  const heatLowColor = xHigherIsBetter ? "#ff5364" : "#10f08b";
+  const heatHighColor = xHigherIsBetter ? "#10f08b" : "#ff5364";
   const plotCenterLeft = `${((xPlotLeft + xPlotWidth / 2) / width) * 100}%`;
   const yScale = (value: number) => margin.top + ((yDomain[1] - value) / (yDomain[1] - yDomain[0])) * plotHeight;
   const selectedPoint = points.find((point) => point.id === selectedPointId) ?? null;
@@ -574,10 +576,10 @@ export function TeamQuadrantScatter({
           <clipPath id={dataClipId}><rect x={xPlotLeft} y={margin.top} width={xPlotWidth} height={plotHeight} rx="8" /></clipPath>
           <clipPath id={pointAreaClipId}><rect x={xPlotLeft - pointOverflow} y={margin.top - pointOverflow} width={xPlotWidth + pointOverflow * 2} height={plotHeight + pointOverflow * 2} /></clipPath>
           <linearGradient id={heatGradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#ff5364" />
+            <stop offset="0%" stopColor={heatLowColor} />
             <stop offset="32%" stopColor="#f6c445" />
-            <stop offset="62%" stopColor="#10f08b" />
-            <stop offset="100%" stopColor="#10f08b" />
+            <stop offset="62%" stopColor={heatHighColor} />
+            <stop offset="100%" stopColor={heatHighColor} />
           </linearGradient>
         </defs>
         <rect x={xPlotLeft} y={margin.top} width={xPlotWidth} height={plotHeight} rx="8" fill="var(--color-nrl-bg)" />
@@ -617,8 +619,9 @@ export function TeamQuadrantScatter({
           const y = groupY(group);
           const isRight = xHigherIsBetter ? group.xValue >= chart.xMean : group.xValue <= chart.xMean;
           const isTop = yHigherIsBetter ? group.yValue >= chart.yMean : group.yValue <= chart.yMean;
+          const heatRatio = (x - singleAxisHeatBarX) / singleAxisHeatBarWidth;
           const pointColor = singleAxis
-            ? singleAxisHeatColor((x - singleAxisHeatBarX) / singleAxisHeatBarWidth)
+            ? singleAxisHeatColor(xHigherIsBetter ? heatRatio : 1 - heatRatio)
             : comparisonLine
             ? (group.yValue >= group.xValue) === comparisonHigherIsBetter ? "#10f08b" : "#ff5364"
             : colorByQuadrant

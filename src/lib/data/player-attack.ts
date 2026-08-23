@@ -71,6 +71,7 @@ export const PLAYER_ATTACK_COMPARISON_STATS = [
   "Forced drop outs",
   "Missed tackles",
   "Penalties",
+  "Ruck infringements",
   "Errors",
 ] as const;
 
@@ -230,6 +231,7 @@ const ATTACK_COMPARISON_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerS
   "Forced drop outs": "Forced Drop Outs",
   "Missed tackles": "Missed Tackles",
   Penalties: "Penalties",
+  "Ruck infringements": "Ruck Infringements",
   Errors: "Errors",
   Fantasy: "Fantasy",
   "Play-the-ball speed": "Average Play The Ball Speed",

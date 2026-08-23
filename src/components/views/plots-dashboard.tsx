@@ -145,6 +145,7 @@ const FORM_STAT_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerStat> = {
   "Forced drop outs": "Forced Drop Outs",
   "Missed tackles": "Missed Tackles",
   Penalties: "Penalties",
+  "Ruck infringements": "Ruck Infringements",
   Errors: "Errors",
   Fantasy: "Fantasy",
   "Play-the-ball speed": "Average Play The Ball Speed",
@@ -2245,7 +2246,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                   points={isPlayerForm ? playerFormPoints : playerSection === "Defense" ? playerDefencePoints : isPlayerEfficiency ? playerAttackPoints : playerAttackComparisonPoints}
                   teamLogos={{}}
                   useLogos={false}
-                  pointImages={isPlayerForm ? playerFormPointImages : isPlayerGameMode && round === "all" ? undefined : playerPointImages}
+                  pointImages={isPlayerForm ? playerFormPointImages : playerPointImages}
                   searchEntityLabel="players"
                   emptyMessage={isPlayerForm ? `No ${playerPosition.toLowerCase()} have L${formWindow} plus ${minPriorGames} prior games this season.` : round !== "all" ? `No ${playerPosition.toLowerCase()} recorded a qualifying appearance in Round ${round}.` : `No ${playerPosition.toLowerCase()} have ${gameWindow ?? 4} qualifying games this season.`}
                   ariaLabel={isPlayerForm

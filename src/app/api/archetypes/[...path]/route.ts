@@ -100,7 +100,7 @@ function gateCupIndexAssets(html: string): string {
     .replaceAll(/\s*<script src="cup_[^"]+"><\/script>/g, "")
     .replace(
       '<button class="mode-btn" data-competition="cup">Cup</button>',
-      '<button class="mode-btn" data-competition="cup" disabled title="Cup archetypes require Pro or Premium access">Cup</button>'
+      '<button class="mode-btn" data-competition="cup" data-pro-required="true" disabled title="Cup archetypes require Pro or Premium access"><span>Cup</span><span class="cup-pro-badge" aria-hidden="true">PRO</span></button>'
     );
 }
 
@@ -186,8 +186,23 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
         }
 
         .control-frame {
-            gap: 0.2rem;
+            gap: 0.55rem;
+            border: 0;
+            background: transparent;
+            padding: 0;
+        }
+
+        .control-frame .mode-toggle {
+            flex-wrap: nowrap;
+            gap: 0.16rem;
+            border: 1px solid #2a3356;
+            border-radius: 999px;
+            background: rgba(17, 24, 50, 0.72);
             padding: 0.18rem;
+        }
+
+        #modeToggle {
+            display: none;
         }
 
         .control-frame .mode-btn {
@@ -196,13 +211,92 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
             letter-spacing: 0.1em;
         }
 
+        .mode-btn[data-competition="cup"] {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.28rem;
+        }
+
+        .mode-btn[data-pro-required="true"] {
+            opacity: 0.72;
+        }
+
+        .cup-pro-badge {
+            display: inline-flex;
+            align-items: center;
+            min-height: 0.8rem;
+            border: 1px solid rgba(0, 245, 138, 0.66);
+            border-radius: 3px;
+            color: #00f58a;
+            font-size: 0.38rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            line-height: 1;
+            padding: 0.14rem 0.2rem;
+        }
+
         .control-divider {
-            height: 1.15rem;
+            display: none;
         }
 
         .tabs {
             gap: 0.4rem;
             margin-bottom: 1rem;
+        }
+
+        .controls-row {
+            flex-direction: row;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 0.65rem;
+            margin-bottom: 0.45rem;
+            overflow-x: auto;
+        }
+
+        .position-select {
+            display: block;
+            flex: 0 0 10rem;
+            min-width: 10rem;
+        }
+
+        .position-select select {
+            height: 2rem;
+            border-color: #2a3356;
+            background-color: #161c32;
+            color: #f5f7ff;
+            font-size: 0.62rem;
+            letter-spacing: 0.12em;
+            outline: none;
+            padding: 0 2rem 0 0.8rem;
+        }
+
+        .position-select select:focus {
+            border-color: #00f58a;
+        }
+
+        .position-select::after {
+            right: 0.82rem;
+            top: 50%;
+            bottom: auto;
+            width: 0.36rem;
+            height: 0.36rem;
+            border-width: 1.5px;
+            color: #f5f7ff;
+            transform: translateY(-70%) rotate(45deg);
+        }
+
+        .desktop-year-toggle {
+            height: 2rem;
+            gap: 0.16rem;
+            padding: 0.18rem;
+        }
+
+        .desktop-year-btn {
+            height: 1.5rem;
+            padding: 0 0.58rem;
+            font-size: 0.62rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .mode-btn.active,
@@ -219,10 +313,24 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
             background-color: rgba(0, 245, 138, 0.08);
         }
 
+        .content-grid {
+            height: calc(100vh - 190px);
+            min-height: 360px;
+        }
+
         @media (max-width: 768px) {
             html,
             body {
                 min-height: 100dvh;
+            }
+
+            .content-grid {
+                height: auto;
+                min-height: 0;
+            }
+
+            .controls-row {
+                margin-bottom: 0.35rem;
             }
 
             .tabs {
@@ -238,6 +346,23 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
             .control-frame .mode-btn {
                 padding: 0.3rem 0.5rem;
                 font-size: 0.58rem;
+            }
+
+            .plot-container {
+                align-self: start;
+                height: clamp(360px, 58dvh, 520px);
+            }
+        }
+
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .content-grid {
+                height: auto;
+                min-height: 0;
+            }
+
+            .plot-container {
+                align-self: start;
+                height: clamp(460px, 62dvh, 640px);
             }
         }
 
@@ -414,6 +539,9 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
                 window.requestAnimationFrame(function () {
                     frame.style.opacity = '1';
                     frame.style.transform = 'none';
+                    try {
+                        frame.contentWindow && frame.contentWindow.dispatchEvent(new Event('resize'));
+                    } catch (_) {}
                 });
             });
         }, true);
@@ -472,7 +600,19 @@ function stylePlotHtml(html: string): string {
 
                 html,
                 body {
+                    height: 100%;
                     min-height: 100%;
+                }
+
+                #plotly-wrapper,
+                #plotly-wrapper > div:not(#archetype-controls),
+                #plotly-wrapper .plot-container,
+                #plotly-wrapper .svg-container,
+                #plotly-wrapper .main-svg,
+                #plotly-wrapper .plotly-graph-div {
+                    min-height: 100%;
+                    height: 100% !important;
+                    width: 100% !important;
                 }
 
                 @media (max-width: 768px) {

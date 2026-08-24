@@ -560,7 +560,7 @@ function stylePlotHtml(html: string): string {
   return htmlWithControls
     .replaceAll("#C9FF00", "#00f58a")
     .replaceAll("#c9ff00", "#00f58a")
-    .replaceAll("#0A1128", "#0b1020")
+    .replaceAll("#0A1128", "#f5f7ff")
     .replaceAll("#151E3F", "#161c32")
     .replaceAll("#1E2742", "#1e2542")
     .replaceAll("#2A3B6E", "#2a3356")

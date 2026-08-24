@@ -196,7 +196,7 @@
       responsive: true,
       scrollZoom: true,
       displaylogo: false,
-    });
+    }).then(applyVisiblePlotLayout);
   }
 
   function getProjectionTrace(trace, index, keptDimensions) {
@@ -305,6 +305,7 @@
       updateProjectionAttributes();
       renderYearControls();
       applyPlayerSearchHighlight();
+      applyVisiblePlotLayout();
       if (typeof window.applyButtonStyles === "function") window.applyButtonStyles();
       if (typeof window.adjustPlotlyForMobile === "function") window.adjustPlotlyForMobile();
     });
@@ -324,6 +325,33 @@
     const gd = getGraph();
     if (!gd || !window.Plotly || !window.Plotly.Plots) return;
     window.requestAnimationFrame(() => window.Plotly.Plots.resize(gd));
+  }
+
+  function applyVisiblePlotLayout() {
+    const gd = getGraph();
+    if (!gd || !window.Plotly) return;
+
+    const axisText = { color: "#f5f7ff", size: 13 };
+    window.Plotly.relayout(gd, {
+      "font.color": "#f5f7ff",
+      "legend.orientation": "h",
+      "legend.x": 0.5,
+      "legend.xanchor": "center",
+      "legend.y": 0.01,
+      "legend.yanchor": "bottom",
+      "legend.font.color": "#f5f7ff",
+      "legend.font.size": 10,
+      "legend.bgcolor": "rgba(17,24,46,0.78)",
+      "legend.bordercolor": "rgba(245,247,255,0.18)",
+      "legend.borderwidth": 1,
+      "margin.b": Math.max((gd.layout.margin && gd.layout.margin.b) || 0, 12),
+      "scene.xaxis.title.font": axisText,
+      "scene.yaxis.title.font": axisText,
+      "scene.zaxis.title.font": axisText,
+      "scene.xaxis.tickfont": { color: "#f5f7ff", size: 11 },
+      "scene.yaxis.tickfont": { color: "#f5f7ff", size: 11 },
+      "scene.zaxis.tickfont": { color: "#f5f7ff", size: 11 },
+    }).then(resizeGraph);
   }
 
   function updateProjectionAttributes() {
@@ -373,6 +401,7 @@
     Plotly.update(gd, args[0] || {}, args[1] || {}).then(() => {
       if (state.droppedDimension) applyProjection();
       applyPlayerSearchHighlight();
+      applyVisiblePlotLayout();
     });
   }
 
@@ -812,9 +841,16 @@
 
   function init() {
     injectStyles();
+    applyVisiblePlotLayout();
     renderControls();
-    setTimeout(renderControls, 100);
-    setTimeout(renderControls, 500);
+    setTimeout(() => {
+      applyVisiblePlotLayout();
+      renderControls();
+    }, 100);
+    setTimeout(() => {
+      applyVisiblePlotLayout();
+      renderControls();
+    }, 500);
   }
 
   window.addEventListener("message", (event) => {

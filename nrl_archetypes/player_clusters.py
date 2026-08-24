@@ -1045,12 +1045,12 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                     x=0.02,
                     xanchor='left',
                     yanchor='bottom',
-                    font=dict(size=10),
+                    font=dict(color='#f5f7ff', size=10),
                     bgcolor='rgba(17,24,46,0.72)',
                 ),
                 paper_bgcolor='#f0f0f0',
                 plot_bgcolor='#f0f0f0',
-                font=dict(color="#0A1128")
+                font=dict(color="#f5f7ff")
             )
             
             suffix = f"_{plot_suffix}" if plot_suffix else ""

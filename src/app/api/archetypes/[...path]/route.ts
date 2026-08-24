@@ -350,7 +350,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
 
             .plot-container {
                 align-self: start;
-                height: clamp(360px, 58dvh, 520px);
+                height: clamp(320px, 48dvh, 410px);
             }
         }
 
@@ -362,7 +362,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
 
             .plot-container {
                 align-self: start;
-                height: clamp(460px, 62dvh, 640px);
+                height: clamp(400px, 54dvh, 560px);
             }
         }
 
@@ -573,11 +573,11 @@ function stylePlotHtml(html: string): string {
     .replaceAll('"gridcolor":"white"', '"gridcolor":"rgba(245,247,255,0.14)"')
     .replaceAll('"zerolinecolor":"white"', '"zerolinecolor":"rgba(245,247,255,0.18)"')
     .replaceAll('"gridwidth":2', '"gridwidth":1')
-    .replaceAll('"margin":{"l":0,"r":0,"b":20,"t":30}', '"margin":{"l":0,"r":0,"b":78,"t":0}')
-    .replaceAll('"margin":{"l":0,"r":0,"b":80,"t":30}', '"margin":{"l":0,"r":0,"b":78,"t":0}')
-    .replaceAll('"margin":{"l":0,"r":0,"b":0,"t":30}', '"margin":{"l":0,"r":0,"b":78,"t":0}')
-    .replaceAll('"showlegend":false,"legend":{"title":{"text":"Archetype"}}', '"showlegend":true,"legend":{"title":{"text":""},"orientation":"h","x":0.5,"xanchor":"center","y":0,"yanchor":"bottom","font":{"color":"#f5f7ff","size":12},"bgcolor":"rgba(17,23,51,0.72)","bordercolor":"rgba(42,51,86,0.95)","borderwidth":1}')
-    .replaceAll('"legend":{"title":{"text":"Archetype"}}', '"showlegend":true,"legend":{"title":{"text":""},"orientation":"h","x":0.5,"xanchor":"center","y":0,"yanchor":"bottom","font":{"color":"#f5f7ff","size":12},"bgcolor":"rgba(17,23,51,0.72)","bordercolor":"rgba(42,51,86,0.95)","borderwidth":1}')
+    .replaceAll('"margin":{"l":0,"r":0,"b":20,"t":30}', '"margin":{"l":0,"r":0,"b":86,"t":0}')
+    .replaceAll('"margin":{"l":0,"r":0,"b":80,"t":30}', '"margin":{"l":0,"r":0,"b":86,"t":0}')
+    .replaceAll('"margin":{"l":0,"r":0,"b":0,"t":30}', '"margin":{"l":0,"r":0,"b":86,"t":0}')
+    .replaceAll('"showlegend":false,"legend":{"title":{"text":"Archetype"}}', '"showlegend":true,"legend":{"title":{"text":""},"orientation":"h","x":0.5,"xanchor":"center","y":0.04,"yanchor":"top","font":{"color":"#f5f7ff","size":12},"bgcolor":"rgba(17,23,51,0.72)","bordercolor":"rgba(42,51,86,0.95)","borderwidth":1}')
+    .replaceAll('"legend":{"title":{"text":"Archetype"}}', '"showlegend":true,"legend":{"title":{"text":""},"orientation":"h","x":0.5,"xanchor":"center","y":0.04,"yanchor":"top","font":{"color":"#f5f7ff","size":12},"bgcolor":"rgba(17,23,51,0.72)","bordercolor":"rgba(42,51,86,0.95)","borderwidth":1}')
     .replaceAll('"opacity":0.8,"size":5', '"opacity":0.82,"size":3.5')
     .replaceAll("'marker.size': 6", "'marker.size': 4")
     .replaceAll("rect.style.fill = 'white';", "rect.style.fill = parentGroup && parentGroup.classList.contains('active') ? 'rgba(0, 245, 138, 0.18)' : 'rgba(17, 24, 46, 0.96)';")

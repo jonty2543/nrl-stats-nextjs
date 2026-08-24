@@ -354,20 +354,12 @@
     });
   }
 
-  function notifyParentYear(year) {
-    window.parent.postMessage({
-      type: "archetypes:plot-year-changed",
-      year: String(year),
-    }, window.location.origin);
-  }
-
   function applyYearFilter(index, yearButton) {
     const gd = getGraph();
     if (!gd || !window.Plotly || !yearButton) return;
 
     state.activeYearIndex = index;
     updateYearButtons();
-    notifyParentYear(yearButton.label);
 
     const args = yearButton.args || [];
     Plotly.update(gd, args[0] || {}, args[1] || {}).then(() => {
@@ -409,8 +401,6 @@
       return;
     }
     updateYearButtons();
-    const activeYear = availableYearButtons.find(({ index }) => index === state.activeYearIndex) || availableYearButtons[0];
-    if (activeYear) notifyParentYear(activeYear.yearButton.label);
   }
 
   function getPlayerSearchOptions(gd) {
@@ -538,19 +528,17 @@
       #plotly-wrapper .plotly-graph-div {
         height: 100% !important;
         min-height: 0;
+        padding-top: 112px;
+        box-sizing: border-box;
       }
       #archetype-controls {
         position: absolute;
         top: 8px;
         left: 10px;
         right: 10px;
-        height: auto !important;
-        min-height: 0 !important;
         z-index: 30;
         display: grid;
         grid-template-columns: minmax(0, max-content);
-        grid-auto-rows: max-content;
-        align-content: start;
         align-items: start;
         justify-items: start;
         gap: 6px;
@@ -561,43 +549,38 @@
       }
       #year-toggle {
         display: flex;
-        gap: 2px;
         max-width: 100%;
-        overflow-x: auto;
-        border: 1px solid #2a3356;
+        overflow: hidden;
+        border: 1px solid rgba(148, 163, 184, 0.34);
         border-radius: 999px;
-        background: rgba(17, 24, 50, 0.72);
-        padding: 2px;
+        background: rgba(9, 14, 30, 0.78);
         box-shadow: 0 10px 26px rgba(4, 8, 18, 0.28);
         pointer-events: auto;
-        scrollbar-width: none;
-      }
-      #year-toggle::-webkit-scrollbar {
-        display: none;
       }
       .year-toggle-btn {
         appearance: none;
-        min-height: 26px;
-        border: 1px solid transparent;
-        border-radius: 999px;
-        background: transparent;
+        min-height: 34px;
+        border: 0;
+        border-right: 1px solid rgba(148, 163, 184, 0.22);
+        background: rgba(17, 24, 46, 0.96);
         color: rgba(245, 247, 255, 0.84);
         cursor: pointer;
-        font: 800 10px/1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        font: 800 13px/1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         padding: 0 14px;
         white-space: nowrap;
-        transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+        transition: background 0.18s ease, color 0.18s ease;
+      }
+      .year-toggle-btn:last-child {
+        border-right: 0;
       }
       .year-toggle-btn:hover,
       .year-toggle-btn:focus-visible {
         background: rgba(0, 245, 138, 0.1);
-        border-color: rgba(0, 245, 138, 0.52);
         color: #00f58a;
         outline: none;
       }
       .year-toggle-btn.is-active {
-        background: rgba(0, 245, 138, 0.14);
-        border-color: #00f58a;
+        background: rgba(0, 245, 138, 0.2);
         color: #00f58a;
       }
       #dimension-toggle {
@@ -626,7 +609,6 @@
         background: rgba(9, 14, 30, 0.76);
         box-shadow: 0 10px 26px rgba(4, 8, 18, 0.28);
         pointer-events: auto;
-        margin-top: 8px;
       }
       #player-search-input {
         appearance: none;
@@ -718,32 +700,24 @@
         box-shadow: inset 0 0 0 1px rgba(0, 245, 138, 0.16);
       }
       @media (max-width: 768px) {
+        #plotly-wrapper .plotly-graph-div {
+          padding-top: 108px;
+        }
         #archetype-controls {
-          grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-          column-gap: 8px;
-          row-gap: 6px;
-          align-items: center;
-          justify-items: stretch;
+          gap: 5px;
           top: 6px;
           left: 4px;
           right: 58px;
         }
         #year-toggle {
-          grid-column: 1;
-          box-sizing: border-box;
-          width: 100%;
-          min-width: 0;
           max-width: 100%;
         }
         .year-toggle-btn {
-          flex: 1 1 0;
-          min-width: 0;
-          min-height: 26px;
-          padding: 0 2px;
-          font-size: 7px;
+          min-height: 32px;
+          padding: 0 10px;
+          font-size: 11px;
         }
         #dimension-toggle {
-          grid-column: 1 / -1;
           gap: 3px;
           width: fit-content;
           max-width: 100%;
@@ -764,39 +738,24 @@
           font-size: 7px;
         }
         #player-search {
-          grid-column: 2;
-          box-sizing: border-box;
-          width: 100%;
-          min-width: 0;
           max-width: 100%;
-          gap: 3px;
-          margin-top: 0;
           margin-left: 0;
-          padding: 2px;
+          padding: 4px;
         }
         #player-search-input {
-          flex: 1 1 auto;
-          width: auto;
-          min-width: 0;
-          min-height: 26px;
-          font-size: 7px;
-          padding: 4px 7px;
+          width: 150px;
+          min-height: 28px;
+          font-size: 8px;
         }
         .player-search-clear {
-          flex: 0 0 auto;
-          min-height: 26px;
-          font-size: 6px;
-          padding: 4px 5px;
+          min-height: 28px;
+          font-size: 7px;
+          padding: 5px 7px;
         }
         #player-search-status {
-          display: none;
+          min-width: 42px;
+          font-size: 7px;
         }
-      }
-      #plotly-wrapper.external-year-control #year-toggle {
-        display: none;
-      }
-      #plotly-wrapper.external-year-control #player-search {
-        margin-top: 0;
       }
     `;
     document.head.appendChild(style);
@@ -807,23 +766,7 @@
     renderControls();
     setTimeout(renderControls, 100);
     setTimeout(renderControls, 500);
-
-    const wrapper = document.getElementById("plotly-wrapper");
-    if (wrapper && window.ResizeObserver) {
-      const resizeObserver = new ResizeObserver(resizeGraph);
-      resizeObserver.observe(wrapper);
-    }
-    window.addEventListener("resize", resizeGraph);
   }
-
-  window.addEventListener("message", (event) => {
-    if (event.origin !== window.location.origin || event.data?.type !== "archetypes:set-plot-year") return;
-    document.getElementById("plotly-wrapper")?.classList.toggle("external-year-control", event.data.externalControl === true);
-    const requestedYear = String(event.data.year);
-    const button = Array.from(document.querySelectorAll(".year-toggle-btn"))
-      .find((candidate) => candidate.textContent === requestedYear);
-    button?.click();
-  });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

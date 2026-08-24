@@ -12,7 +12,12 @@ export default async function RankingsPage() {
   const { userId } = await auth()
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
-  const cupAvailableYearsPromise = canBypassPlotGate ? fetchAvailableYears("cup") : Promise.resolve([])
+  const cupAvailableYearsPromise = canBypassPlotGate
+    ? fetchAvailableYears("cup").catch((error) => {
+        console.warn("Unable to load Cup ranking seasons.", error)
+        return []
+      })
+    : Promise.resolve([])
   const [availableYears, cupAvailableYears, playerImages, teamLogos] = await Promise.all([
     fetchAvailableYears(),
     cupAvailableYearsPromise,

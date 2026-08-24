@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { ImageWithFallback } from "@/components/ui/image-with-fallback"
 import { CompetitionToggle } from "@/components/ui/competition-toggle"
@@ -20,6 +20,11 @@ interface RankingsDashboardProps {
   availableYears: string[]
   cupAvailableYears: string[]
   canAccessCup: boolean
+}
+
+interface CompetitionRows {
+  playerRows: PlayerStat[]
+  teamRows: TeamStat[]
 }
 
 type ValueMode = "average" | "total"
@@ -257,6 +262,12 @@ function parsePersonName(value: string): { first: string; last: string } {
   const parts = normalisePersonName(value).split(" ").filter(Boolean)
   if (parts.length === 0) return { first: "", last: "" }
   return { first: parts[0], last: parts[parts.length - 1] }
+}
+
+function initialisedPlayerName(value: string): string {
+  const parts = value.trim().split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return value.trim()
+  return `${parts[0].charAt(0).toUpperCase()}. ${parts.slice(1).join(" ")}`
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -648,6 +659,10 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   const [activePlayerRows, setActivePlayerRows] = useState<PlayerStat[]>(playerRows)
   const [activeTeamRows, setActiveTeamRows] = useState<TeamStat[]>(teamRows)
   const [competitionLoading, setCompetitionLoading] = useState(false)
+  const competitionRowsRef = useRef(new Map<string, CompetitionRows>([
+    [`nrl:${selectedYear}`, { playerRows, teamRows }],
+  ]))
+  const competitionRequestsRef = useRef(new Map<string, Promise<CompetitionRows | null>>())
   const [view, setView] = useState<RankingView>("players")
   const [section, setSection] = useState<RankingSection>("rankings")
   const [mode, setMode] = useState<ValueMode>("average")
@@ -671,30 +686,62 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   const effectiveMode = section === "form" ? "average" : mode
   const rankingFinderSuggestions = useMemo(() => buildRankingSuggestions(rankingFinderQuery), [rankingFinderQuery])
 
+  const loadCompetitionRows = useCallback((nextCompetition: "nrl" | "cup", nextYear: string) => {
+    const key = `${nextCompetition}:${nextYear}`
+    const cachedRows = competitionRowsRef.current.get(key)
+    if (cachedRows) return Promise.resolve(cachedRows)
+
+    const existingRequest = competitionRequestsRef.current.get(key)
+    if (existingRequest) return existingRequest
+
+    const query = new URLSearchParams({ years: nextYear, competition: nextCompetition })
+    const request: Promise<CompetitionRows | null> = Promise.all([
+      fetch(`/api/player-stats?${query.toString()}`),
+      fetch(`/api/team-stats?${query.toString()}`),
+    ])
+      .then(async ([playersResponse, teamsResponse]) => {
+        if (!playersResponse.ok || !teamsResponse.ok) return null
+        const [nextPlayerRows, nextTeamRows] = await Promise.all([
+          playersResponse.json() as Promise<PlayerStat[]>,
+          teamsResponse.json() as Promise<TeamStat[]>,
+        ])
+        const rows = { playerRows: nextPlayerRows, teamRows: nextTeamRows }
+        competitionRowsRef.current.set(key, rows)
+        return rows
+      })
+      .finally(() => competitionRequestsRef.current.delete(key))
+
+    competitionRequestsRef.current.set(key, request)
+    return request
+  }, [])
+
+  useEffect(() => {
+    if (!canAccessCup) return
+    const cupYear = cupAvailableYears.includes(selectedYear) ? selectedYear : cupAvailableYears[0]
+    if (cupYear) void loadCompetitionRows("cup", cupYear)
+  }, [canAccessCup, cupAvailableYears, loadCompetitionRows, selectedYear])
+
   const changeCompetition = async (nextCompetition: "nrl" | "cup") => {
     if (competitionLoading) return
     if (nextCompetition === competition) return
     if (nextCompetition === "cup" && !canAccessCup) return
     const yearOptions = nextCompetition === "cup" ? cupAvailableYears : availableYears
     const nextYear = yearOptions.includes(selectedYear) ? selectedYear : yearOptions[0] ?? selectedYear
-    setCompetitionLoading(true)
     setCompetition(nextCompetition)
     setActiveYear(nextYear)
-    if (nextCompetition === "nrl" && nextYear === selectedYear) {
-      setActivePlayerRows(playerRows)
-      setActiveTeamRows(teamRows)
-      setCompetitionLoading(false)
+    const cachedRows = competitionRowsRef.current.get(`${nextCompetition}:${nextYear}`)
+    if (cachedRows) {
+      setActivePlayerRows(cachedRows.playerRows)
+      setActiveTeamRows(cachedRows.teamRows)
       return
     }
+
+    setCompetitionLoading(true)
     try {
-      const query = new URLSearchParams({ years: nextYear, competition: nextCompetition })
-      const [playersResponse, teamsResponse] = await Promise.all([
-        fetch(`/api/player-stats?${query.toString()}`),
-        fetch(`/api/team-stats?${query.toString()}`),
-      ])
-      if (!playersResponse.ok || !teamsResponse.ok) return
-      setActivePlayerRows((await playersResponse.json()) as PlayerStat[])
-      setActiveTeamRows((await teamsResponse.json()) as TeamStat[])
+      const rows = await loadCompetitionRows(nextCompetition, nextYear)
+      if (!rows) return
+      setActivePlayerRows(rows.playerRows)
+      setActiveTeamRows(rows.teamRows)
     } finally {
       setCompetitionLoading(false)
     }
@@ -760,9 +807,11 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-end gap-3">
-        <div className="flex min-w-0 items-end gap-2">
+      <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-end gap-3 sm:grid-cols-[max-content_minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="col-start-1 row-start-1 flex min-w-0 items-end">
           <CompetitionToggle value={competition} onChange={(value) => void changeCompetition(value)} canAccessCup={canAccessCup} />
+        </div>
+        <div className="col-start-2 row-start-1 min-w-0">
           <Select
             label="View"
             compact
@@ -774,7 +823,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             onChange={changeView}
           />
         </div>
-        <div ref={rankingFinderRef} className="relative min-w-0">
+        <div ref={rankingFinderRef} className="relative col-span-2 col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-3 sm:row-start-1">
           <label htmlFor="ranking-finder-input" className="sr-only">Find a ranking</label>
           <input
             ref={rankingFinderInputRef}
@@ -811,7 +860,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
       </div>
 
       <section className="relative overflow-hidden rounded-2xl border border-nrl-border bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]" aria-busy={competitionLoading}>
-        <div className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border px-4 py-3 [scrollbar-width:thin]">
+        <div className="flex flex-wrap items-end gap-3 overflow-hidden border-b border-nrl-border px-4 py-3 sm:flex-nowrap sm:overflow-x-auto sm:[scrollbar-width:thin]">
           <div className="w-40 shrink-0">
             <Select label="Primary stat" compact value={effectiveStatKey} options={activeStatOptions.map((option) => ({ value: option.key, label: option.label }))} onChange={setStatKey} />
           </div>
@@ -847,7 +896,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
         ) : null}
 
         {filtersOpen ? (
-          <div id="ranking-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
+          <div id="ranking-filters" className="flex flex-wrap items-end gap-3 overflow-hidden border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 sm:flex-nowrap sm:overflow-x-auto sm:[scrollbar-width:thin]">
             <label className="flex w-24 shrink-0 flex-col gap-0.5">
               <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min games</span>
               <input type="number" min={1} max={30} value={minGames} onChange={(event) => setMinGames(Math.max(1, Number(event.target.value) || 1))} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" />
@@ -933,18 +982,18 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             </table>
           </div>
       ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[370px] border-collapse text-left">
+          <div className="overflow-x-hidden">
+            <table className="w-full min-w-0 table-fixed border-collapse text-left sm:min-w-[370px] sm:table-auto">
               <thead className="sticky top-0 z-10 bg-[#111733]">
                 <tr className="border-b border-nrl-border text-[7px] font-black uppercase tracking-[0.1em] text-nrl-muted sm:text-[9px] sm:tracking-[0.14em]">
-                  <th className="w-8 px-2 py-1.5 sm:w-12 sm:px-4 sm:py-2">#</th>
-                  <th className="px-1.5 py-1.5 sm:px-2 sm:py-2">Player</th>
-                  <th className="w-12 px-1.5 py-1.5 text-right sm:w-16 sm:px-2 sm:py-2">Games</th>
-                  <th className="w-14 px-1.5 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? "Prior" : statInitials(effectiveStatKey, activeStatOptions)}</th>
+                  <th className="w-12 py-1.5 pl-4 pr-2 sm:w-12 sm:px-4 sm:py-2">#</th>
+                  <th className="py-1.5 pl-3 pr-2 sm:px-2 sm:py-2">Player</th>
+                  <th className="w-14 px-2 py-1.5 text-right sm:w-16 sm:px-2 sm:py-2">Games</th>
+                  <th className="w-16 px-2 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? "Prior" : statInitials(effectiveStatKey, activeStatOptions)}</th>
                   {section === "form" || effectivePerStatKey ? (
-                    <th className="w-12 px-1.5 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? `L${formWindow}` : statInitials(effectivePerStatKey, activeStatOptions)}</th>
+                    <th className="w-14 px-2 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? `L${formWindow}` : statInitials(effectivePerStatKey, activeStatOptions)}</th>
                   ) : null}
-                  <th className="w-16 px-2 py-1.5 text-right sm:w-28 sm:px-4 sm:py-2" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
+                  <th className="w-20 px-2 py-1.5 text-right sm:w-28 sm:px-4 sm:py-2" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
                     <button
                       type="button"
                       onClick={toggleValueSortDirection}
@@ -959,8 +1008,8 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               <tbody>
                 {playerRankings.map((entry, index) => (
                   <tr key={entry.name} className="border-b border-nrl-border/70 odd:bg-transparent even:bg-white/[0.018] last:border-b-0">
-                    <td className="px-2 py-1.5 text-[10px] font-black text-nrl-muted sm:px-4 sm:py-2 sm:text-xs">{index + 1}</td>
-                    <td className="px-1.5 py-1.5 sm:px-2 sm:py-2">
+                    <td className="py-1.5 pl-4 pr-2 text-[11px] font-black text-nrl-muted sm:px-4 sm:py-2 sm:text-xs">{index + 1}</td>
+                    <td className="overflow-hidden py-1.5 pl-3 pr-2 sm:px-2 sm:py-2">
                       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 sm:h-11 sm:w-11">
                           <PlayerImageWithFallback
@@ -972,26 +1021,28 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                         <div className="min-w-0">
                           <Link
                             href={`/dashboard/players/${playerSlug(entry.name)}`}
-                            className="block truncate text-[10px] font-black text-nrl-text transition-colors hover:text-nrl-accent sm:text-xs"
+                            className="block truncate text-[12px] font-black text-nrl-text transition-colors hover:text-nrl-accent sm:text-xs"
+                            title={entry.name}
                           >
-                            {entry.name}
+                            <span className="sm:hidden">{initialisedPlayerName(entry.name)}</span>
+                            <span className="hidden sm:inline">{entry.name}</span>
                           </Link>
-                          <div className="mt-0.5 truncate text-[8px] font-semibold text-nrl-muted sm:text-[10px]">
+                          <div className="mt-0.5 truncate text-[10px] font-semibold text-nrl-muted sm:text-[10px]">
                             {entry.team || "-"}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-1.5 py-1.5 text-right text-[10px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">{entry.games}</td>
-                    <td className="px-1.5 py-1.5 text-right text-[10px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
+                    <td className="px-2 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">{entry.games}</td>
+                    <td className="px-2 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
                       {section === "form" ? formatRankingValue(entry.priorValue ?? 0, ratioRanking) : formatCountValue(entry.statValue)}
                     </td>
                     {section === "form" || effectivePerStatKey ? (
-                      <td className="px-1.5 py-1.5 text-right text-[10px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
+                      <td className="px-2 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
                         {section === "form" ? formatRankingValue(entry.recentValue ?? 0, ratioRanking) : formatCountValue(entry.perStatValue ?? 0)}
                       </td>
                     ) : null}
-                    <td className={`px-2 py-1.5 text-right text-[12px] font-black sm:px-4 sm:py-2 sm:text-sm ${section === "form" ? formChangeClass(entry.value, effectiveStatKey) : "text-nrl-text"}`}>
+                    <td className={`px-2 py-1.5 text-right text-[13px] font-black sm:px-4 sm:py-2 sm:text-sm ${section === "form" ? formChangeClass(entry.value, effectiveStatKey) : "text-nrl-text"}`}>
                       {section === "form" ? formatFormChange(entry.value, ratioRanking) : formatRankingValue(entry.value, ratioRanking)}
                     </td>
                   </tr>

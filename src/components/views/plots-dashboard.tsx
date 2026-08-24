@@ -115,7 +115,7 @@ function VolumeAxisToggle({ checked, onChange }: { checked: boolean; onChange: (
   );
 }
 
-const LOWER_IS_BETTER_STATS = new Set(["Missed tackles", "Ineffective tackles", "Penalties", "Ruck infringements", "Inside 10 metres", "Errors", "Handling errors", "One on one lost", "Kicked dead", "On report", "Sin bins", "Send offs", "PTB", "Play-the-ball speed"]);
+const LOWER_IS_BETTER_STATS = new Set(["Missed tackles", "Ineffective tackles", "Penalties", "Ruck infringements", "Ruck Infringements", "Inside 10 metres", "Errors", "Handling errors", "One on one lost", "Kicked dead", "On report", "Sin bins", "Send offs", "PTB", "Play-the-ball speed"]);
 const LOCKED_TEAM_STATS = new Set(["Attacking Ruck Rating", "Defensive Ruck Rating", "Ruck Dominance Rating", "PTB Rating", "Line Defense Rating"]);
 const DEFENSIVE_RATING_STATS = new Set(["Contact Rating", "Line Defense Rating", "Defensive Ruck Rating"]);
 const TEAM_FOR_AGAINST_STATS = TEAM_ATTACK_COMPARISON_STATS.filter((stat) => !LOCKED_TEAM_STATS.has(stat));
@@ -2068,8 +2068,50 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[max-content_minmax(10rem,1fr)] items-end gap-3 sm:grid-cols-[max-content_minmax(14rem,24rem)] lg:grid-cols-[max-content_minmax(18rem,30rem)]">
-        <div ref={plotFinderRef} className="relative col-start-2 row-start-1 min-w-0">
+      <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-end gap-3 sm:grid-cols-[max-content_minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="col-start-1 row-start-1 flex min-w-0 items-end">
+          <CompetitionToggle value={competition} onChange={(value) => void changeCompetition(value)} canAccessCup={canAccessCup} />
+        </div>
+        <div className="col-start-2 row-start-1 min-w-0">
+          <Select
+            label="View"
+            compact
+            value={activePlotView}
+            options={[
+              { label: "Players · Attack", options: [
+                { value: "player_attack_stats", label: "Player stats" },
+                { value: "player_attack_efficiency", label: "Player efficiency" },
+                { value: "player_attack_share", label: "Player team share" },
+              ] },
+              { label: "Players · Form", options: [
+                { value: "player_form", label: "Player form" },
+              ] },
+              { label: "Players · Defense", options: [
+                { value: "player_defense_tackles", label: "Tackling effectiveness" },
+              ] },
+              { label: "Players · Combinations", options: [
+                { value: "player_combinations_halves", label: "Halves contribution split" },
+              ] },
+              { label: "Teams · Attack", options: [
+                { value: "team_attack_stats", label: "Team stats" },
+                { value: "team_attack_efficiency", label: "Team efficiency" },
+              ] },
+              { label: "Teams · Form", options: [
+                { value: "team_form", label: "Team form" },
+              ] },
+              { label: "Teams · Defense", options: [
+                { value: "team_defense_stats", label: "Stats conceded" },
+                { value: "team_defense_efficiency", label: "Defensive efficiency" },
+              ] },
+              { label: "Teams · Team context", options: [
+                { value: "team_context_for_against", label: "For vs against" },
+                { value: "team_context_position_share", label: "Share by starting position" },
+              ] },
+            ]}
+            onChange={changePlotView}
+          />
+        </div>
+        <div ref={plotFinderRef} className="relative col-span-2 col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-3 sm:row-start-1">
           <label htmlFor="plot-finder-input" className="sr-only">Find a plot</label>
           <input
             ref={plotFinderInputRef}
@@ -2107,48 +2149,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
               </div>
             </div>
           ) : null}
-        </div>
-        <div className="col-start-1 row-start-1 flex min-w-0 items-end gap-2">
-          <CompetitionToggle value={competition} onChange={(value) => void changeCompetition(value)} canAccessCup={canAccessCup} />
-          <div className="w-20 shrink-0 sm:w-24">
-            <Select
-              label="View"
-              compact
-              value={activePlotView}
-              options={[
-                { label: "Players · Attack", options: [
-                  { value: "player_attack_stats", label: "Player stats" },
-                  { value: "player_attack_efficiency", label: "Player efficiency" },
-                  { value: "player_attack_share", label: "Player team share" },
-                ] },
-                { label: "Players · Form", options: [
-                  { value: "player_form", label: "Player form" },
-                ] },
-                { label: "Players · Defense", options: [
-                  { value: "player_defense_tackles", label: "Tackling effectiveness" },
-                ] },
-                { label: "Players · Combinations", options: [
-                  { value: "player_combinations_halves", label: "Halves contribution split" },
-                ] },
-                { label: "Teams · Attack", options: [
-                  { value: "team_attack_stats", label: "Team stats" },
-                  { value: "team_attack_efficiency", label: "Team efficiency" },
-                ] },
-                { label: "Teams · Form", options: [
-                  { value: "team_form", label: "Team form" },
-                ] },
-                { label: "Teams · Defense", options: [
-                  { value: "team_defense_stats", label: "Stats conceded" },
-                  { value: "team_defense_efficiency", label: "Defensive efficiency" },
-                ] },
-                { label: "Teams · Team context", options: [
-                  { value: "team_context_for_against", label: "For vs against" },
-                  { value: "team_context_position_share", label: "Share by starting position" },
-                ] },
-              ]}
-              onChange={changePlotView}
-            />
-          </div>
         </div>
       </div>
 

@@ -32,7 +32,12 @@ export default async function PlotsPage() {
   const proAccessPromise = getServerProPlotAccess(userId);
   const availableYearsPromise = fetchAvailableYears();
   const cupAvailableYearsPromise = proAccessPromise.then((canAccess) =>
-    canAccess ? fetchAvailableYears("cup") : Promise.resolve([])
+    canAccess
+      ? fetchAvailableYears("cup").catch((error) => {
+          console.warn("Unable to load Cup plot seasons.", error);
+          return [];
+        })
+      : Promise.resolve([])
   );
   const teamLogosPromise = fetchTeamLogos();
   const playerImagesPromise = fetchPlayerImages();

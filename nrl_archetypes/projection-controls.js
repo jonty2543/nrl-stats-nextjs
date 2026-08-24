@@ -283,7 +283,6 @@
         : { ...(gd.layout.legend || {}) },
       scene: {
         ...(gd.layout.scene || {}),
-        domain: state.droppedDimension ? (gd.layout.scene || {}).domain : { x: [0, 1], y: [0.16, 1] },
         xaxis: { ...((gd.layout.scene || {}).xaxis || {}), title: { text: dimensions[0].label }, showspikes: false },
         yaxis: { ...((gd.layout.scene || {}).yaxis || {}), title: { text: dimensions[1].label }, showspikes: false },
         zaxis: { ...((gd.layout.scene || {}).zaxis || {}), title: { text: dimensions[2].label }, showspikes: false },
@@ -540,7 +539,6 @@
         height: 100% !important;
         min-height: 0;
         padding-top: 140px;
-        padding-bottom: 72px;
         box-sizing: border-box;
       }
       #archetype-controls {
@@ -724,7 +722,6 @@
       @media (max-width: 768px) {
         #plotly-wrapper .plotly-graph-div {
           padding-top: 94px;
-          padding-bottom: 86px;
         }
         #archetype-controls {
           grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -802,7 +799,6 @@
       }
       #plotly-wrapper.external-year-control .plotly-graph-div {
         padding-top: 90px;
-        padding-bottom: 86px;
       }
       #plotly-wrapper.external-year-control #year-toggle {
         display: none;

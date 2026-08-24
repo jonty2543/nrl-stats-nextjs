@@ -1038,16 +1038,16 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
 
             fig.update_layout(
                 legend_title_text='Archetype',
-                margin=dict(l=0, r=0, b=80, t=30),
+                margin=dict(l=0, r=0, b=20, t=30),
                 legend=dict(
-                    orientation='h',
-                    y=0,
-                    x=0.5,
-                    xanchor='center',
+                    orientation='v',
+                    y=0.02,
+                    x=0.02,
+                    xanchor='left',
                     yanchor='bottom',
                     font=dict(size=10),
+                    bgcolor='rgba(17,24,46,0.72)',
                 ),
-                scene=dict(domain=dict(x=[0, 1], y=[0.16, 1])),
                 paper_bgcolor='#f0f0f0',
                 plot_bgcolor='#f0f0f0',
                 font=dict(color="#0A1128")
@@ -1346,18 +1346,15 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                 if (window.innerWidth < 768) {
                     const update = {
                         legend: {
-                            orientation: 'h',
-                            y: 0,
-                            x: 0.5,
-                            xanchor: 'center',
+                            orientation: 'v',
+                            y: 0.02,
+                            x: 0.02,
+                            xanchor: 'left',
                             yanchor: 'bottom',
-                            font: { size: 10 }
+                            font: { size: 10 },
+                            bgcolor: 'rgba(17,24,46,0.72)'
                         },
-                        margin: { l: 5, r: 5, b: 110, t: 50 },
-                        scene: {
-                            ...gd.layout.scene,
-                            domain: { x: [0, 1], y: [0.18, 1] }
-                        },
+                        margin: { l: 5, r: 5, b: 20, t: 50 },
                         updatemenus: [{
                             ...gd.layout.updatemenus[0],
                             x: 0.5,

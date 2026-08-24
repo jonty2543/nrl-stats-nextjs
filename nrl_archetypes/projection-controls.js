@@ -271,15 +271,23 @@
           b: Math.max(baseMargin.b || 0, 72),
         }
         : { ...baseMargin },
-      legend: state.droppedDimension
-        ? {
-          ...(gd.layout.legend || {}),
-          visible: false,
-        }
-        : { ...(gd.layout.legend || {}) },
-      showlegend: false,
+      legend: {
+        ...(gd.layout.legend || {}),
+        title: { text: "" },
+        orientation: "h",
+        x: 0.5,
+        xanchor: "center",
+        y: 0,
+        yanchor: "bottom",
+        font: { color: "#f5f7ff", size: 12 },
+        bgcolor: "rgba(17,23,51,0.72)",
+        bordercolor: "rgba(42,51,86,0.95)",
+        borderwidth: 1,
+      },
+      showlegend: true,
       scene: {
         ...(gd.layout.scene || {}),
+        domain: { ...(((gd.layout.scene || {}).domain) || {}), y: [0.16, 1] },
         xaxis: { ...((gd.layout.scene || {}).xaxis || {}), title: { text: dimensions[0].label }, showspikes: false },
         yaxis: { ...((gd.layout.scene || {}).yaxis || {}), title: { text: dimensions[1].label }, showspikes: false },
         zaxis: { ...((gd.layout.scene || {}).zaxis || {}), title: { text: dimensions[2].label }, showspikes: false },
@@ -331,9 +339,21 @@
     const axisText = { color: "#f5f7ff", size: 13 };
     window.Plotly.relayout(gd, {
       "font.color": "#f5f7ff",
-      "showlegend": false,
+      "showlegend": true,
       "margin.t": 0,
-      "margin.b": 0,
+      "margin.b": 78,
+      "legend.title.text": "",
+      "legend.orientation": "h",
+      "legend.x": 0.5,
+      "legend.xanchor": "center",
+      "legend.y": 0,
+      "legend.yanchor": "bottom",
+      "legend.font.color": "#f5f7ff",
+      "legend.font.size": 12,
+      "legend.bgcolor": "rgba(17,23,51,0.72)",
+      "legend.bordercolor": "rgba(42,51,86,0.95)",
+      "legend.borderwidth": 1,
+      "scene.domain.y": [0.16, 1],
       "scene.xaxis.title.font": axisText,
       "scene.yaxis.title.font": axisText,
       "scene.zaxis.title.font": axisText,
@@ -816,7 +836,7 @@
         }
       }
       #plotly-wrapper.external-year-control .plotly-graph-div {
-        padding-top: 0;
+        padding-top: 42px;
       }
       #plotly-wrapper.external-year-control #year-toggle {
         display: none;

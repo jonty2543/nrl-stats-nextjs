@@ -326,38 +326,6 @@
             border: none;
         }
 
-        .plot-legend {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.6rem 1.1rem;
-            padding: 0.75rem 0.9rem;
-            background-color: rgba(21, 30, 63, 0.72);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-        }
-
-        .plot-legend:empty {
-            display: none;
-        }
-
-        .plot-legend-item {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            color: var(--white);
-            font-size: 0.78rem;
-            font-weight: 800;
-            line-height: 1.2;
-        }
-
-        .plot-legend-swatch {
-            width: 0.48rem;
-            height: 0.48rem;
-            border-radius: 999px;
-            flex: 0 0 auto;
-        }
-
         /* Sidebar / Archetype Cards */
         .sidebar {
             display: flex;
@@ -801,14 +769,6 @@
                 border-radius: 4px;
             }
 
-            .plot-legend {
-                gap: 0.5rem 0.85rem;
-                padding: 0.65rem;
-            }
-
-            .plot-legend-item {
-                font-size: 0.7rem;
-            }
         }
     </style>
 </head>
@@ -910,7 +870,6 @@
 
         <div class="content-grid">
             <div class="plot-stack">
-                <div class="plot-legend" id="plotLegend" aria-label="Archetype legend"></div>
                 <div class="plot-container" id="plotContainer">
                     <div class="loading">Select a position to view archetypes</div>
                 </div>
@@ -980,7 +939,6 @@
         // DOM Elements
         const tabsContainer = document.getElementById('positionTabs');
         const plotContainer = document.getElementById('plotContainer');
-        const plotLegend = document.getElementById('plotLegend');
         const archetypeList = document.getElementById('archetypeList');
         const competitionToggle = document.getElementById('competitionToggle');
         const modeToggle = document.getElementById('modeToggle');
@@ -1009,7 +967,6 @@
         let plotRequestId = 0;
         const rankingsCache = {};
         const rankingYearOptions = ['All', '2023', '2024', '2025', '2026'];
-        const plotLegendColors = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'];
 
         function getCompetitionDataSource() {
             if (currentCompetition === 'cup') {
@@ -1169,7 +1126,6 @@
         function renderNoCompetitionData() {
             tabsContainer.innerHTML = '';
             plotContainer.innerHTML = `<div class="loading">${currentCompetition === 'cup' ? 'Cup archetype data is unavailable.' : 'Archetype data is unavailable.'}</div>`;
-            plotLegend.innerHTML = '';
             archetypeList.innerHTML = '';
             const body = document.getElementById('rankingsBody');
             if (body) body.innerHTML = '<div class="rankings-empty">No rankings available.</div>';
@@ -1357,20 +1313,10 @@
             renderArchetypes(position);
         }
 
-        function renderPlotLegend(archetypes) {
-            plotLegend.innerHTML = archetypes.map((arch, index) => `
-                <span class="plot-legend-item">
-                    <span class="plot-legend-swatch" style="background-color: ${plotLegendColors[index % plotLegendColors.length]}"></span>
-                    <span>${arch.name}</span>
-                </span>
-            `).join('');
-        }
-
         // Render Archetype Cards
         function renderArchetypes(position) {
             const data = getActiveClusterData()[currentYear][position];
             archetypeList.innerHTML = '';
-            renderPlotLegend(data.archetypes);
 
             // Add PC Axis Info Card (Optional context)
             const contextCard = document.createElement('div');

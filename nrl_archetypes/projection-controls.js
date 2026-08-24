@@ -332,6 +332,7 @@
     window.Plotly.relayout(gd, {
       "font.color": "#f5f7ff",
       "showlegend": false,
+      "margin.t": 0,
       "margin.b": 0,
       "scene.xaxis.title.font": axisText,
       "scene.yaxis.title.font": axisText,
@@ -555,7 +556,7 @@
       #plotly-wrapper .plotly-graph-div {
         height: 100% !important;
         min-height: 0;
-        padding-top: 140px;
+        padding-top: 42px;
         box-sizing: border-box;
       }
       #archetype-controls {
@@ -738,7 +739,7 @@
       }
       @media (max-width: 768px) {
         #plotly-wrapper .plotly-graph-div {
-          padding-top: 94px;
+          padding-top: 72px;
         }
         #archetype-controls {
           grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);

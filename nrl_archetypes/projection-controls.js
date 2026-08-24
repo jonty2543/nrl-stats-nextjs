@@ -268,19 +268,16 @@
           ...baseMargin,
           t: Math.max(baseMargin.t || 0, 154),
           r: Math.max(baseMargin.r || 0, 64),
-          b: Math.max(baseMargin.b || 0, 340),
+          b: Math.max(baseMargin.b || 0, 72),
         }
         : { ...baseMargin },
       legend: state.droppedDimension
         ? {
           ...(gd.layout.legend || {}),
-          orientation: "h",
-          x: 0.5,
-          xanchor: "center",
-          y: -0.64,
-          yanchor: "top",
+          visible: false,
         }
         : { ...(gd.layout.legend || {}) },
+      showlegend: false,
       scene: {
         ...(gd.layout.scene || {}),
         xaxis: { ...((gd.layout.scene || {}).xaxis || {}), title: { text: dimensions[0].label }, showspikes: false },
@@ -334,17 +331,8 @@
     const axisText = { color: "#f5f7ff", size: 13 };
     window.Plotly.relayout(gd, {
       "font.color": "#f5f7ff",
-      "legend.orientation": "h",
-      "legend.x": 0.5,
-      "legend.xanchor": "center",
-      "legend.y": 0.01,
-      "legend.yanchor": "bottom",
-      "legend.font.color": "#f5f7ff",
-      "legend.font.size": 10,
-      "legend.bgcolor": "rgba(17,24,46,0.78)",
-      "legend.bordercolor": "rgba(245,247,255,0.18)",
-      "legend.borderwidth": 1,
-      "margin.b": Math.max((gd.layout.margin && gd.layout.margin.b) || 0, 12),
+      "showlegend": false,
+      "margin.b": 0,
       "scene.xaxis.title.font": axisText,
       "scene.yaxis.title.font": axisText,
       "scene.zaxis.title.font": axisText,
@@ -827,7 +815,7 @@
         }
       }
       #plotly-wrapper.external-year-control .plotly-graph-div {
-        padding-top: 90px;
+        padding-top: 0;
       }
       #plotly-wrapper.external-year-control #year-toggle {
         display: none;

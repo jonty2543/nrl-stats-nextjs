@@ -1038,16 +1038,8 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
 
             fig.update_layout(
                 legend_title_text='Archetype',
-                margin=dict(l=0, r=0, b=20, t=30),
-                legend=dict(
-                    orientation='v',
-                    y=0.02,
-                    x=0.02,
-                    xanchor='left',
-                    yanchor='bottom',
-                    font=dict(color='#f5f7ff', size=10),
-                    bgcolor='rgba(17,24,46,0.72)',
-                ),
+                showlegend=False,
+                margin=dict(l=0, r=0, b=0, t=30),
                 paper_bgcolor='#f0f0f0',
                 plot_bgcolor='#f0f0f0',
                 font=dict(color="#f5f7ff")
@@ -1346,15 +1338,10 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                 if (window.innerWidth < 768) {
                     const update = {
                         legend: {
-                            orientation: 'v',
-                            y: 0.02,
-                            x: 0.02,
-                            xanchor: 'left',
-                            yanchor: 'bottom',
-                            font: { size: 10 },
-                            bgcolor: 'rgba(17,24,46,0.72)'
+                            visible: false
                         },
-                        margin: { l: 5, r: 5, b: 20, t: 50 },
+                        showlegend: false,
+                        margin: { l: 5, r: 5, b: 0, t: 50 },
                         updatemenus: [{
                             ...gd.layout.updatemenus[0],
                             x: 0.5,

@@ -1037,23 +1037,11 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                 )
 
             fig.update_layout(
-                legend=dict(
-                    title=dict(text=''),
-                    orientation='h',
-                    x=0.5,
-                    xanchor='center',
-                    y=0,
-                    yanchor='bottom',
-                    font=dict(color='#f5f7ff', size=14),
-                    bgcolor='rgba(0,0,0,0)',
-                    borderwidth=0,
-                ),
-                showlegend=True,
-                margin=dict(l=0, r=0, b=58, t=0),
-                scene=dict(domain=dict(y=[0.1, 1])),
+                legend_title_text='Archetype',
+                margin=dict(l=0, r=0, b=0, t=30),
                 paper_bgcolor='#f0f0f0',
                 plot_bgcolor='#f0f0f0',
-                font=dict(color="#f5f7ff")
+                font=dict(color="#0A1128")
             )
             
             suffix = f"_{plot_suffix}" if plot_suffix else ""
@@ -1349,19 +1337,14 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                 if (window.innerWidth < 768) {
                     const update = {
                         legend: {
-                            title: { text: '' },
                             orientation: 'h',
+                            y: -0.15,
                             x: 0.5,
                             xanchor: 'center',
-                            y: 0,
-                            yanchor: 'bottom',
-                            font: { color: '#f5f7ff', size: 13 },
-                            bgcolor: 'rgba(0,0,0,0)',
-                            borderwidth: 0
+                            yanchor: 'top',
+                            font: { size: 10 }
                         },
-                        showlegend: true,
-                        margin: { l: 5, r: 5, b: 58, t: 0 },
-                        scene: { ...(gd.layout.scene || {}), domain: { ...((gd.layout.scene || {}).domain || {}), y: [0.1, 1] } },
+                        margin: { l: 5, r: 5, b: 100, t: 50 },
                         updatemenus: [{
                             ...gd.layout.updatemenus[0],
                             x: 0.5,

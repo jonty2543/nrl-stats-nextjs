@@ -350,7 +350,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
 
             .plot-container {
                 align-self: start;
-                height: clamp(290px, 42dvh, 360px);
+                height: clamp(360px, 58dvh, 520px);
             }
         }
 
@@ -362,7 +362,7 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
 
             .plot-container {
                 align-self: start;
-                height: clamp(320px, 44dvh, 430px);
+                height: clamp(460px, 62dvh, 640px);
             }
         }
 
@@ -373,24 +373,23 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
         }
 
         .plot-container {
-            background: #111733;
+            background: transparent;
             border: 0;
             border-radius: 0;
             box-shadow: none;
         }
 
-        .plot-stack,
-        .plot-container {
-            width: 100%;
-            max-width: 100%;
-        }
-
         .plot-container iframe {
+            position: absolute;
+            inset: 0;
             display: block;
-            width: 100%;
-            height: 100%;
             background: #111733 !important;
             color-scheme: dark;
+            opacity: 0;
+            transition: opacity 120ms ease-out;
+        }
+
+        .plot-container iframe.is-ready {
             opacity: 1;
         }
 
@@ -561,7 +560,7 @@ function stylePlotHtml(html: string): string {
   return htmlWithControls
     .replaceAll("#C9FF00", "#00f58a")
     .replaceAll("#c9ff00", "#00f58a")
-    .replaceAll("#0A1128", "#f5f7ff")
+    .replaceAll("#0A1128", "#0b1020")
     .replaceAll("#151E3F", "#161c32")
     .replaceAll("#1E2742", "#1e2542")
     .replaceAll("#2A3B6E", "#2a3356")
@@ -573,11 +572,6 @@ function stylePlotHtml(html: string): string {
     .replaceAll('"gridcolor":"white"', '"gridcolor":"rgba(245,247,255,0.14)"')
     .replaceAll('"zerolinecolor":"white"', '"zerolinecolor":"rgba(245,247,255,0.18)"')
     .replaceAll('"gridwidth":2', '"gridwidth":1')
-    .replaceAll('"margin":{"l":0,"r":0,"b":20,"t":30}', '"margin":{"l":0,"r":0,"b":58,"t":0}')
-    .replaceAll('"margin":{"l":0,"r":0,"b":80,"t":30}', '"margin":{"l":0,"r":0,"b":58,"t":0}')
-    .replaceAll('"margin":{"l":0,"r":0,"b":0,"t":30}', '"margin":{"l":0,"r":0,"b":58,"t":0}')
-    .replaceAll('"showlegend":false,"legend":{"title":{"text":"Archetype"}}', '"showlegend":true,"legend":{"title":{"text":""},"orientation":"h","x":0.5,"xanchor":"center","y":0,"yanchor":"bottom","font":{"color":"#f5f7ff","size":14},"bgcolor":"rgba(0,0,0,0)","borderwidth":0}')
-    .replaceAll('"legend":{"title":{"text":"Archetype"}}', '"showlegend":true,"legend":{"title":{"text":""},"orientation":"h","x":0.5,"xanchor":"center","y":0,"yanchor":"bottom","font":{"color":"#f5f7ff","size":14},"bgcolor":"rgba(0,0,0,0)","borderwidth":0}')
     .replaceAll('"opacity":0.8,"size":5', '"opacity":0.82,"size":3.5')
     .replaceAll("'marker.size': 6", "'marker.size': 4")
     .replaceAll("rect.style.fill = 'white';", "rect.style.fill = parentGroup && parentGroup.classList.contains('active') ? 'rgba(0, 245, 138, 0.18)' : 'rgba(17, 24, 46, 0.96)';")
@@ -656,10 +650,6 @@ function stylePlotHtml(html: string): string {
 
                 #plotly-wrapper .updatemenu-button.active .updatemenu-item-text {
                     fill: #00f58a !important;
-                }
-
-                #plotly-wrapper .main-svg text {
-                    fill: #f5f7ff !important;
                 }
 
                 .legend .traces,

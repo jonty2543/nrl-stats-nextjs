@@ -196,7 +196,7 @@
       responsive: true,
       scrollZoom: true,
       displaylogo: false,
-    }).then(applyVisiblePlotLayout);
+    });
   }
 
   function getProjectionTrace(trace, index, keptDimensions) {
@@ -268,25 +268,21 @@
           ...baseMargin,
           t: Math.max(baseMargin.t || 0, 154),
           r: Math.max(baseMargin.r || 0, 64),
-          b: Math.max(baseMargin.b || 0, 72),
+          b: Math.max(baseMargin.b || 0, 340),
         }
         : { ...baseMargin },
-      legend: {
-        ...(gd.layout.legend || {}),
-        title: { text: "" },
-        orientation: "h",
-        x: 0.5,
-        xanchor: "center",
-        y: 0,
-        yanchor: "bottom",
-        font: { color: "#f5f7ff", size: 14 },
-        bgcolor: "rgba(0,0,0,0)",
-        borderwidth: 0,
-      },
-      showlegend: true,
+      legend: state.droppedDimension
+        ? {
+          ...(gd.layout.legend || {}),
+          orientation: "h",
+          x: 0.5,
+          xanchor: "center",
+          y: -0.64,
+          yanchor: "top",
+        }
+        : { ...(gd.layout.legend || {}) },
       scene: {
         ...(gd.layout.scene || {}),
-        domain: { ...(((gd.layout.scene || {}).domain) || {}), y: [0.16, 1] },
         xaxis: { ...((gd.layout.scene || {}).xaxis || {}), title: { text: dimensions[0].label }, showspikes: false },
         yaxis: { ...((gd.layout.scene || {}).yaxis || {}), title: { text: dimensions[1].label }, showspikes: false },
         zaxis: { ...((gd.layout.scene || {}).zaxis || {}), title: { text: dimensions[2].label }, showspikes: false },
@@ -309,7 +305,6 @@
       updateProjectionAttributes();
       renderYearControls();
       applyPlayerSearchHighlight();
-      applyVisiblePlotLayout();
       if (typeof window.applyButtonStyles === "function") window.applyButtonStyles();
       if (typeof window.adjustPlotlyForMobile === "function") window.adjustPlotlyForMobile();
     });
@@ -329,36 +324,6 @@
     const gd = getGraph();
     if (!gd || !window.Plotly || !window.Plotly.Plots) return;
     window.requestAnimationFrame(() => window.Plotly.Plots.resize(gd));
-  }
-
-  function applyVisiblePlotLayout() {
-    const gd = getGraph();
-    if (!gd || !window.Plotly) return;
-
-    const axisText = { color: "#f5f7ff", size: 13 };
-    window.Plotly.relayout(gd, {
-      "font.color": "#f5f7ff",
-      "showlegend": true,
-      "margin.t": 0,
-      "margin.b": 58,
-      "legend.title.text": "",
-      "legend.orientation": "h",
-      "legend.x": 0.5,
-      "legend.xanchor": "center",
-      "legend.y": 0,
-      "legend.yanchor": "bottom",
-      "legend.font.color": "#f5f7ff",
-      "legend.font.size": 14,
-      "legend.bgcolor": "rgba(0,0,0,0)",
-      "legend.borderwidth": 0,
-      "scene.domain.y": [0.1, 1],
-      "scene.xaxis.title.font": axisText,
-      "scene.yaxis.title.font": axisText,
-      "scene.zaxis.title.font": axisText,
-      "scene.xaxis.tickfont": { color: "#f5f7ff", size: 11 },
-      "scene.yaxis.tickfont": { color: "#f5f7ff", size: 11 },
-      "scene.zaxis.tickfont": { color: "#f5f7ff", size: 11 },
-    }).then(resizeGraph);
   }
 
   function updateProjectionAttributes() {
@@ -408,7 +373,6 @@
     Plotly.update(gd, args[0] || {}, args[1] || {}).then(() => {
       if (state.droppedDimension) applyProjection();
       applyPlayerSearchHighlight();
-      applyVisiblePlotLayout();
     });
   }
 
@@ -574,8 +538,6 @@
       #plotly-wrapper .plotly-graph-div {
         height: 100% !important;
         min-height: 0;
-        padding-top: 42px;
-        box-sizing: border-box;
       }
       #archetype-controls {
         position: absolute;
@@ -756,9 +718,6 @@
         box-shadow: inset 0 0 0 1px rgba(0, 245, 138, 0.16);
       }
       @media (max-width: 768px) {
-        #plotly-wrapper .plotly-graph-div {
-          padding-top: 72px;
-        }
         #archetype-controls {
           grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
           column-gap: 8px;
@@ -833,9 +792,6 @@
           display: none;
         }
       }
-      #plotly-wrapper.external-year-control .plotly-graph-div {
-        padding-top: 42px;
-      }
       #plotly-wrapper.external-year-control #year-toggle {
         display: none;
       }
@@ -848,16 +804,16 @@
 
   function init() {
     injectStyles();
-    applyVisiblePlotLayout();
     renderControls();
-    setTimeout(() => {
-      applyVisiblePlotLayout();
-      renderControls();
-    }, 100);
-    setTimeout(() => {
-      applyVisiblePlotLayout();
-      renderControls();
-    }, 500);
+    setTimeout(renderControls, 100);
+    setTimeout(renderControls, 500);
+
+    const wrapper = document.getElementById("plotly-wrapper");
+    if (wrapper && window.ResizeObserver) {
+      const resizeObserver = new ResizeObserver(resizeGraph);
+      resizeObserver.observe(wrapper);
+    }
+    window.addEventListener("resize", resizeGraph);
   }
 
   window.addEventListener("message", (event) => {

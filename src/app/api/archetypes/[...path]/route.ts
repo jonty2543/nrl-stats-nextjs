@@ -572,6 +572,10 @@ function stylePlotHtml(html: string): string {
     .replaceAll('"gridcolor":"white"', '"gridcolor":"rgba(245,247,255,0.14)"')
     .replaceAll('"zerolinecolor":"white"', '"zerolinecolor":"rgba(245,247,255,0.18)"')
     .replaceAll('"gridwidth":2', '"gridwidth":1')
+    .replaceAll('"margin":{"l":0,"r":0,"b":0,"t":30}', '"margin":{"l":0,"r":0,"b":92,"t":30}')
+    .replaceAll('"margin":{"l":0,"r":0,"b":80,"t":30}', '"margin":{"l":0,"r":0,"b":92,"t":30}')
+    .replaceAll('"legend":{"title":{"text":"Archetype"}}', '"legend":{"title":{"text":"Archetype"},"orientation":"h","x":0.5,"xanchor":"center","y":0,"yanchor":"bottom","font":{"size":10}}')
+    .replaceAll('"scene":{"xaxis":{"title"', '"scene":{"domain":{"x":[0,1],"y":[0.16,1]},"xaxis":{"title"')
     .replaceAll('"opacity":0.8,"size":5', '"opacity":0.82,"size":3.5')
     .replaceAll("'marker.size': 6", "'marker.size': 4")
     .replaceAll("rect.style.fill = 'white';", "rect.style.fill = parentGroup && parentGroup.classList.contains('active') ? 'rgba(0, 245, 138, 0.18)' : 'rgba(17, 24, 46, 0.96)';")
@@ -615,11 +619,20 @@ function stylePlotHtml(html: string): string {
                     width: 100% !important;
                 }
 
+                #plotly-wrapper .plotly-graph-div {
+                    box-sizing: border-box;
+                    padding-bottom: 86px;
+                }
+
                 @media (max-width: 768px) {
                     html,
                     body,
                     #plotly-wrapper {
                         min-height: 100dvh;
+                    }
+
+                    #plotly-wrapper .plotly-graph-div {
+                        padding-bottom: 96px;
                     }
                 }
 

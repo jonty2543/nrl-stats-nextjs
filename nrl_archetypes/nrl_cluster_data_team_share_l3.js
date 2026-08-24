@@ -18,7 +18,7 @@ const clusterDataTeamShareL3 = {
                 {
                     "id": 2,
                     "name": "Workhorse Fullback",
-                    "count": 20,
+                    "count": 21,
                     "description": "High-effort players who are always around the ball. They rack up high run metres and support plays."
                 },
                 {
@@ -30,7 +30,7 @@ const clusterDataTeamShareL3 = {
                 {
                     "id": 4,
                     "name": "Support Fullback",
-                    "count": 39,
+                    "count": 38,
                     "description": "Players who are less involved in attack, but may specialise in defense or defusing kicks."
                 }
             ],
@@ -73,13 +73,13 @@ const clusterDataTeamShareL3 = {
                 {
                     "id": 1,
                     "name": "Finisher Winger",
-                    "count": 72,
+                    "count": 73,
                     "description": "Wingers who are specialist try scorers, often with great positional awareness and speed."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 75,
+                    "count": 74,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],

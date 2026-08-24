@@ -287,13 +287,13 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 39,
+                    "count": 40,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 43,
+                    "count": 42,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -329,7 +329,7 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 22,
+                    "count": 21,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
@@ -341,7 +341,7 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 180,
+                    "count": 181,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

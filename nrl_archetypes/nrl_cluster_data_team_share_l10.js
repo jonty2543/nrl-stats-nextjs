@@ -329,7 +329,7 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 29,
+                    "count": 28,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
@@ -341,7 +341,7 @@ const clusterDataTeamShareL10 = {
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 184,
+                    "count": 185,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

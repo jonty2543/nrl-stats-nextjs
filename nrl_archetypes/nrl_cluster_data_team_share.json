@@ -329,7 +329,7 @@
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 30,
+                    "count": 29,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
@@ -341,7 +341,7 @@
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 179,
+                    "count": 180,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

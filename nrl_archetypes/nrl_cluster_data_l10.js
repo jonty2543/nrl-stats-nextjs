@@ -6,7 +6,7 @@ const clusterDataL10 = {
                 {
                     "id": 0,
                     "name": "Ball Running Fullback",
-                    "count": 13,
+                    "count": 12,
                     "description": "Fullbacks who are quick and able to break the defensive line, and opt for game breaking runs over tough carries."
                 },
                 {
@@ -30,7 +30,7 @@ const clusterDataL10 = {
                 {
                     "id": 4,
                     "name": "Support Fullback",
-                    "count": 27,
+                    "count": 28,
                     "description": "Players who are less involved in attack, but may specialise in defense or defusing kicks."
                 }
             ],

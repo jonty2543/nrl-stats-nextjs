@@ -18,13 +18,13 @@
                 {
                     "id": 2,
                     "name": "Workhorse Fullback",
-                    "count": 24,
+                    "count": 23,
                     "description": "High-effort players who are always around the ball. They rack up high run metres and support plays."
                 },
                 {
                     "id": 3,
                     "name": "Playmaker Fullback",
-                    "count": 26,
+                    "count": 27,
                     "description": "These playmakers save their energy for the big moments, with reduced workrates but high involvement in tries and try assists."
                 },
                 {
@@ -67,7 +67,7 @@
                 {
                     "id": 0,
                     "name": "Support Winger",
-                    "count": 118,
+                    "count": 117,
                     "description": "These wingers tend to be less involved in the game, perhaps due to lack of skill or opportunity."
                 },
                 {
@@ -79,7 +79,7 @@
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 81,
+                    "count": 82,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],

@@ -6,7 +6,7 @@ const clusterDataL5 = {
                 {
                     "id": 0,
                     "name": "Ball Running Fullback",
-                    "count": 11,
+                    "count": 10,
                     "description": "Fullbacks who are quick and able to break the defensive line, and opt for game breaking runs over tough carries."
                 },
                 {
@@ -30,7 +30,7 @@ const clusterDataL5 = {
                 {
                     "id": 4,
                     "name": "Support Fullback",
-                    "count": 35,
+                    "count": 36,
                     "description": "Players who are less involved in attack, but may specialise in defense or defusing kicks."
                 }
             ],
@@ -73,13 +73,13 @@ const clusterDataL5 = {
                 {
                     "id": 1,
                     "name": "Finisher Winger",
-                    "count": 51,
+                    "count": 50,
                     "description": "Wingers who are specialist try scorers, often with great positional awareness and speed."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 72,
+                    "count": 73,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -335,13 +335,13 @@ const clusterDataL5 = {
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 66,
+                    "count": 65,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 173,
+                    "count": 174,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

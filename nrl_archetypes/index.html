@@ -1297,6 +1297,21 @@
         }
 
         // Select Position
+        function resizePlotFrame(frame) {
+            const resize = () => {
+                const plotWindow = frame.contentWindow;
+                if (!plotWindow) return;
+                plotWindow.dispatchEvent(new Event('resize'));
+                try {
+                    const plotDiv = plotWindow.document.querySelector('.plotly-graph-div');
+                    plotWindow.Plotly?.Plots?.resize(plotDiv);
+                } catch (_) {}
+            };
+            requestAnimationFrame(resize);
+            window.setTimeout(resize, 120);
+            window.setTimeout(resize, 360);
+        }
+
         function selectPosition(position) {
             const activeYearData = getActiveClusterData()[currentYear];
             if (!position || !activeYearData[position]) {
@@ -1333,6 +1348,7 @@
                         year: currentPlotYear,
                         externalControl: window.matchMedia('(min-width: 1025px)').matches,
                     }, window.location.origin);
+                    resizePlotFrame(nextFrame);
                 });
             };
             plotContainer.appendChild(nextFrame);

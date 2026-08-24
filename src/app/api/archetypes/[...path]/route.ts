@@ -373,23 +373,24 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
         }
 
         .plot-container {
-            background: transparent;
+            background: #111733;
             border: 0;
             border-radius: 0;
             box-shadow: none;
         }
 
-        .plot-container iframe {
-            position: absolute;
-            inset: 0;
-            display: block;
-            background: #111733 !important;
-            color-scheme: dark;
-            opacity: 0;
-            transition: opacity 120ms ease-out;
+        .plot-stack,
+        .plot-container {
+            width: 100%;
+            max-width: 100%;
         }
 
-        .plot-container iframe.is-ready {
+        .plot-container iframe {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #111733 !important;
+            color-scheme: dark;
             opacity: 1;
         }
 

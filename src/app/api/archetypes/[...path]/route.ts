@@ -2,6 +2,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { isValidArchetypesCupToken } from "@/lib/access/archetypes-cup-token";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
 
 export const dynamic = "force-dynamic";
@@ -104,8 +105,21 @@ function gateCupIndexAssets(html: string): string {
     );
 }
 
-function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAccessCup: boolean): string {
-  return (canAccessCup ? html : gateCupIndexAssets(html))
+function styleIndexHtml(
+  html: string,
+  articleLink: ArchetypesArticleLink,
+  canAccessCup: boolean,
+  cupAccessToken: string | null
+): string {
+  const cupAccessQuery = cupAccessToken ? `?cupAccess=${encodeURIComponent(cupAccessToken)}` : "";
+  const cupReadyHtml = canAccessCup
+    ? html
+      .replaceAll(/src="(cup_[^"]+)"/g, `src="$1${cupAccessQuery}"`)
+      .replaceAll("nextFrame.src = plotFile;", "nextFrame.src = withCupAccess(plotFile);")
+      .replaceAll("fetch(plotFile)", "fetch(withCupAccess(plotFile))")
+    : gateCupIndexAssets(html);
+
+  return cupReadyHtml
     .replaceAll("--navy: #0A1128;", "--navy: #0b1020;")
     .replaceAll("--lime: #C9FF00;", "--lime: #00f58a;")
     .replaceAll("--white: #FFFFFF;", "--white: #f5f7ff;")
@@ -384,6 +398,12 @@ function styleIndexHtml(html: string, articleLink: ArchetypesArticleLink, canAcc
         }
     </style>
     <script>
+        const archetypesCupAccessQuery = ${JSON.stringify(cupAccessQuery)};
+        function withCupAccess(assetPath) {
+            if (!archetypesCupAccessQuery || !assetPath.startsWith('cup_')) return assetPath;
+            return assetPath + archetypesCupAccessQuery;
+        }
+
         function syncArchetypesBackground() {
             try {
                 if (window.parent === window || !window.frameElement) return;
@@ -523,11 +543,19 @@ function stylePlotHtml(html: string): string {
     );
 }
 
-function styleHtml(filePath: string, html: string, canAccessCup: boolean, articleLink?: ArchetypesArticleLink): string {
-  return path.basename(filePath) === "index.html" && articleLink ? styleIndexHtml(html, articleLink, canAccessCup) : stylePlotHtml(html);
+function styleHtml(
+  filePath: string,
+  html: string,
+  canAccessCup: boolean,
+  articleLink?: ArchetypesArticleLink,
+  cupAccessToken: string | null = null
+): string {
+  return path.basename(filePath) === "index.html" && articleLink
+    ? styleIndexHtml(html, articleLink, canAccessCup, cupAccessToken)
+    : stylePlotHtml(html);
 }
 
-export async function GET(_request: Request, context: ArchetypesRouteContext) {
+export async function GET(request: Request, context: ArchetypesRouteContext) {
   const { path: pathParts } = await context.params;
   const filePath = resolveArchetypePath(pathParts);
 
@@ -537,7 +565,8 @@ export async function GET(_request: Request, context: ArchetypesRouteContext) {
 
   try {
     const { userId } = await auth();
-    const canAccessCup = await getServerProPlotAccess(userId);
+    const token = new URL(request.url).searchParams.get("cupAccess");
+    const canAccessCup = (await getServerProPlotAccess(userId)) || isValidArchetypesCupToken(token);
     if (!canAccessCup && isCupArchetypeAsset(filePath)) {
       return NextResponse.json({ error: "Cup archetypes require Pro or Premium access" }, { status: 403 });
     }
@@ -546,7 +575,9 @@ export async function GET(_request: Request, context: ArchetypesRouteContext) {
     const contentType = CONTENT_TYPES[extension] ?? "application/octet-stream";
     const file = await readFile(filePath);
     const articleLink = path.basename(filePath) === "index.html" ? getArchetypesArticleLink() : undefined;
-    const body = extension === ".html" ? styleHtml(filePath, file.toString("utf8"), canAccessCup, articleLink) : file;
+    const body = extension === ".html"
+      ? styleHtml(filePath, file.toString("utf8"), canAccessCup, articleLink, canAccessCup ? token : null)
+      : file;
 
     return new NextResponse(body, {
       headers: {

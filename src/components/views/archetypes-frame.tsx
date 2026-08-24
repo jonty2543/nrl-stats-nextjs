@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export function ArchetypesFrame() {
+export function ArchetypesFrame({ cupAccessToken }: { cupAccessToken: string | null }) {
   const [isReady, setIsReady] = useState(false);
 
   return (
@@ -11,7 +11,7 @@ export function ArchetypesFrame() {
       className="relative min-h-0 bg-[#111733]"
     >
       <iframe
-        src="/api/archetypes/index.html"
+        src={`/api/archetypes/index.html${cupAccessToken ? `?cupAccess=${encodeURIComponent(cupAccessToken)}` : ""}`}
         title="NRL player archetypes"
         onLoad={() => window.requestAnimationFrame(() => setIsReady(true))}
         className="block h-[calc(100vh-14.5rem)] min-h-[720px] w-full border-0 transition-opacity duration-150"

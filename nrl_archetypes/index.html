@@ -315,7 +315,7 @@
             border-radius: 8px;
             overflow: hidden;
             position: relative;
-            flex: 1 1 auto;
+            flex: 1 1 0;
             min-height: 0;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
@@ -752,8 +752,14 @@
                 height: auto;
             }
 
+            .plot-stack {
+                height: auto;
+                min-height: 0;
+            }
+
             .plot-container {
-                height: 500px;
+                flex: none;
+                height: clamp(360px, 58vh, 500px);
             }
         }
 
@@ -791,7 +797,7 @@
             }
 
             .plot-container {
-                height: 450px;
+                height: clamp(340px, 54vh, 450px);
                 border-radius: 4px;
             }
 

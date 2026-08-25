@@ -287,6 +287,7 @@ function teamStatSelectOptions(stats: readonly TeamStatsComparisonStat[], canAcc
 function teamStatHigherIsBetter(stat: TeamStatsComparisonStat, conceded: boolean): boolean {
   if (stat === "PTB") return false;
   if (!conceded) return !LOWER_IS_BETTER_STATS.has(stat);
+  if (stat === "Missed tackles") return true;
   return stat === "Contact Rating" || stat === "Line Defense Rating" || stat === "Defensive Ruck Rating";
 }
 

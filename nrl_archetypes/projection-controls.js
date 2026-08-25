@@ -515,10 +515,6 @@
     const style = document.createElement("style");
     style.id = "projection-control-styles";
     style.textContent = `
-      html,
-      body {
-        height: 100%;
-      }
       body {
         margin: 0;
         box-sizing: border-box;

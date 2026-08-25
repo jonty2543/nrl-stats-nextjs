@@ -1418,13 +1418,6 @@ function createEmptyBettingBookieFields(): Record<BettingBookie, number | null> 
 function computeBestBookieFromRow(
   row: Pick<BettingOddsRow, BettingBookie | "bestBookie" | "bestPrice">
 ): Pick<BettingOddsRow, "bestBookie" | "bestPrice"> {
-  if (row.bestBookie != null && row.bestPrice != null) {
-    return {
-      bestBookie: row.bestBookie,
-      bestPrice: row.bestPrice,
-    };
-  }
-
   let bestBookie: BettingBookie | null = null;
   let bestPrice: number | null = null;
 
@@ -1438,9 +1431,17 @@ function computeBestBookieFromRow(
   }
 
   return {
-    bestBookie: row.bestBookie ?? bestBookie,
-    bestPrice: row.bestPrice ?? bestPrice,
+    bestBookie: bestBookie ?? row.bestBookie,
+    bestPrice: bestPrice ?? row.bestPrice,
   };
+}
+
+function isValidBettingOddsRow(row: BettingOddsRow): boolean {
+  if (!row.date || !row.match || !row.result) return false;
+  if (row.market !== "Tryscorer") return true;
+  if (!/[A-Za-z]/.test(row.result)) return false;
+  if (row.value == null) return true;
+  return Number.isInteger(row.value) && row.value >= 1 && row.value <= 3;
 }
 
 function mapLegacyBettingRow(table: BettingOddsTable, raw: Record<string, unknown>): BettingOddsRow {
@@ -1570,6 +1571,7 @@ function mapBettingSnapshotRows(raw: unknown, market: BettingMarket): BettingOdd
       const mapped = mapBettingSnapshotRow(record, market);
       return mapped ? [mapped] : [];
     })
+    .filter(isValidBettingOddsRow)
     .sort((a, b) => {
       if (a.date !== b.date) return b.date.localeCompare(a.date);
       if (a.match !== b.match) return a.match.localeCompare(b.match);
@@ -1782,6 +1784,58 @@ function normalizeCupPlayerStatsRow(raw: Record<string, unknown>): Record<string
   };
 }
 
+function normalizeCupPlayerName(value: unknown): string {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+async function fetchCupPlayerProfileLookup(): Promise<Map<string, number>> {
+  const rows = await fetchAllRows<Record<string, unknown>>("state_cup_player_info", {
+    columns: "player,age",
+  });
+  const lookup = new Map<string, number>();
+  for (const row of rows) {
+    const name = normalizeCupPlayerName(row.player);
+    const age = Number(row.age);
+    if (name && Number.isFinite(age) && age > 0) lookup.set(name, age);
+  }
+  return lookup;
+}
+
+function enrichCupPlayerStatsRows(
+  rows: Record<string, unknown>[],
+  profileAges: Map<string, number>
+): Record<string, unknown>[] {
+  return rows.map((row) => ({
+    ...row,
+    age: profileAges.get(normalizeCupPlayerName(row.player)) ?? null,
+    cup_competition: row.competition ?? null,
+  }));
+}
+
+export interface CupArchetypePlayerFilterRecord {
+  age: number | null;
+  competition: "nsw" | "qld" | null;
+}
+
+export async function fetchCupArchetypePlayerFilters(): Promise<Record<string, CupArchetypePlayerFilterRecord>> {
+  const [stats, profileAges] = await Promise.all([
+    fetchAllRows<Record<string, unknown>>("state_cup_player_stats", { columns: "player,match_date,competition" }),
+    fetchCupPlayerProfileLookup(),
+  ]);
+  const filters: Record<string, CupArchetypePlayerFilterRecord> = {};
+  for (const row of stats) {
+    const name = normalizeCupPlayerName(row.player);
+    const year = String(row.match_date ?? "").slice(0, 4);
+    if (!name || !year) continue;
+    const competition = String(row.competition ?? "").toLowerCase();
+    filters[`${name}|${year}`] = {
+      age: profileAges.get(name) ?? null,
+      competition: competition.includes("nsw") ? "nsw" : competition.includes("qld") ? "qld" : null,
+    };
+  }
+  return filters;
+}
+
 function normalizePlayerStatsRowsForCompetition(
   rows: Record<string, unknown>[],
   competition?: StatsCompetition
@@ -1872,9 +1926,12 @@ export async function fetchPlayerStatsFromSupabase(
       : "match_date,team,opponent_team,is_home",
     }
   );
-  const rawPlayers = await fetchPlayerStatsRowsFromSupabase(years, competition);
+  const [rawPlayers, cupProfileAges] = await Promise.all([
+    fetchPlayerStatsRowsFromSupabase(years, competition),
+    isCupCompetition(competition) ? fetchCupPlayerProfileLookup() : Promise.resolve(null),
+  ]);
   return buildPlayerStatsRows(
-    rawPlayers,
+    cupProfileAges ? enrichCupPlayerStatsRows(rawPlayers, cupProfileAges) : rawPlayers,
     isCupCompetition(competition) ? cupMatchRowsForOpponentLookup(rawMatches) : rawMatches
   );
 }
@@ -2726,7 +2783,7 @@ async function fetchBettingOddsTableFromSupabase(table: BettingOddsTable): Promi
   const rawRows = await fetchAllRowsFromSchema<Record<string, unknown>>("public", table);
   return rawRows
     .flatMap((row) => mapBettingRows(table, row))
-    .filter((row) => row.match.length > 0 && row.result.length > 0 && row.date.length > 0)
+    .filter(isValidBettingOddsRow)
     .sort((a, b) => {
       if (a.date !== b.date) return b.date.localeCompare(a.date);
       if (a.match !== b.match) return a.match.localeCompare(b.match);

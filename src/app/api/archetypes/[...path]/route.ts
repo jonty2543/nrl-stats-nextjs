@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { isValidArchetypesCupToken } from "@/lib/access/archetypes-cup-token";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
+import { fetchCupArchetypePlayerFilters } from "@/lib/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -214,6 +215,41 @@ function styleIndexHtml(
             height: 1.15rem;
         }
 
+        .cup-archetype-filters {
+            display: none;
+            align-items: end;
+            gap: 0.45rem;
+            margin: 0 0 1rem;
+        }
+
+        .cup-archetype-filters.is-visible {
+            display: flex;
+        }
+
+        .cup-archetype-filter {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            color: #aeb9d3;
+            font-size: 0.55rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .cup-archetype-filter input,
+        .cup-archetype-filter select {
+            height: 2rem;
+            min-width: 5.6rem;
+            border: 1px solid #2a3356;
+            border-radius: 999px;
+            background: #111733;
+            color: #f5f7ff;
+            padding: 0 0.7rem;
+            font: inherit;
+            text-transform: none;
+        }
+
         .tabs {
             gap: 0.4rem;
             margin-bottom: 1rem;
@@ -404,6 +440,57 @@ function styleIndexHtml(
             return assetPath + archetypesCupAccessQuery;
         }
 
+        const cupPlayerFiltersUrl = 'cup-player-filters.json' + archetypesCupAccessQuery;
+        let cupPlayerMetadata = null;
+
+        function cupPlayerKey(value) {
+            const match = String(value || '').match(/^(.*) \((\d{4})\)$/);
+            if (!match) return '';
+            return match[1].toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + '|' + match[2];
+        }
+
+        function applyCupPlayerFilters() {
+            if (!cupPlayerMetadata || currentCompetition !== 'cup') return;
+            const maxAge = Number(document.getElementById('cupMaxAge')?.value || 0);
+            const league = document.getElementById('cupLeague')?.value || 'all';
+            document.querySelectorAll('.plot-container iframe').forEach(function (frame) {
+                const graph = frame.contentDocument?.querySelector('.plotly-graph-div');
+                const plotly = frame.contentWindow?.Plotly;
+                if (!graph || !plotly || !graph.data) return;
+                graph.data.forEach(function (trace, index) {
+                    const hovertext = Array.isArray(trace.hovertext) ? trace.hovertext : [];
+                    const opacity = hovertext.map(function (label) {
+                        const player = cupPlayerMetadata[cupPlayerKey(label)];
+                        const matchesAge = !maxAge || (player && typeof player.age === 'number' && player.age <= maxAge);
+                        const matchesLeague = league === 'all' || (player && player.competition === league);
+                        return matchesAge && matchesLeague ? 0.8 : 0.03;
+                    });
+                    plotly.restyle(graph, { 'marker.opacity': [opacity], hoverinfo: [opacity.map(function (value) { return value > 0.1 ? 'text' : 'skip'; })] }, [index]);
+                });
+            });
+        }
+
+        function syncCupArchetypeFilters() {
+            const controls = document.getElementById('cupArchetypeFilters');
+            if (!controls) return;
+            controls.classList.toggle('is-visible', currentCompetition === 'cup');
+            if (currentCompetition === 'cup') applyCupPlayerFilters();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!archetypesCupAccessQuery) return;
+            const controls = document.createElement('div');
+            controls.id = 'cupArchetypeFilters';
+            controls.className = 'cup-archetype-filters';
+            controls.innerHTML = '<label class="cup-archetype-filter">Max age<input id="cupMaxAge" type="number" min="16" max="45" placeholder="Any"></label><label class="cup-archetype-filter">Cup<select id="cupLeague"><option value="all">All Cup</option><option value="nsw">NSW Cup</option><option value="qld">QLD Cup</option></select></label>';
+            document.querySelector('.controls-row')?.insertAdjacentElement('afterend', controls);
+            controls.addEventListener('input', applyCupPlayerFilters);
+            controls.addEventListener('change', applyCupPlayerFilters);
+            fetch(cupPlayerFiltersUrl).then(function (response) { return response.ok ? response.json() : null; }).then(function (data) { cupPlayerMetadata = data; syncCupArchetypeFilters(); }).catch(function () {});
+            document.getElementById('competitionToggle')?.addEventListener('click', function () { window.setTimeout(syncCupArchetypeFilters, 0); });
+            document.getElementById('plotContainer')?.addEventListener('load', function () { window.setTimeout(applyCupPlayerFilters, 0); }, true);
+        });
+
         function syncArchetypesBackground() {
             try {
                 if (window.parent === window || !window.frameElement) return;
@@ -557,6 +644,15 @@ function styleHtml(
 
 export async function GET(request: Request, context: ArchetypesRouteContext) {
   const { path: pathParts } = await context.params;
+  const requestedPath = pathParts?.join("/") ?? "index.html";
+  const { userId } = await auth();
+  const token = new URL(request.url).searchParams.get("cupAccess");
+  const canAccessCup = (await getServerProPlotAccess(userId)) || isValidArchetypesCupToken(token);
+
+  if (requestedPath === "cup-player-filters.json") {
+    if (!canAccessCup) return NextResponse.json({ error: "Cup archetypes require Pro or Premium access" }, { status: 403 });
+    return NextResponse.json(await fetchCupArchetypePlayerFilters(), { headers: { "Cache-Control": "private, max-age=300" } });
+  }
   const filePath = resolveArchetypePath(pathParts);
 
   if (!filePath) {
@@ -564,9 +660,6 @@ export async function GET(request: Request, context: ArchetypesRouteContext) {
   }
 
   try {
-    const { userId } = await auth();
-    const token = new URL(request.url).searchParams.get("cupAccess");
-    const canAccessCup = (await getServerProPlotAccess(userId)) || isValidArchetypesCupToken(token);
     if (!canAccessCup && isCupArchetypeAsset(filePath)) {
       return NextResponse.json({ error: "Cup archetypes require Pro or Premium access" }, { status: 403 });
     }

@@ -237,6 +237,26 @@ function styleIndexHtml(
             display: block;
         }
 
+        .control-frame.has-cup-league-filter {
+            gap: 0.65rem;
+            overflow: visible;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            padding: 0;
+        }
+
+        .control-frame.has-cup-league-filter > .mode-toggle {
+            border: 1px solid #2a3356;
+            border-radius: 999px;
+            background: rgba(17, 24, 50, 0.72);
+            padding: 0.18rem;
+        }
+
+        .control-frame.has-cup-league-filter > .control-divider {
+            display: none;
+        }
+
         .tabs {
             gap: 0.4rem;
             margin-bottom: 1rem;
@@ -438,6 +458,7 @@ function styleIndexHtml(
             select.setAttribute('aria-label', 'Cup competition');
             select.innerHTML = '<option value="all">All Cup</option><option value="nsw">NSW Cup</option><option value="qld">QLD Cup</option>';
             document.getElementById('windowToggle')?.insertAdjacentElement('afterend', select);
+            select.parentElement?.classList.add('has-cup-league-filter');
             document.getElementById('competitionToggle')?.addEventListener('click', function () { window.setTimeout(syncCupLeagueFilter, 0); });
             syncCupLeagueFilter();
         });

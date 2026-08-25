@@ -478,19 +478,10 @@
     renderPlayerSearch();
 
     const existingDimensionToggle = wrapper.querySelector("#dimension-toggle");
-    if (existingDimensionToggle && !existingDimensionToggle.querySelector(".dimension-toggle-label")) {
-      existingDimensionToggle.remove();
-    } else if (existingDimensionToggle) {
-      return;
-    }
+    if (existingDimensionToggle) return;
 
     const controls = document.createElement("div");
     controls.id = "dimension-toggle";
-
-    const label = document.createElement("span");
-    label.className = "dimension-toggle-label";
-    label.textContent = "Show:";
-    controls.appendChild(label);
 
     getDimensions(gd).forEach((dimension) => {
       const button = document.createElement("button");
@@ -509,7 +500,7 @@
       controls.appendChild(button);
     });
 
-    getControlBar(wrapper).appendChild(controls);
+    wrapper.querySelector("#player-search")?.appendChild(controls);
     updateButtons();
     resizeGraph();
   }
@@ -584,18 +575,9 @@
         color: #00f58a;
       }
       #dimension-toggle {
-        position: static !important;
-        top: auto !important;
-        left: auto !important;
         display: flex;
         gap: 6px;
         flex-wrap: nowrap;
-        max-width: 100%;
-        padding: 5px;
-        background: rgba(9, 14, 30, 0.76);
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        border-radius: 999px;
-        box-shadow: 0 10px 26px rgba(4, 8, 18, 0.28);
         pointer-events: auto;
       }
       #player-search {
@@ -655,17 +637,6 @@
         text-transform: uppercase;
         white-space: nowrap;
       }
-      .dimension-toggle-label {
-        display: inline-flex;
-        min-height: 26px;
-        align-items: center;
-        padding: 0 5px 0 7px;
-        color: rgba(245, 247, 255, 0.72);
-        font: 800 9px/1.1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        white-space: nowrap;
-      }
       .dimension-toggle-btn {
         appearance: none;
         min-height: 26px;
@@ -719,14 +690,6 @@
         }
         #dimension-toggle {
           gap: 3px;
-          width: fit-content;
-          max-width: 100%;
-          padding: 4px 3px;
-        }
-        .dimension-toggle-label {
-          min-height: 28px;
-          padding: 0 1px 0 3px;
-          font-size: 6px;
         }
         .dimension-toggle-btn {
           flex: 0 0 auto;

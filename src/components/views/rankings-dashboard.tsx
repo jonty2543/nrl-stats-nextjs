@@ -673,7 +673,6 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   const [minGames, setMinGames] = useState(5)
   const [minMinutes, setMinMinutes] = useState(40)
   const [positionFilter, setPositionFilter] = useState("All Positions")
-  const [maxAge, setMaxAge] = useState("")
   const [cupLeague, setCupLeague] = useState("All Cup")
   const [valueSortDirection, setValueSortDirection] = useState<SortDirection>("desc")
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -767,15 +766,12 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
 
   const filteredPlayerRows = useMemo(() => {
     if (competition !== "cup") return activePlayerRows
-    const ageLimit = Number(maxAge)
     return activePlayerRows.filter((row) => {
-      const age = Number(row.age)
-      const matchesAge = !Number.isFinite(ageLimit) || ageLimit <= 0 || (Number.isFinite(age) && age <= ageLimit)
       const league = String(row.cup_competition ?? "").toLowerCase()
       const matchesLeague = cupLeague === "All Cup" || league.includes(cupLeague === "NSW Cup" ? "nsw" : "qld")
-      return matchesAge && matchesLeague
+      return matchesLeague
     })
-  }, [activePlayerRows, competition, cupLeague, maxAge])
+  }, [activePlayerRows, competition, cupLeague])
   const playerRankings = useMemo(
     () => buildPlayerRankings(filteredPlayerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames),
     [filteredPlayerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames]
@@ -928,10 +924,6 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             ) : null}
             {competition === "cup" && view === "players" ? (
               <>
-                <label className="flex w-24 shrink-0 flex-col gap-0.5">
-                  <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Max age</span>
-                  <input type="number" min={16} max={45} value={maxAge} onChange={(event) => setMaxAge(event.target.value)} placeholder="Any" className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none placeholder:text-nrl-muted focus:border-nrl-accent" />
-                </label>
                 <div className="w-24 shrink-0"><Select label="Cup" compact value={cupLeague} options={["All Cup", "NSW Cup", "QLD Cup"]} onChange={setCupLeague} /></div>
               </>
             ) : null}

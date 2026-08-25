@@ -63,15 +63,9 @@ function GameWindowButtons({ value, onChange, disabled = false }: { value: Playe
   );
 }
 
-function CupPlayerFilters({ maxAge, onMaxAgeChange, cupLeague, onCupLeagueChange }: { maxAge: string; onMaxAgeChange: (value: string) => void; cupLeague: string; onCupLeagueChange: (value: string) => void }) {
+function CupLeagueFilter({ cupLeague, onCupLeagueChange }: { cupLeague: string; onCupLeagueChange: (value: string) => void }) {
   return (
-    <>
-      <label className="flex w-24 shrink-0 flex-col gap-0.5">
-        <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Max age</span>
-        <input type="number" min={16} max={45} value={maxAge} onChange={(event) => onMaxAgeChange(event.target.value)} placeholder="Any" className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none placeholder:text-nrl-muted focus:border-nrl-accent" />
-      </label>
-      <div className="w-24 shrink-0"><Select label="Cup" compact value={cupLeague} options={["All Cup", "NSW Cup", "QLD Cup"]} onChange={onCupLeagueChange} /></div>
-    </>
+    <div className="w-24 shrink-0"><Select label="Cup" compact value={cupLeague} options={["All Cup", "NSW Cup", "QLD Cup"]} onChange={onCupLeagueChange} /></div>
   );
 }
 
@@ -980,7 +974,6 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const [playerPosition, setPlayerPosition] = useState<PlayerAttackPosition>("Fullbacks");
   const [playerPlotMode, setPlayerPlotMode] = useState<PlayerPlotMode>("players");
   const [playerMinimumMinutes, setPlayerMinimumMinutes] = useState(10);
-  const [playerMaxAge, setPlayerMaxAge] = useState("");
   const [playerCupLeague, setPlayerCupLeague] = useState("All Cup");
   const [gameWindow, setGameWindow] = useState<PlayerGameWindow>(null);
   const [playerInfoOpen, setPlayerInfoOpen] = useState(false);
@@ -1101,13 +1094,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
     () => currentPlayerRows.filter((row) => {
       if (Number(row["Mins Played"]) < playerMinimumMinutes) return false;
       if (competition !== "cup") return true;
-      const ageLimit = Number(playerMaxAge);
-      const age = Number(row.age);
-      if (Number.isFinite(ageLimit) && ageLimit > 0 && (!Number.isFinite(age) || age > ageLimit)) return false;
       const league = String(row.cup_competition ?? "").toLowerCase();
       return playerCupLeague === "All Cup" || league.includes(playerCupLeague === "NSW Cup" ? "nsw" : "qld");
     }),
-    [competition, currentPlayerRows, playerCupLeague, playerMaxAge, playerMinimumMinutes]
+    [competition, currentPlayerRows, playerCupLeague, playerMinimumMinutes]
   );
   const currentRows = useMemo(
     () => forSelectedRound(rowsByYear[activeYearKey] ?? [], round, (row) => row.Round),
@@ -2194,7 +2184,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
               {playerFiltersOpen ? (
                 <div id="player-plot-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
                   <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} disabled={round !== "all"} />
-                  {competition === "cup" ? <CupPlayerFilters maxAge={playerMaxAge} onMaxAgeChange={setPlayerMaxAge} cupLeague={playerCupLeague} onCupLeagueChange={setPlayerCupLeague} /> : null}
+                  {competition === "cup" ? <CupLeagueFilter cupLeague={playerCupLeague} onCupLeagueChange={setPlayerCupLeague} /> : null}
                   <div className="w-20 shrink-0"><Select label="Season" compact value={year} options={activeAvailableYears} onChange={(value) => void changeYear(value)} /></div>
                 </div>
               ) : null}
@@ -2250,7 +2240,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                     />
                   </label>
                   {!isPlayerForm ? <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} disabled={round !== "all"} /> : null}
-                  {competition === "cup" ? <CupPlayerFilters maxAge={playerMaxAge} onMaxAgeChange={setPlayerMaxAge} cupLeague={playerCupLeague} onCupLeagueChange={setPlayerCupLeague} /> : null}
+                  {competition === "cup" ? <CupLeagueFilter cupLeague={playerCupLeague} onCupLeagueChange={setPlayerCupLeague} /> : null}
                   {isPlayerForm ? <label className="flex w-24 shrink-0 flex-col gap-0.5"><span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min prior games</span><input type="number" min={1} max={20} value={minPriorGames} onChange={(event) => setMinPriorGames(Math.min(20, Math.max(1, Number(event.target.value) || 1)))} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" /></label> : null}
                   {playerSection === "Attack" && playerAttackPlot === "Stats" && (!isPlayerGameMode || round !== "all") ? (
                     <div className={`flex shrink-0 flex-col gap-0.5 ${round !== "all" ? "opacity-50" : ""}`}>

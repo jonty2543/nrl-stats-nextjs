@@ -1784,56 +1784,11 @@ function normalizeCupPlayerStatsRow(raw: Record<string, unknown>): Record<string
   };
 }
 
-function normalizeCupPlayerName(value: unknown): string {
-  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-async function fetchCupPlayerProfileLookup(): Promise<Map<string, number>> {
-  const rows = await fetchAllRows<Record<string, unknown>>("state_cup_player_info", {
-    columns: "player,age",
-  });
-  const lookup = new Map<string, number>();
-  for (const row of rows) {
-    const name = normalizeCupPlayerName(row.player);
-    const age = Number(row.age);
-    if (name && Number.isFinite(age) && age > 0) lookup.set(name, age);
-  }
-  return lookup;
-}
-
-function enrichCupPlayerStatsRows(
-  rows: Record<string, unknown>[],
-  profileAges: Map<string, number>
-): Record<string, unknown>[] {
+function enrichCupPlayerStatsRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
   return rows.map((row) => ({
     ...row,
-    age: profileAges.get(normalizeCupPlayerName(row.player)) ?? null,
     cup_competition: row.competition ?? null,
   }));
-}
-
-export interface CupArchetypePlayerFilterRecord {
-  age: number | null;
-  competition: "nsw" | "qld" | null;
-}
-
-export async function fetchCupArchetypePlayerFilters(): Promise<Record<string, CupArchetypePlayerFilterRecord>> {
-  const [stats, profileAges] = await Promise.all([
-    fetchAllRows<Record<string, unknown>>("state_cup_player_stats", { columns: "player,match_date,competition" }),
-    fetchCupPlayerProfileLookup(),
-  ]);
-  const filters: Record<string, CupArchetypePlayerFilterRecord> = {};
-  for (const row of stats) {
-    const name = normalizeCupPlayerName(row.player);
-    const year = String(row.match_date ?? "").slice(0, 4);
-    if (!name || !year) continue;
-    const competition = String(row.competition ?? "").toLowerCase();
-    filters[`${name}|${year}`] = {
-      age: profileAges.get(name) ?? null,
-      competition: competition.includes("nsw") ? "nsw" : competition.includes("qld") ? "qld" : null,
-    };
-  }
-  return filters;
 }
 
 function normalizePlayerStatsRowsForCompetition(
@@ -1926,12 +1881,9 @@ export async function fetchPlayerStatsFromSupabase(
       : "match_date,team,opponent_team,is_home",
     }
   );
-  const [rawPlayers, cupProfileAges] = await Promise.all([
-    fetchPlayerStatsRowsFromSupabase(years, competition),
-    isCupCompetition(competition) ? fetchCupPlayerProfileLookup() : Promise.resolve(null),
-  ]);
+  const rawPlayers = await fetchPlayerStatsRowsFromSupabase(years, competition);
   return buildPlayerStatsRows(
-    cupProfileAges ? enrichCupPlayerStatsRows(rawPlayers, cupProfileAges) : rawPlayers,
+    isCupCompetition(competition) ? enrichCupPlayerStatsRows(rawPlayers) : rawPlayers,
     isCupCompetition(competition) ? cupMatchRowsForOpponentLookup(rawMatches) : rawMatches
   );
 }

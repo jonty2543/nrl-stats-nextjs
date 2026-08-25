@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { isValidArchetypesCupToken } from "@/lib/access/archetypes-cup-token";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
+import { fetchCupPlayerLeagues } from "@/lib/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -442,9 +443,38 @@ function styleIndexHtml(
     </style>
     <script>
         const archetypesCupAccessQuery = ${JSON.stringify(cupAccessQuery)};
+        let cupPlayerLeagues = null;
         function withCupAccess(assetPath) {
             if (!archetypesCupAccessQuery || !assetPath.startsWith('cup_')) return assetPath;
             return assetPath + archetypesCupAccessQuery;
+        }
+
+        function getCupPlayerName(label) {
+            return String(label || '')
+                .replace(/\\s+\\(\\d{4}\\)\\s*$/, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+        }
+
+        function applyCupLeagueFilter() {
+            const selectedLeague = document.getElementById('cupLeagueFilter')?.value || 'all';
+            if (currentCompetition !== 'cup' || !cupPlayerLeagues) return;
+
+            document.querySelectorAll('#plotContainer iframe').forEach(function (frame) {
+                const graph = frame.contentDocument?.querySelector('.plotly-graph-div');
+                const plotly = frame.contentWindow?.Plotly;
+                if (!graph || !plotly || !Array.isArray(graph.data)) return;
+
+                graph.data.forEach(function (trace, index) {
+                    const labels = Array.isArray(trace.hovertext) ? trace.hovertext : [];
+                    const opacity = labels.map(function (label) {
+                        const playerLeague = cupPlayerLeagues[getCupPlayerName(label)];
+                        return selectedLeague === 'all' || playerLeague === selectedLeague ? 0.8 : 0;
+                    });
+                    plotly.restyle(graph, { 'marker.opacity': [opacity] }, [index]);
+                });
+            });
         }
 
         function syncCupLeagueFilter() {
@@ -459,7 +489,25 @@ function styleIndexHtml(
             select.innerHTML = '<option value="all">All Cup</option><option value="nsw">NSW Cup</option><option value="qld">QLD Cup</option>';
             document.getElementById('windowToggle')?.insertAdjacentElement('afterend', select);
             select.parentElement?.classList.add('has-cup-league-filter');
-            document.getElementById('competitionToggle')?.addEventListener('click', function () { window.setTimeout(syncCupLeagueFilter, 0); });
+            select.addEventListener('change', applyCupLeagueFilter);
+            document.getElementById('competitionToggle')?.addEventListener('click', function () {
+                window.setTimeout(function () {
+                    syncCupLeagueFilter();
+                    applyCupLeagueFilter();
+                }, 0);
+            });
+            document.addEventListener('load', function (event) {
+                if (event.target instanceof HTMLIFrameElement && event.target.closest('#plotContainer')) {
+                    window.setTimeout(applyCupLeagueFilter, 0);
+                }
+            }, true);
+            fetch('cup-player-leagues.json' + archetypesCupAccessQuery)
+                .then(function (response) { return response.ok ? response.json() : null; })
+                .then(function (leagues) {
+                    cupPlayerLeagues = leagues;
+                    applyCupLeagueFilter();
+                })
+                .catch(function () { cupPlayerLeagues = null; });
             syncCupLeagueFilter();
         });
 
@@ -619,6 +667,22 @@ export async function GET(request: Request, context: ArchetypesRouteContext) {
   const { userId } = await auth();
   const token = new URL(request.url).searchParams.get("cupAccess");
   const canAccessCup = (await getServerProPlotAccess(userId)) || isValidArchetypesCupToken(token);
+  const requestedPath = pathParts?.join("/") ?? "index.html";
+
+  if (requestedPath === "cup-player-leagues.json") {
+    if (!canAccessCup) {
+      return NextResponse.json({ error: "Cup archetypes require Pro or Premium access" }, { status: 403 });
+    }
+
+    try {
+      return NextResponse.json(await fetchCupPlayerLeagues(), {
+        headers: { "Cache-Control": "private, max-age=300" },
+      });
+    } catch (error) {
+      console.error("Failed to fetch Cup player leagues:", error);
+      return NextResponse.json({ error: "Failed to fetch Cup player leagues" }, { status: 500 });
+    }
+  }
 
   const filePath = resolveArchetypePath(pathParts);
 

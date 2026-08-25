@@ -1784,6 +1784,28 @@ function normalizeCupPlayerStatsRow(raw: Record<string, unknown>): Record<string
   };
 }
 
+function normalizeCupPlayerName(value: unknown): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export async function fetchCupPlayerLeagues(): Promise<Record<string, "nsw" | "qld">> {
+  const rows = await fetchAllRows<Record<string, unknown>>("state_cup_player_info", {
+    columns: "player,competition",
+  });
+
+  return rows.reduce<Record<string, "nsw" | "qld">>((leagues, row) => {
+    const player = normalizeCupPlayerName(row.player);
+    const competition = String(row.competition ?? "").toLowerCase();
+    const league = competition.includes("nsw") ? "nsw" : competition.includes("qld") ? "qld" : null;
+
+    if (player && league) leagues[player] = league;
+    return leagues;
+  }, {});
+}
+
 function enrichCupPlayerStatsRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
   return rows.map((row) => ({
     ...row,

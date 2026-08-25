@@ -457,6 +457,20 @@ function styleIndexHtml(
                 .trim();
         }
 
+        function plotValues(value) {
+            if (Array.isArray(value)) return value.slice();
+            if (ArrayBuffer.isView(value)) return Array.from(value);
+            if (value && typeof value === 'object' && typeof value.bdata === 'string') {
+                const binary = window.atob(value.bdata);
+                const bytes = new Uint8Array(binary.length);
+                for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+                const constructors = { f8: Float64Array, f4: Float32Array, i1: Int8Array, i2: Int16Array, i4: Int32Array, u1: Uint8Array, u2: Uint16Array, u4: Uint32Array };
+                const TypedArray = constructors[value.dtype];
+                return TypedArray ? Array.from(new TypedArray(bytes.buffer)) : [];
+            }
+            return [];
+        }
+
         function applyCupLeagueFilter() {
             const selectedLeague = document.getElementById('cupLeagueFilter')?.value || 'all';
             if (currentCompetition !== 'cup' || !cupPlayerLeagues) return;
@@ -466,14 +480,31 @@ function styleIndexHtml(
                 const plotly = frame.contentWindow?.Plotly;
                 if (!graph || !plotly || !Array.isArray(graph.data)) return;
 
-                graph.data.forEach(function (trace, index) {
-                    const labels = Array.isArray(trace.hovertext) ? trace.hovertext : [];
-                    const opacity = labels.map(function (label) {
-                        const playerLeague = cupPlayerLeagues[getCupPlayerName(label)];
-                        return selectedLeague === 'all' || playerLeague === selectedLeague ? 0.8 : 0;
+                if (!frame.__cupLeagueSource) {
+                    frame.__cupLeagueSource = graph.data.map(function (trace) {
+                        return {
+                            x: plotValues(trace.x),
+                            y: plotValues(trace.y),
+                            z: plotValues(trace.z),
+                            hovertext: plotValues(trace.hovertext),
+                        };
                     });
-                    plotly.restyle(graph, { 'marker.opacity': [opacity] }, [index]);
+                }
+
+                const source = frame.__cupLeagueSource;
+                const update = { x: [], y: [], z: [], hovertext: [] };
+                const traceIndexes = source.map(function (_, index) { return index; });
+
+                source.forEach(function (trace) {
+                    const keep = trace.hovertext.map(function (label) {
+                        return selectedLeague === 'all' || cupPlayerLeagues[getCupPlayerName(label)] === selectedLeague;
+                    });
+                    update.x.push(trace.x.filter(function (_, index) { return keep[index]; }));
+                    update.y.push(trace.y.filter(function (_, index) { return keep[index]; }));
+                    update.z.push(trace.z.filter(function (_, index) { return keep[index]; }));
+                    update.hovertext.push(trace.hovertext.filter(function (_, index) { return keep[index]; }));
                 });
+                plotly.restyle(graph, update, traceIndexes);
             });
         }
 

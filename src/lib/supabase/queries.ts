@@ -1799,7 +1799,11 @@ export async function fetchCupPlayerLeagues(): Promise<Record<string, "nsw" | "q
   return rows.reduce<Record<string, "nsw" | "qld">>((leagues, row) => {
     const player = normalizeCupPlayerName(row.player);
     const competition = String(row.competition ?? "").toLowerCase();
-    const league = competition.includes("nsw") ? "nsw" : competition.includes("qld") ? "qld" : null;
+    const league = competition.includes("nsw")
+      ? "nsw"
+      : competition.includes("qld") || competition.includes("hostplus")
+        ? "qld"
+        : null;
 
     if (player && league) leagues[player] = league;
     return leagues;

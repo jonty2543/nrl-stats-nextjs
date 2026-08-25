@@ -483,6 +483,7 @@ function styleIndexHtml(
                 if (!frame.__cupLeagueSource) {
                     frame.__cupLeagueSource = graph.data.map(function (trace) {
                         return {
+                            name: trace.name,
                             x: plotValues(trace.x),
                             y: plotValues(trace.y),
                             z: plotValues(trace.z),
@@ -492,17 +493,34 @@ function styleIndexHtml(
                 }
 
                 const source = frame.__cupLeagueSource;
-                const update = { x: [], y: [], z: [], hovertext: [] };
-                const traceIndexes = source.map(function (_, index) { return index; });
-
-                source.forEach(function (trace) {
+                const filtered = source.map(function (trace) {
                     const keep = trace.hovertext.map(function (label) {
                         return selectedLeague === 'all' || cupPlayerLeagues[getCupPlayerName(label)] === selectedLeague;
                     });
-                    update.x.push(trace.x.filter(function (_, index) { return keep[index]; }));
-                    update.y.push(trace.y.filter(function (_, index) { return keep[index]; }));
-                    update.z.push(trace.z.filter(function (_, index) { return keep[index]; }));
-                    update.hovertext.push(trace.hovertext.filter(function (_, index) { return keep[index]; }));
+                    return {
+                        ...trace,
+                        keep,
+                        hasPoints: keep.some(Boolean),
+                    };
+                });
+                const legendTraceIndexes = new Set();
+                filtered.forEach(function (trace, index) {
+                    if (trace.hasPoints && !Array.from(legendTraceIndexes).some(function (traceIndex) {
+                        return filtered[traceIndex].name === trace.name;
+                    })) {
+                        legendTraceIndexes.add(index);
+                    }
+                });
+                const update = { x: [], y: [], z: [], hovertext: [], visible: [], showlegend: [] };
+                const traceIndexes = source.map(function (_, index) { return index; });
+
+                filtered.forEach(function (trace, index) {
+                    update.x.push(trace.x.filter(function (_, pointIndex) { return trace.keep[pointIndex]; }));
+                    update.y.push(trace.y.filter(function (_, pointIndex) { return trace.keep[pointIndex]; }));
+                    update.z.push(trace.z.filter(function (_, pointIndex) { return trace.keep[pointIndex]; }));
+                    update.hovertext.push(trace.hovertext.filter(function (_, pointIndex) { return trace.keep[pointIndex]; }));
+                    update.visible.push(trace.hasPoints);
+                    update.showlegend.push(legendTraceIndexes.has(index));
                 });
                 plotly.restyle(graph, update, traceIndexes);
             });

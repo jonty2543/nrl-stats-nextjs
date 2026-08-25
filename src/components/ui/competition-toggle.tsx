@@ -4,13 +4,18 @@ interface CompetitionToggleProps {
   value: "nrl" | "cup";
   onChange: (value: "nrl" | "cup") => void;
   canAccessCup: boolean;
+  hideLabel?: boolean;
+  size?: "default" | "large";
+  className?: string;
 }
 
-export function CompetitionToggle({ value, onChange, canAccessCup }: CompetitionToggleProps) {
+export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = false, size = "default", className = "" }: CompetitionToggleProps) {
+  const large = size === "large";
+
   return (
-    <div className="flex shrink-0 flex-col gap-0.5">
-      <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Competition</span>
-      <div className="flex h-8 rounded-md border border-nrl-border bg-nrl-panel-2 p-0.5">
+    <div className={`flex shrink-0 flex-col gap-0.5 ${className}`}>
+      <span className={hideLabel ? "sr-only" : "text-[8px] font-semibold uppercase tracking-wide text-nrl-muted"}>Competition</span>
+      <div className={`flex rounded-md border border-nrl-border bg-nrl-panel-2 p-0.5 ${large ? "h-10" : "h-8"}`}>
         {(["nrl", "cup"] as const).map((option) => {
           const locked = option === "cup" && !canAccessCup;
           const active = value === option;
@@ -22,7 +27,7 @@ export function CompetitionToggle({ value, onChange, canAccessCup }: Competition
               aria-pressed={active}
               title={locked ? "Cup stats require Pro or Premium access" : undefined}
               onClick={() => onChange(option)}
-              className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[9px] font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
+              className={`inline-flex flex-1 items-center justify-center gap-1 rounded border py-1 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? "px-3 text-[11px]" : "px-2 text-[9px]"} ${
                 active ? "border-nrl-accent text-nrl-accent" : "border-transparent text-nrl-muted hover:text-nrl-text"
               }`}
             >

@@ -219,6 +219,24 @@ function styleIndexHtml(
             display: none;
         }
 
+        .cup-league-filter {
+            display: none;
+            height: 1.9rem;
+            min-width: 6.3rem;
+            border: 1px solid #2a3356;
+            border-radius: 999px;
+            background: #111733;
+            color: #f5f7ff;
+            padding: 0 0.65rem;
+            font: 700 0.6rem ${APP_FONT_STACK};
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .cup-league-filter.is-visible {
+            display: block;
+        }
+
         .tabs {
             gap: 0.4rem;
             margin-bottom: 1rem;
@@ -408,6 +426,21 @@ function styleIndexHtml(
             if (!archetypesCupAccessQuery || !assetPath.startsWith('cup_')) return assetPath;
             return assetPath + archetypesCupAccessQuery;
         }
+
+        function syncCupLeagueFilter() {
+            document.getElementById('cupLeagueFilter')?.classList.toggle('is-visible', currentCompetition === 'cup');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const select = document.createElement('select');
+            select.id = 'cupLeagueFilter';
+            select.className = 'cup-league-filter';
+            select.setAttribute('aria-label', 'Cup competition');
+            select.innerHTML = '<option value="all">All Cup</option><option value="nsw">NSW Cup</option><option value="qld">QLD Cup</option>';
+            document.getElementById('windowToggle')?.insertAdjacentElement('afterend', select);
+            document.getElementById('competitionToggle')?.addEventListener('click', function () { window.setTimeout(syncCupLeagueFilter, 0); });
+            syncCupLeagueFilter();
+        });
 
         function syncArchetypesBackground() {
             try {

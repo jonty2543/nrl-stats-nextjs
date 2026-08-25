@@ -215,6 +215,11 @@ function styleIndexHtml(
             height: 1.15rem;
         }
 
+        #modeToggle,
+        #competitionToggle + .control-divider {
+            display: none;
+        }
+
         .cup-archetype-filters {
             display: none;
             align-items: end;

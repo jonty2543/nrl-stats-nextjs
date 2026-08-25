@@ -575,6 +575,9 @@
         color: #00f58a;
       }
       #dimension-toggle {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
         display: flex;
         gap: 6px;
         flex-wrap: nowrap;

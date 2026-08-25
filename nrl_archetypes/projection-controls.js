@@ -500,7 +500,7 @@
       controls.appendChild(button);
     });
 
-    wrapper.querySelector("#player-search")?.appendChild(controls);
+    getControlBar(wrapper).appendChild(controls);
     updateButtons();
     resizeGraph();
   }
@@ -528,10 +528,9 @@
         left: 10px;
         right: 10px;
         z-index: 30;
-        display: grid;
-        grid-template-columns: minmax(0, max-content);
+        display: flex;
+        flex-wrap: wrap;
         align-items: start;
-        justify-items: start;
         gap: 6px;
         pointer-events: none;
       }
@@ -539,6 +538,8 @@
         display: none !important;
       }
       #year-toggle {
+        flex-basis: 100%;
+        width: fit-content;
         display: flex;
         max-width: 100%;
         overflow: hidden;
@@ -678,6 +679,7 @@
           padding-top: 108px;
         }
         #archetype-controls {
+          flex-wrap: wrap;
           gap: 5px;
           top: 6px;
           left: 4px;

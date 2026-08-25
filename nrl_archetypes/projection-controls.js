@@ -519,8 +519,6 @@
       #plotly-wrapper {
         position: relative;
         min-height: 0;
-        box-sizing: border-box;
-        border: 1px solid rgba(0, 245, 138, 0.55);
       }
       #plotly-wrapper .plotly-graph-div {
         height: 100% !important;

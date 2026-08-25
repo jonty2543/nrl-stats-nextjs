@@ -389,8 +389,8 @@ export function TeamQuadrantScatter({
   const singleAxisHeatBarHeight = isMobile ? 14 : 10;
   const singleAxisHeatBarX = xPlotLeft;
   const singleAxisHeatBarWidth = xPlotWidth;
-  const heatLowColor = xHigherIsBetter ? "#ff5364" : "#10f08b";
-  const heatHighColor = xHigherIsBetter ? "#10f08b" : "#ff5364";
+  const heatLowColor = "#ff5364";
+  const heatHighColor = "#10f08b";
   const plotCenterLeft = `${((xPlotLeft + xPlotWidth / 2) / width) * 100}%`;
   const yScale = (value: number) => margin.top + ((yDomain[1] - value) / (yDomain[1] - yDomain[0])) * plotHeight;
   const selectedPoint = points.find((point) => point.id === selectedPointId) ?? null;
@@ -621,7 +621,7 @@ export function TeamQuadrantScatter({
           const isTop = yHigherIsBetter ? group.yValue >= chart.yMean : group.yValue <= chart.yMean;
           const heatRatio = (x - singleAxisHeatBarX) / singleAxisHeatBarWidth;
           const pointColor = singleAxis
-            ? singleAxisHeatColor(xHigherIsBetter ? heatRatio : 1 - heatRatio)
+            ? singleAxisHeatColor(heatRatio)
             : comparisonLine
             ? (group.yValue >= group.xValue) === comparisonHigherIsBetter ? "#10f08b" : "#ff5364"
             : colorByQuadrant

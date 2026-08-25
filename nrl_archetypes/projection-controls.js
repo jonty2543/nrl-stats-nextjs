@@ -542,7 +542,7 @@
         display: none !important;
       }
       #year-toggle {
-        flex-basis: 100%;
+        flex-basis: auto;
         width: fit-content;
         display: flex;
         max-width: 100%;

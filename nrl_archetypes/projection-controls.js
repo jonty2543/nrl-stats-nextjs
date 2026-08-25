@@ -105,10 +105,12 @@
 
     if (!state.playerSearch.trim()) {
       status.textContent = "";
+      status.hidden = true;
       return;
     }
 
     status.textContent = matchCount === 1 ? "1 match" : `${matchCount} matches`;
+    status.hidden = false;
   }
 
   function highlightedValue(values, pointIndex) {
@@ -458,6 +460,7 @@
 
     const status = document.createElement("span");
     status.id = "player-search-status";
+    status.hidden = true;
 
     controls.appendChild(input);
     controls.appendChild(dataList);
@@ -478,19 +481,10 @@
     renderPlayerSearch();
 
     const existingDimensionToggle = wrapper.querySelector("#dimension-toggle");
-    if (existingDimensionToggle && !existingDimensionToggle.querySelector(".dimension-toggle-label")) {
-      existingDimensionToggle.remove();
-    } else if (existingDimensionToggle) {
-      return;
-    }
+    existingDimensionToggle?.remove();
 
     const controls = document.createElement("div");
     controls.id = "dimension-toggle";
-
-    const label = document.createElement("span");
-    label.className = "dimension-toggle-label";
-    label.textContent = "Show:";
-    controls.appendChild(label);
 
     getDimensions(gd).forEach((dimension) => {
       const button = document.createElement("button");
@@ -509,7 +503,8 @@
       controls.appendChild(button);
     });
 
-    getControlBar(wrapper).appendChild(controls);
+    controls.style.position = "static";
+    wrapper.querySelector("#player-search")?.appendChild(controls);
     updateButtons();
     resizeGraph();
   }
@@ -590,12 +585,12 @@
         display: flex;
         gap: 6px;
         flex-wrap: nowrap;
-        max-width: 100%;
-        padding: 5px;
-        background: rgba(9, 14, 30, 0.76);
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        border-radius: 999px;
-        box-shadow: 0 10px 26px rgba(4, 8, 18, 0.28);
+        max-width: none;
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
         pointer-events: auto;
       }
       #player-search {

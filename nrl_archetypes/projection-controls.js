@@ -478,7 +478,8 @@
     renderPlayerSearch();
 
     const existingDimensionToggle = wrapper.querySelector("#dimension-toggle");
-    if (existingDimensionToggle) return;
+    if (existingDimensionToggle?.closest("#archetype-controls")) return;
+    existingDimensionToggle?.remove();
 
     const controls = document.createElement("div");
     controls.id = "dimension-toggle";

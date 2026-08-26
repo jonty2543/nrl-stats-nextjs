@@ -23,8 +23,8 @@ interface RankingsDashboardProps {
 }
 
 interface CompetitionRows {
-  playerRows: PlayerStat[]
-  teamRows: TeamStat[]
+  playerRows?: PlayerStat[]
+  teamRows?: TeamStat[]
 }
 
 type ValueMode = "average" | "total"
@@ -687,39 +687,47 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   const effectiveMode = section === "form" ? "average" : mode
   const rankingFinderSuggestions = useMemo(() => buildRankingSuggestions(rankingFinderQuery), [rankingFinderQuery])
 
-  const loadCompetitionRows = useCallback((nextCompetition: "nrl" | "cup", nextYear: string) => {
+  const loadCompetitionRows = useCallback((nextCompetition: "nrl" | "cup", nextYear: string, targetView: RankingView) => {
     const key = `${nextCompetition}:${nextYear}`
     const cachedRows = competitionRowsRef.current.get(key)
-    if (cachedRows) return Promise.resolve(cachedRows)
+    const needsPlayerRows = targetView === "players" && !cachedRows?.playerRows
+    const needsTeamRows = targetView === "teams" && !cachedRows?.teamRows
+    if (!needsPlayerRows && !needsTeamRows) return Promise.resolve(cachedRows ?? {})
 
-    const existingRequest = competitionRequestsRef.current.get(key)
+    const requestKey = `${key}:${targetView}`
+    const existingRequest = competitionRequestsRef.current.get(requestKey)
     if (existingRequest) return existingRequest
 
     const query = new URLSearchParams({ years: nextYear, competition: nextCompetition })
     const request: Promise<CompetitionRows | null> = Promise.all([
-      fetch(`/api/player-stats?${query.toString()}`),
-      fetch(`/api/team-stats?${query.toString()}`),
+      needsPlayerRows ? fetch(`/api/player-stats?${query.toString()}`) : Promise.resolve(null),
+      needsTeamRows ? fetch(`/api/team-stats?${query.toString()}`) : Promise.resolve(null),
     ])
       .then(async ([playersResponse, teamsResponse]) => {
-        if (!playersResponse.ok || !teamsResponse.ok) return null
+        if (playersResponse && !playersResponse.ok) return null
+        if (teamsResponse && !teamsResponse.ok) return null
         const [nextPlayerRows, nextTeamRows] = await Promise.all([
-          playersResponse.json() as Promise<PlayerStat[]>,
-          teamsResponse.json() as Promise<TeamStat[]>,
+          playersResponse ? playersResponse.json() as Promise<PlayerStat[]> : Promise.resolve(cachedRows?.playerRows),
+          teamsResponse ? teamsResponse.json() as Promise<TeamStat[]> : Promise.resolve(cachedRows?.teamRows),
         ])
-        const rows = { playerRows: nextPlayerRows, teamRows: nextTeamRows }
+        const rows = {
+          ...(cachedRows ?? {}),
+          ...(nextPlayerRows ? { playerRows: nextPlayerRows } : {}),
+          ...(nextTeamRows ? { teamRows: nextTeamRows } : {}),
+        }
         competitionRowsRef.current.set(key, rows)
         return rows
       })
-      .finally(() => competitionRequestsRef.current.delete(key))
+      .finally(() => competitionRequestsRef.current.delete(requestKey))
 
-    competitionRequestsRef.current.set(key, request)
+    competitionRequestsRef.current.set(requestKey, request)
     return request
   }, [])
 
   useEffect(() => {
     if (!canAccessCup) return
     const cupYear = cupAvailableYears.includes(selectedYear) ? selectedYear : cupAvailableYears[0]
-    if (cupYear) void loadCompetitionRows("cup", cupYear)
+    if (cupYear) void loadCompetitionRows("cup", cupYear, "players")
   }, [canAccessCup, cupAvailableYears, loadCompetitionRows, selectedYear])
 
   const changeCompetition = async (nextCompetition: "nrl" | "cup") => {
@@ -731,22 +739,46 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
     setCompetition(nextCompetition)
     setActiveYear(nextYear)
     const cachedRows = competitionRowsRef.current.get(`${nextCompetition}:${nextYear}`)
-    if (cachedRows) {
-      setActivePlayerRows(cachedRows.playerRows)
-      setActiveTeamRows(cachedRows.teamRows)
+    if ((view === "players" && cachedRows?.playerRows) || (view === "teams" && cachedRows?.teamRows)) {
+      setActivePlayerRows(cachedRows.playerRows ?? [])
+      setActiveTeamRows(cachedRows.teamRows ?? [])
       return
     }
 
+    setActivePlayerRows([])
+    setActiveTeamRows([])
     setCompetitionLoading(true)
     try {
-      const rows = await loadCompetitionRows(nextCompetition, nextYear)
+      const rows = await loadCompetitionRows(nextCompetition, nextYear, view)
       if (!rows) return
-      setActivePlayerRows(rows.playerRows)
-      setActiveTeamRows(rows.teamRows)
+      setActivePlayerRows(rows.playerRows ?? [])
+      setActiveTeamRows(rows.teamRows ?? [])
     } finally {
       setCompetitionLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (competitionLoading || !activeYear) return
+    const cachedRows = competitionRowsRef.current.get(`${competition}:${activeYear}`)
+    const hasCurrentRows = view === "players" ? activePlayerRows.length > 0 || cachedRows?.playerRows : activeTeamRows.length > 0 || cachedRows?.teamRows
+    if (hasCurrentRows) return
+
+    let cancelled = false
+    setCompetitionLoading(true)
+    loadCompetitionRows(competition, activeYear, view)
+      .then((rows) => {
+        if (cancelled || !rows) return
+        if (view === "players") setActivePlayerRows(rows.playerRows ?? [])
+        else setActiveTeamRows(rows.teamRows ?? [])
+      })
+      .finally(() => {
+        if (!cancelled) setCompetitionLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activePlayerRows.length, activeTeamRows.length, activeYear, competition, competitionLoading, loadCompetitionRows, view])
 
   useEffect(() => {
     if (!rankingFinderOpen) return
@@ -816,18 +848,25 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-end gap-3 sm:grid-cols-[max-content_minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(190px,0.3fr)_minmax(180px,280px)] items-start gap-3 sm:grid-cols-[minmax(210px,0.28fr)_minmax(220px,320px)_minmax(0,1fr)]">
         <div className="col-start-1 row-start-1 flex min-w-0 items-end">
-          <CompetitionToggle value={competition} onChange={(value) => void changeCompetition(value)} canAccessCup={canAccessCup} />
+          <CompetitionToggle
+            value={competition}
+            onChange={(value) => void changeCompetition(value)}
+            canAccessCup={canAccessCup}
+            hideLabel
+            size="large"
+            className="w-full"
+          />
         </div>
         <div className="col-start-2 row-start-1 min-w-0">
           <Select
             label="View"
-            compact
+            hideLabel
             value={`${view}_${section}`}
             options={[
-              { label: "Players", options: [{ value: "players_rankings", label: "Player rankings" }, { value: "players_form", label: "Player form" }] },
-              { label: "Teams", options: [{ value: "teams_rankings", label: "Team rankings" }, { value: "teams_form", label: "Team form" }] },
+              { label: "Players", options: [{ value: "players_rankings", label: "Player stats" }, { value: "players_form", label: "Player form" }] },
+              { label: "Teams", options: [{ value: "teams_rankings", label: "Team stats" }, { value: "teams_form", label: "Team form" }] },
             ]}
             onChange={changeView}
           />
@@ -1034,7 +1073,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                         </div>
                         <div className="min-w-0">
                           <Link
-                            href={`/dashboard/players/${playerSlug(entry.name)}`}
+                            href={`/dashboard/players/${playerSlug(entry.name)}${competition === "cup" ? "?competition=cup" : ""}`}
                             className="block truncate text-[12px] font-black text-nrl-text transition-colors hover:text-nrl-accent sm:text-xs"
                             title={entry.name}
                           >

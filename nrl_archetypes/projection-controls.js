@@ -2,8 +2,6 @@
   const isCurrentSeasonWindow = /_(?:l3|l5|l10)(?:_|\.html)/i.test(window.location.pathname);
   const state = {
     activeYearIndex: 0,
-    cupLeagueFilter: "all",
-    cupPlayerLeagues: null,
     droppedDimension: null,
     originalData: null,
     playerSearch: "",
@@ -84,22 +82,6 @@
     return String(value || "").replace(/\s+\(\d{4}\)\s*$/, "").trim();
   }
 
-  function cupPlayerNameKey(value) {
-    return playerNameFromHover(value)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
-  }
-
-  function pointMatchesCupLeague(label) {
-    if (!state.cupPlayerLeagues || state.cupLeagueFilter === "all") return true;
-    return state.cupPlayerLeagues[cupPlayerNameKey(label)] === state.cupLeagueFilter;
-  }
-
-  function getLeagueKeep(source) {
-    return source.hovertext.map((label) => pointMatchesCupLeague(label));
-  }
-
   function filterValues(values, keep) {
     return values.filter((_, index) => keep[index]);
   }
@@ -111,17 +93,16 @@
     const legendTraceNames = new Set();
     return traces.map((trace, index) => {
       const source = state.originalData[index];
-      const keep = getLeagueKeep(source);
-      const hasPoints = keep.some(Boolean);
+      const hasPoints = Boolean(source.hovertext.length);
       const showlegend = Boolean(hasPoints && !legendTraceNames.has(trace.name));
       if (showlegend) legendTraceNames.add(trace.name);
 
       return {
         ...trace,
-        x: filterValues(source.x, keep),
-        y: filterValues(source.y, keep),
-        z: filterValues(source.z, keep),
-        hovertext: filterValues(source.hovertext, keep),
+        x: source.x,
+        y: source.y,
+        z: source.z,
+        hovertext: source.hovertext,
         visible: hasPoints,
         showlegend,
       };
@@ -138,7 +119,6 @@
       if (!source) return;
 
       source.hovertext.forEach((label, pointIndex) => {
-        if (!pointMatchesCupLeague(label)) return;
         const playerName = playerNameFromHover(label);
         const searchable = `${playerName} ${label}`.toLowerCase();
         if (!searchable.includes(normalizedQuery)) return;
@@ -826,23 +806,6 @@
     `;
     document.head.appendChild(style);
   }
-
-  window.setCupLeagueFilter = function (league, leagues) {
-    state.cupLeagueFilter = league || "all";
-    state.cupPlayerLeagues = leagues || null;
-    const gd = getGraph();
-    if (!gd || !window.Plotly || !ensureOriginalData(gd)) return;
-
-    const yearMenu = gd.layout && gd.layout.updatemenus && gd.layout.updatemenus[0];
-    const yearButton = yearMenu && Array.isArray(yearMenu.buttons)
-      ? yearMenu.buttons[state.activeYearIndex]
-      : null;
-    if (yearButton) {
-      applyYearFilter(state.activeYearIndex, yearButton);
-      return;
-    }
-    applyProjection();
-  };
 
   function init() {
     injectStyles();

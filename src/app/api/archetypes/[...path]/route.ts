@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { isValidArchetypesCupToken } from "@/lib/access/archetypes-cup-token";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
-import { fetchCupPlayerLeagues } from "@/lib/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -102,7 +101,7 @@ function gateCupIndexAssets(html: string): string {
     .replaceAll(/\s*<script src="cup_[^"]+"><\/script>/g, "")
     .replace(
       '<button class="mode-btn" data-competition="cup">Cup</button>',
-      '<button class="mode-btn" data-competition="cup" disabled title="Cup archetypes require Pro or Premium access">Cup</button>'
+      '<button class="mode-btn" data-competition="cup" disabled title="Cup archetypes require Pro or Premium access">Cup <span class="mode-btn-pro">Pro</span></button>'
     );
 }
 
@@ -193,6 +192,10 @@ function styleIndexHtml(
 
         .mode-btn,
         .tab-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.32rem;
             padding: 0.38rem 0.68rem;
             font-size: 0.68rem;
             font-weight: 800;
@@ -220,44 +223,6 @@ function styleIndexHtml(
             display: none;
         }
 
-        .cup-league-filter {
-            display: none;
-            height: 1.9rem;
-            min-width: 5.5rem;
-            border: 1px solid #2a3356;
-            border-radius: 999px;
-            background: #111733;
-            color: #f5f7ff;
-            padding: 0 0.5rem;
-            font: 700 0.6rem ${APP_FONT_STACK};
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-
-        .cup-league-filter.is-visible {
-            display: block;
-        }
-
-        .control-frame.has-cup-league-filter {
-            gap: 0.65rem;
-            overflow: visible;
-            border: 0;
-            border-radius: 0;
-            background: transparent;
-            padding: 0;
-        }
-
-        .control-frame.has-cup-league-filter > .mode-toggle {
-            border: 1px solid #2a3356;
-            border-radius: 999px;
-            background: rgba(17, 24, 50, 0.72);
-            padding: 0.18rem;
-        }
-
-        .control-frame.has-cup-league-filter > .control-divider {
-            display: none;
-        }
-
         .tabs {
             gap: 0.4rem;
             margin-bottom: 1rem;
@@ -275,6 +240,19 @@ function styleIndexHtml(
         .tab-btn:hover,
         .year-btn:hover {
             background-color: rgba(0, 245, 138, 0.08);
+        }
+
+        .mode-btn-pro {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid rgba(0, 245, 138, 0.6);
+            border-radius: 0.16rem;
+            color: #00f58a;
+            font-size: 0.42rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            line-height: 1;
+            padding: 0.08rem 0.16rem;
         }
 
         @media (max-width: 768px) {
@@ -443,143 +421,10 @@ function styleIndexHtml(
     </style>
     <script>
         const archetypesCupAccessQuery = ${JSON.stringify(cupAccessQuery)};
-        let cupPlayerLeagues = null;
         function withCupAccess(assetPath) {
             if (!archetypesCupAccessQuery || !assetPath.startsWith('cup_')) return assetPath;
             return assetPath + archetypesCupAccessQuery;
         }
-
-        function getCupPlayerName(label) {
-            return String(label || '')
-                .replace(/\\s+\\(\\d{4}\\)\\s*$/, '')
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, ' ')
-                .trim();
-        }
-
-        function plotValues(value) {
-            if (Array.isArray(value)) return value.slice();
-            if (ArrayBuffer.isView(value)) return Array.from(value);
-            if (value && typeof value === 'object' && typeof value.bdata === 'string') {
-                const binary = window.atob(value.bdata);
-                const bytes = new Uint8Array(binary.length);
-                for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-                const constructors = { f8: Float64Array, f4: Float32Array, i1: Int8Array, i2: Int16Array, i4: Int32Array, u1: Uint8Array, u2: Uint16Array, u4: Uint32Array };
-                const TypedArray = constructors[value.dtype];
-                return TypedArray ? Array.from(new TypedArray(bytes.buffer)) : [];
-            }
-            return [];
-        }
-
-        function applyCupLeagueFilter() {
-            const selectedLeague = document.getElementById('cupLeagueFilter')?.value || 'all';
-            if (currentCompetition !== 'cup' || !cupPlayerLeagues) return;
-
-            document.querySelectorAll('#plotContainer iframe').forEach(function (frame) {
-                if (typeof frame.contentWindow?.setCupLeagueFilter === 'function') {
-                    if (frame.__lastCupLeagueFilter === selectedLeague && frame.__lastCupLeagueSource === cupPlayerLeagues) return;
-                    frame.__lastCupLeagueFilter = selectedLeague;
-                    frame.__lastCupLeagueSource = cupPlayerLeagues;
-                    frame.contentWindow.setCupLeagueFilter(selectedLeague, cupPlayerLeagues);
-                    return;
-                }
-                if (frame.contentWindow && !frame.__cupLeagueFilterRetry) {
-                    frame.__cupLeagueFilterRetry = true;
-                    window.setTimeout(function () {
-                        frame.__cupLeagueFilterRetry = false;
-                        applyCupLeagueFilter();
-                    }, 80);
-                    return;
-                }
-
-                const graph = frame.contentDocument?.querySelector('.plotly-graph-div');
-                const plotly = frame.contentWindow?.Plotly;
-                if (!graph || !plotly || !Array.isArray(graph.data)) return;
-                if (graph.data[0]?.type !== 'scatter3d') return;
-
-                if (!frame.__cupLeagueSource) {
-                    frame.__cupLeagueSource = graph.data.map(function (trace) {
-                        return {
-                            name: trace.name,
-                            x: plotValues(trace.x),
-                            y: plotValues(trace.y),
-                            z: plotValues(trace.z),
-                            hovertext: plotValues(trace.hovertext),
-                        };
-                    });
-                }
-
-                const source = frame.__cupLeagueSource;
-                const filtered = source.map(function (trace) {
-                    const keep = trace.hovertext.map(function (label) {
-                        return selectedLeague === 'all' || cupPlayerLeagues[getCupPlayerName(label)] === selectedLeague;
-                    });
-                    return {
-                        ...trace,
-                        keep,
-                        hasPoints: keep.some(Boolean),
-                    };
-                });
-                const legendTraceIndexes = new Set();
-                filtered.forEach(function (trace, index) {
-                    if (trace.hasPoints && !Array.from(legendTraceIndexes).some(function (traceIndex) {
-                        return filtered[traceIndex].name === trace.name;
-                    })) {
-                        legendTraceIndexes.add(index);
-                    }
-                });
-                const update = { x: [], y: [], z: [], hovertext: [], visible: [], showlegend: [] };
-                const traceIndexes = source.map(function (_, index) { return index; });
-
-                filtered.forEach(function (trace, index) {
-                    update.x.push(trace.x.filter(function (_, pointIndex) { return trace.keep[pointIndex]; }));
-                    update.y.push(trace.y.filter(function (_, pointIndex) { return trace.keep[pointIndex]; }));
-                    update.z.push(trace.z.filter(function (_, pointIndex) { return trace.keep[pointIndex]; }));
-                    update.hovertext.push(trace.hovertext.filter(function (_, pointIndex) { return trace.keep[pointIndex]; }));
-                    update.visible.push(trace.hasPoints);
-                    update.showlegend.push(legendTraceIndexes.has(index));
-                });
-                plotly.restyle(graph, update, traceIndexes);
-            });
-        }
-
-        function syncCupLeagueFilter() {
-            document.getElementById('cupLeagueFilter')?.classList.toggle('is-visible', currentCompetition === 'cup');
-        }
-
-        document.addEventListener('DOMContentLoaded', function () {
-            const select = document.createElement('select');
-            select.id = 'cupLeagueFilter';
-            select.className = 'cup-league-filter';
-            select.setAttribute('aria-label', 'Cup competition');
-            select.innerHTML = '<option value="all">All Cup</option><option value="nsw">NSW Cup</option><option value="qld">QLD Cup</option>';
-            document.getElementById('windowToggle')?.insertAdjacentElement('afterend', select);
-            select.parentElement?.classList.add('has-cup-league-filter');
-            select.addEventListener('change', applyCupLeagueFilter);
-            document.getElementById('competitionToggle')?.addEventListener('click', function () {
-                window.setTimeout(function () {
-                    syncCupLeagueFilter();
-                    applyCupLeagueFilter();
-                }, 0);
-            });
-            document.addEventListener('load', function (event) {
-                if (event.target instanceof HTMLIFrameElement && event.target.closest('#plotContainer')) {
-                    window.setTimeout(applyCupLeagueFilter, 0);
-                }
-            }, true);
-            fetch('cup-player-leagues.json' + archetypesCupAccessQuery)
-                .then(function (response) { return response.ok ? response.json() : null; })
-                .then(function (leagues) {
-                    cupPlayerLeagues = leagues;
-                    applyCupLeagueFilter();
-                })
-                .catch(function () { cupPlayerLeagues = null; });
-            window.addEventListener('message', function (event) {
-                if (event.origin !== window.location.origin || event.data?.type !== 'archetypes-plot-updated') return;
-                window.setTimeout(applyCupLeagueFilter, 0);
-            });
-            syncCupLeagueFilter();
-        });
 
         function syncArchetypesBackground() {
             try {
@@ -737,22 +582,6 @@ export async function GET(request: Request, context: ArchetypesRouteContext) {
   const { userId } = await auth();
   const token = new URL(request.url).searchParams.get("cupAccess");
   const canAccessCup = (await getServerProPlotAccess(userId)) || isValidArchetypesCupToken(token);
-  const requestedPath = pathParts?.join("/") ?? "index.html";
-
-  if (requestedPath === "cup-player-leagues.json") {
-    if (!canAccessCup) {
-      return NextResponse.json({ error: "Cup archetypes require Pro or Premium access" }, { status: 403 });
-    }
-
-    try {
-      return NextResponse.json(await fetchCupPlayerLeagues(), {
-        headers: { "Cache-Control": "private, max-age=300" },
-      });
-    } catch (error) {
-      console.error("Failed to fetch Cup player leagues:", error);
-      return NextResponse.json({ error: "Failed to fetch Cup player leagues" }, { status: 500 });
-    }
-  }
 
   const filePath = resolveArchetypePath(pathParts);
 

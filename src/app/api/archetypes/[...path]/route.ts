@@ -444,7 +444,6 @@ function styleIndexHtml(
     <script>
         const archetypesCupAccessQuery = ${JSON.stringify(cupAccessQuery)};
         let cupPlayerLeagues = null;
-        let lastRankingsCupLeague = null;
         function withCupAccess(assetPath) {
             if (!archetypesCupAccessQuery || !assetPath.startsWith('cup_')) return assetPath;
             return assetPath + archetypesCupAccessQuery;
@@ -542,12 +541,6 @@ function styleIndexHtml(
                 });
                 plotly.restyle(graph, update, traceIndexes);
             });
-
-            if (rankingsOpen && currentPosition && lastRankingsCupLeague !== selectedLeague) {
-                lastRankingsCupLeague = selectedLeague;
-                rankingsRequestId++;
-                renderArchetypes(currentPosition);
-            }
         }
 
         function syncCupLeagueFilter() {

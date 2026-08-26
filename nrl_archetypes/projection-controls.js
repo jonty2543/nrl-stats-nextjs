@@ -8,6 +8,12 @@
   };
   const PLAYER_SEARCH_TRACE_NAME = "Player search highlight";
 
+  function notifyParentPlotUpdated() {
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "archetypes-plot-updated" }, window.location.origin);
+    }
+  }
+
   function getGraph() {
     return document.querySelector(".plotly-graph-div");
   }
@@ -198,7 +204,7 @@
       responsive: true,
       scrollZoom: true,
       displaylogo: false,
-    });
+    }).then(notifyParentPlotUpdated);
   }
 
   function getProjectionTrace(trace, index, keptDimensions) {
@@ -309,6 +315,7 @@
       applyPlayerSearchHighlight();
       if (typeof window.applyButtonStyles === "function") window.applyButtonStyles();
       if (typeof window.adjustPlotlyForMobile === "function") window.adjustPlotlyForMobile();
+      notifyParentPlotUpdated();
     });
   }
 
@@ -367,6 +374,7 @@
     Plotly.update(gd, args[0] || {}, args[1] || {}).then(() => {
       if (state.droppedDimension) applyProjection();
       applyPlayerSearchHighlight();
+      notifyParentPlotUpdated();
     });
   }
 

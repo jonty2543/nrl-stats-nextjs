@@ -479,6 +479,7 @@ function styleIndexHtml(
                 const graph = frame.contentDocument?.querySelector('.plotly-graph-div');
                 const plotly = frame.contentWindow?.Plotly;
                 if (!graph || !plotly || !Array.isArray(graph.data)) return;
+                if (graph.data[0]?.type !== 'scatter3d') return;
 
                 if (!frame.__cupLeagueSource) {
                     frame.__cupLeagueSource = graph.data.map(function (trace) {
@@ -557,6 +558,10 @@ function styleIndexHtml(
                     applyCupLeagueFilter();
                 })
                 .catch(function () { cupPlayerLeagues = null; });
+            window.addEventListener('message', function (event) {
+                if (event.origin !== window.location.origin || event.data?.type !== 'archetypes-plot-updated') return;
+                window.setTimeout(applyCupLeagueFilter, 0);
+            });
             syncCupLeagueFilter();
         });
 

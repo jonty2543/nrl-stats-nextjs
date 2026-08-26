@@ -223,12 +223,12 @@ function styleIndexHtml(
         .cup-league-filter {
             display: none;
             height: 1.9rem;
-            min-width: 6.3rem;
+            min-width: 5.5rem;
             border: 1px solid #2a3356;
             border-radius: 999px;
             background: #111733;
             color: #f5f7ff;
-            padding: 0 0.65rem;
+            padding: 0 0.5rem;
             font: 700 0.6rem ${APP_FONT_STACK};
             letter-spacing: 0.08em;
             text-transform: uppercase;

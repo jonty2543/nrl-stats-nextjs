@@ -476,6 +476,22 @@ function styleIndexHtml(
             if (currentCompetition !== 'cup' || !cupPlayerLeagues) return;
 
             document.querySelectorAll('#plotContainer iframe').forEach(function (frame) {
+                if (typeof frame.contentWindow?.setCupLeagueFilter === 'function') {
+                    if (frame.__lastCupLeagueFilter === selectedLeague && frame.__lastCupLeagueSource === cupPlayerLeagues) return;
+                    frame.__lastCupLeagueFilter = selectedLeague;
+                    frame.__lastCupLeagueSource = cupPlayerLeagues;
+                    frame.contentWindow.setCupLeagueFilter(selectedLeague, cupPlayerLeagues);
+                    return;
+                }
+                if (frame.contentWindow && !frame.__cupLeagueFilterRetry) {
+                    frame.__cupLeagueFilterRetry = true;
+                    window.setTimeout(function () {
+                        frame.__cupLeagueFilterRetry = false;
+                        applyCupLeagueFilter();
+                    }, 80);
+                    return;
+                }
+
                 const graph = frame.contentDocument?.querySelector('.plotly-graph-div');
                 const plotly = frame.contentWindow?.Plotly;
                 if (!graph || !plotly || !Array.isArray(graph.data)) return;

@@ -2,6 +2,8 @@
   const isCurrentSeasonWindow = /_(?:l3|l5|l10)(?:_|\.html)/i.test(window.location.pathname);
   const state = {
     activeYearIndex: 0,
+    cupLeagueFilter: "all",
+    cupPlayerLeagues: null,
     droppedDimension: null,
     originalData: null,
     playerSearch: "",
@@ -82,8 +84,48 @@
     return String(value || "").replace(/\s+\(\d{4}\)\s*$/, "").trim();
   }
 
+  function cupPlayerNameKey(value) {
+    return playerNameFromHover(value)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function pointMatchesCupLeague(label) {
+    if (!state.cupPlayerLeagues || state.cupLeagueFilter === "all") return true;
+    return state.cupPlayerLeagues[cupPlayerNameKey(label)] === state.cupLeagueFilter;
+  }
+
+  function getLeagueKeep(source) {
+    return source.hovertext.map((label) => pointMatchesCupLeague(label));
+  }
+
+  function filterValues(values, keep) {
+    return values.filter((_, index) => keep[index]);
+  }
+
   function getBaseTraces(gd) {
-    return state.originalData ? gd.data.slice(0, state.originalData.length) : gd.data;
+    if (!state.originalData) return gd.data;
+
+    const traces = gd.data.slice(0, state.originalData.length);
+    const legendTraceNames = new Set();
+    return traces.map((trace, index) => {
+      const source = state.originalData[index];
+      const keep = getLeagueKeep(source);
+      const hasPoints = keep.some(Boolean);
+      const showlegend = Boolean(hasPoints && !legendTraceNames.has(trace.name));
+      if (showlegend) legendTraceNames.add(trace.name);
+
+      return {
+        ...trace,
+        x: filterValues(source.x, keep),
+        y: filterValues(source.y, keep),
+        z: filterValues(source.z, keep),
+        hovertext: filterValues(source.hovertext, keep),
+        visible: hasPoints,
+        showlegend,
+      };
+    });
   }
 
   function getPlayerSearchMatches(gd, query) {
@@ -96,6 +138,7 @@
       if (!source) return;
 
       source.hovertext.forEach((label, pointIndex) => {
+        if (!pointMatchesCupLeague(label)) return;
         const playerName = playerNameFromHover(label);
         const searchable = `${playerName} ${label}`.toLowerCase();
         if (!searchable.includes(normalizedQuery)) return;
@@ -210,13 +253,15 @@
   function getProjectionTrace(trace, index, keptDimensions) {
     const nextTrace = { ...trace };
     const source = state.originalData[index];
+    const keep = getLeagueKeep(source);
 
     delete nextTrace.scene;
     delete nextTrace.z;
     nextTrace.type = "scatter";
     nextTrace.mode = trace.mode || "markers";
-    nextTrace.x = source[keptDimensions[0].axis];
-    nextTrace.y = source[keptDimensions[1].axis];
+    nextTrace.x = filterValues(source[keptDimensions[0].axis], keep);
+    nextTrace.y = filterValues(source[keptDimensions[1].axis], keep);
+    nextTrace.hovertext = filterValues(source.hovertext, keep);
     nextTrace.marker = { ...(trace.marker || {}) };
 
     return nextTrace;
@@ -225,14 +270,16 @@
   function getRestoredTrace(trace, index) {
     const nextTrace = { ...trace };
     const source = state.originalData[index];
+    const keep = getLeagueKeep(source);
 
     delete nextTrace.xaxis;
     delete nextTrace.yaxis;
     nextTrace.type = "scatter3d";
     nextTrace.mode = trace.mode || "markers";
-    nextTrace.x = source.x;
-    nextTrace.y = source.y;
-    nextTrace.z = source.z;
+    nextTrace.x = filterValues(source.x, keep);
+    nextTrace.y = filterValues(source.y, keep);
+    nextTrace.z = filterValues(source.z, keep);
+    nextTrace.hovertext = filterValues(source.hovertext, keep);
     nextTrace.marker = { ...(trace.marker || {}) };
 
     return nextTrace;
@@ -371,8 +418,23 @@
     updateYearButtons();
 
     const args = yearButton.args || [];
+    if (state.originalData) {
+      const data = getBaseTraces(gd).map((trace) => ({ ...trace }));
+      Plotly.react(gd, data, gd.layout, {
+        responsive: true,
+        scrollZoom: true,
+        displaylogo: false,
+      }).then(() => {
+        Plotly.update(gd, args[0] || {}, args[1] || {}).then(() => {
+          if (state.droppedDimension) applyProjection();
+          applyPlayerSearchHighlight();
+          notifyParentPlotUpdated();
+        });
+      });
+      return;
+    }
+
     Plotly.update(gd, args[0] || {}, args[1] || {}).then(() => {
-      if (state.droppedDimension) applyProjection();
       applyPlayerSearchHighlight();
       notifyParentPlotUpdated();
     });
@@ -764,6 +826,23 @@
     `;
     document.head.appendChild(style);
   }
+
+  window.setCupLeagueFilter = function (league, leagues) {
+    state.cupLeagueFilter = league || "all";
+    state.cupPlayerLeagues = leagues || null;
+    const gd = getGraph();
+    if (!gd || !window.Plotly || !ensureOriginalData(gd)) return;
+
+    const yearMenu = gd.layout && gd.layout.updatemenus && gd.layout.updatemenus[0];
+    const yearButton = yearMenu && Array.isArray(yearMenu.buttons)
+      ? yearMenu.buttons[state.activeYearIndex]
+      : null;
+    if (yearButton) {
+      applyYearFilter(state.activeYearIndex, yearButton);
+      return;
+    }
+    applyProjection();
+  };
 
   function init() {
     injectStyles();

@@ -848,7 +848,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[minmax(190px,0.3fr)_minmax(180px,280px)] items-start gap-3 sm:grid-cols-[minmax(210px,0.28fr)_minmax(220px,320px)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-3 px-4 sm:grid-cols-[minmax(210px,0.28fr)_minmax(220px,320px)_minmax(0,1fr)] sm:px-0">
         <div className="col-start-1 row-start-1 flex min-w-0 items-end">
           <CompetitionToggle
             value={competition}
@@ -978,7 +978,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
           <div className="p-8 text-center text-xs font-bold text-nrl-muted">No {view} match the current {section} filters.</div>
         ) : view === "teams" ? (
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto px-3 sm:px-0">
             <table className="w-full min-w-[370px] border-collapse text-left">
               <thead className="sticky top-0 z-10 bg-[#111733]">
                 <tr className="border-b border-nrl-border text-[7px] font-black uppercase tracking-[0.1em] text-nrl-muted sm:text-[9px] sm:tracking-[0.14em]">
@@ -1035,7 +1035,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             </table>
           </div>
       ) : (
-          <div className="overflow-x-hidden">
+          <div className="overflow-x-hidden px-3 sm:px-0">
             <table className="w-full min-w-0 table-fixed border-collapse text-left sm:min-w-[370px] sm:table-auto">
               <thead className="sticky top-0 z-10 bg-[#111733]">
                 <tr className="border-b border-nrl-border text-[7px] font-black uppercase tracking-[0.1em] text-nrl-muted sm:text-[9px] sm:tracking-[0.14em]">

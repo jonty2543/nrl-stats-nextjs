@@ -86,6 +86,16 @@
     return values.filter((_, index) => keep[index]);
   }
 
+  function getLeagueKeep(source) {
+    const pointCount = Math.max(
+      source.x.length,
+      source.y.length,
+      source.z.length,
+      source.hovertext.length
+    );
+    return Array.from({ length: pointCount }, () => true);
+  }
+
   function getBaseTraces(gd) {
     if (!state.originalData) return gd.data;
 

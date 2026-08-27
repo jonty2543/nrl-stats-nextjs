@@ -228,7 +228,7 @@
     const matches = query ? getPlayerSearchMatches(gd, query) : [];
     updatePlayerSearchStatus(matches.length);
 
-    const data = getBaseTraces(gd).map((trace) => ({ ...trace }));
+    const data = getDisplayedTraces(gd);
     if (query && matches.length > 0) {
       data.push(buildPlayerSearchTrace(matches));
     }
@@ -275,6 +275,16 @@
     return nextTrace;
   }
 
+  function getDisplayedTraces(gd) {
+    const dimensions = getDimensions(gd);
+    const keptDimensions = dimensions.filter((dimension) => dimension.key !== state.droppedDimension);
+    return getBaseTraces(gd).map((trace, index) => (
+      state.droppedDimension
+        ? getProjectionTrace(trace, index, keptDimensions)
+        : getRestoredTrace(trace, index)
+    ));
+  }
+
   function getProjectedAxis(label, titleStandoff) {
     return {
       title: { text: label, font: { color: "#f8fafc", size: 15 }, standoff: titleStandoff },
@@ -300,11 +310,7 @@
 
     const dimensions = getDimensions(gd);
     const keptDimensions = dimensions.filter((dimension) => dimension.key !== state.droppedDimension);
-    const data = getBaseTraces(gd).map((trace, index) => (
-      state.droppedDimension
-        ? getProjectionTrace(trace, index, keptDimensions)
-        : getRestoredTrace(trace, index)
-    ));
+    const data = getDisplayedTraces(gd);
     const baseMargin = gd.layout.margin || {};
     const layout = {
       ...gd.layout,

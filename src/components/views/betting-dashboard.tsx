@@ -4762,16 +4762,22 @@ function BestBetsHero({
       : modelBets.filter((bet) => bet.market === selectedModelMarket),
     [modelBets, selectedModelMarket]
   );
+  const freeBetSelectionBets = useMemo(
+    () => selectedModelMarket === "All"
+      ? selectedModelBets.filter((bet) => bet.market !== "Total")
+      : selectedModelBets,
+    [selectedModelBets, selectedModelMarket]
+  );
   const weeklyFreeBetCandidatesList = useMemo(
-    () => weeklyFreeBetCandidates(selectedModelBets, tryscorerKickoffsByMatch, nowMs),
-    [nowMs, selectedModelBets, tryscorerKickoffsByMatch]
+    () => weeklyFreeBetCandidates(freeBetSelectionBets, tryscorerKickoffsByMatch, nowMs),
+    [freeBetSelectionBets, nowMs, tryscorerKickoffsByMatch]
   );
   const weeklyFreeBet = useMemo(() => {
     if (weeklyFreeBetId == null) return null;
-    const bet = selectedModelBets.find((candidate) => candidate.id === weeklyFreeBetId) ?? null;
+    const bet = freeBetSelectionBets.find((candidate) => candidate.id === weeklyFreeBetId) ?? null;
     if (!bet || !isWeeklyFreeBetEligible(bet, tryscorerKickoffsByMatch, nowMs)) return null;
     return bet;
-  }, [nowMs, selectedModelBets, tryscorerKickoffsByMatch, weeklyFreeBetId]);
+  }, [freeBetSelectionBets, nowMs, tryscorerKickoffsByMatch, weeklyFreeBetId]);
   const activeSelectedBestBetId = selectedBestBetIds[category];
   const activeItems = useMemo(() => {
     if (!isArbitrage) {

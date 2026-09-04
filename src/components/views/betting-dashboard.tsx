@@ -107,6 +107,11 @@ interface TryscorerResolvedProfile {
   team: string | null;
 }
 
+interface BestBetBookiePrice {
+  bookie: BettingBookie;
+  price: number;
+}
+
 interface EventGroup {
   key: string;
   date: string;
@@ -127,6 +132,7 @@ interface BestBetCandidate {
   bestBookie: BettingBookie;
   bestBookies: BettingBookie[];
   bestBookieCount: number;
+  otherBookiePrices: BestBetBookiePrice[];
   odds: number;
   modelProbability: number;
   impliedProbability: number;
@@ -1134,7 +1140,7 @@ function BetRatingExplainerDialog({ open, onClose }: { open: boolean; onClose: (
             <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
               <div className="font-bold text-emerald-300">1. Market efficiency</div>
               <p className="mt-1">If bookmaker odds are dispersed—meaning there is disagreement between bookmakers—the bet rating is increased.</p>
-              <p className="mt-2">For H2H, we calculate market percentage by summing the implied probability of each outcome. If bookmakers disagree heavily and this falls below 100%, it is a positive expected-value market and the bet rating will be high.</p>
+              <p className="mt-2">For H2H and margin markets, we calculate market percentage by summing the implied probability of each outcome. If bookmakers disagree heavily and this falls below 100%, it is a positive expected-value market and the bet rating will be high.</p>
             </div>
             <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
               <div className="font-bold text-emerald-300">2. Time to event</div>
@@ -1840,7 +1846,7 @@ function buildEventGroups(
       };
     });
 
-    const inverseSum = (group.market === "H2H" ? outcomes : [])
+    const inverseSum = (group.market === "H2H" || group.market === "Margin" ? outcomes : [])
       .map((row) => row.bestPriceComputed)
       .filter((value): value is number => value != null)
       .reduce((sum, price) => sum + 1 / price, 0);
@@ -2047,6 +2053,11 @@ function buildBestBets({
           ? [row.bestOfferComputed.bookie]
           : [];
       const bestBookie = bestBookies[0] ?? null;
+      const otherBookiePrices = BETTING_BOOKIE_COLUMNS
+        .map((bookie) => row.bookieOffers[bookie])
+        .filter((offer): offer is BookieOffer => offer != null && !bestBookies.includes(offer.bookie))
+        .sort((a, b) => b.price - a.price)
+        .map(({ bookie, price }) => ({ bookie, price }));
       if (
         odds == null ||
         modelProbability == null ||
@@ -2100,6 +2111,7 @@ function buildBestBets({
         bestBookie,
         bestBookies,
         bestBookieCount: bestBookies.length,
+        otherBookiePrices,
         odds,
         modelProbability,
         impliedProbability: implied,
@@ -2284,6 +2296,21 @@ function BookieLogo({
         className={compact ? "h-4 w-auto object-contain" : "h-5 w-auto object-contain"}
       />
     </span>
+  );
+}
+
+function OtherBookiePrices({ prices }: { prices: BestBetBookiePrice[] }) {
+  return (
+    <div className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-nrl-muted">
+      {prices.length > 0 ? prices.slice(0, 4).map(({ bookie, price }) => (
+        <span key={`${bookie}-${price}`} className="inline-flex items-center gap-1 whitespace-nowrap">
+          <BookieLogo bookie={bookie} compact />
+          <span className="tabular-nums">{formatPrice(price)}</span>
+        </span>
+      )) : (
+        <span>None available</span>
+      )}
+    </div>
   );
 }
 
@@ -4769,22 +4796,37 @@ function BestBetsHero({
     [selectedModelBets, selectedModelMarket]
   );
   const weeklyFreeBetCandidatesList = useMemo(
-    () => weeklyFreeBetCandidates(freeBetSelectionBets, tryscorerKickoffsByMatch, nowMs),
-    [freeBetSelectionBets, nowMs, tryscorerKickoffsByMatch]
+    () => canAccessPremium ? [] : weeklyFreeBetCandidates(freeBetSelectionBets, tryscorerKickoffsByMatch, nowMs),
+    [canAccessPremium, freeBetSelectionBets, nowMs, tryscorerKickoffsByMatch]
   );
   const weeklyFreeBet = useMemo(() => {
+    if (canAccessPremium) return null;
     if (weeklyFreeBetId == null) return null;
     const bet = freeBetSelectionBets.find((candidate) => candidate.id === weeklyFreeBetId) ?? null;
     if (!bet || !isWeeklyFreeBetEligible(bet, tryscorerKickoffsByMatch, nowMs)) return null;
     return bet;
-  }, [freeBetSelectionBets, nowMs, tryscorerKickoffsByMatch, weeklyFreeBetId]);
+  }, [canAccessPremium, freeBetSelectionBets, nowMs, tryscorerKickoffsByMatch, weeklyFreeBetId]);
   const activeSelectedBestBetId = selectedBestBetIds[category];
   const activeItems = useMemo(() => {
     if (!isArbitrage) {
-      if (!weeklyFreeBet) return selectedModelBets;
+      const sortedItems = weeklyFreeBet
+        ? [
+            weeklyFreeBet,
+            ...selectedModelBets.filter((bet) => bet.id !== weeklyFreeBet.id),
+          ]
+        : selectedModelBets;
+      if (!canAccessPremium || !activeSelectedBestBetId) return sortedItems;
+
+      const selectedIndex = sortedItems.findIndex((item) => item.id === activeSelectedBestBetId);
+      if (selectedIndex <= 0) return sortedItems;
+
+      const selectedItem = sortedItems[selectedIndex];
+      if (!selectedItem) return sortedItems;
+
       return [
-        weeklyFreeBet,
-        ...selectedModelBets.filter((bet) => bet.id !== weeklyFreeBet.id),
+        selectedItem,
+        ...sortedItems.slice(0, selectedIndex),
+        ...sortedItems.slice(selectedIndex + 1),
       ];
     }
 
@@ -4802,8 +4844,8 @@ function BestBetsHero({
       ...sortedItems.slice(0, selectedIndex),
       ...sortedItems.slice(selectedIndex + 1),
     ];
-  }, [activeSelectedBestBetId, isArbitrage, ratedArbitrageBets, selectedModelBets, weeklyFreeBet]);
-  const hasFeaturedItem = isArbitrage || weeklyFreeBet != null;
+  }, [activeSelectedBestBetId, canAccessPremium, isArbitrage, ratedArbitrageBets, selectedModelBets, weeklyFreeBet]);
+  const hasFeaturedItem = isArbitrage || weeklyFreeBet != null || (!isArbitrage && canAccessPremium && activeItems.length > 0);
   const featuredItem = hasFeaturedItem ? activeItems[0] ?? null : null;
   const queueItems = hasFeaturedItem ? activeItems.slice(1) : activeItems;
   const activeTheme = isArbitrage
@@ -4815,7 +4857,7 @@ function BestBetsHero({
         metric: "text-violet-300 drop-shadow-[0_0_10px_rgba(139,92,246,0.24)]",
       }
     : {
-        label: "Free Bet",
+        label: canAccessPremium ? "Best Bet" : "Free Bet",
         pill: "border-nrl-accent/45 bg-nrl-accent/12 text-nrl-accent",
         activeBorder: "border-nrl-accent/45",
         activeShadow: "shadow-[0_14px_30px_rgba(0,245,138,0.08)]",
@@ -4838,7 +4880,7 @@ function BestBetsHero({
   }, [isArbitrage, modelBetCountsByMarket, orderedMarkets, selectedModelMarket]);
 
   useEffect(() => {
-    if (isArbitrage) return;
+    if (isArbitrage || canAccessPremium) return;
     let cancelled = false;
     const key = weeklyFreeBetKey(nowMs, selectedModelMarket);
     const storedValue = window.localStorage.getItem(key);
@@ -4863,7 +4905,7 @@ function BestBetsHero({
     return () => {
       cancelled = true;
     };
-  }, [isArbitrage, nowMs, selectedModelMarket, weeklyFreeBetCandidatesList]);
+  }, [canAccessPremium, isArbitrage, nowMs, selectedModelMarket, weeklyFreeBetCandidatesList]);
 
   const handleCategoryChange = (nextCategory: "model" | "arbitrage") => {
     setCategory(nextCategory);
@@ -4994,7 +5036,7 @@ function BestBetsHero({
           {!isArbitrage ? (
             <div className="flex items-center justify-between gap-3 px-1 py-1.5">
               <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-text">
-                Free Bet
+                {canAccessPremium ? "Best Bet" : "Free Bet"}
               </div>
               <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
                 {formatBestBetMarketLabel((featuredItem as BestBetCandidate).market)}
@@ -5158,12 +5200,7 @@ function BestBetsHero({
                       </div>
                     </div>
                     <div>
-                      <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
-                      <div className="mt-0.5 font-semibold text-nrl-text">
-                        <span className="text-white">{formatPct((featuredItem as BestBetCandidate).modelProbability * 100)}</span>
-                        <span className="mx-1.5 text-nrl-muted">vs</span>
-                        <span>{formatPct((featuredItem as BestBetCandidate).impliedProbability * 100)}</span>
-                      </div>
+                      <OtherBookiePrices prices={(featuredItem as BestBetCandidate).otherBookiePrices} />
                     </div>
                   </div>
                   {canAccessPremium ? (
@@ -5357,16 +5394,11 @@ function BestBetsHero({
                             </div>
                           </div>
                           <div>
-                            <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-nrl-muted">Model / implied</div>
-                            <div className="mt-0.5 font-semibold text-nrl-text">
+                            <div className="mt-0.5">
                               {isLocked ? (
                                 <span className="text-nrl-muted">Hidden</span>
                               ) : (
-                                <>
-                                  <span className="text-white">{formatPct((item as BestBetCandidate).modelProbability * 100)}</span>
-                                  <span className="mx-1.5 text-nrl-muted">vs</span>
-                                  <span>{formatPct((item as BestBetCandidate).impliedProbability * 100)}</span>
-                                </>
+                                <OtherBookiePrices prices={(item as BestBetCandidate).otherBookiePrices} />
                               )}
                             </div>
                           </div>

@@ -114,6 +114,13 @@
             display: none;
         }
 
+        .control-stack {
+            display: flex;
+            flex: 0 0 auto;
+            flex-wrap: nowrap;
+            gap: 0.6rem;
+        }
+
         .controls-row .control-frame,
         .controls-row .tabs {
             flex: 0 0 auto;
@@ -152,6 +159,10 @@
         .control-frame .mode-btn {
             border-color: transparent;
             white-space: nowrap;
+        }
+
+        #decadeToggle .mode-btn {
+            text-transform: none;
         }
 
         .control-divider {
@@ -734,22 +745,34 @@
         </div>
 
         <div class="controls-row">
-            <div class="control-frame">
-                <div class="mode-toggle" id="competitionToggle" aria-label="Competition">
-                    <button class="mode-btn active" data-competition="nrl">NRL</button>
-                    <button class="mode-btn" data-competition="cup">Cup</button>
+            <div class="control-stack">
+                <div class="control-frame">
+                    <div class="mode-toggle" id="competitionToggle" aria-label="Competition">
+                        <button class="mode-btn active" data-competition="nrl">NRL</button>
+                        <button class="mode-btn" data-competition="cup">Cup</button>
+                    </div>
                 </div>
-                <span class="control-divider" aria-hidden="true"></span>
-                <div class="mode-toggle" id="modeToggle">
-                    <button class="mode-btn active" data-mode="production">Production</button>
-                    <button class="mode-btn" data-mode="teamShare">Team Share</button>
+                <div class="control-frame mode-control-frame" id="modeControlFrame">
+                    <div class="mode-toggle" id="modeToggle">
+                        <button class="mode-btn active" data-mode="production">Production</button>
+                        <button class="mode-btn" data-mode="teamShare">Team Share</button>
+                    </div>
                 </div>
-                <span class="control-divider" aria-hidden="true"></span>
-                <div class="mode-toggle" id="windowToggle" aria-label="Qualifying game window">
-                    <button class="mode-btn active" data-window="all">All</button>
-                    <button class="mode-btn" data-window="l3">L3</button>
-                    <button class="mode-btn" data-window="l5">L5</button>
-                    <button class="mode-btn" data-window="l10">L10</button>
+                <div class="control-frame">
+                    <div class="mode-toggle" id="windowToggle" aria-label="Qualifying game window">
+                        <button class="mode-btn active" data-window="all">All</button>
+                        <button class="mode-btn" data-window="l3">L3</button>
+                        <button class="mode-btn" data-window="l5">L5</button>
+                        <button class="mode-btn" data-window="l10">L10</button>
+                    </div>
+                </div>
+                <div class="control-frame">
+                    <div class="mode-toggle" id="decadeToggle" aria-label="Archetype era">
+                        <button class="mode-btn active" data-period="2020s">20's</button>
+                        <button class="mode-btn" data-period="2010s">10's</button>
+                        <button class="mode-btn" data-period="2000s">00's</button>
+                        <button class="mode-btn" data-period="All">All</button>
+                    </div>
                 </div>
             </div>
 
@@ -831,6 +854,7 @@
         const competitionToggle = document.getElementById('competitionToggle');
         const modeToggle = document.getElementById('modeToggle');
         const windowToggle = document.getElementById('windowToggle');
+        const decadeToggle = document.getElementById('decadeToggle');
         const rankingsCard = document.getElementById('rankingsCard');
         const rankingsHeader = document.getElementById('rankingsHeader');
         const rankingsViewToggle = document.getElementById('rankingsViewToggle');
@@ -841,7 +865,7 @@
 
         // State
         let currentPosition = null;
-        let currentYear = 'All';
+        let currentYear = '2020s';
         let currentCompetition = 'nrl';
         let currentMode = 'production';
         let currentWindow = 'all';
@@ -852,7 +876,32 @@
         let rankingsRequestId = 0;
         let plotRequestId = 0;
         const rankingsCache = {};
-        const rankingYearOptions = ['All', '2023', '2024', '2025', '2026'];
+        const latestRankingYear = Math.max(2026, new Date().getFullYear());
+        const allRankingYears = Array.from({ length: latestRankingYear - 1999 }, (_, index) => String(2000 + index));
+
+        function getPeriodYears(period) {
+            if (period === 'All') return allRankingYears;
+            const decadeStart = Number.parseInt(period, 10);
+            if (!Number.isFinite(decadeStart)) return allRankingYears;
+            return allRankingYears.filter(year => {
+                const numericYear = Number.parseInt(year, 10);
+                return numericYear >= decadeStart && numericYear <= decadeStart + 9;
+            });
+        }
+
+        function getRankingYearOptions() {
+            if (currentWindow !== 'all') return ['2026'];
+            return ['All', ...getPeriodYears(currentYear)];
+        }
+
+        function updateRankingsYearOptions() {
+            const options = getRankingYearOptions();
+            if (!options.includes(rankingsYear)) rankingsYear = 'All';
+            rankingsYearSelect.innerHTML = options
+                .map(year => `<option value="${year}">${year}</option>`)
+                .join('');
+            rankingsYearSelect.value = rankingsYear;
+        }
 
         function getCompetitionDataSource() {
             if (currentCompetition === 'cup') {
@@ -889,6 +938,11 @@
             return Boolean(data && data[currentYear] && Object.keys(data[currentYear]).length);
         }
 
+        function getAvailablePeriods() {
+            const data = getCompetitionDataSource().production || {};
+            return Object.keys(data).filter(period => data[period] && Object.keys(data[period]).length);
+        }
+
         function getActiveClusterData() {
             const source = getCompetitionDataSource();
             if (currentMode === 'teamShare') {
@@ -903,6 +957,10 @@
             return source.production;
         }
 
+        function getActivePeriodKey() {
+            return currentWindow === 'all' ? currentYear : '2026';
+        }
+
         function getPlotSuffix() {
             const modeSuffix = currentMode === 'teamShare' ? '_team_share' : '';
             const windowSuffix = currentWindow === 'all' ? '' : `_${currentWindow}`;
@@ -911,6 +969,10 @@
 
         function getPlotPrefix() {
             return getCompetitionDataSource().prefix;
+        }
+
+        function getPlotPeriodSuffix() {
+            return String(getActivePeriodKey()).toLowerCase();
         }
 
         // Initialize
@@ -939,6 +1001,10 @@
 
             windowToggle.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.onclick = () => selectWindow(btn.dataset.window);
+            });
+
+            decadeToggle.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.onclick = () => selectPeriod(btn.dataset.period);
             });
 
             rankingsHeader.onclick = () => {
@@ -976,8 +1042,10 @@
             };
 
             updateModeAvailability();
+            updatePeriodAvailability();
+            updateRankingsYearOptions();
 
-            const positions = rebuildPositionTabs(getActiveClusterData()[currentYear] || {});
+            const positions = rebuildPositionTabs(getActiveClusterData()[getActivePeriodKey()] || {});
 
             // Select first position by default
             if (positions.length > 0) {
@@ -996,6 +1064,7 @@
         }
 
         function updateRankingsControls() {
+            updateRankingsYearOptions();
             rankingsViewToggle.querySelectorAll('.rankings-toggle-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.rankingsView === rankingsView);
             });
@@ -1004,6 +1073,20 @@
             });
             rankingsYearFilter.hidden = rankingsView !== 'rankings';
             rankingsFormFilter.hidden = rankingsView !== 'form';
+        }
+
+        function updatePeriodAvailability() {
+            const availablePeriods = getAvailablePeriods();
+            if (!availablePeriods.includes(currentYear)) {
+                currentYear = availablePeriods.includes('All') ? 'All' : availablePeriods[0] || 'All';
+            }
+
+            decadeToggle.querySelectorAll('.mode-btn').forEach(btn => {
+                const unavailable = !availablePeriods.includes(btn.dataset.period);
+                btn.disabled = unavailable;
+                btn.title = unavailable ? 'Archetype data is unavailable for this era' : '';
+                btn.classList.toggle('active', btn.dataset.period === currentYear);
+            });
         }
 
         function rebuildPositionTabs(activeYearData) {
@@ -1021,7 +1104,8 @@
 
         function updateModeAvailability() {
             const source = getCompetitionDataSource();
-            const hasTeamShareData = Boolean(source.teamShare && source.teamShare[currentYear]);
+            const activePeriodKey = getActivePeriodKey();
+            const hasTeamShareData = Boolean(source.teamShare && source.teamShare[activePeriodKey]);
             modeToggle.querySelectorAll('.mode-btn').forEach(btn => {
                 const unavailable = btn.dataset.mode === 'teamShare' && !hasTeamShareData;
                 btn.disabled = unavailable;
@@ -1037,6 +1121,8 @@
             currentCompetition = competition;
             currentMode = 'production';
             currentWindow = 'all';
+            updatePeriodAvailability();
+            updateRankingsYearOptions();
             rankingsRequestId++;
             plotRequestId++;
 
@@ -1048,7 +1134,30 @@
             });
             updateModeAvailability();
 
-            const activeYearData = getActiveClusterData()[currentYear] || {};
+            const activeYearData = getActiveClusterData()[getActivePeriodKey()] || {};
+            const selectedPosition = activeYearData[currentPosition] ? currentPosition : Object.keys(activeYearData)[0];
+            currentPosition = null;
+            if (selectedPosition) {
+                rebuildPositionTabs(activeYearData);
+                selectPosition(selectedPosition);
+            } else {
+                renderNoCompetitionData();
+            }
+        }
+
+        function selectPeriod(period) {
+            if (currentYear === period) return;
+            if (!getAvailablePeriods().includes(period)) return;
+            currentYear = period;
+            rankingsYear = 'All';
+            rankingsRequestId++;
+            plotRequestId++;
+
+            updatePeriodAvailability();
+            updateRankingsYearOptions();
+            updateModeAvailability();
+
+            const activeYearData = getActiveClusterData()[getActivePeriodKey()] || {};
             const selectedPosition = activeYearData[currentPosition] ? currentPosition : Object.keys(activeYearData)[0];
             currentPosition = null;
             if (selectedPosition) {
@@ -1070,7 +1179,7 @@
                 btn.classList.toggle('active', btn.dataset.mode === mode);
             });
 
-            const activeYearData = getActiveClusterData()[currentYear] || {};
+            const activeYearData = getActiveClusterData()[getActivePeriodKey()] || {};
             const selectedPosition = activeYearData[currentPosition] ? currentPosition : Object.keys(activeYearData)[0];
             currentPosition = null;
             if (selectedPosition) selectPosition(selectedPosition);
@@ -1089,7 +1198,7 @@
                 btn.classList.toggle('active', btn.dataset.window === windowName);
             });
 
-            const activeYearData = getActiveClusterData()[currentYear] || {};
+            const activeYearData = getActiveClusterData()[getActivePeriodKey()] || {};
             const selectedPosition = activeYearData[currentPosition] ? currentPosition : Object.keys(activeYearData)[0];
             currentPosition = null;
             if (selectedPosition) selectPosition(selectedPosition);
@@ -1097,7 +1206,7 @@
 
         // Select Position
         function selectPosition(position) {
-            const activeYearData = getActiveClusterData()[currentYear];
+            const activeYearData = getActiveClusterData()[getActivePeriodKey()];
             if (!position || !activeYearData[position]) {
                 position = Object.keys(activeYearData)[0];
             }
@@ -1111,7 +1220,7 @@
             });
 
             // Update Plot
-            const plotFile = `${getPlotPrefix()}_cluster_plot_${position.toLowerCase().replace(' ', '_')}${getPlotSuffix()}_all.html`;
+            const plotFile = `${getPlotPrefix()}_cluster_plot_${position.toLowerCase().replace(' ', '_')}${getPlotSuffix()}_${getPlotPeriodSuffix()}.html`;
             const requestId = ++plotRequestId;
             const nextFrame = document.createElement('iframe');
             nextFrame.src = plotFile;
@@ -1138,7 +1247,7 @@
 
         // Render Archetype Cards
         function renderArchetypes(position) {
-            const data = getActiveClusterData()[currentYear][position];
+            const data = getActiveClusterData()[getActivePeriodKey()][position];
             archetypeList.innerHTML = '';
 
             // Add PC Axis Info Card (Optional context)
@@ -1158,7 +1267,7 @@
                 ? 'Team Share mode uses each player game stat as a percentage of their team total for that same game, then averages those shares by player-season.'
                 : 'Production mode uses the player production stats directly.';
             const windowDescription = currentWindow === 'all'
-                ? 'All qualifying games in the season are included.'
+                ? `All qualifying games in the ${currentYear === 'All' ? 'available dataset' : currentYear} are included.`
                 : `Only each player’s latest ${{ l3: 'three', l5: 'five', l10: 'ten' }[currentWindow]} qualifying games from 2026 are included.`;
 
             updateRankingsCard(position, data);
@@ -1360,12 +1469,12 @@
 
         async function loadRankings(position, windowName = currentWindow) {
             const mode = currentMode;
-            const cacheKey = `${currentCompetition}:${mode}:${windowName}:${position}`;
+            const cacheKey = `${currentCompetition}:${mode}:${windowName}:${getActivePeriodKey()}:${position}`;
             if (rankingsCache[cacheKey]) return rankingsCache[cacheKey];
 
             const modeSuffix = mode === 'teamShare' ? '_team_share' : '';
             const windowSuffix = windowName === 'all' ? '' : `_${windowName}`;
-            const plotFile = `${getPlotPrefix()}_cluster_plot_${position.toLowerCase().replace(' ', '_')}${modeSuffix}${windowSuffix}_all.html`;
+            const plotFile = `${getPlotPrefix()}_cluster_plot_${position.toLowerCase().replace(' ', '_')}${modeSuffix}${windowSuffix}_${getPlotPeriodSuffix()}.html`;
             const response = await fetch(plotFile);
             if (!response.ok) throw new Error(`Failed to fetch ${plotFile}`);
 

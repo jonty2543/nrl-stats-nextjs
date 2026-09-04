@@ -208,18 +208,26 @@ function styleIndexHtml(
             padding: 0.18rem;
         }
 
+        .control-stack {
+            gap: 0.52rem;
+        }
+
         .control-frame .mode-btn {
             padding: 0.34rem 0.58rem;
             font-size: 0.62rem;
             letter-spacing: 0.1em;
         }
 
+        #decadeToggle .mode-btn {
+            text-transform: none;
+        }
+
         .control-divider {
             height: 1.15rem;
         }
 
-        #modeToggle,
-        #competitionToggle + .control-divider {
+        #modeControlFrame,
+        #modeToggle {
             display: none;
         }
 
@@ -274,6 +282,10 @@ function styleIndexHtml(
             .control-frame .mode-btn {
                 padding: 0.3rem 0.5rem;
                 font-size: 0.58rem;
+            }
+
+            .control-stack {
+                gap: 0.42rem;
             }
         }
 

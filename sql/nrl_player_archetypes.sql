@@ -5,6 +5,7 @@ create table if not exists nrl.player_archetypes (
   id uuid primary key default gen_random_uuid(),
   player text not null,
   year integer not null check (year between 1900 and 2200),
+  decade text not null default 'All',
   position text not null,
   source_position text not null,
   archetype text not null,
@@ -25,11 +26,27 @@ create table if not exists nrl.player_archetypes (
   key_stat_percentiles jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint player_archetypes_player_year_position_key unique (player, year, position)
+  constraint player_archetypes_player_year_position_decade_key unique (player, year, position, decade)
 );
+
+alter table nrl.player_archetypes
+  add column if not exists decade text not null default 'All';
+
+alter table nrl.player_archetypes
+  drop constraint if exists player_archetypes_player_year_position_key;
+
+alter table nrl.player_archetypes
+  drop constraint if exists player_archetypes_player_year_position_decade_key;
+
+alter table nrl.player_archetypes
+  add constraint player_archetypes_player_year_position_decade_key
+  unique (player, year, position, decade);
 
 create index if not exists player_archetypes_year_position_idx
   on nrl.player_archetypes (year, position);
+
+create index if not exists player_archetypes_decade_year_position_idx
+  on nrl.player_archetypes (decade, year, position);
 
 create index if not exists player_archetypes_archetype_idx
   on nrl.player_archetypes (archetype);

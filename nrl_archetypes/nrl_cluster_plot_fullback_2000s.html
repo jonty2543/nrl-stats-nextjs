@@ -1,0 +1,361 @@
+<html>
+<head><meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+                body {
+                    margin: 0;
+                }
+                #plotly-wrapper {
+                    position: relative;
+                }
+                #dimension-toggle {
+                    position: absolute;
+                    top: 44px;
+                    left: 10px;
+                    z-index: 20;
+                    display: flex;
+                    gap: 4px;
+                    flex-wrap: nowrap;
+                    max-width: calc(100% - 90px);
+                    padding: 3px;
+                    background: rgba(10, 17, 40, 0.74);
+                    border: 1px solid rgba(248, 250, 252, 0.24);
+                    border-radius: 6px;
+                    box-shadow: 0 2px 8px rgba(10, 17, 40, 0.22);
+                }
+                .dimension-toggle-btn {
+                    appearance: none;
+                    border: 1px solid rgba(248, 250, 252, 0.34);
+                    border-radius: 4px;
+                    background: rgba(15, 23, 42, 0.92);
+                    color: #f8fafc;
+                    cursor: pointer;
+                    font: 700 9px/1.1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                    padding: 3px 6px;
+                    white-space: nowrap;
+                }
+                .dimension-toggle-btn:hover,
+                .dimension-toggle-btn:focus-visible {
+                    border-color: #C9FF00;
+                    outline: none;
+                }
+                .dimension-toggle-btn.is-dropped {
+                    background: rgba(201, 255, 0, 0.14);
+                    border-color: #C9FF00;
+                    color: #ffffff;
+                }
+                #plotly-wrapper .updatemenu-button rect.updatemenu-item-bg {
+                    rx: 8px !important;
+                    ry: 8px !important;
+                    fill: white !important;
+                }
+                #plotly-wrapper .updatemenu-item-text {
+                    fill: #0A1128 !important;
+                }
+                
+                /* Mobile specific adjustments */
+                @media (max-width: 768px) {
+                    #plotly-wrapper .updatemenu-button rect.updatemenu-item-bg {
+                        height: 35px !important; /* Larger touch target */
+                    }
+                    #plotly-wrapper .updatemenu-item-text {
+                        font-size: 14px !important;
+                    }
+                    /* Prevent flicker by hiding buttons until positioned */
+                    #plotly-wrapper .updatemenu-container {
+                        visibility: hidden;
+                    }
+                    #plotly-wrapper.ready .updatemenu-container {
+                        visibility: visible;
+                    }
+                    #dimension-toggle {
+                        top: 48px;
+                        left: 6px;
+                        max-width: calc(100% - 64px);
+                    }
+                    .dimension-toggle-btn {
+                        flex: 1 1 auto;
+                        min-width: 0;
+                        padding: 5px 6px;
+                    }
+                }
+            </style>
+            <script>
+            const projectionDimensions = [
+                { key: 'pc1', axis: 'x', label: "Playmaking" },
+                { key: 'pc2', axis: 'y', label: "Evasiveness" },
+                { key: 'pc3', axis: 'z', label: "Workrate" }
+            ];
+            let droppedProjectionDimension = null;
+            let originalProjectionData = null;
+
+            function applyButtonStyles() {
+                const rects = document.querySelectorAll('.updatemenu-item-bg');
+                const isMobile = window.innerWidth < 768;
+                
+                rects.forEach(rect => {
+                    rect.setAttribute('rx', '8');
+                    rect.setAttribute('ry', '8');
+                    
+                    if (isMobile) {
+                        rect.setAttribute('height', '35');
+                    }
+                    
+                    const parentGroup = rect.closest('.updatemenu-button');
+                    const text = parentGroup ? parentGroup.querySelector('.updatemenu-item-text') : null;
+
+                    if (parentGroup && parentGroup.classList.contains('active')) {
+                        rect.style.fill = 'white';
+                        rect.style.stroke = '#C9FF00';
+                        rect.style.strokeWidth = '2px';
+                        if (text) {
+                            text.style.fill = 'black';
+                            text.setAttribute('fill', 'black');
+                        }
+                    } else {
+                        rect.style.fill = 'white';
+                        rect.style.stroke = '#2A3B6E';
+                        rect.style.strokeWidth = '1px';
+                        if (text) {
+                            text.style.fill = '#0A1128';
+                            text.setAttribute('fill', '#0A1128');
+                        }
+                    }
+                });
+            }
+
+            function readTraceValue(trace, axis) {
+                const value = trace[axis] || [];
+                if (ArrayBuffer.isView(value)) {
+                    return Array.from(value);
+                }
+                return Array.isArray(value) ? [...value] : value;
+            }
+
+            function ensureProjectionData(gd) {
+                if (originalProjectionData) return true;
+                if (!gd || !gd.data || !gd.data.length) return false;
+
+                const firstTrace = gd.data[0];
+                if (!firstTrace || !firstTrace.x || !firstTrace.y || !firstTrace.z) return false;
+
+                originalProjectionData = gd.data.map(trace => ({
+                    x: readTraceValue(trace, 'x'),
+                    y: readTraceValue(trace, 'y'),
+                    z: readTraceValue(trace, 'z')
+                }));
+
+                return true;
+            }
+
+            function getProjectionTrace(trace, index, dimensionsToKeep) {
+                const base = { ...trace };
+                const source = originalProjectionData[index];
+                const firstAxis = dimensionsToKeep[0].axis;
+                const secondAxis = dimensionsToKeep[1].axis;
+
+                delete base.scene;
+                delete base.z;
+                base.type = 'scatter';
+                base.mode = trace.mode || 'markers';
+                base.x = source[firstAxis];
+                base.y = source[secondAxis];
+                base.marker = { ...(trace.marker || {}) };
+
+                return base;
+            }
+
+            function getRestoredTrace(trace, index) {
+                const base = { ...trace };
+                const source = originalProjectionData[index];
+
+                delete base.xaxis;
+                delete base.yaxis;
+                base.type = 'scatter3d';
+                base.mode = trace.mode || 'markers';
+                base.x = source.x;
+                base.y = source.y;
+                base.z = source.z;
+                base.marker = { ...(trace.marker || {}) };
+
+                return base;
+            }
+
+            function getProjectedAxis(label) {
+                return {
+                    title: { text: label, font: { color: "#f8fafc", size: 15 } },
+                    tickfont: { color: "#f8fafc", size: 12 },
+                    showline: false,
+                    mirror: false,
+                    zeroline: true,
+                    zerolinecolor: "rgba(229, 231, 235, 0.82)",
+                    zerolinewidth: 2,
+                    showgrid: true,
+                    gridcolor: "rgba(229, 231, 235, 0.28)",
+                    gridwidth: 1,
+                    ticks: ""
+                };
+            }
+
+            function applyProjection() {
+                const gd = document.querySelector('.plotly-graph-div');
+                if (!gd || !window.Plotly) return;
+
+                if (!ensureProjectionData(gd)) return;
+
+                const dimensionsToKeep = projectionDimensions.filter(dimension => dimension.key !== droppedProjectionDimension);
+                const projectedData = gd.data.map((trace, index) => (
+                    droppedProjectionDimension
+                        ? getProjectionTrace(trace, index, dimensionsToKeep)
+                        : getRestoredTrace(trace, index)
+                ));
+                const baseMargin = gd.layout.margin || {};
+                const layout = {
+                    ...gd.layout,
+                    margin: droppedProjectionDimension
+                        ? { ...baseMargin, t: Math.max(baseMargin.t || 0, 82), r: Math.max(baseMargin.r || 0, 64) }
+                        : { ...baseMargin },
+                    legend: { ...gd.layout.legend },
+                    scene: {
+                        ...(gd.layout.scene || {}),
+                        xaxis: { ...((gd.layout.scene || {}).xaxis || {}), title: { text: projectionDimensions[0].label }, showspikes: false },
+                        yaxis: { ...((gd.layout.scene || {}).yaxis || {}), title: { text: projectionDimensions[1].label }, showspikes: false },
+                        zaxis: { ...((gd.layout.scene || {}).zaxis || {}), title: { text: projectionDimensions[2].label }, showspikes: false },
+                        dragmode: 'turntable'
+                    },
+                    xaxis: droppedProjectionDimension
+                        ? getProjectedAxis(dimensionsToKeep[0].label)
+                        : gd.layout.xaxis,
+                    yaxis: droppedProjectionDimension
+                        ? { ...getProjectedAxis(dimensionsToKeep[1].label), scaleanchor: 'x', scaleratio: 1 }
+                        : gd.layout.yaxis,
+                    dragmode: droppedProjectionDimension ? 'pan' : gd.layout.dragmode
+                };
+
+                Plotly.react(gd, projectedData, layout, {
+                    responsive: true,
+                    scrollZoom: true,
+                    displaylogo: false
+                }).then(() => {
+                    updateProjectionAttributes();
+                    applyButtonStyles();
+                    adjustPlotlyForMobile();
+                });
+            }
+
+            function updateProjectionAttributes() {
+                const wrapper = document.getElementById('plotly-wrapper');
+                if (!wrapper) return;
+
+                wrapper.dataset.projectionMode = droppedProjectionDimension ? '2d' : '3d';
+                wrapper.dataset.droppedDimension = droppedProjectionDimension || '';
+                wrapper.dataset.projectionReady = originalProjectionData ? 'true' : 'false';
+            }
+
+            function renderDimensionToggle() {
+                const wrapper = document.getElementById('plotly-wrapper');
+                const gd = document.querySelector('.plotly-graph-div');
+                if (!wrapper || !gd || wrapper.querySelector('#dimension-toggle')) return;
+
+                if (!ensureProjectionData(gd)) return;
+                updateProjectionAttributes();
+
+                const controls = document.createElement('div');
+                controls.id = 'dimension-toggle';
+                projectionDimensions.forEach(dimension => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'dimension-toggle-btn';
+                    button.textContent = dimension.label;
+                    button.title = `Toggle ${dimension.label} projection`;
+                    button.addEventListener('click', () => {
+                        droppedProjectionDimension = droppedProjectionDimension === dimension.key ? null : dimension.key;
+                        controls.querySelectorAll('.dimension-toggle-btn').forEach(btn => {
+                            btn.classList.toggle('is-dropped', btn === button && droppedProjectionDimension === dimension.key);
+                        });
+                        applyProjection();
+                    });
+                    controls.appendChild(button);
+                });
+                wrapper.appendChild(controls);
+            }
+
+            function adjustPlotlyForMobile() {
+                const gd = document.querySelector('.plotly-graph-div');
+                if (!gd) return;
+                
+                if (window.innerWidth < 768) {
+                    const update = {
+                        legend: {
+                            orientation: 'h',
+                            y: -0.15,
+                            x: 0.5,
+                            xanchor: 'center',
+                            yanchor: 'top',
+                            font: { size: 10 }
+                        },
+                        margin: { l: 5, r: 5, b: 100, t: 50 },
+                        updatemenus: [{
+                            ...gd.layout.updatemenus[0],
+                            x: 0.5,
+                            y: 1.12, /* Move higher to avoid modebar */
+                            xanchor: 'center',
+                            yanchor: 'bottom',
+                            direction: 'right',
+                            font: { size: 10 }
+                        }],
+                        modebar: {
+                            orientation: 'v',
+                            x: 1,
+                            y: 0.5,
+                            xanchor: 'right',
+                            yanchor: 'middle'
+                        }
+                    };
+                    Plotly.relayout(gd, update).then(() => {
+                        Plotly.relayout(gd, { 'scene.dragmode': 'turntable' });
+                        Plotly.restyle(gd, { 'marker.size': 6 });
+                        document.getElementById('plotly-wrapper').classList.add('ready');
+                    });
+                } else {
+                    document.getElementById('plotly-wrapper').classList.add('ready');
+                }
+            }
+
+            // Watch for changes to the plot
+            const observer = new MutationObserver((mutations) => {
+                applyButtonStyles();
+            });
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const target = document.body || document.documentElement;
+                if (target instanceof Node) {
+                    observer.observe(target, { childList: true, subtree: true });
+                }
+                applyButtonStyles();
+                renderDimensionToggle();
+                
+                // Initial mobile adjustment - faster timeout
+                setTimeout(() => {
+                    renderDimensionToggle();
+                    adjustPlotlyForMobile();
+                }, 100);
+            });
+            
+            window.addEventListener('resize', () => {
+                applyButtonStyles();
+                adjustPlotlyForMobile();
+            });
+            
+            // Also run on a timer as a fallback
+            setInterval(() => {
+                applyButtonStyles();
+                renderDimensionToggle();
+            }, 1000);
+            </script>
+            </head>
+<body><div id="plotly-wrapper" style="height:100%; width:100%;">
+    <div>                        <script type="text/javascript">window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-3.3.0.min.js" integrity="sha256-bO3dS6yCpk9aK4gUpNELtCiDeSYvGYnK7jFI58NQnHI=" crossorigin="anonymous"></script>                <div id="9b631f52-bbe0-4f73-9f28-79a3e68bfebf" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script type="text/javascript">                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("9b631f52-bbe0-4f73-9f28-79a3e68bfebf")) {                    Plotly.newPlot(                        "9b631f52-bbe0-4f73-9f28-79a3e68bfebf",                        [{"customdata":{"dtype":"i2","bdata":"0QfRB9EH"},"hoverinfo":"text","hovertext":["David Peachey (2001)","Mark Hughes (2001)","Rhys Wesser (2001)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"gipODMqY4L8fZ4N7sD3av4Isnycl8fe\u002f"},"y":{"dtype":"f8","bdata":"IPl5q6Jb2z+oeVf5fn\u002fwP2qPRe6lZvY\u002f"},"z":{"dtype":"f8","bdata":"Ml6sdWlV5r9iD5drGk3MP2T5wDbSDOQ\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0gfSB9IH"},"hoverinfo":"text","hovertext":["Brett Mullins (2002)","David Peachey (2002)","Rhys Wesser (2002)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"V5tN\u002fx5+8L8Es4IbcOvZv6jv59n2S9y\u002f"},"y":{"dtype":"f8","bdata":"8yIQnCTI8j85uV3KMQ7rP7aVCsvCkQFA"},"z":{"dtype":"f8","bdata":"XBCnMbMz9b\u002fb7Um0EL7hv+R8Xhy4lec\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0wfTBw=="},"hoverinfo":"text","hovertext":["Billy Slater (2003)","Rhys Wesser (2003)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"TdO1zK9V9b\u002fFuzljO0PFvw=="},"y":{"dtype":"f8","bdata":"ijQl\u002fFTU+z8K4rndGuMGQA=="},"z":{"dtype":"f8","bdata":"PwNYHcQuyL93EM7s0O71Pw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1AfUB9QH1Ac="},"hoverinfo":"text","hovertext":["Billy Slater (2004)","Brett Stewart (2004)","Rhys Wesser (2004)","Ty Williams (2004)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"jths7P7t3L8\u002fKOgaW0vsv1Q9ayFQMPO\u002fgiyfJyXx978="},"y":{"dtype":"f8","bdata":"HMKRv7QY9D9AJaTCesv7P8SFKxBRvto\u002fgRzeIY\u002fN6z8="},"z":{"dtype":"f8","bdata":"jSj2LbWIxr\u002fM\u002fI91oK7Yv7VLWuCmPK+\u002fD92PmICh4r8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1QfVB9UH1QfVB9UH1Qc="},"hoverinfo":"text","hovertext":["Billy Slater (2005)","Brett Stewart (2005)","Luke Patten (2005)","Marshall Chalk (2005)","Rhys Wesser (2005)","Todd Polglase (2005)","Wade McKinnon (2005)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"xgHZuNX\u002f5r9mYmeZySnpv7ODOtnKwuu\u002fgiyfJyXx97+zTdWVqzjIv62eQNy\u002fqdm\u002f7WN2E6I39L8="},"y":{"dtype":"f8","bdata":"8Ehcl3s4\u002fz8dH79E9fHuP4Ed75s9XNQ\u002f39hfjmb\u002fAkBGos91H4P8P+1e23\u002fH0uk\u002fqgbHZzdZ+z8="},"z":{"dtype":"f8","bdata":"B7wveOp05L\u002f4FxZQvLHsv01uCzPSba6\u002fSfTtF2wz4T+drv8sj4bkP0uo+86VKuO\u002fsYdoaJXv4z8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1gfWB9YH1gfWB9YH1gc="},"hoverinfo":"text","hovertext":["Brett Stewart (2006)","Darius Boyd (2006)","David Seage (2006)","David Simmons (2006)","Greg Inglis (2006)","Shaun Foley (2006)","Wade Mckinnon (2006)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"LOuEk2DW4D8gjiCYuKvlv4Isnycl8fe\u002fmr435Ab96r+espxw6YWnvzqIzgFXlei\u002fgiyfJyXx978="},"y":{"dtype":"f8","bdata":"5UfSTAURAUAImo3NxBDrP1AT7dkNzfQ\u002fBROBKG2a5T\u002f7J5PP0iUWQGvzBnTUoeQ\u002fh\u002fr9Gloa8j8="},"z":{"dtype":"f8","bdata":"mpe8wFRC478URkGOvte1v6CCpLXrLvI\u002f4EApT85s3z\u002fZoRV9kTUAQNAj3J2EE+S\u002fU5SV8kgJ8D8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1wfXB9cH1wfXBw=="},"hoverinfo":"text","hovertext":["Brett Kearney (2007)","Jarryd Hayne (2007)","Matthew Bowen (2007)","Wade McKinnon (2007)","William Zillman (2007)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"iUxVbqaZ6r+MVbL8b9HTvz7mSie2Pe8\u002f5+iR6SxtgL+MFGgQXELsvw=="},"y":{"dtype":"f8","bdata":"50IV5HW0BEA8rzv2TfL6PwUsaNfBrQdAetcZaVfe9T\u002fPI3xTQqDhPw=="},"z":{"dtype":"f8","bdata":"QhV8TY436j+Apq5iWMjnP3BcxP9HFda\u002ff6Gfgw5S0j8YsIfIZ2LCPw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2AfYB9gH2AfYBw=="},"hoverinfo":"text","hovertext":["Amos Roberts (2008)","Brett Morris (2008)","David Milne (2008)","Luke Patten (2008)","Wade McKinnon (2008)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"UOf3laEB4r9Q5\u002feVoQHiv0qsTNs2HdW\u002f1IRN89Zz8L+CLJ8nJfH3vw=="},"y":{"dtype":"f8","bdata":"HGiu4JFbBUCUCMFnucHpP9xdyYLGjPc\u002fbmGDT8Vi5D\u002fsLBdw\u002fowAQA=="},"z":{"dtype":"f8","bdata":"UXkOkKqa5r+Kgd6UlM3hvyZqgV8OEMY\u002fy\u002fz7IsI\u002f1r+Wv2Y5tEjBvw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2QfZB9kH2Qc="},"hoverinfo":"text","hovertext":["David Milne (2009)","Luke Capewell (2009)","Nathan Merritt (2009)","Shannon Gallant (2009)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"fM1XxH9s8b861lmaOvjqvyS\u002fPTtEt9O\u002fSgaARpGA7r8="},"y":{"dtype":"f8","bdata":"AZhFuZCN9T+wxErsuzjzP1JYG5Fs1QJAqMcFc3eZ2D8="},"z":{"dtype":"f8","bdata":"oaX7Tesj0j\u002fEDzBRWoffv0KlYakzcOC\u002fjGbThajm478="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0QfRBw=="},"hoverinfo":"text","hovertext":["Amos Roberts (2001)","Brett Hodgson (2001)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"ixn5YSeS7L9eDNp2AObhPw=="},"y":{"dtype":"f8","bdata":"zkgVG7dMn78qwALptRD7Pw=="},"z":{"dtype":"f8","bdata":"rMTiLQIrn78uvB3mI\u002ffuPw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0gfSB9IH0gc="},"hoverinfo":"text","hovertext":["Brett Hodgson (2002)","Darren Lockyer (2002)","Matthew Bowen (2002)","Robbie Ross (2002)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"tY87Odiay7\u002fZur8mW5kAQCMJwQpiauO\u002fpkXAGKp+wT8="},"y":{"dtype":"f8","bdata":"FfHRP00J5j8A7s0I64L0P9EZNz5OY+k\u002fex79D9hgub8="},"z":{"dtype":"f8","bdata":"a2CJGz9xuj9ewHOBMd\u002fkP2z4qWC27+k\u002feQWGgZU0078="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0wfTB9MH"},"hoverinfo":"text","hovertext":["Brett Hodgson (2003)","Luke Patten (2003)","Matthew Bowen (2003)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"60w41PaB0T+A2IwOi1PaP8R3+qmwXfw\u002f"},"y":{"dtype":"f8","bdata":"LZXEgNrHuT+gw4z93VzVv5O5il+V7\u002fQ\u002f"},"z":{"dtype":"f8","bdata":"Za8anNCh4r\u002fo\u002fftqX\u002fzPv+3f7XjdgLo\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1AfUB9QH1Ac="},"hoverinfo":"text","hovertext":["Ben Hornby (2004)","Brett Hodgson (2004)","Karmichael Hunt (2004)","Matthew Bowen (2004)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"Tg69GI9M3b+TLuUlIUV7P2aAB7XZuN6\u002fna8yaUyH278="},"y":{"dtype":"f8","bdata":"NbDWrJKd4D8q9nvKL6fmP1zAxg8SdsU\u002flu7KmBrG5z8="},"z":{"dtype":"f8","bdata":"kCAv7upTgr+wfA7M24XBP33XhHy+TNq\u002f9FlChPYB2j8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1QfVB9UH1QfVB9UH1Qc="},"hoverinfo":"text","hovertext":["Anthony Minichiello (2005)","Ben Hornby (2005)","Brett Hodgson (2005)","Greg Inglis (2005)","Karmichael Hunt (2005)","Matthew Bowen (2005)","Milton Thaiday (2005)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"EuW69Bs47D+C7Krj\u002f5rdP8uV1DkJJAVAs03Vlas4yL8soxBalc7lPxemy103BwNAHOH19+av4j8="},"y":{"dtype":"f8","bdata":"iEphVStx8z+fy9UZlz3PP3QxWG0QZ\u002fc\u002flv4aRyeU1b\u002fopmxwIsbMPyczzYfnpf0\u002fI+8yDY\u002fB8z8="},"z":{"dtype":"f8","bdata":"tfT4wbLA4z92N5l0kn\u002flv3imlATxV+s\u002f4Hgf1ltVwD+FV+NOYnrKv2E+z+7nyug\u002f+I77IRkT178="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1gfWB9YH1gfWBw=="},"hoverinfo":"text","hovertext":["Anthony Minichiello (2006)","Billy Slater (2006)","Luke Patten (2006)","Milton Thaiday (2006)","Rhys Wesser (2006)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"m8uetm7LwT9nuh\u002fI9Bn5P2pVYCchNts\u002fEHlZJdGC4D8g2LVa32DzPw=="},"y":{"dtype":"f8","bdata":"S0WRWLUL4D8ZWbV4f6nmP2fsi0vBXsO\u002faXJ5EIE+9z\u002fs3piiBLb9Pw=="},"z":{"dtype":"f8","bdata":"WHNF9pp9u78JIfofk1f3P50dUV\u002f49eI\u002fpEZX8vcmyr\u002fX9j6W6NHwPw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1wfXB9cH"},"hoverinfo":"text","hovertext":["Brett Stewart (2007)","Luke Patten (2007)","Sam Perrett (2007)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"C8tEiFM34j8LlLKaZd1cPxR7JwCxSPs\u002f"},"y":{"dtype":"f8","bdata":"sDjgIyh2\u002fj\u002fav4xAELSdP\u002fOWj0PPvuc\u002f"},"z":{"dtype":"f8","bdata":"TQlicdQ7+z\u002fkJSznXFnBPxcLruj1Xe8\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2AfYB9gH2AfYB9gH"},"hoverinfo":"text","hovertext":["Anthony Minichiello (2008)","Brett Kearney (2008)","Jarryd Hayne (2008)","Kurt Gidley (2008)","Lance Hohaia (2008)","Nathan Merritt (2008)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"qD8ttrrd2b8nwRoh3jXLvx3xPJglp\u002fM\u002fPY8HZJGc3T\u002fpeSebRSniP2lk4aHTjM8\u002f"},"y":{"dtype":"f8","bdata":"hOSY1K5t3b8GiA67pHnfP5HvCnUZ8O0\u002fkcfMpHpC0z\u002faZHRE4PrAP2+ioaxh4+0\u002f"},"z":{"dtype":"f8","bdata":"pra\u002fuTQDzD8bpvLXy+\u002fVv8VfqWUIfqm\u002fhZj0w2PK7j8mNN4N6oHOv3TdxnC98ua\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2QfZB9kH2Qc="},"hoverinfo":"text","hovertext":["Jarryd Hayne (2009)","Kurt Gidley (2009)","Luke Patten (2009)","Sam Perrett (2009)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"PHiXrbBxDEBLFZe2usPrP\u002fP6KAeMpNo\u002fJj6H6ND7378="},"y":{"dtype":"f8","bdata":"vAIMzEyEBkA8Qa\u002fBFNLzvw\u002fqbUom9sq\u002f0HRRB8Vvzr8="},"z":{"dtype":"f8","bdata":"gFZ5AIK0DECag0NwxHTaPxSlTfQl4r2\u002fTpmKu2SN3j8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0QfRB9EH0Qc="},"hoverinfo":"text","hovertext":["Brendon Reeves (2001)","Matt Geyer (2001)","Preston Campbell (2001)","Robbie O'Davis (2001)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"1Jdv5baY878XesxxOrryv4Isnycl8fe\u002fA8f0QfXX3L8="},"y":{"dtype":"f8","bdata":"sc06dLNsoT9hBlMj\u002fUvgv4mqoIKGCfo\u002fxuWwM2o+8L8="},"z":{"dtype":"f8","bdata":"9u69oujFzz+FqSB4CdbnP8lH5z8a3Pk\u002fd+cjdnfW7T8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0gfSB9IH0gfSBw=="},"hoverinfo":"text","hovertext":["Adam Mogg (2002)","Brendon Reeves (2002)","Clinton Schifcofske (2002)","Daniel Fitzhenry (2002)","Kurt Gidley (2002)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"giyfJyXx97\u002f0vwhRdVXIv6rhokxEd\u002fC\u002fVxT4rTEW4r8b4cC7vX7yvw=="},"y":{"dtype":"f8","bdata":"eyt+3m9V678OMRzLe5jpv\u002f6VrMTegfG\u002fNrpnMPDN9L83aJ7KSCO3vw=="},"z":{"dtype":"f8","bdata":"PahcPhbJ4D9u1NcXELHhP0rJ1npbvOY\u002feXcv271S7T+auA\u002f2jJf3Pw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0wfTBw=="},"hoverinfo":"text","hovertext":["Anthony Minichiello (2003)","Clinton Schifcofske (2003)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"puzFo7Jc6j\u002f6EMGjPaPivw=="},"y":{"dtype":"f8","bdata":"nr5918h44T9b9gL9YN\u002fhvw=="},"z":{"dtype":"f8","bdata":"ZkwrCEHoAECWxABZWvnpPw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1AfUB9QH"},"hoverinfo":"text","hovertext":["Anthony Minichiello (2004)","Clinton Schifcofske (2004)","Wade McKinnon (2004)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"NFwL9F2X6L\u002fyIXnxB+Tpv6xG9QFlR+e\u002f"},"y":{"dtype":"f8","bdata":"tOvFsQkX+j8h5\u002f9IOtXhv+6jfgHY2sK\u002f"},"z":{"dtype":"f8","bdata":"Xkiea3hV+T9KABxBktviP2rvQw6PZ+c\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1QfVBw=="},"hoverinfo":"text","hovertext":["Clint Greenshields (2005)","Clinton Schifcofske (2005)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"323K9qjz8L8XsdSX0c3Svw=="},"y":{"dtype":"f8","bdata":"rq\u002fhNLoonr8lSI2ytB+EPw=="},"z":{"dtype":"f8","bdata":"TI3jIeQWzj9uOjw724PwPw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1gfWB9YH1gfWBw=="},"hoverinfo":"text","hovertext":["Clint Greenshields (2006)","Clinton Schifcofske (2006)","Justin Hodges (2006)","Shannon McDonnell (2006)","Wade McKinnon (2006)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"osMXPwBo8b\u002f+sNyA\u002faDkv7D3nHYtkBBAiJ3\u002fAgiz8r8MQOuYU7Xovw=="},"y":{"dtype":"f8","bdata":"qjg0EXJP3j94om5KlGLTvzr\u002fGhVkZwdASWZiNPKQ2r8RxAdCA27vPw=="},"z":{"dtype":"f8","bdata":"yEinBYCf6z\u002fLrYWiacvxPyECjr+MOClAX1J+oYS+5T+VP45zMpXvPw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1wfXB9cH"},"hoverinfo":"text","hovertext":["Justin Hodges (2007)","Kurt Gidley (2007)","Mitch Brown (2007)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"u4QHqYTFx7+2Eserb97pv218KtWTaO6\u002f"},"y":{"dtype":"f8","bdata":"bhnVmKG7+r\u002fpKAcBP1uov4ofajRvVdg\u002f"},"z":{"dtype":"f8","bdata":"3xO+AleG8D9ovI7BFf\u002fgPyCTULBn194\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2Ac="},"hoverinfo":"text","hovertext":["Sam Perrett (2008)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"I+RcTVWl6L8="},"y":{"dtype":"f8","bdata":"gT5Rnmgz8r8="},"z":{"dtype":"f8","bdata":"rN4WsZyD3D8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2QfZBw=="},"hoverinfo":"text","hovertext":["Josh Dugan (2009)","Nathan Stapleton (2009)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"sZDE5A1fyL\u002fUl2\u002fltpjzvw=="},"y":{"dtype":"f8","bdata":"D6cpXQdI4b\u002fbkMIh2Wa6vw=="},"z":{"dtype":"f8","bdata":"ItX4p4ma9D+TvDZZcHTTPw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0Qc="},"hoverinfo":"text","hovertext":["Darren Lockyer (2001)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"9ZIIZCz87D8="},"y":{"dtype":"f8","bdata":"3cGf\u002fd8W4b8="},"z":{"dtype":"f8","bdata":"kA8cPuqL4r8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0wfTB9MH0wfTBw=="},"hoverinfo":"text","hovertext":["Ben Hornby (2003)","Brent Webb (2003)","Darren Lockyer (2003)","David Peachey (2003)","Robbie Ross (2003)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"ey+aMmLB3T8ODFGjuCD5P43Uv6ZGSAJAHnbV9iW1BED90BFak9TdPw=="},"y":{"dtype":"f8","bdata":"sapjW2mv77\u002flovpYR6W1v3QhpAKfxr8\u002fNypb7JCb9L\u002fJQvQJivrlvw=="},"z":{"dtype":"f8","bdata":"vw2BQTfW4b8nMtbCT0XNvzv0pazk99U\u002f2O4jbwxV+b+K3Fehb9zuvw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1AfUBw=="},"hoverinfo":"text","hovertext":["Brent Webb (2004)","David Peachey (2004)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"tw8Q5krN5j9MYbOI9ugAQA=="},"y":{"dtype":"f8","bdata":"STP2BmJf4r\u002f5DG+8HJLmvw=="},"z":{"dtype":"f8","bdata":"sxSCJs7X6r\u002fylrpRyxD1vw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1Qc="},"hoverinfo":"text","hovertext":["David Peachey (2005)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"GCXC0qyX9D8="},"y":{"dtype":"f8","bdata":"vgYF7ejawb8="},"z":{"dtype":"f8","bdata":"6M1h2iyz7r8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1gfWB9YH1gfWB9YH1gc="},"hoverinfo":"text","hovertext":["Amos Roberts (2006)","Brent Webb (2006)","Brett Hodgson (2006)","David Peachey (2006)","Karmichael Hunt (2006)","Matthew Bowen (2006)","Todd Polglase (2006)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"vKzxcxPF6j9kska9cE\u002f8P8pkprN\u002fL\u002fw\u002fNKKeXgisB0CUfZv9lq79P0JFNsUUuvg\u002fnujnEaNX7D8="},"y":{"dtype":"f8","bdata":"ohQsZs6A1r8uo9LQ36vvPx4nMlss7pe\u002f+RuYgZ7R5L+ZetjdDXDCP5PWMSXtmOa\u002frB9bHfCa9L8="},"z":{"dtype":"f8","bdata":"gibXPIRA8L9h5YdnwAXUv5pgFP4cL8E\u002fg+saf6EA+L+QG9PJeL7AvwAr17uYnl8\u002fpPV9mPA66r8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1wfXB9cH1wfXB9cH"},"hoverinfo":"text","hovertext":["Anthony Minichiello (2007)","Billy Slater (2007)","Brett Hodgson (2007)","Jarrod Sammut (2007)","Karmichael Hunt (2007)","Preston Campbell (2007)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"EGjJZhch9z\u002fz8ry0KwoUQMODVXRcXgdAXOBZsW+dCECcvy8IsCoCQJEboEsNUuM\u002f"},"y":{"dtype":"f8","bdata":"vL61p7tF9L\u002ftl\u002fJY3LDkP63xTgMdB+W\u002fDPNCMap5wj+ZFFNGS57sP2prx6DgkPC\u002f"},"z":{"dtype":"f8","bdata":"8I3ILOS\u002f4D\u002fmM7Q7S\u002fPyP4ckHHSsu9y\u002fuQ8k0\u002fLM1j\u002fWpXcBd7jZP9i7GT9HgPG\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2AfYB9gH2AfYB9gH2Ac="},"hoverinfo":"text","hovertext":["Billy Slater (2008)","Brett Hodgson (2008)","Brett Stewart (2008)","Karmichael Hunt (2008)","Matthew Bowen (2008)","Preston Campbell (2008)","Rhys Wesser (2008)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"uLWJw9ZWEUBWWJmAaOX+P4BgyxKFwg5ARs9GSgWsA0ASmQLv3OIGQBl2wFlVFv4\u002fcpkLVMYy7T8="},"y":{"dtype":"f8","bdata":"eq725466+T+P3jdCAH\u002fPv7xv9TEWavg\u002fzhs8IGbK578IZd\u002fa223pv1Fycz7URbo\u002fyskF8xqx3r8="},"z":{"dtype":"f8","bdata":"fPD9Ax4dfj8PJGUlVnHiv2eS7ys9xtI\u002fshkk\u002fUQ7zb+Ee7wEdDH1v6s5W41hpuO\u002fZMjeH4Bzyb8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2QfZB9kH2QfZB9kH2QfZBw=="},"hoverinfo":"text","hovertext":["Billy Slater (2009)","Brett Stewart (2009)","Darius Boyd (2009)","Karmichael Hunt (2009)","Luke Burt (2009)","Matthew Bowen (2009)","Preston Campbell (2009)","Tim Moltzen (2009)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"pgol2N9rEkDsPc+tz1D8P1IvCmmKOPM\u002fIUc4ybktEUAE944uh73wP5OgedQIgvQ\u002fFWIQtDFO\u002fD\u002fKBUrBrCL9Pw=="},"y":{"dtype":"f8","bdata":"Lj8cQfXI\u002fD\u002f2UiESvrwAQG0bET9qy+6\u002fgj9s7oY6zz8s97Vl6n7xv11Zi6hI0L0\u002ffWGc9AHM6r8NNs2WcaDqPw=="},"z":{"dtype":"f8","bdata":"UFz0avEY5j\u002fcdFuBPfPjv4DFBOIgfna\u002faHeEzFts5L\u002fdytsXzUHwv9lpw5y1TfK\u002fzz27duld878ENr\u002f42vzwvw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0QfRB9EH0QfRB9EH0QfRB9EH0QfRB9EH"},"hoverinfo":"text","hovertext":["Brett Atkinson (2001)","Chris Flannery (2001)","Clinton Schifcofske (2001)","Ivan Cleary (2001)","Joel Caine (2001)","Julian O'Neill (2001)","Luke Patten (2001)","Luke Phillips (2001)","Matt Seers (2001)","Matthew Bowen (2001)","Robbie Ross (2001)","Trent Leis (2001)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"fM1XxH9s8b+CLJ8nJfH3v1gg8ZXa1u+\u002ffM1XxH9s8b+CLJ8nJfH3vxd6zHE6uvK\u002fgiyfJyXx979EZgp65yXyvzRpUGLm3\u002fS\u002fV5tN\u002fx5+8L8wsLR\u002f27zvv4Isnycl8fe\u002f"},"y":{"dtype":"f8","bdata":"AlcWDtwp\u002fb+ygqO15OwGwKzyo1glEOe\u002ffElN5Y6M+7+co8NXa+\u002f3vwVd6MqRnu2\u002ffnHAr+289L9D8dbWaD77v5yGM4qNJP2\u002fl+uZ7OJK8r9Jnuq6Rk3Fv3DiNs+kEeu\u002f"},"z":{"dtype":"f8","bdata":"ynDHKRU90b8coOaJQBXAv3LP4fEb1K0\u002fQHoUcDEi8b+bJ1EA\u002fwzlP9iEkt5KBO2\u002fPH4XSHRH4L\u002fi7SK2xnnGvwUdZjtT+fG\u002fhMUAdjbT3T\u002f2R8IG8wXkv3gBoIB\u002f4uq\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0gfSB9IH0gfSB9IH0gfSB9IH0gfSB9IH"},"hoverinfo":"text","hovertext":["Amos Roberts (2002)","Ben Hornby (2002)","Brent Webb (2002)","Ivan Cleary (2002)","Joel Caine (2002)","Junior Langi (2002)","Luke Patten (2002)","Luke Phillips (2002)","Reece Simmonds (2002)","Robbie O'Davis (2002)","Wade McKinnon (2002)","Wade Mckinnon (2002)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"7WN2E6I39L+pbMGrm7Pqv7gO0xL1j8w\u002fDhK+BPHy8r8Afft10q70v\u002f4Xdgm2w+W\u002fT4NGx0dr4b\u002fmpQGdp87xv4Isnycl8fe\u002fhrUgrba95b98zVfEf2zxvyCOIJi4q+W\u002f"},"y":{"dtype":"f8","bdata":"QrVExPMZ3L9JudYq5YdxPy9ZPY3HG\u002fi\u002fyEKxrabQ\u002fL+ZmIvbX5fwv3bwQSsKAgHALRunvqh+4r\u002fe23wXUDL1v+pXaRoutwLAZpO29LQK8L\u002fPjm+8v7z1v1zv1nKyKf+\u002f"},"z":{"dtype":"f8","bdata":"+qIqlaiVyj9cwK2zTq7Fv+Ijv7FFVsQ\u002fY4NVECad9b+xSb3dv3DXPwbL+gk5VeU\u002fTFtZNdgyy7\u002fkil3SKtiiv2YixL7RXa6\u002fnpyizCYLxz8SreAHfMvfv56YzCl80L6\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"0wfTB9MH0wfTB9MH0wfTB9MH0wc="},"hoverinfo":"text","hovertext":["Ashley Graham (2003)","Brad Watts (2003)","Brendon Reeves (2003)","Joel Caine (2003)","Mark Hughes (2003)","Motu Tony (2003)","Reece Simmonds (2003)","Robbie O'Davis (2003)","Robert Miles (2003)","Wade McKinnon (2003)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"TJxuNvbe7L98eEm+p3Tpv1gg8ZXa1u+\u002fgiyfJyXx979Yj\u002fN3nwbrv4Isnycl8fe\u002fgiyfJyXx978xzEqEY8\u002fqvwCPScrvfum\u002fGh3AvNXp6r8="},"y":{"dtype":"f8","bdata":"cVt\u002fSluvvb8ohbt07oPzv9KXIivWz\u002fG\u002fkWhyjUoO\u002fr8aVvrY5Enbv6nUsx37cuC\u002fMmWVHRoq3b9VzuFbNSLlv8NmrM0ukv2\u002fnS\u002fFO\u002f8O1z8="},"z":{"dtype":"f8","bdata":"vJLt5nzzor9iCapk72LNv25PLxebLOG\u002fe+dwaQM\u002f0z8M42zPRiDTv05oDM5+v+S\u002fqncLmv4YtL+EqqgYgvXFP3rrWxphB7q\u002fsqhZkdZn6b8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1AfUB9QH1AfUB9QH1Ac="},"hoverinfo":"text","hovertext":["Andrew Walker (2004)","Brad Watts (2004)","David Simmons (2004)","Garth Wood (2004)","Luke Burt (2004)","Luke Patten (2004)","Robbie O'Davis (2004)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"AO6ewo6Byr\u002f+F3YJtsPlv4Isnycl8fe\u002fgiyfJyXx979Xm03\u002fHn7wv\u002f4iJVLQFMW\u002f9v9is4r\u002f478="},"y":{"dtype":"f8","bdata":"3KYkkl7a5r8Q4YsH+yD8v9rQKsKpl\u002fa\u002fQN2lJTfBAMCZheCH8QHhP1e2aJxNS86\u002f0AiAgsVu978="},"z":{"dtype":"f8","bdata":"lSQ9v3kU9r9lvC5NPz3vv5sX2i+MJO+\u002flfhFuG0p5r8F8gBKHPjwv6toJOoPQOi\u002f7WwqgF2R2b8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1QfVBw=="},"hoverinfo":"text","hovertext":["Brent Webb (2005)","Luke Burt (2005)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"UkQWqJIX8L8j5FxNVaXovw=="},"y":{"dtype":"f8","bdata":"+nC8MxmT9L\u002fDvlrM\u002flf6vw=="},"z":{"dtype":"f8","bdata":"g\u002f2u6Tkg4b9gPJraAGH2vw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1gfWBw=="},"hoverinfo":"text","hovertext":["Ben Hornby (2006)","Luke Burt (2006)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"u17ensm33T9KBoBGkYDuvw=="},"y":{"dtype":"f8","bdata":"jv+Kfebt879fhOrCgDDgPw=="},"z":{"dtype":"f8","bdata":"PeL7q5iD2b9MzdIR4Uz3vw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"1wfXB9cH1wfXB9cH1wfXB9cH"},"hoverinfo":"text","hovertext":["Amos Roberts (2007)","Ben Hornby (2007)","David Peachey (2007)","David Simmons (2007)","Josh Morris (2007)","Luke Burt (2007)","Nathan Merritt (2007)","Rhys Wesser (2007)","Richard Mathers (2007)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"ZFPYmLUN2r8wRpIeYaTYP0qsTNs2HdW\u002fSgaARpGA7r9WmKk5wVbjv47HI7jZVtG\u002fu4QHqYTFx78320yNtt\u002fRv4Isnycl8fe\u002f"},"y":{"dtype":"f8","bdata":"kPUwF8PcwT\u002fObgyyIub1v61mx78RP+i\u002fB89QGJ7f+L8B3SnVOqDtv6cJm2KzJrC\u002fRCRxJHNr4b+l5PSBtf\u002fmv14prwNweQTA"},"z":{"dtype":"f8","bdata":"Qc+bWkZc9r\u002fSWKZB+QL1v6jTyLb5ufG\u002f4EuGnsDvfr\u002f0yIBNeXWRP9yXzdGAsuy\u002fk46ghQu+37\u002fyWJIfygfdv1yyenMG3fG\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2AfYB9gH2AfYB9gH2AfYBw=="},"hoverinfo":"text","hovertext":["Ashley Graham (2008)","Brent Crisp (2008)","Bronx Goodwin (2008)","Fetuli Talanoa (2008)","Jason Nightingale (2008)","Luke Burt (2008)","Mitch Brown (2008)","Wes Naiqama (2008)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"JL89O0S3079Q5\u002feVoQHiv6IFZraU1OU\u002fgiyfJyXx97\u002f90BFak9TdP4rbzELTXcO\u002f\u002fdARWpPU3T+Tv6RqKTi4vw=="},"y":{"dtype":"f8","bdata":"\u002fMdQpYAk5L+FTLBdk3z8v5I8O2Ca1Pa\u002fInWbjNHqAsBOL+1mIqr4vzYMTQ7QjbS\u002fCkNiuIljAcC0\u002fLSqtT8DwA=="},"z":{"dtype":"f8","bdata":"EE19B92J3L+eOGxA9f3ov8cn3a6hBvS\u002fgvmq0p3CtL86h6YFQ+LNv+L1Cuppv\u002fm\u002fjCei\u002f0qxwj+4ok0e6qW6vw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"2QfZB9kH2QfZBw=="},"hoverinfo":"text","hovertext":["Jarrod Sammut (2009)","Lachlan Coote (2009)","Michael Robertson (2009)","Wade McKinnon (2009)","William Zillman (2009)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"q1h2DX4y9L9Xm03\u002fHn7wv9DEKRSQmNa\u002frbakiCFL3L+IujY2EMbnvw=="},"y":{"dtype":"f8","bdata":"qLrzQPnX87\u002fjcHlK\u002f5blv8xCalxxP+y\u002fLL4EtkFe6L9UrGbqQbL7vw=="},"z":{"dtype":"f8","bdata":"5Ucdaw8v5L+9ptNr7hLUv67FYLjfQ+m\u002fJspiwRnzt7+2Icq0WjXnvw=="},"type":"scatter3d"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermapbox":[{"type":"scattermapbox","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"mapbox":{"style":"light"}}},"scene":{"xaxis":{"title":{"text":"Playmaking"},"showspikes":false},"yaxis":{"title":{"text":"Evasiveness"},"showspikes":false},"zaxis":{"title":{"text":"Workrate"},"showspikes":false},"dragmode":"turntable"},"updatemenus":[{"active":0,"bgcolor":"white","bordercolor":"#2A3B6E","borderwidth":1,"buttons":[{"args":[{"marker.opacity":0.8,"hoverinfo":"text"}],"label":"All Years","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15],"hoverinfo":["none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none"]}],"label":"2000","method":"update"},{"args":[{"marker.opacity":[0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15],"hoverinfo":["text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none"]}],"label":"2001","method":"update"},{"args":[{"marker.opacity":[0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15],"hoverinfo":["none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none"]}],"label":"2002","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15],"hoverinfo":["none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none"]}],"label":"2003","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15],"hoverinfo":["none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none"]}],"label":"2004","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15],"hoverinfo":["none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none"]}],"label":"2005","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15],"hoverinfo":["none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none"]}],"label":"2006","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15],"hoverinfo":["none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none"]}],"label":"2007","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15],"hoverinfo":["none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none"]}],"label":"2008","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.8],"hoverinfo":["none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","text","none","none","none","none","none","none","none","none","text"]}],"label":"2009","method":"update"}],"direction":"right","font":{"color":"#0A1128","size":11},"showactive":true,"type":"buttons","x":0.02,"xanchor":"left","y":0.98,"yanchor":"top"}],"legend":{"title":{"text":"Archetype"}},"margin":{"l":0,"r":0,"b":0,"t":30},"font":{"color":"#0A1128"},"paper_bgcolor":"#f0f0f0","plot_bgcolor":"#f0f0f0"},                        {"responsive": true, "scrollZoom": true, "displaylogo": false}                    )                };            </script>        </div>
+</div></body>
+</html>

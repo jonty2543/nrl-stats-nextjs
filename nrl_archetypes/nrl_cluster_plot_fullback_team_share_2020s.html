@@ -1,0 +1,361 @@
+<html>
+<head><meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+                body {
+                    margin: 0;
+                }
+                #plotly-wrapper {
+                    position: relative;
+                }
+                #dimension-toggle {
+                    position: absolute;
+                    top: 44px;
+                    left: 10px;
+                    z-index: 20;
+                    display: flex;
+                    gap: 4px;
+                    flex-wrap: nowrap;
+                    max-width: calc(100% - 90px);
+                    padding: 3px;
+                    background: rgba(10, 17, 40, 0.74);
+                    border: 1px solid rgba(248, 250, 252, 0.24);
+                    border-radius: 6px;
+                    box-shadow: 0 2px 8px rgba(10, 17, 40, 0.22);
+                }
+                .dimension-toggle-btn {
+                    appearance: none;
+                    border: 1px solid rgba(248, 250, 252, 0.34);
+                    border-radius: 4px;
+                    background: rgba(15, 23, 42, 0.92);
+                    color: #f8fafc;
+                    cursor: pointer;
+                    font: 700 9px/1.1 "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                    padding: 3px 6px;
+                    white-space: nowrap;
+                }
+                .dimension-toggle-btn:hover,
+                .dimension-toggle-btn:focus-visible {
+                    border-color: #C9FF00;
+                    outline: none;
+                }
+                .dimension-toggle-btn.is-dropped {
+                    background: rgba(201, 255, 0, 0.14);
+                    border-color: #C9FF00;
+                    color: #ffffff;
+                }
+                #plotly-wrapper .updatemenu-button rect.updatemenu-item-bg {
+                    rx: 8px !important;
+                    ry: 8px !important;
+                    fill: white !important;
+                }
+                #plotly-wrapper .updatemenu-item-text {
+                    fill: #0A1128 !important;
+                }
+                
+                /* Mobile specific adjustments */
+                @media (max-width: 768px) {
+                    #plotly-wrapper .updatemenu-button rect.updatemenu-item-bg {
+                        height: 35px !important; /* Larger touch target */
+                    }
+                    #plotly-wrapper .updatemenu-item-text {
+                        font-size: 14px !important;
+                    }
+                    /* Prevent flicker by hiding buttons until positioned */
+                    #plotly-wrapper .updatemenu-container {
+                        visibility: hidden;
+                    }
+                    #plotly-wrapper.ready .updatemenu-container {
+                        visibility: visible;
+                    }
+                    #dimension-toggle {
+                        top: 48px;
+                        left: 6px;
+                        max-width: calc(100% - 64px);
+                    }
+                    .dimension-toggle-btn {
+                        flex: 1 1 auto;
+                        min-width: 0;
+                        padding: 5px 6px;
+                    }
+                }
+            </style>
+            <script>
+            const projectionDimensions = [
+                { key: 'pc1', axis: 'x', label: "Playmaking" },
+                { key: 'pc2', axis: 'y', label: "Evasiveness" },
+                { key: 'pc3', axis: 'z', label: "Workrate" }
+            ];
+            let droppedProjectionDimension = null;
+            let originalProjectionData = null;
+
+            function applyButtonStyles() {
+                const rects = document.querySelectorAll('.updatemenu-item-bg');
+                const isMobile = window.innerWidth < 768;
+                
+                rects.forEach(rect => {
+                    rect.setAttribute('rx', '8');
+                    rect.setAttribute('ry', '8');
+                    
+                    if (isMobile) {
+                        rect.setAttribute('height', '35');
+                    }
+                    
+                    const parentGroup = rect.closest('.updatemenu-button');
+                    const text = parentGroup ? parentGroup.querySelector('.updatemenu-item-text') : null;
+
+                    if (parentGroup && parentGroup.classList.contains('active')) {
+                        rect.style.fill = 'white';
+                        rect.style.stroke = '#C9FF00';
+                        rect.style.strokeWidth = '2px';
+                        if (text) {
+                            text.style.fill = 'black';
+                            text.setAttribute('fill', 'black');
+                        }
+                    } else {
+                        rect.style.fill = 'white';
+                        rect.style.stroke = '#2A3B6E';
+                        rect.style.strokeWidth = '1px';
+                        if (text) {
+                            text.style.fill = '#0A1128';
+                            text.setAttribute('fill', '#0A1128');
+                        }
+                    }
+                });
+            }
+
+            function readTraceValue(trace, axis) {
+                const value = trace[axis] || [];
+                if (ArrayBuffer.isView(value)) {
+                    return Array.from(value);
+                }
+                return Array.isArray(value) ? [...value] : value;
+            }
+
+            function ensureProjectionData(gd) {
+                if (originalProjectionData) return true;
+                if (!gd || !gd.data || !gd.data.length) return false;
+
+                const firstTrace = gd.data[0];
+                if (!firstTrace || !firstTrace.x || !firstTrace.y || !firstTrace.z) return false;
+
+                originalProjectionData = gd.data.map(trace => ({
+                    x: readTraceValue(trace, 'x'),
+                    y: readTraceValue(trace, 'y'),
+                    z: readTraceValue(trace, 'z')
+                }));
+
+                return true;
+            }
+
+            function getProjectionTrace(trace, index, dimensionsToKeep) {
+                const base = { ...trace };
+                const source = originalProjectionData[index];
+                const firstAxis = dimensionsToKeep[0].axis;
+                const secondAxis = dimensionsToKeep[1].axis;
+
+                delete base.scene;
+                delete base.z;
+                base.type = 'scatter';
+                base.mode = trace.mode || 'markers';
+                base.x = source[firstAxis];
+                base.y = source[secondAxis];
+                base.marker = { ...(trace.marker || {}) };
+
+                return base;
+            }
+
+            function getRestoredTrace(trace, index) {
+                const base = { ...trace };
+                const source = originalProjectionData[index];
+
+                delete base.xaxis;
+                delete base.yaxis;
+                base.type = 'scatter3d';
+                base.mode = trace.mode || 'markers';
+                base.x = source.x;
+                base.y = source.y;
+                base.z = source.z;
+                base.marker = { ...(trace.marker || {}) };
+
+                return base;
+            }
+
+            function getProjectedAxis(label) {
+                return {
+                    title: { text: label, font: { color: "#f8fafc", size: 15 } },
+                    tickfont: { color: "#f8fafc", size: 12 },
+                    showline: false,
+                    mirror: false,
+                    zeroline: true,
+                    zerolinecolor: "rgba(229, 231, 235, 0.82)",
+                    zerolinewidth: 2,
+                    showgrid: true,
+                    gridcolor: "rgba(229, 231, 235, 0.28)",
+                    gridwidth: 1,
+                    ticks: ""
+                };
+            }
+
+            function applyProjection() {
+                const gd = document.querySelector('.plotly-graph-div');
+                if (!gd || !window.Plotly) return;
+
+                if (!ensureProjectionData(gd)) return;
+
+                const dimensionsToKeep = projectionDimensions.filter(dimension => dimension.key !== droppedProjectionDimension);
+                const projectedData = gd.data.map((trace, index) => (
+                    droppedProjectionDimension
+                        ? getProjectionTrace(trace, index, dimensionsToKeep)
+                        : getRestoredTrace(trace, index)
+                ));
+                const baseMargin = gd.layout.margin || {};
+                const layout = {
+                    ...gd.layout,
+                    margin: droppedProjectionDimension
+                        ? { ...baseMargin, t: Math.max(baseMargin.t || 0, 82), r: Math.max(baseMargin.r || 0, 64) }
+                        : { ...baseMargin },
+                    legend: { ...gd.layout.legend },
+                    scene: {
+                        ...(gd.layout.scene || {}),
+                        xaxis: { ...((gd.layout.scene || {}).xaxis || {}), title: { text: projectionDimensions[0].label }, showspikes: false },
+                        yaxis: { ...((gd.layout.scene || {}).yaxis || {}), title: { text: projectionDimensions[1].label }, showspikes: false },
+                        zaxis: { ...((gd.layout.scene || {}).zaxis || {}), title: { text: projectionDimensions[2].label }, showspikes: false },
+                        dragmode: 'turntable'
+                    },
+                    xaxis: droppedProjectionDimension
+                        ? getProjectedAxis(dimensionsToKeep[0].label)
+                        : gd.layout.xaxis,
+                    yaxis: droppedProjectionDimension
+                        ? { ...getProjectedAxis(dimensionsToKeep[1].label), scaleanchor: 'x', scaleratio: 1 }
+                        : gd.layout.yaxis,
+                    dragmode: droppedProjectionDimension ? 'pan' : gd.layout.dragmode
+                };
+
+                Plotly.react(gd, projectedData, layout, {
+                    responsive: true,
+                    scrollZoom: true,
+                    displaylogo: false
+                }).then(() => {
+                    updateProjectionAttributes();
+                    applyButtonStyles();
+                    adjustPlotlyForMobile();
+                });
+            }
+
+            function updateProjectionAttributes() {
+                const wrapper = document.getElementById('plotly-wrapper');
+                if (!wrapper) return;
+
+                wrapper.dataset.projectionMode = droppedProjectionDimension ? '2d' : '3d';
+                wrapper.dataset.droppedDimension = droppedProjectionDimension || '';
+                wrapper.dataset.projectionReady = originalProjectionData ? 'true' : 'false';
+            }
+
+            function renderDimensionToggle() {
+                const wrapper = document.getElementById('plotly-wrapper');
+                const gd = document.querySelector('.plotly-graph-div');
+                if (!wrapper || !gd || wrapper.querySelector('#dimension-toggle')) return;
+
+                if (!ensureProjectionData(gd)) return;
+                updateProjectionAttributes();
+
+                const controls = document.createElement('div');
+                controls.id = 'dimension-toggle';
+                projectionDimensions.forEach(dimension => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'dimension-toggle-btn';
+                    button.textContent = dimension.label;
+                    button.title = `Toggle ${dimension.label} projection`;
+                    button.addEventListener('click', () => {
+                        droppedProjectionDimension = droppedProjectionDimension === dimension.key ? null : dimension.key;
+                        controls.querySelectorAll('.dimension-toggle-btn').forEach(btn => {
+                            btn.classList.toggle('is-dropped', btn === button && droppedProjectionDimension === dimension.key);
+                        });
+                        applyProjection();
+                    });
+                    controls.appendChild(button);
+                });
+                wrapper.appendChild(controls);
+            }
+
+            function adjustPlotlyForMobile() {
+                const gd = document.querySelector('.plotly-graph-div');
+                if (!gd) return;
+                
+                if (window.innerWidth < 768) {
+                    const update = {
+                        legend: {
+                            orientation: 'h',
+                            y: -0.15,
+                            x: 0.5,
+                            xanchor: 'center',
+                            yanchor: 'top',
+                            font: { size: 10 }
+                        },
+                        margin: { l: 5, r: 5, b: 100, t: 50 },
+                        updatemenus: [{
+                            ...gd.layout.updatemenus[0],
+                            x: 0.5,
+                            y: 1.12, /* Move higher to avoid modebar */
+                            xanchor: 'center',
+                            yanchor: 'bottom',
+                            direction: 'right',
+                            font: { size: 10 }
+                        }],
+                        modebar: {
+                            orientation: 'v',
+                            x: 1,
+                            y: 0.5,
+                            xanchor: 'right',
+                            yanchor: 'middle'
+                        }
+                    };
+                    Plotly.relayout(gd, update).then(() => {
+                        Plotly.relayout(gd, { 'scene.dragmode': 'turntable' });
+                        Plotly.restyle(gd, { 'marker.size': 6 });
+                        document.getElementById('plotly-wrapper').classList.add('ready');
+                    });
+                } else {
+                    document.getElementById('plotly-wrapper').classList.add('ready');
+                }
+            }
+
+            // Watch for changes to the plot
+            const observer = new MutationObserver((mutations) => {
+                applyButtonStyles();
+            });
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const target = document.body || document.documentElement;
+                if (target instanceof Node) {
+                    observer.observe(target, { childList: true, subtree: true });
+                }
+                applyButtonStyles();
+                renderDimensionToggle();
+                
+                // Initial mobile adjustment - faster timeout
+                setTimeout(() => {
+                    renderDimensionToggle();
+                    adjustPlotlyForMobile();
+                }, 100);
+            });
+            
+            window.addEventListener('resize', () => {
+                applyButtonStyles();
+                adjustPlotlyForMobile();
+            });
+            
+            // Also run on a timer as a fallback
+            setInterval(() => {
+                applyButtonStyles();
+                renderDimensionToggle();
+            }, 1000);
+            </script>
+            </head>
+<body><div id="plotly-wrapper" style="height:100%; width:100%;">
+    <div>                        <script type="text/javascript">window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-3.3.0.min.js" integrity="sha256-bO3dS6yCpk9aK4gUpNELtCiDeSYvGYnK7jFI58NQnHI=" crossorigin="anonymous"></script>                <div id="755ebb75-153c-4db2-a38d-1f32a2a6fada" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script type="text/javascript">                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("755ebb75-153c-4db2-a38d-1f32a2a6fada")) {                    Plotly.newPlot(                        "755ebb75-153c-4db2-a38d-1f32a2a6fada",                        [{"customdata":{"dtype":"i2","bdata":"5AfkB+QH"},"hoverinfo":"text","hovertext":["AJ Brimson (2020)","Nick Meaney (2020)","Phillip Sami (2020)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"TUssLXW1+b\u002fa\u002fgLqr6wBwFoaFDKzSAXA"},"y":{"dtype":"f8","bdata":"63IO7non+j+2383WhfztP3U2t8dhkwRA"},"z":{"dtype":"f8","bdata":"0RnVvAmB8L+VINdTuMjfP31sA5D4YvY\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5QflB+UH5QflB+UH"},"hoverinfo":"text","hovertext":["Jamayne Isaako (2021)","Jordan Rapana (2021)","Nick Meaney (2021)","Reece Walsh (2021)","Ryan Papenhuyzen (2021)","Tyrell Sloan (2021)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"uIoSnRG56b+pmw9RfrD3vyoPWVZgZuC\u002fKhehpFAW178g5\u002fGbT43pP3Y0xzF46O6\u002f"},"y":{"dtype":"f8","bdata":"hK10hvvj9T\u002fMBlNu+3cIQMCvpMCVc\u002fY\u002fqgVJQCuQ7z9LZ+ICRu4PQIXg7SdNZQVA"},"z":{"dtype":"f8","bdata":"5gV5\u002fVYy27\u002fHuXM9DzAJQFEaheWg+\u002fC\u002fQ8T2vtN++L+ilbZH+Ee8vz+tO8pCdQTA"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5gc="},"hoverinfo":"text","hovertext":["Cody Ramsey (2022)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"Uoj6Lzrr9b8="},"y":{"dtype":"f8","bdata":"eC7Jnd\u002fR5j8="},"z":{"dtype":"f8","bdata":"vsoD9PH\u002f4L8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5wfnB+cH5wc="},"hoverinfo":"text","hovertext":["Hamiso Tabuai-Fidow (2023)","Jake Averillo (2023)","Tyrell Sloan (2023)","William Kennedy (2023)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"fVVTyUieyL+2piPfpAzcvyeTj+ZLauC\u002fAlGvGHfL+L8="},"y":{"dtype":"f8","bdata":"ZcOEeK11\u002fz9467Xr4ETlPzNwR8gu3OI\u002fUKcM5+bW6j8="},"z":{"dtype":"f8","bdata":"\u002ffSr+hPT5L\u002fp0yWAx1v3v3c8h93XGf6\u002fWfmBZqBt3r8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6AfoB+gH6Ac="},"hoverinfo":"text","hovertext":["David Armstrong (2024)","Hamiso Tabuai-Fidow (2024)","Jye Gray (2024)","Reece Walsh (2024)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"9bi8+uVY\u002fL+\u002fWZ0gLO3qv\u002fcqRtS\u002fPgDAsYpK\u002fRMy+j8="},"y":{"dtype":"f8","bdata":"qCB2gs+3AkDUjWWoL7P6P\u002fpBfAaZIfI\u002frRhXvDXCDUA="},"z":{"dtype":"f8","bdata":"HaAauK079L\u002f1dwGn5dvgP463u9PTGvC\u002f+kDSGxHB4r8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6QfpBw=="},"hoverinfo":"text","hovertext":["Hamiso Tabuai-Fidow (2025)","Nick Meaney (2025)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"J3A23uEflz\u002fDWaur\u002fyH\u002fvw=="},"y":{"dtype":"f8","bdata":"TzhKvXlE8j8VmGucRfj8Pw=="},"z":{"dtype":"f8","bdata":"7DFOUkFm4r9dni3LKVH2Pw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6gfqB+oH"},"hoverinfo":"text","hovertext":["Clayton Faulalo (2026)","Kaeo Weekes (2026)","Sualauvi Faalogo (2026)"],"legendgroup":"Ball Running Fullback","marker":{"color":"#636EFA","opacity":0.8,"size":5},"mode":"markers","name":"Ball Running Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"73KRoto747+L69n1wDTSvwphMc8CG8w\u002f"},"y":{"dtype":"f8","bdata":"0jloRSB\u002f\u002fj8OYVu6lm\u002fwP+jAeaDbgglA"},"z":{"dtype":"f8","bdata":"XReYBtW28z\u002fcfCyK9nHrv4qHsj1\u002fNfI\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5AfkB+QH5Ac="},"hoverinfo":"text","hovertext":["Clinton Gutherson (2020)","Corey Allan (2020)","Kalyn Ponga (2020)","Ryan Papenhuyzen (2020)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"Zq2+CUZW8z9rfLaCTpC4v5O1mzNxT\u002fY\u002famgs2DFU2j8="},"y":{"dtype":"f8","bdata":"\u002fxh0JFBI0D\u002fZYYB1p0zEP2IJOliZcuo\u002f9I2abuLo6T8="},"z":{"dtype":"f8","bdata":"BzcnIHaJ2z\u002f7OZzxCJDjvxyrzPXzBP0\u002fsaFyqoYp\u002fD8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5QflB+UH5QflB+UH"},"hoverinfo":"text","hovertext":["Daine Laurie (2021)","James Tedesco (2021)","Matthew Dufty (2021)","Tesi Niu (2021)","Tom Trbojevic (2021)","Valentine Holmes (2021)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"BZUq5C\u002fe1b\u002fvz1wAjET6P6DLD1IKaOY\u002fZkFqixOK1L8fTsAyNlb4Pw6DsK8O1wZA"},"y":{"dtype":"f8","bdata":"ERkUNNm+q78gZp\u002fq68\u002fvP2Z\u002f4QhXK+c\u002f65UAFIb06j8s+T8GXbcFQIezdBeDX8g\u002f"},"z":{"dtype":"f8","bdata":"Nhazn9Ysxr9NPn7zZ+DvP4V7taq87+u\u002fgNFgLeGWwz\u002fRQsjnEe38P0LUuFk49\u002fw\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5gfmB+YH5gfmBw=="},"hoverinfo":"text","hovertext":["AJ Brimson (2022)","Clinton Gutherson (2022)","Kalyn Ponga (2022)","Tesi Niu (2022)","Tex Hoy (2022)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"WJpl3fWT3r\u002f29kboZBe4PwT9Y3ijv\u002fM\u002flLUO407m8j97IJNssOfpvw=="},"y":{"dtype":"f8","bdata":"a2UvB57O27\u002fxbT6idgPXPyAI9fKulfo\u002fTbCHzjuB7z\u002fC6SHW8RHHvw=="},"z":{"dtype":"f8","bdata":"zza1JSYR1T\u002fglu2ObqDrvztjNlk7LsC\u002f5r23gLSttz8nCBXETCi9Pw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5wfnB+cH5wfnB+cH5wc="},"hoverinfo":"text","hovertext":["Clinton Gutherson (2023)","Dylan Edwards (2023)","Jahream Bula (2023)","James Tedesco (2023)","Jayden Campbell (2023)","Jordan Rapana (2023)","Tom Trbojevic (2023)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"1OKSZ4Mp6z8T9Wc8elTQv2VB3nLaYsO\u002fNHOyDmXa2L9k7kbG9WDkvxU2ZZC6ocE\u002fhJUnWSpa9j8="},"y":{"dtype":"f8","bdata":"kNse24iB0z+0RRkLWuC8v\u002fC06HjFHeW\u002fAz2Zx3d59D\u002fXwJqueGHfP4WILC+XFvE\u002fZwUy3t7t7z8="},"z":{"dtype":"f8","bdata":"B4ZIgVgc0L+V+eFp63jwP5hN8TVSe8k\u002faimxFx6S+D9Rx4JyWhPhP\u002f7UnNPZyO8\u002frgY3xo8W6z8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6AfoB+gH6Ac="},"hoverinfo":"text","hovertext":["Jahream Bula (2024)","James Tedesco (2024)","Jordan Rapana (2024)","Tom Trbojevic (2024)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"qyNq6bu10b+woSaECtbmP0wGsRCQWdo\u002frxWzdx+46T8="},"y":{"dtype":"f8","bdata":"yOLR5ZYc4r+bhD\u002fYHC7yP2Vky5SMOKm\u002fhxiE\u002f5ZB+D8="},"z":{"dtype":"f8","bdata":"XUvX5n+23z+n9vlNcMoCQCptaY8FS+E\u002fQo6+N\u002fY\u002fBEA="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6QfpB+kH6QfpBw=="},"hoverinfo":"text","hovertext":["AJ Brimson (2025)","Clinton Gutherson (2025)","Dane Gagai (2025)","James Tedesco (2025)","Ryan Papenhuyzen (2025)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"2ziyTGwP9T+v5mwJERD2P2WoA2WwG9M\u002fNpA\u002fJYKH8D\u002feoTpI2k3fPw=="},"y":{"dtype":"f8","bdata":"1y0HLZ\u002fR1L9DoPaXc4rRP\u002fKU9+ofrsS\u002fmpqD86uy8T8TueMrDEbfPw=="},"z":{"dtype":"f8","bdata":"4f2INmy24j9IsWm2nhNyP9Cww354\u002f9Q\u002fVtiWehC+\u002fj89Twp\u002fKCzWvw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6gfqB+oH6gfqB+oH"},"hoverinfo":"text","hovertext":["Cody Ramsey (2026)","Hamiso Tabuai-Fidow (2026)","Isaiah Iongi (2026)","James Tedesco (2026)","Kalyn Ponga (2026)","Tom Trbojevic (2026)"],"legendgroup":"Balanced Fullback","marker":{"color":"#EF553B","opacity":0.8,"size":5},"mode":"markers","name":"Balanced Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"XKD0FVKW2b8OZV9zX\u002fTdP73\u002fW9h0q9Q\u002ffojR7ZSNwL+1mPI5FJbxP0RMiHJezuM\u002f"},"y":{"dtype":"f8","bdata":"KIh20nNPeL9WfbKZPQucPz23HDHAqts\u002fOkz+oXIb6z\u002fcL0MYlwfIv8t4UWLnu9o\u002f"},"z":{"dtype":"f8","bdata":"Yrh\u002fNflA578v0mu5JFrRv\u002fa68XC5o\u002fM\u002fn6LDegkZ8T+vxLbuvni\u002fP\u002fGlA\u002fdEFfQ\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5AfkB+QH5AfkB+QH5Ac="},"hoverinfo":"text","hovertext":["Adam Doueihi (2020)","Charnze Nicoll-Klokstad (2020)","Dallin Watene-Zelezniak (2020)","Dylan Edwards (2020)","James Tedesco (2020)","Roger Tuivasa-Sheck (2020)","Will Hopoate (2020)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"AzJkjcHW97\u002fYUcQbyFf8vxJctdaVVwXA+fVF3P\u002fP8r+u6hIFBH20P6u+Afohp\u002fa\u002fGQfJqOrJxr8="},"y":{"dtype":"f8","bdata":"Dl33w7bE8L\u002fprKsmHTHTv8qYzqdFzPA\u002fa2dyuy9d7L8W+HppyBP5P3JgzroDEug\u002f6W8oPo+bpr8="},"z":{"dtype":"f8","bdata":"VGbUOpxt9D8ardnOd2L\u002fP016u6QZSf0\u002fNsS\u002fdAfG6T8j2pSorF0IQK7MZUFsBgxAlR5XA4le9D8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5QflB+UH5Qc="},"hoverinfo":"text","hovertext":["Dallin Watene-Zelezniak (2021)","Dylan Edwards (2021)","Roger Tuivasa-Sheck (2021)","Stephen Crichton (2021)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"ar7TEPbxAMBJcTbSW\u002fr3vwXmm26FZ8S\u002fUm3Exfk8978="},"y":{"dtype":"f8","bdata":"Ss8ijjY78L\u002fokOojqiDyv+oq8AUuWug\u002fSkH3wy2L4r8="},"z":{"dtype":"f8","bdata":"2PRv5NhqBkCX5E3ykOP5PxXel\u002fhYfw1A1ra7zOwlAUA="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5gfmB+YH5gc="},"hoverinfo":"text","hovertext":["Dylan Edwards (2022)","James Tedesco (2022)","Reuben Garrick (2022)","Tom Trbojevic (2022)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"RkHhK2Dl9b8QgaBGt9Lnv76C3RteWYE\u002fvKWZFT1i2L8="},"y":{"dtype":"f8","bdata":"ntP3Z4wAwL+dBw0ZvO7xPz+ls9\u002fmYu6\u002f5xChBKDD+z8="},"z":{"dtype":"f8","bdata":"ZX6oFVoSA0CiI+KekrQCQEkCQODUpQRANi+4sPaFDUA="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5wfnB+cH5wfnB+cH"},"hoverinfo":"text","hovertext":["Charnze Nicoll-Klokstad (2023)","Connor Tracey (2023)","Hayze Perham (2023)","Lachlan Miller (2023)","Reuben Garrick (2023)","Sebastian Kris (2023)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"Scvvs2Ui8b9DiU9nn+f0vzVFtnQ\u002fOtC\u002fBRNn+RqG9L+Mxj2Pr6rvv7O2BtZf0wLA"},"y":{"dtype":"f8","bdata":"fqjObKAA5b8UpGZwSEvaPxzPPBRodfC\u002fvbG9hp462r9B7fGDBHLwPxPBmlhFS+O\u002f"},"z":{"dtype":"f8","bdata":"eNBAO7MJAUBtKAF8d\u002fX6P4NzVPM9les\u002fK2Rewacd6T+h4BK8guH5PzJVdZ8Ft+g\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6AfoB+gH6AfoB+gH"},"hoverinfo":"text","hovertext":["Charnze Nicoll-Klokstad (2024)","Connor Tracey (2024)","Daine Laurie (2024)","Dylan Edwards (2024)","Keano Kini (2024)","Trai Fuller (2024)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"DjTlCeeN978kyIRD6pzjv++RJJTO\u002f+C\u002f3Pttvzfd2L9mMIwY+A3tvwfg8VmBCvW\u002f"},"y":{"dtype":"f8","bdata":"LmtHRnhtz788uxgXjgL3v1GNbtwm6sU\u002fOSMcNDOVzz9plnPIsMTovyK1OfOuifE\u002f"},"z":{"dtype":"f8","bdata":"g+UrEvkuAkB\u002fuTkjXAP2P9LDpGuuagpAe8d6Yrqu\u002fz8WukaTYwMGQPeS+Nh\u002fAgBA"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6QfpB+kH6QfpB+kH6QfpB+kH"},"hoverinfo":"text","hovertext":["Charnze Nicoll-Klokstad (2025)","Connor Tracey (2025)","Dylan Edwards (2025)","Isaiah Iongi (2025)","Jahream Bula (2025)","Jye Gray (2025)","Lehi Hopoate (2025)","Selwyn Cobbo (2025)","Tom Trbojevic (2025)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"ZJGLcNcd8786HF+Wrue7vymVXGk9trE\u002fyHXFqEIS8L\u002fDSTegxrz1v+49V2qCTee\u002fpkXYth903D9RID4uWlP1vwzyxAsF4eC\u002f"},"y":{"dtype":"f8","bdata":"C1z1n4BL8b++pmaZZcf3vyA7TRR6odm\u002fmfG5\u002fNRr1L9\u002fBgmcfQrOP6PSbz1mY9U\u002f7ZBnu4V3+b9iblvf29X3v4A3WG5tMu2\u002f"},"z":{"dtype":"f8","bdata":"PWidwY03BEAQ1BHDbKfzP\u002fi2lhP55\u002fs\u002fvwn2QktZ7z8rufkLicnZP7w5yN19OwlALbWM2m9q\u002fT+vjzdcrETxPyHSKRF7C\u002fA\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6gfqB+oH6gfqBw=="},"hoverinfo":"text","hovertext":["Dylan Edwards (2026)","Fletcher Sharpe (2026)","Keano Kini (2026)","Matthew Dufty (2026)","Trai Fuller (2026)"],"legendgroup":"Workhorse Fullback","marker":{"color":"#00CC96","opacity":0.8,"size":5},"mode":"markers","name":"Workhorse Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"XiCef4jW2j+QXH9uyn7xv3xn4iYqpeA\u002fUD2jlVKs67\u002fLYQ2rqfsCwA=="},"y":{"dtype":"f8","bdata":"bUIg4C9R3b9STcM+PfTsvyi\u002fJeFx836\u002fGSMdw5sG2r8OCc19yLvivw=="},"z":{"dtype":"f8","bdata":"t6WvzWLo\u002fz+glTS2Z\u002frkP19sU0GjxwFAYdPeemMfD0DDTcazQHQMQA=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5AfkB+QH5AfkB+QH"},"hoverinfo":"text","hovertext":["Darius Boyd (2020)","Jamayne Isaako (2020)","Latrell Mitchell (2020)","Matthew Dufty (2020)","Tom Trbojevic (2020)","Valentine Holmes (2020)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"xmLW2XeJE0CnC7WQFvb0PwtyYtsQjQFAiUkUr1NL9D8pgH6gneABQDW4jL1Vs\u002fg\u002f"},"y":{"dtype":"f8","bdata":"+iX47g5S7r8KB9YCPaz3v2wry52rJvW\u002fLbmBp67I1T\u002fxQ5LWxbsDQF6ZWGyhkes\u002f"},"z":{"dtype":"f8","bdata":"A5tl7PERCMDgogez2aWjP78C6e5oOwTAcOQwmKWg8r9nuAz\u002fPQHnv4unkqrcKvG\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5QflB+UH5QflB+UH"},"hoverinfo":"text","hovertext":["Blake Taaffe (2021)","Clinton Gutherson (2021)","Kalyn Ponga (2021)","Latrell Mitchell (2021)","Nicho Hynes (2021)","William Kennedy (2021)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"CwcnNgfAAEAYKoiwCLf2P5j+ok13Eg5AU+9G\u002f\u002fWW+z+PwrycXeIBQGYbCzd16e4\u002f"},"y":{"dtype":"f8","bdata":"mg6CkXOgBMBFTGZ86\u002fjUvytfCuaEivc\u002f3RDvj8jz6T+e1ooGP73Xv8xRNC0wmrW\u002f"},"z":{"dtype":"f8","bdata":"0fVAYGByAsAkGsPNeFbMvxQjdMxFuuq\u002frhGhy9Cj\u002fb+KdekDoyfyv5WFV08xUPS\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5gfmB+YH5gfmB+YH"},"hoverinfo":"text","hovertext":["Latrell Mitchell (2022)","Matthew Dufty (2022)","Reece Walsh (2022)","Ryan Papenhuyzen (2022)","Scott Drinkwater (2022)","Te Maire Martin (2022)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"H5vFxbEe8j\u002fhWUFdrSH1P6oklHvlyPA\u002fgPq0gldb5z84phH5YrnsP8RHc2T6dQJA"},"y":{"dtype":"f8","bdata":"OQzBjH5t27+NV7KnkW7pvxPscKGgdOE\u002fgaidlcKG9D8n\u002fYqfc3q6v\u002f7\u002f8HjNmAPA"},"z":{"dtype":"f8","bdata":"FjLwZmTFBsBCp8ZPazfVv+zxT17rJvG\u002fmabjEwXZ\u002f791coVG8ff5v40hHyvDPQ\u002fA"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5wfnB+cH5wfnB+cH"},"hoverinfo":"text","hovertext":["AJ Brimson (2023)","Kalyn Ponga (2023)","Kodi Nikorima (2023)","Latrell Mitchell (2023)","Reece Walsh (2023)","Scott Drinkwater (2023)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"i7vMdCiw+z8bAcjEBNX7P+wOcznqtAlAlNTq9BbS6D+Jixm8vxwLQIFAqdw1w\u002f8\u002f"},"y":{"dtype":"f8","bdata":"YbQRd9nGXT+pDdQxG7zvPy8whDPjimy\u002fGlAYCCID4b\u002fzvfKDeObSP0i0D2O4YOM\u002f"},"z":{"dtype":"f8","bdata":"H3t9BtH69b+jaeXbyC\u002flvwb3r12Haf6\u002fouFIFupB7r+Y1lzgkZP4v7mLtdIjb+q\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6AfoB+gH6AfoB+gH"},"hoverinfo":"text","hovertext":["Clinton Gutherson (2024)","Kalyn Ponga (2024)","Latrell Mitchell (2024)","Ryan Papenhuyzen (2024)","Scott Drinkwater (2024)","Tristan Sailor (2024)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"jog\u002fwJsn8j\u002f+UnV3xbwAQCzQMb3Y1RBASFfbbuDj4z9mM7lNHu39PxXIhmK+MfQ\u002f"},"y":{"dtype":"f8","bdata":"CuQ77R7I6r9LK6\u002f+CkvuPzxeR9ieG\u002fg\u002fcdbJWkxi3z8Zl\u002fAB3WCyv4poDG6VjwDA"},"z":{"dtype":"f8","bdata":"PKuKiKDwuj\u002f4P7+0rzLjv15L00s4Nve\u002fR6G4wjqd\u002fL+ji01duuviv+hvT2sJlti\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6QfpB+kH6Qc="},"hoverinfo":"text","hovertext":["Kalyn Ponga (2025)","Latrell Mitchell (2025)","Reece Walsh (2025)","Scott Drinkwater (2025)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"6jw77J0fAEBhtae17yL6P5ByY0JoeAxAGgMh5SuIAUA="},"y":{"dtype":"f8","bdata":"CuPhoT+c+b9d8B1hC0jYvwlN4IZeo8q\u002f+ehPpg2d0z8="},"z":{"dtype":"f8","bdata":"UBHjKkTT0L9FjT\u002fGYx73v\u002fgcrJ\u002f2kPK\u002fh9M0aPGD8b8="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6gfqB+oH6gc="},"hoverinfo":"text","hovertext":["Clinton Gutherson (2026)","Hayze Perham (2026)","Reece Walsh (2026)","Scott Drinkwater (2026)"],"legendgroup":"Playmaker Fullback","marker":{"color":"#AB63FA","opacity":0.8,"size":5},"mode":"markers","name":"Playmaker Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"ZjKIqFQE3T8w6DjWD8EBQGZjvY45jBFAUpRrRexcBkA="},"y":{"dtype":"f8","bdata":"QnbT2xCY8r8Qsa0J1tf4v+7dWTp9+PU\u002fOxYsWkqq8L8="},"z":{"dtype":"f8","bdata":"HFYdSHS6zr\u002fMS5k67DPhv23UDYt27PK\u002fUgafyHwj778="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5AfkB+QH5AfkBw=="},"hoverinfo":"text","hovertext":["Brendan Elliot (2020)","Caleb Aekins (2020)","Corey Thompson (2020)","Hamiso Tabuai-Fidow (2020)","William Kennedy (2020)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":true,"x":{"dtype":"f8","bdata":"zMt+UJjlA8CRubo7o4j7v47nduMis\u002fa\u002fFR+d6imf9784C4MP6ELhPw=="},"y":{"dtype":"f8","bdata":"K1vrjN2aB8A\u002f5aGL\u002fr8HwAvyLhHrLMG\u002fWJUHGUFV7z+0TPAPeu7vvw=="},"z":{"dtype":"f8","bdata":"i1CVsdjG+7+oHvziupLov9VSftvhbfO\u002fS5wvoRbVCMD4FexGtEwGwA=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5QflB+UH5QflB+UH"},"hoverinfo":"text","hovertext":["AJ Brimson (2021)","Alexander Brimson (2021)","Caleb Aekins (2021)","Dylan Walker (2021)","Jayden Campbell (2021)","Tex Hoy (2021)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"fKZroghG4b8PRc1wEnPmvz6ja7sPc7i\u002fMdapIWEe+b\u002fJfqRCjLT0vweiQ1i3efu\u002f"},"y":{"dtype":"f8","bdata":"kDJhIAU84b9mWUQjEIX0vz5H0bmgHfm\u002f\u002fOwV+A6lAMDVOvGCOOzDvx2ox\u002fXJQfu\u002f"},"z":{"dtype":"f8","bdata":"X+H2kwlv7r\u002fyiXtfmVLsv5wdKKA96+Q\u002fPhHTEPck8L8yFVnYl8Dlv8Fv53Tlq\u002fu\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5gfmB+YH5gfmB+YH5gfmB+YH5gfmB+YH"},"hoverinfo":"text","hovertext":["Blake Taaffe (2022)","Charnze Nicoll-Klokstad (2022)","Daine Laurie (2022)","Hamiso Tabuai-Fidow (2022)","Jake Averillo (2022)","Jamayne Isaako (2022)","Jayden Campbell (2022)","Moses Mbye (2022)","Nick Meaney (2022)","Starford To'a (2022)","William Kennedy (2022)","Xavier Savage (2022)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"lDvAx\u002f\u002fmx79sNBxCAcvfv3wdLj45t70\u002fnNcv7nCc4b\u002fMHMKFhJQAwLOwRCacAf2\u002fO7rxNVuT87\u002fyaYy8Z6u3P5korq8nvsy\u002fX7sweq43+L9lYqJ+00ruv2ETs19N6ue\u002f"},"y":{"dtype":"f8","bdata":"eDCE5Y16+7\u002fSJ0moQB8DwIVXvms8Et+\u002f3RG9KIYXyL9IsJ\u002fq9FnlP\u002fIqDMVgwOA\u002fPEEO9Msb778yhj6pObv+v1swQYlLO++\u002f5Yoyb31D6b\u002f0TBqBF6bzvxWd2AJTZc2\u002f"},"z":{"dtype":"f8","bdata":"fGQ+I+hXD8CABmlQiUjiv7JRai\u002fT\u002f+2\u002f0vJmrU6pDsAo8d22vpcJwGgdkUn13fq\u002flv8+3cr30r9NYD0vNvYEwH0v9hq1nwPAfILxOz2a4L8iPF0iR34CwFSa6U5jNOO\u002f"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"5wfnBw=="},"hoverinfo":"text","hovertext":["Blake Taaffe (2023)","Nick Meaney (2023)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"2+RfHM9S8L8m++NwYFPbvw=="},"y":{"dtype":"f8","bdata":"Cdta7Al08b83B3dEYA7qvw=="},"z":{"dtype":"f8","bdata":"78qX2CMcAsA4E4fqamrZvw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6AfoB+gH6AfoB+gH"},"hoverinfo":"text","hovertext":["Blake Taaffe (2024)","Kaeo Weekes (2024)","Sualauvi Faalogo (2024)","Taine Tuaupiki (2024)","Tyrell Sloan (2024)","William Kennedy (2024)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"+4uAr30g8D8Xjx40TvX1vwLM\u002fg70VOu\u002fbv4V\u002f0to7L+L21uRQzrrv7uUQ5htF\u002fS\u002f"},"y":{"dtype":"f8","bdata":"qh3mC\u002fz2AcBfSV+EJqjzv4UErh4ZgNq\u002fw\u002fxnlUNI878UKJtjmZa+PwhOHbMaLADA"},"z":{"dtype":"f8","bdata":"PkwMkrMf5b9IDf8SaxDpv1Dt8d1kM8Y\u002fAJLuMTFZxL933igKeb0GwEmpBSiyGAHA"},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6QfpB+kH6QfpBw=="},"hoverinfo":"text","hovertext":["Daine Laurie (2025)","Jaylan De Groot (2025)","Kaeo Weekes (2025)","Taine Tuaupiki (2025)","William Kennedy (2025)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"3DqYGh2X3r+xkzta8q7aPz\u002fB1dsEcfC\u002f81PuGehk1L9cMe2n\u002fYbrvw=="},"y":{"dtype":"f8","bdata":"2N+fhNEE\u002fb8WqXBQF\u002fn9vw9KQWJjrcg\u002fi4DvYKhB8r\u002fnnqvAiaj4vw=="},"z":{"dtype":"f8","bdata":"GN16\u002fL+w4T+z12gZGu0AwKvIippupfK\u002f264MPw+Oyr8JwvpKx5\u002ftvw=="},"type":"scatter3d"},{"customdata":{"dtype":"i2","bdata":"6gfqB+oH6gfqB+oH6gc="},"hoverinfo":"text","hovertext":["Charnze Nicoll-Klokstad (2026)","Connor Tracey (2026)","Jahream Bula (2026)","Joash Papalii (2026)","Jye Gray (2026)","Taine Tuaupiki (2026)","William Kennedy (2026)"],"legendgroup":"Support Fullback","marker":{"color":"#FFA15A","opacity":0.8,"size":5},"mode":"markers","name":"Support Fullback","showlegend":false,"x":{"dtype":"f8","bdata":"PY\u002fW\u002fZTKAsDzobM5noX3vwZMW\u002f8wvue\u002flmvFgq3H6L9eOp24x9bmv+nAjlJf4P2\u002f6Bu39Q\u002fX1b8="},"y":{"dtype":"f8","bdata":"+Z9Cyg675b8ubnq5whDwv4oigMJXZfW\u002f0VtsyXUa278zJ9Va2HTiv7GcBSwLmta\u002fXN8+xkfI4L8="},"z":{"dtype":"f8","bdata":"o5L4Nm+n679foWc9w5TTP+nipHzSFME\u002fUF8sTObW6L9U\u002f+Ex44DUv0tLNAbFqrO\u002fZaqaOITu1b8="},"type":"scatter3d"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermapbox":[{"type":"scattermapbox","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"mapbox":{"style":"light"}}},"scene":{"xaxis":{"title":{"text":"Playmaking"},"showspikes":false},"yaxis":{"title":{"text":"Evasiveness"},"showspikes":false},"zaxis":{"title":{"text":"Workrate"},"showspikes":false},"dragmode":"turntable"},"updatemenus":[{"active":0,"bgcolor":"white","bordercolor":"#2A3B6E","borderwidth":1,"buttons":[{"args":[{"marker.opacity":0.8,"hoverinfo":"text"}],"label":"All Years","method":"update"},{"args":[{"marker.opacity":[0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15],"hoverinfo":["text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none"]}],"label":"2020","method":"update"},{"args":[{"marker.opacity":[0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15],"hoverinfo":["none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none"]}],"label":"2021","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15],"hoverinfo":["none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none"]}],"label":"2022","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15],"hoverinfo":["none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none"]}],"label":"2023","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15],"hoverinfo":["none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none"]}],"label":"2024","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15],"hoverinfo":["none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none"]}],"label":"2025","method":"update"},{"args":[{"marker.opacity":[0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8,0.15,0.15,0.15,0.15,0.15,0.15,0.8],"hoverinfo":["none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text","none","none","none","none","none","none","text"]}],"label":"2026","method":"update"}],"direction":"right","font":{"color":"#0A1128","size":11},"showactive":true,"type":"buttons","x":0.02,"xanchor":"left","y":0.98,"yanchor":"top"}],"legend":{"title":{"text":"Archetype"}},"margin":{"l":0,"r":0,"b":0,"t":30},"font":{"color":"#0A1128"},"paper_bgcolor":"#f0f0f0","plot_bgcolor":"#f0f0f0"},                        {"responsive": true, "scrollZoom": true, "displaylogo": false}                    )                };            </script>        </div>
+</div></body>
+</html>

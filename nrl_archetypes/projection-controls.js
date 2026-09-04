@@ -449,7 +449,14 @@
 
     const availableYearButtons = yearMenu.buttons
       .map((yearButton, index) => ({ yearButton, index }))
-      .filter(({ yearButton }) => !isCurrentSeasonWindow || String(yearButton.label) === "2026");
+      .filter(({ yearButton }) => !isCurrentSeasonWindow || String(yearButton.label) === "2026")
+      .sort((a, b) => {
+        const aLabel = String(a.yearButton.label);
+        const bLabel = String(b.yearButton.label);
+        if (aLabel === "All Years") return -1;
+        if (bLabel === "All Years") return 1;
+        return Number(bLabel) - Number(aLabel);
+      });
 
     availableYearButtons.forEach(({ yearButton, index }) => {
       const button = document.createElement("button");
@@ -609,18 +616,29 @@
       }
       #year-toggle {
         flex-basis: auto;
-        width: fit-content;
+        width: max-content;
         display: flex;
-        max-width: 100%;
-        overflow: hidden;
+        max-width: calc(100vw - 28px);
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
         border: 1px solid rgba(148, 163, 184, 0.34);
         border-radius: 999px;
         background: rgba(9, 14, 30, 0.78);
         box-shadow: 0 10px 26px rgba(4, 8, 18, 0.28);
         pointer-events: auto;
       }
+      #year-toggle::-webkit-scrollbar {
+        height: 4px;
+      }
+      #year-toggle::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.5);
+      }
       .year-toggle-btn {
         appearance: none;
+        flex: 0 0 auto;
         min-height: 34px;
         border: 0;
         border-right: 1px solid rgba(148, 163, 184, 0.22);
@@ -772,7 +790,7 @@
           right: 58px;
         }
         #year-toggle {
-          max-width: 100%;
+          max-width: calc(100vw - 72px);
         }
         .year-toggle-btn {
           min-height: 32px;

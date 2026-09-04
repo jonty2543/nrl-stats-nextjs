@@ -20,7 +20,9 @@ from scipy.spatial.distance import cdist
 
 supabase: Client = create_client(f.SUPABASE_URL, f.SUPABASE_KEY)
 
-YEARS_TO_PROCESS = [2023, 2024, 2025, 2026]
+START_YEAR = int(os.getenv("ARCHETYPE_START_YEAR", "2000"))
+END_YEAR = int(os.getenv("ARCHETYPE_END_YEAR", str(datetime.now().year)))
+YEARS_TO_PROCESS = list(range(START_YEAR, END_YEAR + 1))
 ARCHETYPE_TABLE = "player_archetypes"
 PLAYER_STATS_TABLE = "player_stats"
 MATCHES_TABLE = "matches"
@@ -421,6 +423,16 @@ def fetch_player_stats_for_years(years, configs, table=PLAYER_STATS_TABLE, batch
     return pd.concat(frames, ignore_index=True)
 
 
+def build_archetype_periods(years):
+    sorted_years = sorted(set(int(year) for year in years))
+    periods = [{"label": "All", "years": sorted_years}]
+    for decade_start in range((min(sorted_years) // 10) * 10, (max(sorted_years) // 10) * 10 + 1, 10):
+        decade_years = [year for year in sorted_years if decade_start <= year <= decade_start + 9]
+        if decade_years:
+            periods.append({"label": f"{decade_start}s", "years": decade_years})
+    return periods
+
+
 def load_and_process_data(configs, player_data, stat_mode='production', recent_games=None):
     print(f"Processing {stat_mode.replace('_', ' ')} player stats...")
     
@@ -531,10 +543,10 @@ def load_and_process_data(configs, player_data, stat_mode='production', recent_g
 
 # --- Model Training ---
 
-def train_models(training_agg, configs, game_window=None):
+def train_models(training_agg, configs, game_window=None, label="GLOBAL"):
     models = {}
     
-    print("\n====== TRAINING MODELS (GLOBAL) ======")
+    print(f"\n====== TRAINING MODELS ({label}) ======")
     
     for config in configs:
         print(f"\nTraining {config.name}...")
@@ -550,6 +562,10 @@ def train_models(training_agg, configs, game_window=None):
             
         if df.empty:
             print(f"  No data for {config.name}")
+            continue
+
+        if len(df) < config.n_clusters:
+            print(f"  Not enough rows for {config.name}: {len(df)} rows for {config.n_clusters} clusters")
             continue
             
         # Combine features
@@ -703,10 +719,11 @@ def build_stat_map(row, features, suffix="", digits=3):
     return out
 
 
-def build_player_archetype_record(row, config, features):
+def build_player_archetype_record(row, config, features, period_label):
     return {
         "player": str(row["player"]),
         "year": int(row["year"]),
+        "decade": period_label,
         "position": export_position_name(config),
         "source_position": config.name,
         "archetype": str(row["cluster_name"]),
@@ -744,7 +761,7 @@ def upsert_player_archetypes(records):
             supabase
             .schema("nrl")
             .table(ARCHETYPE_TABLE)
-            .upsert(batch, on_conflict="player,year,position")
+            .upsert(batch, on_conflict="player,year,position,decade")
             .execute()
         )
 
@@ -757,6 +774,7 @@ def upsert_player_archetypes(records):
             .delete()
             .eq("position", export_position_name(config))
             .in_("year", YEARS_TO_PROCESS)
+            .in_("decade", sorted({record["decade"] for record in records}))
             .lt("games", config.min_games)
             .execute()
         )
@@ -801,27 +819,22 @@ def configure_competition(competition):
     CACHE_FILE_PREFIX = "player_stats"
 
 
-def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="production", game_window=None):
+def generate_outputs(training_agg, models_by_period, configs, periods, plot_suffix="", stat_mode="production", game_window=None, store_records=True):
     full_cluster_data_export = {}
     player_archetype_records = []
-    
-    # Only process "All" as requested by user
-    process_years = ["All"]
-    
-    for year in process_years:
-        print(f"\n====== GENERATING OUTPUTS FOR {year} ======")
+
+    for period in periods:
+        period_label = period["label"]
+        period_years = period["years"]
+        print(f"\n====== GENERATING OUTPUTS FOR {period_label} ======")
         cluster_data_export = {}
-        
-        if year == "All":
-            year_data = training_agg.copy()
-            # Create hover label with year
-            year_data['hover_label'] = year_data['player'] + " (" + year_data['year'].astype(str) + ")"
-        else:
-            year_data = training_agg[training_agg['year'] == year].copy()
-            year_data['hover_label'] = year_data['player']
+
+        year_data = training_agg[training_agg['year'].isin(period_years)].copy()
+        year_data['hover_label'] = year_data['player'] + " (" + year_data['year'].astype(str) + ")"
+        models = models_by_period.get(period_label, {})
         
         if year_data.empty:
-            print(f"No data for {year}")
+            print(f"No data for {period_label}")
             continue
             
         for config in configs:
@@ -839,7 +852,7 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                 df = df[df['player'] != 'Chris Randall']
                 
             if df.empty:
-                print(f"  No players for {config.name} in {year}")
+                print(f"  No players for {config.name} in {period_label}")
                 continue
                 
             # Transform features and calculate the visible PC coordinates first.
@@ -883,9 +896,9 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
             for feature in percentile_features:
                 df[f'{feature}_percentile'] = percentile_df[feature]
 
-            if year == "All":
+            if store_records:
                 player_archetype_records.extend(
-                    build_player_archetype_record(row, config, percentile_features)
+                    build_player_archetype_record(row, config, percentile_features, period_label)
                     for _, row in df.iterrows()
                 )
                 
@@ -925,7 +938,7 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
             cluster_data_export[export_name] = position_data
             
             # Generate Plot
-            if year == "All":
+            if True:
                 # For the "All" view, we create separate traces for each (Year, Archetype)
                 # to make filtering by year much more robust.
                 fig = go.Figure()
@@ -935,7 +948,7 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                 for i, arch in enumerate(archetypes):
                     color = colors[i % len(colors)]
                     legend_shown = False
-                    for y in YEARS_TO_PROCESS:
+                    for y in period_years:
                         mask = (df['cluster_name'] == arch) & (df['year'] == y)
                         sub_df = df[mask]
                         if sub_df.empty:
@@ -965,7 +978,7 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                     args=[{"marker.opacity": 0.8, "hoverinfo": "text"}]
                 ))
                 
-                for target_y in YEARS_TO_PROCESS:
+                for target_y in period_years:
                     opacities = []
                     hoverinfos = []
                     for trace in fig.data:
@@ -1007,33 +1020,6 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                         dragmode='turntable'
                     )
                 )
-            else:
-                # Standard px plot for individual years
-                fig = px.scatter_3d(
-                    df,
-                    x='pc1',
-                    y='pc2',
-                    z='pc3',
-                    color='cluster_name',
-                    hover_name='hover_label',
-                    opacity=0.8,
-                    labels={
-                        'pc1': config.pc_names[0],
-                        'pc2': config.pc_names[1],
-                        'pc3': config.pc_names[2],
-                        'cluster_name': 'Archetype'
-                    }
-                )
-                fig.update_traces(marker=dict(size=5))
-                fig.update_layout(
-                    scene=dict(
-                        xaxis=dict(showspikes=False),
-                        yaxis=dict(showspikes=False),
-                        zaxis=dict(showspikes=False),
-                        dragmode='turntable'
-                    )
-                )
-
             fig.update_layout(
                 legend_title_text='Archetype',
                 margin=dict(l=0, r=0, b=0, t=30),
@@ -1043,7 +1029,7 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
             )
             
             suffix = f"_{plot_suffix}" if plot_suffix else ""
-            filename = f"{OUTPUT_PREFIX}_cluster_plot_{export_name.lower().replace(' ', '_')}{suffix}_{str(year).lower()}.html"
+            filename = f"{OUTPUT_PREFIX}_cluster_plot_{export_name.lower().replace(' ', '_')}{suffix}_{str(period_label).lower()}.html"
             
             # Inject custom CSS and JS to fix Plotly button styling, add mobile responsiveness,
             # and allow projecting the 3D archetype space onto any 2D plane.
@@ -1376,8 +1362,10 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
             });
 
             document.addEventListener('DOMContentLoaded', () => {
-                const target = document.body;
-                observer.observe(target, { childList: true, subtree: true });
+                const target = document.body || document.documentElement;
+                if (target instanceof Node) {
+                    observer.observe(target, { childList: true, subtree: true });
+                }
                 applyButtonStyles();
                 renderDimensionToggle();
                 
@@ -1431,7 +1419,7 @@ def generate_outputs(training_agg, models, configs, plot_suffix="", stat_mode="p
                 output_file.write(html_content)
             print(f"  Saved plot {filename}")
             
-        full_cluster_data_export[str(year)] = cluster_data_export
+        full_cluster_data_export[str(period_label)] = cluster_data_export
         
     return full_cluster_data_export, player_archetype_records
 
@@ -1453,6 +1441,25 @@ def save_empty_competition_exports():
         variable_suffix = f'L{game_window}'
         save_cluster_exports({}, f'{OUTPUT_PREFIX}_cluster_data_{window_label}', f'{variable_base}{variable_suffix}')
         save_cluster_exports({}, f'{OUTPUT_PREFIX}_cluster_data_team_share_{window_label}', f'{variable_base}TeamShare{variable_suffix}')
+
+
+def train_models_for_periods(training_agg, configs, periods, game_window=None):
+    models_by_period = {}
+    for period in periods:
+        period_label = period["label"]
+        period_years = period["years"]
+        period_data = training_agg[training_agg["year"].isin(period_years)].copy()
+        if period_data.empty:
+            print(f"\nSkipping model training for {period_label}: no rows.")
+            models_by_period[period_label] = {}
+            continue
+        models_by_period[period_label] = train_models(
+            period_data,
+            configs,
+            game_window=game_window,
+            label=period_label,
+        )
+    return models_by_period
 
 
 def fetch_table_count(table):
@@ -1490,12 +1497,18 @@ if __name__ == "__main__":
         raise SystemExit(0)
 
     training_agg = load_and_process_data(POSITION_CONFIGS, player_data, stat_mode='production')
+    archetype_periods = build_archetype_periods(YEARS_TO_PROCESS)
     
-    # 2. Train Models (Global)
-    models = train_models(training_agg, POSITION_CONFIGS)
+    # 2. Train Models by era
+    models_by_period = train_models_for_periods(training_agg, POSITION_CONFIGS, archetype_periods)
     
-    # 3. Generate Outputs (Per Year)
-    full_data, player_archetype_records = generate_outputs(training_agg, models, POSITION_CONFIGS)
+    # 3. Generate Outputs by era
+    full_data, player_archetype_records = generate_outputs(
+        training_agg,
+        models_by_period,
+        POSITION_CONFIGS,
+        archetype_periods,
+    )
     
     # 4. Save JSON and browser data
     save_cluster_exports(full_data, f'{OUTPUT_PREFIX}_cluster_data', 'clusterData' if OUTPUT_PREFIX == 'nrl' else 'cupClusterData')
@@ -1509,13 +1522,15 @@ if __name__ == "__main__":
     # 6. Generate alternate team-share archetype view
     team_share_configs = build_team_share_configs(POSITION_CONFIGS)
     team_share_training_agg = load_and_process_data(team_share_configs, player_data, stat_mode='team_share')
-    team_share_models = train_models(team_share_training_agg, team_share_configs)
+    team_share_models_by_period = train_models_for_periods(team_share_training_agg, team_share_configs, archetype_periods)
     team_share_data, _ = generate_outputs(
         team_share_training_agg,
-        team_share_models,
+        team_share_models_by_period,
         team_share_configs,
+        archetype_periods,
         plot_suffix="team_share",
         stat_mode="team_share",
+        store_records=False,
     )
     save_cluster_exports(
         team_share_data,
@@ -1524,6 +1539,16 @@ if __name__ == "__main__":
     )
 
     # 7. Generate recent qualifying-game views.
+    current_year = max(YEARS_TO_PROCESS)
+    current_year_periods = [{"label": str(current_year), "years": [current_year]}]
+    current_decade_label = f"{current_year // 10 * 10}s"
+    current_models_by_period = {
+        str(current_year): models_by_period.get(current_decade_label) or models_by_period.get("All", {})
+    }
+    current_team_share_models_by_period = {
+        str(current_year): team_share_models_by_period.get(current_decade_label) or team_share_models_by_period.get("All", {})
+    }
+
     for game_window in (3, 5, 10):
         window_label = f'l{game_window}'
         variable_suffix = f'L{game_window}'
@@ -1537,10 +1562,12 @@ if __name__ == "__main__":
         # Keep the All player-year feature space and cluster centroids fixed.
         window_data, _ = generate_outputs(
             window_training_agg,
-            models,
+            current_models_by_period,
             POSITION_CONFIGS,
+            current_year_periods,
             plot_suffix=window_label,
             game_window=game_window,
+            store_records=False,
         )
         save_cluster_exports(
             window_data,
@@ -1557,11 +1584,13 @@ if __name__ == "__main__":
         # Team-share windows likewise reuse the All team-share model.
         window_team_share_data, _ = generate_outputs(
             window_team_share_agg,
-            team_share_models,
+            current_team_share_models_by_period,
             team_share_configs,
+            current_year_periods,
             plot_suffix=f'team_share_{window_label}',
             stat_mode='team_share',
             game_window=game_window,
+            store_records=False,
         )
         save_cluster_exports(
             window_team_share_data,

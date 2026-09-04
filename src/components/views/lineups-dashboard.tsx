@@ -782,6 +782,10 @@ function displayName(player: LineupPlayer): string {
   return `${player.isCaptain ? "(C) " : ""}${last}`
 }
 
+function compactPitchDisplayName(player: LineupPlayer): string {
+  return displayName(player).replace(/-/g, "-\u200b")
+}
+
 function formatAverage(value: number | null | undefined, mode: AverageStatKey): string {
   if (value == null) return "-"
   if (mode === "All Run Metres" || mode === "Post Contact Metres" || mode === "Receipts") return value.toFixed(0)
@@ -890,16 +894,16 @@ function PlayerMetric({
   compact: boolean
 }) {
   const playerKey = normaliseKey(player.player)
-  const textClass = compact ? "text-[10px]" : "text-[11px]"
+  const textClass = compact ? "text-[9px]" : "text-[11px]"
 
   if (displayMode === "fantasy") {
     if (!canAccessFantasyProjections) {
-      return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+      return <div className={`${textClass} whitespace-nowrap font-semibold leading-tight text-emerald-100/60`}>-</div>
     }
     return player.fantasyProjection != null ? (
-      <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>{Math.round(player.fantasyProjection)} proj</div>
+      <div className={`${textClass} whitespace-nowrap font-semibold leading-tight text-emerald-100/90`}>{Math.round(player.fantasyProjection)} proj</div>
     ) : (
-      <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+      <div className={`${textClass} whitespace-nowrap font-semibold leading-tight text-emerald-100/60`}>-</div>
     )
   }
 
@@ -907,7 +911,7 @@ function PlayerMetric({
     const odds = tryscorerOdds[playerKey]
     const logo = resolveBookieLogo(odds?.bestBookie)
     return odds?.bestPrice != null ? (
-      <div className={`mt-0.5 flex items-center justify-center gap-1 ${textClass} font-semibold leading-tight text-emerald-100/90`}>
+      <div className={`mt-0.5 flex items-center justify-center gap-1 ${textClass} whitespace-nowrap font-semibold leading-tight text-emerald-100/90`}>
         {logo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={logo} alt={odds.bestBookie ?? ""} className={`${compact ? "h-2.5" : "h-3"} w-auto object-contain`} loading="lazy" />
@@ -915,22 +919,22 @@ function PlayerMetric({
         <span>{odds.bestPrice.toFixed(2)}</span>
       </div>
     ) : (
-      <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+      <div className={`${textClass} whitespace-nowrap font-semibold leading-tight text-emerald-100/60`}>-</div>
     )
   }
 
   if (displayMode === "edge") {
-    if (!canAccessPremiumBetting) return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    if (!canAccessPremiumBetting) return <div className={`${textClass} whitespace-nowrap font-semibold leading-tight text-emerald-100/60`}>-</div>
     const edge = tryScorerEdge(tryscorerOdds[playerKey])
     return (
-      <div className={`${textClass} font-semibold leading-tight ${edge != null && edge < 0 ? "text-red-200" : "text-emerald-100/90"}`}>
+      <div className={`${textClass} whitespace-nowrap font-semibold leading-tight ${edge != null && edge < 0 ? "text-red-200" : "text-emerald-100/90"}`}>
         {edge == null ? "-" : `${edge >= 0 ? "+" : ""}${edge.toFixed(1)}%`}
       </div>
     )
   }
 
   if (displayMode === "betRating") {
-    if (!canAccessPremiumBetting) return <div className={`${textClass} font-semibold leading-tight text-emerald-100/60`}>-</div>
+    if (!canAccessPremiumBetting) return <div className={`${textClass} whitespace-nowrap font-semibold leading-tight text-emerald-100/60`}>-</div>
     const odds = tryscorerOdds[playerKey]
     return (
       <div className="mt-0.5 flex justify-center">
@@ -943,7 +947,7 @@ function PlayerMetric({
 
   const statLabel = statPerGameLabel(displayMode)
   return (
-    <div className={`${textClass} font-semibold leading-tight text-emerald-100/90`}>
+    <div className={`${textClass} mt-0.5 whitespace-nowrap font-semibold leading-tight text-emerald-100/90`}>
       {formatAverage(playerAverages[playerKey]?.[displayMode], displayMode)}
       {statLabel ? ` ${statLabel}` : ""}
     </div>
@@ -2786,12 +2790,12 @@ function PitchPlayer({
   return (
     <button
       type="button"
-      className={`${compact ? "w-14 sm:w-16" : "w-20"} absolute z-[2] -translate-x-1/2 -translate-y-1/2 text-center outline-none transition-transform hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-emerald-300`}
+      className={`${compact ? "w-[4.25rem] sm:w-16" : "w-20"} absolute z-[2] -translate-x-1/2 -translate-y-1/2 text-center outline-none transition-transform hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-emerald-300`}
       style={position}
       title={`${player.player}${player.sideSource === "override" ? " - side override" : ""}`}
       onClick={() => onPlayerSelect(player)}
     >
-      <div className={`${compact ? "h-9 w-9 sm:h-10 sm:w-10" : "h-12 w-12"} relative mx-auto`}>
+      <div className={`${compact ? "h-8 w-8 sm:h-10 sm:w-10" : "h-12 w-12"} relative mx-auto`}>
         <div className="grid h-full w-full place-items-center overflow-hidden rounded-full border-2 border-white/75 bg-nrl-panel shadow-[0_8px_18px_rgba(0,0,0,0.32)]">
           <PlayerImageWithFallback
             sources={imageSources}
@@ -2810,8 +2814,8 @@ function PitchPlayer({
           </div>
         ) : null}
       </div>
-      <div className={`${compact ? "max-w-[3.45rem] text-[9px]" : "text-[11px]"} mx-auto mt-1 whitespace-normal break-words font-bold leading-tight text-white drop-shadow`} title={player.player}>
-        {displayName(player)}
+      <div className={`${compact ? "line-clamp-2 h-[1.4rem] max-w-[4.25rem] text-[9px] leading-[0.7rem]" : "text-[11px]"} mx-auto mt-0.5 overflow-hidden whitespace-normal break-normal font-bold text-white drop-shadow`} title={player.player}>
+        {compact ? compactPitchDisplayName(player) : displayName(player)}
       </div>
       {showPlayerMetric ? (
         <PlayerMetric

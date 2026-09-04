@@ -161,8 +161,31 @@
             white-space: nowrap;
         }
 
-        #decadeToggle .mode-btn {
-            text-transform: none;
+        #windowControlFrame,
+        #decadeControlFrame {
+            overflow: visible;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            padding: 0;
+        }
+
+        .control-select {
+            min-width: 5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            background: rgba(17, 24, 50, 0.92);
+            color: var(--white);
+            padding: 0.42rem 1.8rem 0.42rem 0.65rem;
+            font-size: 0.72rem;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .control-select:hover,
+        .control-select:focus {
+            border-color: var(--lime);
+            outline: none;
         }
 
         .control-divider {
@@ -758,21 +781,21 @@
                         <button class="mode-btn" data-mode="teamShare">Team Share</button>
                     </div>
                 </div>
-                <div class="control-frame">
-                    <div class="mode-toggle" id="windowToggle" aria-label="Qualifying game window">
-                        <button class="mode-btn active" data-window="all">All</button>
-                        <button class="mode-btn" data-window="l3">L3</button>
-                        <button class="mode-btn" data-window="l5">L5</button>
-                        <button class="mode-btn" data-window="l10">L10</button>
-                    </div>
+                <div class="control-frame" id="windowControlFrame">
+                    <select class="control-select" id="windowToggle" aria-label="Qualifying game window">
+                        <option value="all" selected>All</option>
+                        <option value="l3">L3</option>
+                        <option value="l5">L5</option>
+                        <option value="l10">L10</option>
+                    </select>
                 </div>
-                <div class="control-frame">
-                    <div class="mode-toggle" id="decadeToggle" aria-label="Archetype era">
-                        <button class="mode-btn active" data-period="2020s">20's</button>
-                        <button class="mode-btn" data-period="2010s">10's</button>
-                        <button class="mode-btn" data-period="2000s">00's</button>
-                        <button class="mode-btn" data-period="All">All</button>
-                    </div>
+                <div class="control-frame" id="decadeControlFrame">
+                    <select class="control-select" id="decadeToggle" aria-label="Archetype era">
+                        <option value="2020s" selected>20's</option>
+                        <option value="2010s">10's</option>
+                        <option value="2000s">00's</option>
+                        <option value="All">All</option>
+                    </select>
                 </div>
             </div>
 
@@ -999,13 +1022,8 @@
                 btn.onclick = () => selectMode(btn.dataset.mode);
             });
 
-            windowToggle.querySelectorAll('.mode-btn').forEach(btn => {
-                btn.onclick = () => selectWindow(btn.dataset.window);
-            });
-
-            decadeToggle.querySelectorAll('.mode-btn').forEach(btn => {
-                btn.onclick = () => selectPeriod(btn.dataset.period);
-            });
+            windowToggle.onchange = event => selectWindow(event.target.value);
+            decadeToggle.onchange = event => selectPeriod(event.target.value);
 
             rankingsHeader.onclick = () => {
                 rankingsOpen = !rankingsOpen;
@@ -1081,12 +1099,11 @@
                 currentYear = availablePeriods.includes('All') ? 'All' : availablePeriods[0] || 'All';
             }
 
-            decadeToggle.querySelectorAll('.mode-btn').forEach(btn => {
-                const unavailable = !availablePeriods.includes(btn.dataset.period);
-                btn.disabled = unavailable;
-                btn.title = unavailable ? 'Archetype data is unavailable for this era' : '';
-                btn.classList.toggle('active', btn.dataset.period === currentYear);
+            Array.from(decadeToggle.options).forEach(option => {
+                const unavailable = !availablePeriods.includes(option.value);
+                option.disabled = unavailable;
             });
+            decadeToggle.value = currentYear;
         }
 
         function rebuildPositionTabs(activeYearData) {
@@ -1129,9 +1146,7 @@
             competitionToggle.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.competition === competition);
             });
-            windowToggle.querySelectorAll('.mode-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.window === currentWindow);
-            });
+            windowToggle.value = currentWindow;
             updateModeAvailability();
 
             const activeYearData = getActiveClusterData()[getActivePeriodKey()] || {};
@@ -1194,9 +1209,7 @@
             }
             rankingsRequestId++;
 
-            windowToggle.querySelectorAll('.mode-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.window === windowName);
-            });
+            windowToggle.value = windowName;
 
             const activeYearData = getActiveClusterData()[getActivePeriodKey()] || {};
             const selectedPosition = activeYearData[currentPosition] ? currentPosition : Object.keys(activeYearData)[0];

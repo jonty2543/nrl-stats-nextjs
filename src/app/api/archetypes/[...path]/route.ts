@@ -218,6 +218,20 @@ function styleIndexHtml(
             letter-spacing: 0.1em;
         }
 
+        #windowControlFrame,
+        #decadeControlFrame {
+            gap: 0;
+            padding: 0;
+        }
+
+        .control-select {
+            min-width: 4.7rem;
+            border-radius: 999px;
+            padding: 0.34rem 1.6rem 0.34rem 0.58rem;
+            font-size: 0.62rem;
+            letter-spacing: 0.08em;
+        }
+
         #decadeToggle .mode-btn {
             text-transform: none;
         }

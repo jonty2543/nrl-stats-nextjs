@@ -8,6 +8,7 @@ import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
 export const dynamic = "force-dynamic";
 
 const ARCHETYPES_DIR = path.join(process.cwd(), "nrl_archetypes");
+const CURRENT_ARCHETYPE_YEAR = "2026";
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -90,6 +91,18 @@ function resolveArchetypePath(parts: string[] | undefined): string | null {
   }
 
   return resolvedPath;
+}
+
+function normalizeRecentWindowPlotPath(filePath: string): string {
+  const basename = path.basename(filePath);
+  const normalizedBasename = basename.replace(
+    /_((?:team_share_)?l(?:3|5|10))_(?:all|\d{4}s)\.html$/,
+    `_$1_${CURRENT_ARCHETYPE_YEAR}.html`
+  );
+
+  return normalizedBasename === basename
+    ? filePath
+    : path.join(path.dirname(filePath), normalizedBasename);
 }
 
 function isCupArchetypeAsset(filePath: string): boolean {
@@ -609,13 +622,14 @@ export async function GET(request: Request, context: ArchetypesRouteContext) {
   const token = new URL(request.url).searchParams.get("cupAccess");
   const canAccessCup = (await getServerProPlotAccess(userId)) || isValidArchetypesCupToken(token);
 
-  const filePath = resolveArchetypePath(pathParts);
+  const requestedFilePath = resolveArchetypePath(pathParts);
 
-  if (!filePath) {
+  if (!requestedFilePath) {
     return NextResponse.json({ error: "Invalid archetypes path" }, { status: 400 });
   }
 
   try {
+    const filePath = normalizeRecentWindowPlotPath(requestedFilePath);
     if (!canAccessCup && isCupArchetypeAsset(filePath)) {
       return NextResponse.json({ error: "Cup archetypes require Pro or Premium access" }, { status: 403 });
     }

@@ -78,13 +78,17 @@ function currentRoundOption(options: LineupRoundOption[]): LineupRoundOption | n
     month: "2-digit",
     day: "2-digit",
   }).format(now)
-  const weekday = new Intl.DateTimeFormat("en-US", {
+  const brisbaneTimeParts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Australia/Brisbane",
     weekday: "short",
-  }).format(now)
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now)
+  const weekday = brisbaneTimeParts.find((part) => part.type === "weekday")?.value
+  const hour = Number(brisbaneTimeParts.find((part) => part.type === "hour")?.value)
   const nextFutureRound = options.find((option) => option.startDate >= today)
 
-  if (weekday === "Mon" && nextFutureRound) return nextFutureRound
+  if ((weekday === "Mon" || (weekday === "Sun" && hour >= 18)) && nextFutureRound) return nextFutureRound
 
   const activeRound = options.find((option) => today >= option.startDate && today <= option.endDate)
   if (activeRound) return activeRound

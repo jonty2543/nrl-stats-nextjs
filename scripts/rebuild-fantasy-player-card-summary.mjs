@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
 const PAGE_SIZE = 1000;
@@ -676,10 +674,17 @@ function getProjectionFixtureCutoffUtc() {
 }
 
 function parseRoundNumber(value) {
+  const label = String(value ?? "");
   const match = String(value ?? "").match(/\d+/);
-  if (!match) return null;
-  const round = Number.parseInt(match[0], 10);
-  return Number.isFinite(round) ? round : null;
+  if (match) {
+    const round = Number.parseInt(match[0], 10);
+    if (Number.isFinite(round)) return round;
+  }
+  if (/finals week 1/i.test(label)) return 28;
+  if (/finals week 2/i.test(label)) return 29;
+  if (/finals week 3/i.test(label)) return 30;
+  if (/grand final/i.test(label)) return 31;
+  return null;
 }
 
 function isZeroProjectionPosition(value) {
@@ -846,22 +851,48 @@ async function fetchOriginChanceNames(supabase) {
   );
 }
 
-async function loadDrawRows() {
-  try {
-    const raw = await readFile(path.join(process.cwd(), "data", "draw_2026.csv"), "utf8");
-    return raw
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .slice(1)
-      .flatMap((line) => {
-        const [round, kickoff, matchCentreUrl, home, away] = line.split(",");
-        const roundNum = Number.parseInt(round ?? "", 10);
-        return Number.isFinite(roundNum) ? [{ round: roundNum, kickoff, matchCentreUrl, home, away }] : [];
-      });
-  } catch {
-    return [];
+async function fetchScrapedFixtureRows(supabase, year) {
+  const [matchRows, lineupRows] = await Promise.all([
+    fetchAllRows(
+      supabase,
+      "matches",
+      "url,match_date,round,round_number,team,opponent_team,is_home",
+      (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).eq("is_home", true).order("match_date", { ascending: true })
+    ),
+    fetchAllRows(
+      supabase,
+      "lineups",
+      "match_id,match_date,kickoff_utc,round,match,match_url",
+      (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).eq("team_type", "Home").eq("number", 1).order("match_date", { ascending: true })
+    ),
+  ]);
+  const fixtures = new Map();
+  const addFixture = (row) => {
+    if (!row.round || !row.kickoff || !row.home || !row.away) return;
+    fixtures.set(`${String(row.kickoff).slice(0, 10)}|${teamGroup(row.home)}|${teamGroup(row.away)}`, row);
+  };
+
+  for (const row of matchRows) {
+    addFixture({
+      round: parseRoundNumber(row.round_number) || parseRoundNumber(row.round),
+      kickoff: text(row.match_date),
+      matchCentreUrl: text(row.url),
+      home: text(row.team),
+      away: text(row.opponent_team),
+    });
   }
+  for (const row of lineupRows) {
+    const [home = "", away = ""] = text(row.match).split(/\s+vs\s+/i).map((team) => team.trim());
+    addFixture({
+      round: parseRoundNumber(row.round),
+      kickoff: text(row.kickoff_utc || row.match_date),
+      matchCentreUrl: text(row.match_url),
+      home,
+      away,
+    });
+  }
+
+  return [...fixtures.values()].sort((a, b) => a.round - b.round || a.kickoff.localeCompare(b.kickoff));
 }
 
 function teamPlaysInRound(drawRows, round, team) {
@@ -952,26 +983,6 @@ function resultBeforeMatch(result, matchDate) {
   const resultDate = String(result.matchDate ?? "").slice(0, 10);
   const currentDate = String(matchDate ?? "").slice(0, 10);
   return Boolean(resultDate && currentDate && resultDate < currentDate);
-}
-
-async function loadDraw2026Rows() {
-  const drawPath = path.join(process.cwd(), "data", "draw_2026.csv");
-  const raw = await readFile(drawPath, "utf8");
-  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const rows = [];
-  for (const line of lines.slice(1)) {
-    const [round, kickoff, matchCentreUrl, home, away] = line.split(",");
-    const roundNumber = Number.parseInt(round ?? "", 10);
-    if (!Number.isFinite(roundNumber)) continue;
-    rows.push({
-      round: roundNumber,
-      kickoff: kickoff ?? "",
-      matchCentreUrl: matchCentreUrl ?? "",
-      home: home ?? "",
-      away: away ?? "",
-    });
-  }
-  return rows.sort((a, b) => a.round - b.round || a.kickoff.localeCompare(b.kickoff));
 }
 
 function addLineupRoundOption(options, round, roundNumber, matchDate) {
@@ -1155,12 +1166,6 @@ async function fetchLineupRoundOptionsSummary(supabase, year) {
     if (!round) continue;
     const date = text(row.match_date || row.kickoff_utc).slice(0, 10);
     addLineupRoundOption(byRound, round, parseRoundNumber(round), date);
-  }
-  if (year === 2026) {
-    const drawRows = await loadDraw2026Rows();
-    for (const row of drawRows) {
-      addLineupRoundOption(byRound, `Round ${row.round}`, row.round, String(row.kickoff ?? "").slice(0, 10));
-    }
   }
   return [...byRound.values()].sort((a, b) => a.roundNumber - b.roundNumber);
 }
@@ -1558,7 +1563,7 @@ async function main() {
     fetchLineupProjectionSnapshot(supabaseNrl),
     fetchOwnershipBaseline(supabaseShortside),
     fetchOriginChanceNames(supabaseNrl),
-    loadDrawRows(),
+    fetchScrapedFixtureRows(supabaseNrl, currentYear),
     fetchPlayerImages(supabaseNrl).catch((error) => {
       console.warn("Unable to fetch player images for page summary.", error);
       return [];
@@ -1595,10 +1600,7 @@ async function main() {
     console.warn("Unable to fetch lineups round options for page summary.", error);
     return [];
   });
-  const draw2026Rows = currentYear === 2026 ? await loadDraw2026Rows().catch((error) => {
-    console.warn("Unable to load 2026 draw for lineups page summary.", error);
-    return [];
-  }) : [];
+  const draw2026Rows = currentYear === 2026 ? drawRows : [];
   const lineupsRound = currentRoundOption(lineupsRoundOptions, lineups.round);
   const today = getTodayInBrisbane();
   const currentRoundSummary = lineupsRound ? await Promise.all([

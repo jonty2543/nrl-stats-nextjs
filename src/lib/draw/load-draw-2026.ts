@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises"
-import path from "node:path"
 import { unstable_cache } from "next/cache"
 import { createServerSupabaseClient } from "@/lib/supabase/client"
 import type { Draw2026Data, Draw2026Row } from "./types"
@@ -15,33 +13,71 @@ function normaliseTeamKey(value: unknown): string {
     .trim()
 }
 
-function parseDrawCsv(raw: string): Draw2026Row[] {
-  const lines = raw
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
+function roundNumber(value: unknown): number | null {
+  const label = String(value ?? "").trim()
+  const numeric = Number.parseInt(label.match(/\d+/)?.[0] ?? "", 10)
+  if (Number.isFinite(numeric)) return numeric
+  if (/finals week 1/i.test(label)) return 28
+  if (/finals week 2/i.test(label)) return 29
+  if (/finals week 3/i.test(label)) return 30
+  if (/grand final/i.test(label)) return 31
+  return null
+}
 
-  if (lines.length <= 1) return []
+function fixtureKey(row: Draw2026Row): string {
+  return [row.kickoff.slice(0, 10), normaliseTeamKey(row.home), normaliseTeamKey(row.away)].join("|")
+}
 
-  const out: Draw2026Row[] = []
-  for (const line of lines.slice(1)) {
-    const [round, kickoff, matchCentreUrl, home, away] = line.split(",")
-    const roundNum = Number.parseInt(round ?? "", 10)
-    if (!Number.isFinite(roundNum)) continue
+async function fetchScrapedFixtureRows(): Promise<Draw2026Row[]> {
+  const supabase = createServerSupabaseClient("nrl")
+  const [{ data: matchData, error: matchError }, { data: lineupData, error: lineupError }] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("url,match_date,round,round_number,team,opponent_team,is_home")
+      .gte("match_date", "2026-01-01")
+      .lt("match_date", "2027-01-01")
+      .eq("is_home", true)
+      .order("match_date", { ascending: true })
+      .limit(PAGE_SIZE),
+    supabase
+      .from("lineups")
+      .select("match_id,match_date,kickoff_utc,round,match,match_url")
+      .gte("match_date", "2026-01-01")
+      .lt("match_date", "2027-01-01")
+      .eq("team_type", "Home")
+      .eq("number", 1)
+      .order("match_date", { ascending: true })
+      .limit(PAGE_SIZE),
+  ])
 
-    out.push({
-      round: roundNum,
-      kickoff: kickoff ?? "",
-      matchCentreUrl: matchCentreUrl ?? "",
-      home: home ?? "",
-      away: away ?? "",
-    })
+  if (matchError) throw new Error(`Supabase fetch nrl.matches fixtures: ${matchError.message}`)
+  if (lineupError) throw new Error(`Supabase fetch nrl.lineups fixtures: ${lineupError.message}`)
+
+  const fixtures = new Map<string, Draw2026Row>()
+  for (const raw of matchData ?? []) {
+    const round = roundNumber(raw.round_number) || roundNumber(raw.round)
+    const kickoff = String(raw.match_date ?? "")
+    const home = String(raw.team ?? "").trim()
+    const away = String(raw.opponent_team ?? "").trim()
+    if (!round || !kickoff || !home || !away) continue
+    const row = { round, kickoff, matchCentreUrl: String(raw.url ?? ""), home, away }
+    fixtures.set(fixtureKey(row), row)
   }
 
-  return out.sort((a, b) => {
-    if (a.round !== b.round) return a.round - b.round
-    return a.kickoff.localeCompare(b.kickoff)
-  })
+  const seenMatchIds = new Set<string>()
+  for (const raw of lineupData ?? []) {
+    const matchId = String(raw.match_id ?? "").trim()
+    if (matchId && seenMatchIds.has(matchId)) continue
+    if (matchId) seenMatchIds.add(matchId)
+    const [home = "", away = ""] = String(raw.match ?? "").split(/\s+vs\s+/i).map((team) => team.trim())
+    const round = roundNumber(raw.round)
+    const kickoff = String(raw.kickoff_utc ?? raw.match_date ?? "")
+    if (!round || !kickoff || !home || !away) continue
+    const row = { round, kickoff, matchCentreUrl: String(raw.match_url ?? ""), home, away }
+    fixtures.set(fixtureKey(row), row)
+  }
+
+  return [...fixtures.values()].sort((left, right) => left.round - right.round || left.kickoff.localeCompare(right.kickoff))
 }
 
 async function fetchTeamLogosFromSupabase(): Promise<Record<string, string>> {
@@ -79,9 +115,8 @@ async function fetchTeamLogosFromSupabase(): Promise<Record<string, string>> {
 }
 
 async function loadDraw2026DataUncached(): Promise<Draw2026Data> {
-  const drawPath = path.join(process.cwd(), "data", "draw_2026.csv")
-  const [csvRaw, teamLogos] = await Promise.all([
-    readFile(drawPath, "utf8"),
+  const [rows, teamLogos] = await Promise.all([
+    fetchScrapedFixtureRows(),
     Promise.race([
       fetchTeamLogosFromSupabase().catch((error) => {
         console.warn("Unable to load team logos for draw data.", error)
@@ -97,14 +132,14 @@ async function loadDraw2026DataUncached(): Promise<Draw2026Data> {
   ])
 
   return {
-    rows: parseDrawCsv(csvRaw),
+    rows,
     teamLogos,
   }
 }
 
 const loadDraw2026DataCached = unstable_cache(
   loadDraw2026DataUncached,
-  ["draw-2026-with-logos-v1"],
+  ["scraped-2026-fixtures-with-logos-v1"],
   { revalidate: 3600 }
 )
 

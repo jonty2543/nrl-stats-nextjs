@@ -438,6 +438,26 @@ function historicalLiveMatch(match: LineupMatch, stats: LineupMatchStats | null)
   }
 }
 
+function mergeLiveAndHistoricalMatch(
+  liveMatch: LineupLiveMatch | null | undefined,
+  historicalMatch: LineupLiveMatch | null
+): LineupLiveMatch | null {
+  if (!isLiveDataVisible(liveMatch)) return historicalMatch
+  if (!liveMatch || !historicalMatch) return liveMatch ?? historicalMatch
+
+  return {
+    ...liveMatch,
+    scoringEvents:
+      historicalMatch.scoringEvents.length > liveMatch.scoringEvents.length
+        ? historicalMatch.scoringEvents
+        : liveMatch.scoringEvents,
+    playerStats:
+      Object.keys(historicalMatch.playerStats).length > Object.keys(liveMatch.playerStats).length
+        ? historicalMatch.playerStats
+        : liveMatch.playerStats,
+  }
+}
+
 function formatGameClock(seconds: number | null | undefined): string | null {
   if (seconds == null || !Number.isFinite(seconds)) return null
   const minutes = Math.floor(seconds / 60)
@@ -4011,7 +4031,7 @@ function LineupCard({
   const playerTryHistory = detail?.playerTryHistory ?? {}
   const positionPpmBaselines = detail?.positionPpmBaselines ?? {}
   const historicalData = historicalLiveMatch(detailMatch, matchStats)
-  const displayLiveMatch = isLiveDataVisible(liveMatch) ? liveMatch : historicalData
+  const displayLiveMatch = mergeLiveAndHistoricalMatch(liveMatch, historicalData)
   const completedHomePlayers = applyCompletedPlayerStats(detailMatch.homeTeam?.players ?? [], matchStats, detailMatch.homeTeam)
   const completedAwayPlayers = applyCompletedPlayerStats(detailMatch.awayTeam?.players ?? [], matchStats, detailMatch.awayTeam)
   const homePlayers =

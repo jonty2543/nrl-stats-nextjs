@@ -3,9 +3,11 @@ create extension if not exists pgcrypto;
 
 create table if not exists nrl.player_archetypes (
   id uuid primary key default gen_random_uuid(),
+  competition text not null default 'nrl' check (competition in ('nrl', 'cup')),
   player text not null,
   year integer not null check (year between 1900 and 2200),
   decade text not null default 'All',
+  model_version text not null default 'v1',
   position text not null,
   source_position text not null,
   archetype text not null,
@@ -26,11 +28,18 @@ create table if not exists nrl.player_archetypes (
   key_stat_percentiles jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint player_archetypes_player_year_position_decade_key unique (player, year, position, decade)
+  constraint player_archetypes_identity_key
+    unique (competition, player, year, position, decade)
 );
 
 alter table nrl.player_archetypes
+  add column if not exists competition text not null default 'nrl';
+
+alter table nrl.player_archetypes
   add column if not exists decade text not null default 'All';
+
+alter table nrl.player_archetypes
+  add column if not exists model_version text not null default 'v1';
 
 alter table nrl.player_archetypes
   drop constraint if exists player_archetypes_player_year_position_key;
@@ -39,14 +48,17 @@ alter table nrl.player_archetypes
   drop constraint if exists player_archetypes_player_year_position_decade_key;
 
 alter table nrl.player_archetypes
-  add constraint player_archetypes_player_year_position_decade_key
-  unique (player, year, position, decade);
+  drop constraint if exists player_archetypes_identity_key;
+
+alter table nrl.player_archetypes
+  add constraint player_archetypes_identity_key
+  unique (competition, player, year, position, decade);
 
 create index if not exists player_archetypes_year_position_idx
   on nrl.player_archetypes (year, position);
 
 create index if not exists player_archetypes_decade_year_position_idx
-  on nrl.player_archetypes (decade, year, position);
+  on nrl.player_archetypes (competition, decade, year, position);
 
 create index if not exists player_archetypes_archetype_idx
   on nrl.player_archetypes (archetype);

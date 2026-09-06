@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import functions as f
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 from supabase import create_client, Client
 from sklearn.preprocessing import StandardScaler
@@ -29,6 +29,7 @@ MATCHES_TABLE = "matches"
 OUTPUT_PREFIX = "nrl"
 CACHE_FILE_PREFIX = "player_stats"
 UPSERT_BATCH_SIZE = 500
+ARCHETYPE_MODEL_VERSION = os.getenv("ARCHETYPE_MODEL_VERSION", "v1")
 PLAYER_NAME_ALIASES = {
     "Nicholas Hynes": "Nicho Hynes",
 }
@@ -395,14 +396,18 @@ def fetch_player_stats_for_years(years, configs, table=PLAYER_STATS_TABLE, batch
         offset = 0
 
         while True:
-            response = (
+            query = (
                 supabase
                 .schema("nrl")
                 .table(table)
                 .select(select_cols)
                 .gte("match_date", start_date)
                 .lt("match_date", end_date)
-                .gte(minutes_source_column, 40)
+            )
+            if not (table == "state_cup_player_stats" and year == 2014):
+                query = query.gte(minutes_source_column, 40)
+            response = (
+                query
                 .order("match_date")
                 .range(offset, offset + batch - 1)
                 .execute()
@@ -442,10 +447,9 @@ def load_and_process_data(configs, player_data, stat_mode='production', recent_g
     
     player_df = player_data[
         (player_data['match_date'] >= start_date) & 
-        (player_data['match_date'] < end_date) & 
-        (player_data['mins_played'] >= 40)
+        (player_data['match_date'] < end_date)
     ].copy()
-    
+
     # Extract year
     player_df['year'] = pd.to_datetime(player_df['match_date']).dt.year
     player_df['player'] = player_df['player'].replace(PLAYER_NAME_ALIASES)
@@ -456,6 +460,22 @@ def load_and_process_data(configs, player_data, stat_mode='production', recent_g
         lambda row: f.map_position(row.get('position'), row.get('number')),
         axis=1,
     )
+
+    player_df['mins_played'] = pd.to_numeric(player_df['mins_played'], errors='coerce')
+    if PLAYER_STATS_TABLE == 'state_cup_player_stats':
+        missing_minutes = player_df['mins_played'].isna() | (player_df['mins_played'] <= 0)
+        position_minutes = (
+            player_df.loc[~missing_minutes]
+            .groupby('position')['mins_played']
+            .median()
+        )
+        imputed_minutes = player_df['position'].map(position_minutes)
+        can_impute = missing_minutes & imputed_minutes.notna()
+        player_df.loc[can_impute, 'mins_played'] = imputed_minutes.loc[can_impute]
+        if can_impute.any():
+            print(f"Imputed missing Cup minutes for {int(can_impute.sum())} player-games using position medians.")
+
+    player_df = player_df[player_df['mins_played'] >= 40].copy()
 
     # Some match feeds publish null tackle efficiency, or fractional positive
     # values such as 0.94 instead of 94, despite supplying the tackle counts.
@@ -721,9 +741,11 @@ def build_stat_map(row, features, suffix="", digits=3):
 
 def build_player_archetype_record(row, config, features, period_label):
     return {
+        "competition": OUTPUT_PREFIX,
         "player": str(row["player"]),
         "year": int(row["year"]),
         "decade": period_label,
+        "model_version": ARCHETYPE_MODEL_VERSION,
         "position": export_position_name(config),
         "source_position": config.name,
         "archetype": str(row["cluster_name"]),
@@ -754,6 +776,7 @@ def upsert_player_archetypes(records):
         print("\nNo player archetype rows to upsert.")
         return
 
+    refresh_started_at = datetime.now(timezone.utc).isoformat()
     print(f"\nUpserting {len(records)} rows to nrl.{ARCHETYPE_TABLE}...")
     for start in range(0, len(records), UPSERT_BATCH_SIZE):
         batch = records[start:start + UPSERT_BATCH_SIZE]
@@ -761,24 +784,45 @@ def upsert_player_archetypes(records):
             supabase
             .schema("nrl")
             .table(ARCHETYPE_TABLE)
-            .upsert(batch, on_conflict="player,year,position,decade")
+            .upsert(batch, on_conflict="competition,player,year,position,decade")
             .execute()
         )
 
-    removed_below_minimum = 0
-    for config in POSITION_CONFIGS:
+    removed_stale = 0
+    for competition in {record["competition"] for record in records}:
+        scope_decades = sorted({record["decade"] for record in records if record["competition"] == competition})
         response = (
             supabase
             .schema("nrl")
             .table(ARCHETYPE_TABLE)
             .delete()
-            .eq("position", export_position_name(config))
+            .eq("competition", competition)
             .in_("year", YEARS_TO_PROCESS)
-            .in_("decade", sorted({record["decade"] for record in records}))
-            .lt("games", config.min_games)
+            .in_("decade", scope_decades)
+            .lt("updated_at", refresh_started_at)
             .execute()
         )
-        removed_below_minimum += len(response.data or [])
+        removed_stale += len(response.data or [])
+    if removed_stale:
+        print(f"Removed {removed_stale} stale archetype rows.")
+
+    removed_below_minimum = 0
+    for competition in {record["competition"] for record in records}:
+        scope_decades = sorted({record["decade"] for record in records if record["competition"] == competition})
+        for config in POSITION_CONFIGS:
+            response = (
+                supabase
+                .schema("nrl")
+                .table(ARCHETYPE_TABLE)
+                .delete()
+                .eq("competition", competition)
+                .eq("position", export_position_name(config))
+                .in_("year", YEARS_TO_PROCESS)
+                .in_("decade", scope_decades)
+                .lt("games", config.min_games)
+                .execute()
+            )
+            removed_below_minimum += len(response.data or [])
     if removed_below_minimum:
         print(f"Removed {removed_below_minimum} archetype rows below their position minimum.")
 
@@ -789,14 +833,16 @@ def upsert_player_archetypes(records):
         if canonical in canonical_players
     ]
     if stale_aliases:
-        (
-            supabase
-            .schema("nrl")
-            .table(ARCHETYPE_TABLE)
-            .delete()
-            .in_("player", stale_aliases)
-            .execute()
-        )
+        for competition in {record["competition"] for record in records}:
+            (
+                supabase
+                .schema("nrl")
+                .table(ARCHETYPE_TABLE)
+                .delete()
+                .eq("competition", competition)
+                .in_("player", stale_aliases)
+                .execute()
+            )
         print(f"Removed stale player aliases: {', '.join(stale_aliases)}.")
     print(f"Upserted {len(records)} rows to nrl.{ARCHETYPE_TABLE}.")
 
@@ -807,7 +853,7 @@ def configure_competition(competition):
     if competition == "cup":
         PLAYER_STATS_TABLE = "state_cup_player_stats"
         MATCHES_TABLE = "state_cup_matches"
-        ARCHETYPE_TABLE = os.getenv("CUP_ARCHETYPE_TABLE", "")
+        ARCHETYPE_TABLE = "player_archetypes"
         OUTPUT_PREFIX = "cup"
         CACHE_FILE_PREFIX = "state_cup_player_stats"
         return
@@ -854,6 +900,8 @@ def generate_outputs(training_agg, models_by_period, configs, periods, plot_suff
             if df.empty:
                 print(f"  No players for {config.name} in {period_label}")
                 continue
+
+            available_years = sorted(df['year'].dropna().astype(int).unique())
                 
             # Transform features and calculate the visible PC coordinates first.
             all_features = list(set(config.features1 + config.features2 + config.features3))
@@ -948,7 +996,7 @@ def generate_outputs(training_agg, models_by_period, configs, periods, plot_suff
                 for i, arch in enumerate(archetypes):
                     color = colors[i % len(colors)]
                     legend_shown = False
-                    for y in period_years:
+                    for y in available_years:
                         mask = (df['cluster_name'] == arch) & (df['year'] == y)
                         sub_df = df[mask]
                         if sub_df.empty:
@@ -978,7 +1026,7 @@ def generate_outputs(training_agg, models_by_period, configs, periods, plot_suff
                     args=[{"marker.opacity": 0.8, "hoverinfo": "text"}]
                 ))
                 
-                for target_y in period_years:
+                for target_y in available_years:
                     opacities = []
                     hoverinfos = []
                     for trace in fig.data:
@@ -1513,13 +1561,13 @@ if __name__ == "__main__":
     # 4. Save JSON and browser data
     save_cluster_exports(full_data, f'{OUTPUT_PREFIX}_cluster_data', 'clusterData' if OUTPUT_PREFIX == 'nrl' else 'cupClusterData')
 
-    # 5. Upsert player-level archetype outputs
+    # 5. Store full-season production archetypes.
     if os.getenv("SKIP_ARCHETYPE_UPSERT") == "1":
         print("Skipped player archetype upsert.")
     else:
         upsert_player_archetypes(player_archetype_records)
 
-    # 6. Generate alternate team-share archetype view
+    # 6. Generate alternate team-share archetype view for display only.
     team_share_configs = build_team_share_configs(POSITION_CONFIGS)
     team_share_training_agg = load_and_process_data(team_share_configs, player_data, stat_mode='team_share')
     team_share_models_by_period = train_models_for_periods(team_share_training_agg, team_share_configs, archetype_periods)

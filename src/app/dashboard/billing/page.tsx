@@ -207,6 +207,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
                   "Everything in Free",
                   "Fantasy projections and breakevens",
                   "All plots unlocked in Fantasy and Stats",
+                  "NSW and QLD Cup stats",
                   "Stats models, including xPoints and Line Defense Rating",
                   "Fantasy trade ratings",
                   "New features as they release",

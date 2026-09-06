@@ -122,6 +122,8 @@ type AverageStatKey =
   | "Tackle Breaks"
   | "Offloads"
 
+const MATCH_DETAIL_CLIENT_TIMEOUT_MS = 8000
+
 function fallbackLineupMatchDetail(match: LineupMatch): LineupMatchDetailData {
   return {
     match,
@@ -191,6 +193,10 @@ const STATS_SOURCES: { key: StatsSource; label: string }[] = [
   { key: "origin2026", label: "2026 Origin" },
   { key: "originLifetime", label: "Origin lifetime" },
 ]
+
+function competitionParam(competition: LineupCompetition): string | null {
+  return competition === "nrl" ? null : competition
+}
 
 function isAverageDisplayMode(mode: DisplayMode): mode is AverageStatKey {
   return mode !== "odds" && mode !== "fantasy" && mode !== "edge" && mode !== "betRating"
@@ -1754,12 +1760,13 @@ const TEAM_PLOT_STATS: Record<Exclude<TeamPlotCategory, "pro">, Array<{
   key: LineupMatchDistributionStatKey
   label: string
   suffix?: string
+  lowerIsBetter?: boolean
 }>> = {
   match: [
     { key: "score", label: "Points" },
     { key: "possessionPct", label: "Possession", suffix: "%" },
     { key: "completionRate", label: "Completion", suffix: "%" },
-    { key: "penalties", label: "Penalties" },
+    { key: "penalties", label: "Penalties", lowerIsBetter: true },
   ],
   running: [
     { key: "allRunMetres", label: "Run metres" },
@@ -1772,13 +1779,14 @@ const TEAM_PLOT_STATS: Record<Exclude<TeamPlotCategory, "pro">, Array<{
     { key: "tacklesMade", label: "Tackles" },
     { key: "missedTackles", label: "Missed tackles" },
     { key: "tackleEfficiency", label: "Tackle efficiency", suffix: "%" },
-    { key: "ruckInfringements", label: "Ruck infringements" },
+    { key: "ruckInfringements", label: "Ruck infringements", lowerIsBetter: true },
   ],
 }
 
 const POST_MATCH_MODEL_PLOT_STATS: Array<{
   key: PostMatchModelDistributionStatKey
   label: string
+  lowerIsBetter?: boolean
 }> = [
   { key: "xpoints", label: "xPoints" },
   { key: "finishingDelta", label: "Finishing vs xPoints" },
@@ -1791,14 +1799,15 @@ const POST_MATCH_MODEL_PLOT_STATS: Array<{
   { key: "actualPostContactMetres", label: "Actual post contact" },
   { key: "postContactMetresAboveExpected", label: "Post contact vs expected" },
   { key: "pcmAboveExpectedPer100Runs", label: "PCM vs expected / 100 runs" },
-  { key: "expectedPlayTheBallSpeed", label: "Expected play-the-ball" },
-  { key: "actualPlayTheBallSpeed", label: "Actual play-the-ball" },
+  { key: "expectedPlayTheBallSpeed", label: "Expected play-the-ball", lowerIsBetter: true },
+  { key: "actualPlayTheBallSpeed", label: "Actual play-the-ball", lowerIsBetter: true },
   { key: "playTheBallSpeedAboveExpected", label: "PTB speed vs expected" },
 ]
 
 const PLAYER_PLOT_STATS: Array<{
   key: LineupPlayerDistributionStatKey
   label: string
+  lowerIsBetter?: boolean
 }> = [
   { key: "fantasyPointsTotal", label: "Fantasy points" },
   { key: "allRuns", label: "Runs" },
@@ -1811,8 +1820,8 @@ const PLAYER_PLOT_STATS: Array<{
   { key: "tryAssists", label: "Try assists" },
   { key: "lineBreaks", label: "Line breaks" },
   { key: "lineBreakAssists", label: "Line-break assists" },
-  { key: "missedTackles", label: "Missed tackles" },
-  { key: "errors", label: "Errors" },
+  { key: "missedTackles", label: "Missed tackles", lowerIsBetter: true },
+  { key: "errors", label: "Errors", lowerIsBetter: true },
   { key: "offloads", label: "Offloads" },
 ]
 
@@ -1892,12 +1901,14 @@ function NormalDistributionPlot({
   values,
   markers,
   sampleLabel,
+  lowerIsBetter = false,
 }: {
   label: string
   suffix?: string
   values: number[]
   markers: DistributionPlotMarker[]
   sampleLabel: string
+  lowerIsBetter?: boolean
 }) {
   const mean = distributionMean(values)
   if (mean == null || !markers.some((marker) => marker.value != null)) return null
@@ -1918,11 +1929,12 @@ function NormalDistributionPlot({
     const bin = binFor(value)
     const stack = binStacks[bin]++
     const position = binCount === 1 ? 0.5 : bin / (binCount - 1)
+    const colourPosition = lowerIsBetter ? 1 - position : position
     return {
       value,
       x: 14 + position * 292,
       y: 56 - stack * stackSpacing,
-      colour: `hsl(${4 + position * 145} 78% 59%)`,
+      colour: `hsl(${4 + colourPosition * 145} 78% 59%)`,
     }
   })
   const markerRows = markers.flatMap((marker) => marker.value != null && Number.isFinite(marker.value)
@@ -1943,10 +1955,10 @@ function NormalDistributionPlot({
       <svg viewBox="0 0 320 88" className="mt-2 h-auto w-full overflow-visible" role="img" aria-label={`${label} stacked dot distribution for ${samples.length} ${sampleLabel}`}>
         <defs>
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#fb7185" />
+            <stop offset="0%" stopColor={lowerIsBetter ? "#10e7a2" : "#fb7185"} />
             <stop offset="38%" stopColor="#fbbf24" />
-            <stop offset="68%" stopColor="#4ade80" />
-            <stop offset="100%" stopColor="#10e7a2" />
+            <stop offset="68%" stopColor={lowerIsBetter ? "#fbbf24" : "#4ade80"} />
+            <stop offset="100%" stopColor={lowerIsBetter ? "#fb7185" : "#10e7a2"} />
           </linearGradient>
           {markerRows.map((marker, index) => marker.playerImageSources ? (
             <clipPath key={marker.key} id={`${gradientId}-marker-${index}`}>
@@ -2142,6 +2154,7 @@ function MatchStatPlotsPanel({
                 { key: "model-away", label: stats.away.team, value: awayModelValues?.[stat.key] ?? null, logoUrl: resolveTeamLogo(stats.away.team, teamLogos) },
               ]}
               sampleLabel="team performances"
+              lowerIsBetter={stat.lowerIsBetter}
             />
           )) : teamPlotCategory !== "pro" ? TEAM_PLOT_STATS[teamPlotCategory].map((stat) => (
             <NormalDistributionPlot
@@ -2154,6 +2167,7 @@ function MatchStatPlotsPanel({
                 { key: "away", label: stats.away.team, value: stats.away[stat.key], logoUrl: resolveTeamLogo(stats.away.team, teamLogos) },
               ]}
               sampleLabel="team games"
+              lowerIsBetter={stat.lowerIsBetter}
             />
           )) : null}
         </div>
@@ -2171,6 +2185,7 @@ function MatchStatPlotsPanel({
                 playerImageSources: selectedPlayer.imageSources,
               }]}
               sampleLabel={`${selectedPlayer.positionGroup ?? "position"} player performances`}
+              lowerIsBetter={stat.lowerIsBetter}
             />
           ))}
         </div>
@@ -4057,7 +4072,7 @@ function LineupCard({
     availableDetailViews.splice(matchStatsIndex + 1, 0, "player-stats")
   }
   const matchStatDistributions = detail?.matchStatDistributions ?? null
-  if (isPostMatch || hasResultScore) availableDetailViews.push("plots")
+  if (selectedCompetition === "nrl" && (isPostMatch || hasResultScore)) availableDetailViews.push("plots")
   const activeDetailView = detailView && availableDetailViews.includes(detailView) ? detailView : availableDetailViews[0] ?? "stats"
   const showLiveIndicators = isLiveDataVisible(displayLiveMatch)
   const homeTryChart = tryChartsByTeam[statsinsiderTeamCode(detailMatch.homeTeam) ?? ""] ?? null
@@ -4474,13 +4489,17 @@ function LineupSelectors({
           value={selectedCompetition}
           onChange={(event) => {
             const params = new URLSearchParams({ year: String(selectedYear) })
-            if (event.target.value === "origin") params.set("competition", "origin")
+            const competition = event.target.value as LineupCompetition
+            const competitionValue = competitionParam(competition)
+            if (competitionValue) params.set("competition", competitionValue)
             window.location.href = `/dashboard/lineups${params.toString() ? `?${params.toString()}` : ""}`
           }}
           className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
         >
           <option value="nrl">NRL</option>
           <option value="origin">Origin</option>
+          <option value="qldCup">QLD Cup</option>
+          <option value="nswCup">NSW Cup</option>
         </select>
       </label>
       {yearOptions.length > 0 ? (
@@ -4490,7 +4509,8 @@ function LineupSelectors({
             value={String(selectedYear)}
             onChange={(event) => {
               const params = new URLSearchParams({ year: event.target.value })
-              if (selectedCompetition === "origin") params.set("competition", "origin")
+              const competitionValue = competitionParam(selectedCompetition)
+              if (competitionValue) params.set("competition", competitionValue)
               window.location.href = `/dashboard/lineups?${params.toString()}`
             }}
             className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
@@ -4513,7 +4533,8 @@ function LineupSelectors({
                 year: String(selectedYear),
                 round: event.target.value,
               })
-              if (selectedCompetition === "origin") params.set("competition", "origin")
+              const competitionValue = competitionParam(selectedCompetition)
+              if (competitionValue) params.set("competition", competitionValue)
               window.location.href = `/dashboard/lineups?${params.toString()}`
             }}
             className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
@@ -4573,6 +4594,8 @@ export function LineupsDashboard({
     const current = matchDetails[match.matchId]
     if (current?.status === "loading" || current?.status === "loaded") return
     requestedMatchDetailsRef.current.add(requestKey)
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), MATCH_DETAIL_CLIENT_TIMEOUT_MS)
 
     setMatchDetails((details) => ({
       ...details,
@@ -4583,6 +4606,7 @@ export function LineupsDashboard({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ matchId: match.matchId, round: match.round || selectedRound, year, match, competition: selectedCompetition }),
+      signal: controller.signal,
     })
       .then((response) => response.ok ? response.json() : null)
       .then((data: { detail?: LineupMatchDetailData | null } | null) => {
@@ -4599,6 +4623,9 @@ export function LineupsDashboard({
           ...details,
           [match.matchId]: { status: "loaded", detail },
         }))
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId)
       })
   }
 

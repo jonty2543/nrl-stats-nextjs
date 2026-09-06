@@ -277,7 +277,10 @@ function enrichLineupMatchImages(match: LineupMatch, lookup: Map<string, PlayerI
 }
 
 function parseCompetition(value: string | undefined): LineupCompetition {
-  return value === "origin" ? "origin" : "nrl"
+  if (value === "origin") return "origin"
+  if (value === "nswCup" || value === "nsw-cup") return "nswCup"
+  if (value === "qldCup" || value === "qld-cup") return "qldCup"
+  return "nrl"
 }
 
 function parseYear(value: string | undefined): number | null {
@@ -296,7 +299,7 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const currentYear = currentYearInBrisbane()
   const selectedCompetition = parseCompetition(params.competition)
   const fetchedYearOptions = await withFallback(fetchLineupYearOptions(selectedCompetition), [], "Lineups year options")
-  const selectedYear = parseYear(params.year) ?? (selectedCompetition === "origin" ? fetchedYearOptions[0]?.year : currentYear) ?? currentYear
+  const selectedYear = parseYear(params.year) ?? (selectedCompetition === "nrl" ? currentYear : fetchedYearOptions[0]?.year) ?? currentYear
   const yearOptions = mergeYearOptions(
     fetchedYearOptions,
     [{ value: String(selectedYear), label: String(selectedYear), year: selectedYear }],

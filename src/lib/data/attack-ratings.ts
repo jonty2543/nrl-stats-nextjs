@@ -13,6 +13,7 @@ export const TEAM_ATTACK_COMPARISON_STATS = [
   "Time in possession",
   "Runs",
   "Passes",
+  "Pass to run ratio",
   "Receipts",
   "Run metres",
   "Post-contact metres",
@@ -43,6 +44,7 @@ export const TEAM_DEFENCE_CONCEDED_STATS = [
   "Time in possession",
   "Runs",
   "Passes",
+  "Pass to run ratio",
   "Receipts",
   "Run metres",
   "Post-contact metres",
@@ -65,6 +67,8 @@ export const TEAM_ATTACK_EFFICIENCY_BASE_STATS = ["Receipts", "Runs", "Passes", 
 export type TeamAttackEfficiencyBaseStat = (typeof TEAM_ATTACK_EFFICIENCY_BASE_STATS)[number];
 
 export const TEAM_ATTACK_EFFICIENCY_OUTPUT_STATS = [
+  "Runs",
+  "Passes",
   "Run metres",
   "Post-contact metres",
   "Line breaks",

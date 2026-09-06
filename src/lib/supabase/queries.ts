@@ -45,6 +45,8 @@ const PAGE_SIZE = 1000;
 const DAILY_REVALIDATE_SECONDS = 86400;
 const LIVE_SEASON_STATS_REVALIDATE_SECONDS = 300;
 const DIRECT_PLAYER_STATS_TIMEOUT_MS = 2000;
+const DIRECT_CUP_PLAYER_STATS_TIMEOUT_MS = 8000;
+const FALLBACK_CUP_AVAILABLE_YEARS = ["2026", "2025", "2024", "2023"];
 const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
@@ -584,16 +586,18 @@ async function fetchAllRows<T extends Record<string, unknown>>(
 
 async function fetchPlayerStatsRowsForPlayerFromSupabase(
   playerName: string,
-  years?: string[]
+  years?: string[],
+  competition: StatsCompetition = "nrl"
 ): Promise<Record<string, unknown>[]> {
   const supabase = createServerSupabaseClient();
   const allRows: Record<string, unknown>[] = [];
   let start = 0;
+  const table = isCupCompetition(competition) ? "state_cup_player_stats" : "player_stats";
 
   while (true) {
     const end = start + PAGE_SIZE - 1;
     let query = supabase
-      .from("player_stats")
+      .from(table)
       .select("*")
       .eq("player", playerName);
 
@@ -608,7 +612,7 @@ async function fetchPlayerStatsRowsForPlayerFromSupabase(
 
     const { data, error } = await query.range(start, end);
 
-    if (error) throw new Error(`Supabase fetch player_stats for player ${playerName}: ${error.message}`);
+    if (error) throw new Error(`Supabase fetch ${table} for player ${playerName}: ${error.message}`);
     const rows = (data ?? []) as Record<string, unknown>[];
     if (rows.length === 0) break;
     allRows.push(...rows);
@@ -1646,6 +1650,11 @@ function cleanPlayerRow(row: Record<string, unknown>): Record<string, unknown> {
     if (col in row) row[col] = toNum(row[col]);
   }
 
+  if (!("Passes To Run Ratio" in row)) {
+    const runs = toNum(row["All Runs"]);
+    row["Passes To Run Ratio"] = runs > 0 ? toNum(row.Passes) / runs : 0;
+  }
+
   const tacklesMade = toNum(row["Tackles Made"]);
   const tackleAttempts = tacklesMade + toNum(row["Missed Tackles"]) + toNum(row["Ineffective Tackles"]);
   const tackleEfficiency = toNum(row["Tackle Efficiency"]);
@@ -1773,6 +1782,7 @@ function normalizeCupPlayerStatsRow(raw: Record<string, unknown>): Record<string
     total_points: raw.fantasy_points_total ?? raw.total_points,
     kicking_metres: raw.kick_metres ?? raw.kicking_metres,
     forced_drop_outs: raw.forced_drop_out_kicks ?? raw.forced_drop_outs,
+    passes: raw.total_passes ?? raw.passes,
     forty_twenty: raw.forty_twenty_kicks ?? raw.forty_twenty,
     twenty_forty: raw.twenty_forty_kicks ?? raw.twenty_forty,
     grubbers: raw.grubber_kicks ?? raw.grubbers,
@@ -1782,32 +1792,6 @@ function normalizeCupPlayerStatsRow(raw: Record<string, unknown>): Record<string
     stint_one: raw.stint_one_seconds ?? raw.stint_one,
     stint_two: raw.stint_two_seconds ?? raw.stint_two,
   };
-}
-
-function normalizeCupPlayerName(value: unknown): string {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-export async function fetchCupPlayerLeagues(): Promise<Record<string, "nsw" | "qld">> {
-  const rows = await fetchAllRows<Record<string, unknown>>("state_cup_player_info", {
-    columns: "player,competition",
-  });
-
-  return rows.reduce<Record<string, "nsw" | "qld">>((leagues, row) => {
-    const player = normalizeCupPlayerName(row.player);
-    const competition = String(row.competition ?? "").toLowerCase();
-    const league = competition.includes("nsw")
-      ? "nsw"
-      : competition.includes("qld") || competition.includes("hostplus")
-        ? "qld"
-        : null;
-
-    if (player && league) leagues[player] = league;
-    return leagues;
-  }, {});
 }
 
 function enrichCupPlayerStatsRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
@@ -1938,7 +1922,7 @@ export async function fetchPlayerStats(
           { revalidate: DAILY_REVALIDATE_SECONDS }
         )();
   const localServerCache =
-    process.env.NODE_ENV !== "production" && !hasLiveSeason
+    process.env.NODE_ENV !== "production"
       ? await readPlayerStatsServerCache(normalizedArg)
       : null;
 
@@ -2016,6 +2000,7 @@ function buildTeamStatsRowsFromMatches(rawMatches: Record<string, unknown>[]): T
       Offloads: Number(raw.offloads ?? 0),
       "Dummy Passes": Number(raw.dummy_passes ?? 0),
       Passes: Number(raw.total_passes ?? 0),
+      "Passes To Run Ratio": Number(raw.all_runs ?? 0) > 0 ? Number(raw.total_passes ?? 0) / Number(raw.all_runs ?? 0) : 0,
       Receipts: Number(raw.receipts ?? 0),
       "Tackles Made": Number(raw.tackles_made ?? 0),
       "Missed Tackles": Number(raw.missed_tackles ?? 0),
@@ -2138,7 +2123,15 @@ export async function fetchTeamStatsFromSupabase(
     isCupCompetition(competition) ? "state_cup_matches" : "matches",
     {
     years,
-    columns: isCupCompetition(competition) ? "*" : [
+    columns: isCupCompetition(competition) ? [
+      "match_date",
+      "round",
+      "home_team",
+      "away_team",
+      "home_score",
+      "away_score",
+      "team_stats",
+    ].join(",") : [
       "match_date",
       "round",
       "team",
@@ -2517,10 +2510,29 @@ export async function fetchTeammateLookupRows(
 
 async function fetchPlayerStatsForLocalNameAllYearsFromSupabase(
   localPlayerName: string,
-  years?: string[]
+  years?: string[],
+  competition: StatsCompetition = "nrl"
 ): Promise<PlayerStat[]> {
+  if (isCupCompetition(competition)) {
+    const rawPlayers = await fetchPlayerStatsRowsForPlayerFromSupabase(localPlayerName, years, competition);
+    const matchDates = Array.from(new Set(rawPlayers.map((row) => String(row.match_date ?? "")).filter(Boolean)));
+    const supabase = createServerSupabaseClient();
+    const { data, error } = matchDates.length > 0
+      ? await supabase
+          .from("state_cup_matches")
+          .select("match_date,home_team,away_team")
+          .in("match_date", matchDates)
+      : { data: [], error: null };
+
+    if (error) throw new Error(`Supabase fetch state_cup_matches for player ${localPlayerName}: ${error.message}`);
+    return buildPlayerStatsRows(
+      enrichCupPlayerStatsRows(rawPlayers),
+      cupMatchRowsForOpponentLookup((data ?? []) as Record<string, unknown>[])
+    );
+  }
+
   const [rawPlayers, rawMatches] = await Promise.all([
-    fetchPlayerStatsRowsForPlayerFromSupabase(localPlayerName, years),
+    fetchPlayerStatsRowsForPlayerFromSupabase(localPlayerName, years, competition),
     fetchAllRows<Record<string, unknown>>("matches", {
       years,
       columns: "match_date,team,opponent_team,is_home",
@@ -2619,7 +2631,8 @@ export async function fetchFantasyPlayerStatsForYears(
 
 export async function fetchPlayerStatsForPlayerName(
   playerName: string,
-  years?: string[]
+  years?: string[],
+  competition: StatsCompetition = "nrl"
 ): Promise<PlayerStat[]> {
   if (!playerName.trim()) return [];
   const normalizedYears = years?.filter(Boolean).sort();
@@ -2627,14 +2640,16 @@ export async function fetchPlayerStatsForPlayerName(
 
   try {
     const directRows = await withTimeout(
-      fetchPlayerStatsForLocalNameAllYearsFromSupabase(playerName, normalizedYears),
-      DIRECT_PLAYER_STATS_TIMEOUT_MS,
+      fetchPlayerStatsForLocalNameAllYearsFromSupabase(playerName, normalizedYears, competition),
+      isCupCompetition(competition) ? DIRECT_CUP_PLAYER_STATS_TIMEOUT_MS : DIRECT_PLAYER_STATS_TIMEOUT_MS,
       "Direct player stats fetch timed out"
     );
     if (directRows.length > 0) return directRows;
   } catch (error) {
     console.warn("Unable to fetch player stats directly; falling back to cache.", error);
   }
+
+  if (isCupCompetition(competition)) return [];
 
   const serverCache = await readPlayerStatsServerCache(normalizedYears);
   if (!serverCache) return [];
@@ -2691,12 +2706,17 @@ const fetchAvailableYearsCached = unstable_cache(
 
 export async function fetchAvailableYears(competition: StatsCompetition = "nrl"): Promise<string[]> {
   if (isCupCompetition(competition)) {
-    if (process.env.NODE_ENV !== "production") return fetchAvailableYearsFromSupabase(competition);
-    return unstable_cache(
-      async (): Promise<string[]> => fetchAvailableYearsFromSupabase(competition),
-      ["cup-available-years-v1"],
-      { revalidate: DAILY_REVALIDATE_SECONDS }
-    )();
+    try {
+      if (process.env.NODE_ENV !== "production") return await fetchAvailableYearsFromSupabase(competition);
+      return await unstable_cache(
+        async (): Promise<string[]> => fetchAvailableYearsFromSupabase(competition),
+        ["cup-available-years-v1"],
+        { revalidate: DAILY_REVALIDATE_SECONDS }
+      )();
+    } catch (error) {
+      console.warn("Unable to fetch Cup available years; using fallback years.", error);
+      return FALLBACK_CUP_AVAILABLE_YEARS;
+    }
   }
   const serverCacheMeta =
     process.env.NODE_ENV !== "production"
@@ -4510,26 +4530,6 @@ export async function fetchPlayerImagesFromSupabase(): Promise<PlayerImageRecord
     console.warn("Unable to fetch state_cup_player_info images; using NRL player images only for those players.", error);
   }
 
-  try {
-    const cupStatRows = await fetchAllRows<Record<string, unknown>>("state_cup_player_stats", {
-      columns: "player,team,number,position,head_image,body_image,match_date",
-      orderBy: ["match_date", "team", "player"],
-    });
-    rows.push(...cupStatRows.map((row) => ({
-      player: typeof row.player === "string" ? row.player : "",
-      team: typeof row.team === "string" ? row.team : null,
-      number: row.number == null ? null : String(row.number),
-      position: typeof row.position === "string" ? row.position : null,
-      cached_head_image: null,
-      cached_body_image: null,
-      head_image: playerImageUrlOrNull(row.head_image),
-      body_image: playerImageUrlOrNull(row.body_image),
-      last_seen_match_date: typeof row.match_date === "string" ? row.match_date : null,
-    })));
-  } catch (error) {
-    console.warn("Unable to fetch state_cup_player_stats images; using player info images only for Cup players.", error);
-  }
-
   return dedupePlayerImageRows(rows);
 }
 
@@ -4547,6 +4547,63 @@ export async function fetchPlayerImages(): Promise<PlayerImageRecord[]> {
     return await fetchPlayerImagesCached();
   } catch (error) {
     console.warn("Unable to fetch player_images; using empty image list.", error);
+    return [];
+  }
+}
+
+export async function fetchPlayerImagesForPlayer(
+  playerName: string,
+  competition: StatsCompetition = "nrl"
+): Promise<PlayerImageRecord[]> {
+  const player = playerName.trim();
+  if (!player) return [];
+
+  try {
+    const supabase = createServerSupabaseClient();
+    const rows: PlayerImageRecord[] = [];
+    const { data: imageRows, error: imageError } = await supabase
+      .from("player_images")
+      .select("player,team,number,position,cached_head_image,cached_body_image,head_image,body_image,last_seen_match_date")
+      .eq("player", player);
+
+    if (imageError) throw new Error(`Supabase fetch player_images for ${player}: ${imageError.message}`);
+    rows.push(...((imageRows ?? []) as Record<string, unknown>[]).map((row) => ({
+      player: typeof row.player === "string" ? row.player : "",
+      team: typeof row.team === "string" ? row.team : null,
+      number: row.number == null ? null : String(row.number),
+      position: typeof row.position === "string" ? row.position : null,
+      cached_head_image: playerImageUrlOrNull(row.cached_head_image),
+      cached_body_image: playerImageUrlOrNull(row.cached_body_image),
+      head_image: playerImageUrlOrNull(row.head_image),
+      body_image: playerImageUrlOrNull(row.body_image),
+      last_seen_match_date: typeof row.last_seen_match_date === "string" ? row.last_seen_match_date : null,
+    })));
+
+    if (isCupCompetition(competition)) {
+      const { data: cupRows, error: cupError } = await supabase
+        .from("state_cup_player_stats")
+        .select("player,team,number,position,head_image,body_image,match_date")
+        .eq("player", player)
+        .order("match_date", { ascending: false })
+        .limit(20);
+
+      if (cupError) throw new Error(`Supabase fetch state_cup_player_stats images for ${player}: ${cupError.message}`);
+      rows.push(...((cupRows ?? []) as Record<string, unknown>[]).map((row) => ({
+        player: typeof row.player === "string" ? row.player : "",
+        team: typeof row.team === "string" ? row.team : null,
+        number: row.number == null ? null : String(row.number),
+        position: typeof row.position === "string" ? row.position : null,
+        cached_head_image: null,
+        cached_body_image: null,
+        head_image: playerImageUrlOrNull(row.head_image),
+        body_image: playerImageUrlOrNull(row.body_image),
+        last_seen_match_date: typeof row.match_date === "string" ? row.match_date : null,
+      })));
+    }
+
+    return dedupePlayerImageRows(rows);
+  } catch (error) {
+    console.warn(`Unable to fetch images for ${player}; using empty image list.`, error);
     return [];
   }
 }

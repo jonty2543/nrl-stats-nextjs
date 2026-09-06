@@ -132,6 +132,7 @@ const FORM_STAT_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerStat> = {
   Receipts: "Receipts",
   Runs: "All Runs",
   Passes: "Passes",
+  "Pass to run ratio": "Passes To Run Ratio",
   "Run metres": "All Run Metres",
   "Post-contact metres": "Post Contact Metres",
   Points: "Points",
@@ -356,6 +357,13 @@ const TEAM_ATTACK_STAT_META: Record<TeamStatsComparisonStat, {
   },
   Runs: perGameAttackStat("Runs"),
   Passes: perGameAttackStat("Passes"),
+  "Pass to run ratio": {
+    axisLabel: "PASS TO RUN RATIO",
+    metricLabel: "Pass/run",
+    description: "Passes divided by runs.",
+    minPadding: 0.05,
+    value: (point) => point.totals.Runs > 0 ? point.totals.Passes / point.totals.Runs : null,
+  },
   Receipts: perGameAttackStat("Receipts"),
   "Run metres": perGameAttackStat("Run metres"),
   "Post-contact metres": perGameAttackStat("Post-contact metres"),
@@ -605,6 +613,7 @@ const STAT_SEARCH_ALIASES: Record<string, string[]> = {
   Runs: ["run", "runs", "carry", "carries"],
   Receipts: ["receipt", "receipts", "touch", "touches"],
   Passes: ["pass", "passes"],
+  "Pass to run ratio": ["pass run ratio", "passes run ratio", "pass to run ratio", "passes to run ratio", "pass/run", "passes/run"],
   "Run metres": ["run metre", "run metres", "running metre", "running metres", "run meter", "run meters"],
   "Post-contact metres": ["post contact metre", "post contact metres", "post-contact metre", "post-contact metres", "pcm"],
   "Kick return metres": ["kick return metre", "kick return metres"],
@@ -1005,6 +1014,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const [teamAgainstStat, setTeamAgainstStat] = useState<TeamAttackComparisonStat>("Points");
   const [teamShareMetric, setTeamShareMetric] = useState<TeamShareMetric>("Runs");
   const [mode, setMode] = useState<DefencePlotMode>("season");
+  const [selectedTeam, setSelectedTeam] = useState("All teams");
   const [year, setYear] = useState(initialYear);
   const [round, setRound] = useState("all");
   const [proPlot, setProPlot] = useState<ProModelPlotId>("expected-points");
@@ -1103,6 +1113,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
     () => forSelectedRound(rowsByYear[activeYearKey] ?? [], round, (row) => row.Round),
     [activeYearKey, round, rowsByYear]
   );
+  const teamFilterOptions = useMemo(() => {
+    const teams = [...new Set(currentRows.map((row) => row.Team).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+    return ["All teams", ...teams];
+  }, [currentRows]);
   const currentPostMatchMetrics = useMemo(
     () => forSelectedRound(postMatchMetricsByYear[activeYearKey] ?? [], round, (row) => row.round),
     [activeYearKey, postMatchMetricsByYear, round]
@@ -1515,7 +1529,13 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
       detail: `Expected LB ${point.expectedLineBreaks.toFixed(1)} · Allowed ${point.actualLineBreaks.toFixed(1)}`,
     }));
   }, [activeTeamEfficiencyBaseMetric, activeTeamEfficiencyOutputMetric, activeTeamEfficiencyShowsVolume, activeTeamXMeta, activeTeamYMeta, attackPoints, concededPoints, defencePoints, isAttack, isForVsAgainstPlot, isRuckDominancePlot, isTeamDefenceEfficiency, isTeamDefenceStatsConceded, isTeamEfficiency, teamAgainstMeta, teamAgainstStat, teamForMeta, teamForStat, teamModelStats.attack, teamModelStats.defense]);
-  const plottedTeamPoints = isTeamForm ? teamFormPoints : isXPoints ? xPointsScatterPoints : points;
+  const rawPlottedTeamPoints = isTeamForm ? teamFormPoints : isXPoints ? xPointsScatterPoints : points;
+  const plottedTeamPoints = useMemo(
+    () => mode === "games" && selectedTeam !== "All teams"
+      ? rawPlottedTeamPoints.filter((point) => point.team === selectedTeam)
+      : rawPlottedTeamPoints,
+    [mode, rawPlottedTeamPoints, selectedTeam]
+  );
   const teamScatterAriaLabel = isAttackXPoints
     ? "Expected points against actual points scatter plot"
     : isDefenseXPoints
@@ -1613,6 +1633,11 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
     () => mode === "games" && !isTeamSingleStat ? coefficientOfDetermination(plottedTeamPoints) : null,
     [isTeamSingleStat, mode, plottedTeamPoints]
   );
+
+  useEffect(() => {
+    if (selectedTeam === "All teams" || teamFilterOptions.includes(selectedTeam)) return;
+    setSelectedTeam("All teams");
+  }, [selectedTeam, teamFilterOptions]);
 
   const loadTeamYear = async (targetYear: string, manageLoading = true, includeMetrics = false, refreshMetrics = false) => {
     const key = dataKey(targetYear);
@@ -2100,8 +2125,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[minmax(190px,0.3fr)_minmax(180px,280px)] items-start gap-3 sm:grid-cols-[minmax(210px,0.28fr)_minmax(220px,320px)_minmax(0,1fr)]">
-        <div className="col-start-1 row-start-1 flex min-w-0 items-end">
+      <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[minmax(210px,0.28fr)_minmax(220px,320px)_minmax(0,1fr)]">
+        <div className="flex min-w-0 items-end sm:col-start-1 sm:row-start-1">
           <CompetitionToggle
             value={competition}
             onChange={(value) => void changeCompetition(value)}
@@ -2111,7 +2136,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
             className="w-full"
           />
         </div>
-        <div className="col-start-2 row-start-1 min-w-0">
+        <div className="min-w-0 sm:col-start-2 sm:row-start-1">
           <Select
             label="View"
             hideLabel
@@ -2150,7 +2175,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
             onChange={changePlotView}
           />
         </div>
-        <div ref={plotFinderRef} className="relative col-span-2 col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-3 sm:row-start-1">
+        <div ref={plotFinderRef} className="relative min-w-0 sm:col-start-3 sm:row-start-1">
           <label htmlFor="plot-finder-input" className="sr-only">Find a plot</label>
           <input
             ref={plotFinderInputRef}
@@ -2393,6 +2418,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
           {teamFiltersOpen ? (
             <div id="team-plot-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
               {(!isOther || isRuckDominancePlot || isForVsAgainstPlot) && !isTeamForm ? <div className="w-32 shrink-0"><Select label="Plot points" compact value={mode === "season" ? "Team" : "Games"} options={[{ value: "Team", label: "One per team" }, { value: "Games", label: "One per game" }]} onChange={(value) => setMode(value === "Team" ? "season" : "games")} disabled={round !== "all"} /></div> : null}
+              {mode === "games" && !isTeamForm ? <div className="w-32 shrink-0"><Select label="Team" compact value={selectedTeam} options={teamFilterOptions} onChange={setSelectedTeam} /></div> : null}
               {isTeamAttackEfficiency ? <VolumeAxisToggle checked={teamEfficiencyShowsVolume} onChange={(checked) => setTeamEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
               {isTeamDefenceEfficiency ? <VolumeAxisToggle checked={teamDefenceEfficiencyShowsVolume} onChange={(checked) => setTeamDefenceEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
               {!isTeamForm ? <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} disabled={round !== "all"} /> : null}

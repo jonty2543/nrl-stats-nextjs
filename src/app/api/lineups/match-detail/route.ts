@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { getServerPremiumAccess, getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { fetchCompletedMatchStats, fetchLineupsForRound, fetchMatchStatDistributions } from "@/lib/lineups/nrl-lineups"
+import { fetchCompletedMatchStats, fetchLineupsForRound, fetchMatchStatDistributions, fetchUpcomingTryscorerOdds } from "@/lib/lineups/nrl-lineups"
 import {
   fetchLineupPlayerAverageSources,
   fetchLineupsMatchDetailSummary,
@@ -14,6 +14,28 @@ import {
 } from "@/lib/data/post-match-team-metrics"
 import type { LineupMatch, LineupMatchStats } from "@/lib/lineups/nrl-lineups"
 import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
+
+const MATCH_DETAIL_TIMEOUT_MS = 2500
+
+function withTimeout<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeout = setTimeout(() => {
+      console.warn(`${label} timed out; using fallback.`)
+      resolve(fallback)
+    }, MATCH_DETAIL_TIMEOUT_MS)
+  })
+
+  return Promise.race([
+    promise.catch((error) => {
+      console.warn(`${label} failed; using fallback.`, error)
+      return fallback
+    }),
+    timeoutPromise,
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
+}
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
@@ -29,7 +51,10 @@ function numberValue(value: unknown): number | null {
 }
 
 function parseCompetition(value: unknown): LineupCompetition {
-  return value === "origin" ? "origin" : "nrl"
+  if (value === "origin") return "origin"
+  if (value === "nswCup" || value === "nsw-cup") return "nswCup"
+  if (value === "qldCup" || value === "qld-cup") return "qldCup"
+  return "nrl"
 }
 
 function fallbackMatch(value: unknown, matchId: string): LineupMatch | null {
@@ -40,6 +65,32 @@ function fallbackMatch(value: unknown, matchId: string): LineupMatch | null {
 
 function playerCount(match: LineupMatch | null | undefined): number {
   return (match?.homeTeam?.players.length ?? 0) + (match?.awayTeam?.players.length ?? 0)
+}
+
+function normaliseKey(value: string | null | undefined): string {
+  return String(value ?? "")
+    .replace(/-/g, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
+function playerKeys(match: LineupMatch | null | undefined): string[] {
+  return [
+    ...(match?.homeTeam?.players ?? []),
+    ...(match?.awayTeam?.players ?? []),
+  ]
+    .map((player) => normaliseKey(player.player))
+    .filter(Boolean)
+}
+
+async function fallbackTryscorerOdds(match: LineupMatch | null | undefined) {
+  const keys = new Set(playerKeys(match))
+  if (keys.size === 0) return {}
+  const odds = await withTimeout(fetchUpcomingTryscorerOdds(), {}, "Lineup match detail tryscorer odds")
+  return Object.fromEntries(
+    Object.entries(odds).filter(([key]) => keys.has(key))
+  )
 }
 
 function matchTeams(match: LineupMatch): string[] {
@@ -188,25 +239,36 @@ export async function POST(request: NextRequest) {
       getServerPremiumAccess(userId),
     ])
     const detail = competition === "nrl"
-      ? await fetchLineupsMatchDetailSummary(year, round, matchId)
+      ? await withTimeout(
+          fetchLineupsMatchDetailSummary(year, round, matchId),
+          null,
+          "Lineup match detail summary"
+        )
       : null
     let hydratedMatch: LineupMatch | null = null
     let hydratedMatchStats = detail?.matchStats ?? null
     const detailMatch = detail?.match ?? shellMatch
 
-    const shouldHydrateRoundData =
-      playerCount(detailMatch) === 0 ||
-      hydratedMatchStats == null ||
-      hydratedMatchStats.home?.possessionPct == null ||
-      hydratedMatchStats.away?.possessionPct == null
+    const shouldHydrateRoundData = detail == null
+      ? detailMatch != null
+      : (
+          playerCount(detailMatch) === 0 ||
+          hydratedMatchStats == null ||
+          hydratedMatchStats.home?.possessionPct == null ||
+          hydratedMatchStats.away?.possessionPct == null
+        )
 
     if (shouldHydrateRoundData) {
-      const roundLineups = await fetchLineupsForRound({
-        round,
-        year,
-        includeFantasyProjections: hasProAccess,
-        competition,
-      })
+      const roundLineups = await withTimeout(
+        fetchLineupsForRound({
+          round,
+          year,
+          includeFantasyProjections: hasProAccess,
+          competition,
+        }),
+        { matches: [], matchStats: {} },
+        "Lineup match detail round hydration"
+      )
       hydratedMatch =
         roundLineups.matches.find((candidate) => candidate.matchId === matchId) ??
         (detailMatch ? roundLineups.matches.find((candidate) => sameFixture(candidate, detailMatch)) : null) ??
@@ -216,19 +278,27 @@ export async function POST(request: NextRequest) {
         roundLineups.matchStats[matchId] ??
         hydratedMatchStats
     }
-    if (competition === "nrl" && needsCompletedMatchStats(hydratedMatchStats) && (hydratedMatch ?? detailMatch)) {
-      hydratedMatchStats = await fetchCompletedMatchStats((hydratedMatch ?? detailMatch) as LineupMatch) ?? hydratedMatchStats
+    if (detail != null && competition === "nrl" && needsCompletedMatchStats(hydratedMatchStats) && (hydratedMatch ?? detailMatch)) {
+      hydratedMatchStats = await withTimeout(
+        fetchCompletedMatchStats((hydratedMatch ?? detailMatch) as LineupMatch),
+        hydratedMatchStats,
+        "Lineup completed match stats"
+      )
     }
 
     const fallbackDetail = shellMatch
       ? {
           match: hydratedMatch ?? shellMatch,
           matchStats: hydratedMatchStats,
-          tryscorerOdds: {},
+          tryscorerOdds: await fallbackTryscorerOdds(hydratedMatch ?? shellMatch),
           sportsbetOdds: {},
           casualtyWardOuts: {},
           playerAverages: {},
-          playerAverageSources: await fetchLineupPlayerAverageSources(hydratedMatch ?? shellMatch),
+          playerAverageSources: await withTimeout(
+            fetchLineupPlayerAverageSources(hydratedMatch ?? shellMatch),
+            {},
+            "Lineup match detail player average sources"
+          ),
           positionPpmBaselines: {},
           playerTryHistory: {},
       }

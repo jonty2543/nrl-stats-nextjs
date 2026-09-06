@@ -136,6 +136,7 @@ export interface TeamStat {
   Offloads: number;
   "Dummy Passes": number;
   Passes: number;
+  "Passes To Run Ratio": number;
   Receipts: number;
   "Tackles Made": number;
   "Missed Tackles": number;

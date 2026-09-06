@@ -6,6 +6,8 @@ export type PlayerAttackPosition = (typeof PLAYER_ATTACK_POSITIONS)[number];
 export const PLAYER_BACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halves"] as const satisfies readonly PlayerAttackPosition[];
 export const PLAYER_EFFICIENCY_BASE_METRICS = ["Minutes", "Receipts", "Runs", "Passes"] as const;
 export const PLAYER_EFFICIENCY_OUTPUT_METRICS = [
+  "Runs",
+  "Passes",
   "Run metres",
   "Post-contact metres",
   "Kick return metres",
@@ -52,6 +54,7 @@ export const PLAYER_ATTACK_COMPARISON_STATS = [
   "Receipts",
   "Runs",
   "Passes",
+  "Pass to run ratio",
   "Run metres",
   "Post-contact metres",
   "Points",
@@ -165,6 +168,8 @@ const EFFICIENCY_BASE_FIELDS: Record<PlayerEfficiencyBaseMetric, keyof PlayerSta
 };
 
 const EFFICIENCY_OUTPUT_FIELDS: Record<PlayerEfficiencyOutputMetric, keyof PlayerStat> = {
+  Runs: "All Runs",
+  Passes: "Passes",
   "Run metres": "All Run Metres",
   "Post-contact metres": "Post Contact Metres",
   "Kick return metres": "Kick Return Metres",
@@ -212,6 +217,7 @@ const ATTACK_COMPARISON_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerS
   Receipts: "Receipts",
   Runs: "All Runs",
   Passes: "Passes",
+  "Pass to run ratio": "Passes To Run Ratio",
   "Run metres": "All Run Metres",
   "Post-contact metres": "Post Contact Metres",
   Points: "Points",

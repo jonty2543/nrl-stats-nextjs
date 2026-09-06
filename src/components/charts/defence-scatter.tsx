@@ -44,6 +44,7 @@ interface TeamQuadrantScatterProps {
   pointImages?: Record<string, string>;
   searchEntityLabel?: "players" | "teams";
   colorByQuadrant?: boolean;
+  uniformPointColor?: boolean;
   comparisonLine?: boolean;
   comparisonHigherIsBetter?: boolean;
   rSquared?: number | null;
@@ -275,6 +276,7 @@ export function TeamQuadrantScatter({
   pointImages,
   searchEntityLabel: searchEntityLabelOverride,
   colorByQuadrant = true,
+  uniformPointColor = false,
   comparisonLine = false,
   comparisonHigherIsBetter = true,
   rSquared = null,
@@ -620,7 +622,9 @@ export function TeamQuadrantScatter({
           const isRight = xHigherIsBetter ? group.xValue >= chart.xMean : group.xValue <= chart.xMean;
           const isTop = yHigherIsBetter ? group.yValue >= chart.yMean : group.yValue <= chart.yMean;
           const heatRatio = (x - singleAxisHeatBarX) / singleAxisHeatBarWidth;
-          const pointColor = singleAxis
+          const pointColor = uniformPointColor
+            ? "#4f9cff"
+            : singleAxis
             ? singleAxisHeatColor(heatRatio)
             : comparisonLine
             ? (group.yValue >= group.xValue) === comparisonHigherIsBetter ? "#10f08b" : "#ff5364"

@@ -4,12 +4,67 @@ import { BettingDashboard } from "@/components/views/betting-dashboard";
 import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { fetchBettingOddsSnapshot, fetchBettingOddsSnapshotFromRawTables, fetchBettingPageSummary, fetchPlayerImages, fetchTeamLogos } from "@/lib/supabase/queries";
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types";
-import type { BettingSummaryGame } from "@/lib/supabase/queries";
+import type { BettingPageSummary, BettingSummaryGame } from "@/lib/supabase/queries";
 
 export const dynamic = "force-dynamic";
 
 const SUNDAY_BETTING_RELEASE_UTC_HOUR = 11;
 const LOCALHOST_NAMES = new Set(["localhost", "127.0.0.1", "::1"]);
+const BETTING_PAGE_SNAPSHOT_TIMEOUT_MS = 8000;
+const BETTING_PAGE_RAW_SNAPSHOT_TIMEOUT_MS = 4000;
+const BETTING_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS = 2500;
+
+function emptyBettingOddsSnapshot(): BettingOddsSnapshot {
+  return {
+    h2h: [],
+    line: [],
+    margin: [],
+    total: [],
+    tryscorer: [],
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function emptyBettingPageSummary(): BettingPageSummary {
+  return {
+    id: "current",
+    year: null,
+    games: [],
+    teamLogos: {},
+    playerTeamsByName: {},
+    tryscorerFormByPlayer: {},
+    tryscorerLastFiveVsOpponentByMatch: {},
+    tryscorerKickoffsByMatch: {},
+    lineupPlayersByMatch: {},
+    teamLastFiveByMatch: {},
+    updatedAt: null,
+  };
+}
+
+async function withOptionalContextTimeout<T>(
+  label: string,
+  promise: Promise<T>,
+  fallback: T,
+  timeoutMs = BETTING_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise.catch((error) => {
+        console.warn(`Unable to load ${label} for betting page; using fallback.`, error);
+        return fallback;
+      }),
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => {
+          console.warn(`${label} timed out for betting page after ${timeoutMs}ms; using fallback.`);
+          resolve(fallback);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 function normalisePlayerKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -282,19 +337,21 @@ function buildTeamFormByMatchKey(games: BettingSummaryGame[]): Record<string, st
 export default async function BettingPage() {
   const { userId } = await auth();
   const [snapshot, canAccessPremium, bettingSummary, playerImages, teamLogos, localhostRequest] = await Promise.all([
-    fetchBettingOddsSnapshot(),
+    withOptionalContextTimeout("betting odds snapshot", fetchBettingOddsSnapshot(), emptyBettingOddsSnapshot(), BETTING_PAGE_SNAPSHOT_TIMEOUT_MS),
     getServerPremiumAccess(userId),
-    fetchBettingPageSummary(),
-    fetchPlayerImages(),
-    fetchTeamLogos(),
+    withOptionalContextTimeout("betting summary", fetchBettingPageSummary(), emptyBettingPageSummary()),
+    withOptionalContextTimeout("player images", fetchPlayerImages(), []),
+    withOptionalContextTimeout("team logos", fetchTeamLogos(), {}),
     isLocalhostRequest(),
   ]);
   const lineupsFilteredSnapshot = filterTryscorersToLineups(
     localhostRequest
-      ? await fetchBettingOddsSnapshotFromRawTables().catch((error) => {
-          console.warn("Unable to fetch raw betting odds for localhost screenshot mode; using summary snapshot.", error);
-          return snapshot;
-        })
+      ? await withOptionalContextTimeout(
+          "raw betting odds for localhost screenshot mode",
+          fetchBettingOddsSnapshotFromRawTables(),
+          snapshot,
+          BETTING_PAGE_RAW_SNAPSHOT_TIMEOUT_MS
+        )
       : snapshot,
     bettingSummary.lineupPlayersByMatch,
     bettingSummary.games

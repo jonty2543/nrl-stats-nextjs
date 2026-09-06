@@ -1700,18 +1700,36 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
     const query = nextCompetition === "cup" ? "&competition=cup" : "";
     setLoading(true);
     try {
-      const [playersResponse, teamsResponse] = await Promise.all([
-        playerRowsByYear[key] ? null : fetch(`/api/player-stats?years=${encodeURIComponent(nextYear)}${query}`),
-        rowsByYear[key] ? null : fetch(`/api/team-stats?years=${encodeURIComponent(nextYear)}${query}`),
-      ]);
-      if (playersResponse?.ok) {
-        const rows = await playersResponse.json() as PlayerStat[];
+      if (entity === "Players") {
+        if (playerRowsByYear[key]) return;
+        const response = await fetch(`/api/player-stats?years=${encodeURIComponent(nextYear)}${query}`);
+        if (!response.ok) return;
+        const rows = await response.json() as PlayerStat[];
         setPlayerRowsByYear((current) => ({ ...current, [key]: rows }));
+        return;
       }
-      if (teamsResponse?.ok) {
-        const rows = await teamsResponse.json() as TeamStat[];
-        setRowsByYear((current) => ({ ...current, [key]: rows }));
+
+      if (isOther) {
+        const [playersResponse, teamsResponse] = await Promise.all([
+          playerRowsByYear[key] ? null : fetch(`/api/player-stats?years=${encodeURIComponent(nextYear)}${query}`),
+          rowsByYear[key] ? null : fetch(`/api/team-stats?years=${encodeURIComponent(nextYear)}${query}`),
+        ]);
+        if (playersResponse?.ok) {
+          const rows = await playersResponse.json() as PlayerStat[];
+          setPlayerRowsByYear((current) => ({ ...current, [key]: rows }));
+        }
+        if (teamsResponse?.ok) {
+          const rows = await teamsResponse.json() as TeamStat[];
+          setRowsByYear((current) => ({ ...current, [key]: rows }));
+        }
+        return;
       }
+
+      if (rowsByYear[key]) return;
+      const response = await fetch(`/api/team-stats?years=${encodeURIComponent(nextYear)}${query}`);
+      if (!response.ok) return;
+      const rows = await response.json() as TeamStat[];
+      setRowsByYear((current) => ({ ...current, [key]: rows }));
     } finally {
       setLoading(false);
     }

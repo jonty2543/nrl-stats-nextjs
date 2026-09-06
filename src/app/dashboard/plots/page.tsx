@@ -26,6 +26,26 @@ function buildPlayerFaceImages(rows: PlayerImageRecord[]): Record<string, string
   return faces;
 }
 
+async function withOptionalContextTimeout<T>(label: string, promise: Promise<T>, fallback: T, timeoutMs = 1200): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeout = setTimeout(() => {
+          console.warn(`Timed out loading ${label}; rendering plots without it.`);
+          resolve(fallback);
+        }, timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    console.warn(`Unable to load ${label}; rendering plots without it.`, error);
+    return fallback;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export default async function PlotsPage() {
   const { userId } = await auth();
   const canAccessLoginSeason = Boolean(userId);
@@ -33,14 +53,11 @@ export default async function PlotsPage() {
   const availableYearsPromise = fetchAvailableYears();
   const cupAvailableYearsPromise = proAccessPromise.then((canAccess) =>
     canAccess
-      ? fetchAvailableYears("cup").catch((error) => {
-          console.warn("Unable to load Cup plot seasons.", error);
-          return [];
-        })
+      ? withOptionalContextTimeout("Cup plot seasons", fetchAvailableYears("cup"), [])
       : Promise.resolve([])
   );
-  const teamLogosPromise = fetchTeamLogos();
-  const playerImagesPromise = fetchPlayerImages();
+  const teamLogosPromise = withOptionalContextTimeout("plot team logos", fetchTeamLogos(), {});
+  const playerImagesPromise = withOptionalContextTimeout("plot player images", fetchPlayerImages(), []);
   const [canAccessProSeason, availableYears] = await Promise.all([proAccessPromise, availableYearsPromise]);
   const unlockedYears = availableYears.filter((year) =>
     isAccessibleSeason(year, canAccessLoginSeason, "stats", canAccessProSeason)

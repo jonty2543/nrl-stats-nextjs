@@ -816,6 +816,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
     ? `${statInitials(effectiveStatKey, activeStatOptions)} / ${statInitials(effectivePerStatKey, activeStatOptions)}`
     : statInitials(effectiveStatKey, activeStatOptions)
   const valueHeading = section === "form" ? "Change" : statHeading
+  const totalHeading = section === "form" || effectivePerStatKey ? (section === "form" ? "Prior" : statInitials(effectiveStatKey, activeStatOptions)) : "Total"
   const toggleValueSortDirection = () => {
     setValueSortDirection((current) => current === "desc" ? "asc" : "desc")
   }
@@ -985,7 +986,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                   <th className="w-8 px-2 py-1.5 sm:w-12 sm:px-4 sm:py-2">#</th>
                   <th className="px-1.5 py-1.5 sm:px-2 sm:py-2">Team</th>
                   <th className="w-12 px-1.5 py-1.5 text-right sm:w-16 sm:px-2 sm:py-2">Games</th>
-                  <th className="w-14 px-1.5 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? "Prior" : statInitials(effectiveStatKey, activeStatOptions)}</th>
+                  <th className="w-14 px-1.5 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{totalHeading}</th>
                   {section === "form" || effectivePerStatKey ? (
                     <th className="w-12 px-1.5 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? `L${formWindow}` : statInitials(effectivePerStatKey, activeStatOptions)}</th>
                   ) : null}
@@ -1040,13 +1041,13 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               <thead className="sticky top-0 z-10 bg-[#111733]">
                 <tr className="border-b border-nrl-border text-[7px] font-black uppercase tracking-[0.1em] text-nrl-muted sm:text-[9px] sm:tracking-[0.14em]">
                   <th className="w-12 py-1.5 pl-4 pr-2 sm:w-12 sm:px-4 sm:py-2">#</th>
-                  <th className="py-1.5 pl-3 pr-2 sm:px-2 sm:py-2">Player</th>
+                  <th className="py-1.5 pl-1 pr-2 sm:px-2 sm:py-2">Player</th>
                   <th className="w-14 px-2 py-1.5 text-right sm:w-16 sm:px-2 sm:py-2">Games</th>
-                  <th className="w-16 px-2 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? "Prior" : statInitials(effectiveStatKey, activeStatOptions)}</th>
+                  <th className="w-14 px-1 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{totalHeading}</th>
                   {section === "form" || effectivePerStatKey ? (
                     <th className="w-14 px-2 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? `L${formWindow}` : statInitials(effectivePerStatKey, activeStatOptions)}</th>
                   ) : null}
-                  <th className="w-20 px-2 py-1.5 text-right sm:w-28 sm:px-4 sm:py-2" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
+                  <th className="w-[4.5rem] px-1 py-1.5 text-right sm:w-28 sm:px-4 sm:py-2" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
                     <button
                       type="button"
                       onClick={toggleValueSortDirection}
@@ -1062,7 +1063,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                 {playerRankings.map((entry, index) => (
                   <tr key={entry.name} className="border-b border-nrl-border/70 odd:bg-transparent even:bg-white/[0.018] last:border-b-0">
                     <td className="py-1.5 pl-4 pr-2 text-[11px] font-black text-nrl-muted sm:px-4 sm:py-2 sm:text-xs">{index + 1}</td>
-                    <td className="overflow-hidden py-1.5 pl-3 pr-2 sm:px-2 sm:py-2">
+                    <td className="overflow-hidden py-1.5 pl-1 pr-2 sm:px-2 sm:py-2">
                       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                         <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 sm:h-11 sm:w-11">
                           <PlayerImageWithFallback
@@ -1087,7 +1088,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                       </div>
                     </td>
                     <td className="px-2 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">{entry.games}</td>
-                    <td className="px-2 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
+                    <td className="px-1 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
                       {section === "form" ? formatRankingValue(entry.priorValue ?? 0, ratioRanking) : formatCountValue(entry.statValue)}
                     </td>
                     {section === "form" || effectivePerStatKey ? (
@@ -1095,7 +1096,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                         {section === "form" ? formatRankingValue(entry.recentValue ?? 0, ratioRanking) : formatCountValue(entry.perStatValue ?? 0)}
                       </td>
                     ) : null}
-                    <td className={`px-2 py-1.5 text-right text-[13px] font-black sm:px-4 sm:py-2 sm:text-sm ${section === "form" ? formChangeClass(entry.value, effectiveStatKey) : "text-nrl-text"}`}>
+                    <td className={`px-1 py-1.5 text-right text-[13px] font-black sm:px-4 sm:py-2 sm:text-sm ${section === "form" ? formChangeClass(entry.value, effectiveStatKey) : "text-nrl-text"}`}>
                       {section === "form" ? formatFormChange(entry.value, ratioRanking) : formatRankingValue(entry.value, ratioRanking)}
                     </td>
                   </tr>

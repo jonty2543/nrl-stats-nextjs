@@ -28,13 +28,6 @@ function fixtureKey(row: Draw2026Row): string {
   return [row.kickoff.slice(0, 10), normaliseTeamKey(row.home), normaliseTeamKey(row.away)].join("|")
 }
 
-function weekKey(dateValue: string): string {
-  const date = new Date(`${dateValue.slice(0, 10)}T12:00:00Z`)
-  if (Number.isNaN(date.getTime())) return ""
-  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7))
-  return date.toISOString().slice(0, 10)
-}
-
 function roundLabel(round: number): string {
   if (round >= 28 && round <= 30) return `Finals Week ${round - 27}`
   if (round === 31) return "Grand Final"
@@ -43,85 +36,32 @@ function roundLabel(round: number): string {
 
 async function fetchScrapedFixtureRows(): Promise<Draw2026Row[]> {
   const nrlSupabase = createServerSupabaseClient("nrl")
-  const publicSupabase = createServerSupabaseClient()
-  const [{ data: matchData, error: matchError }, { data: lineupData, error: lineupError }, { data: oddsData, error: oddsError }] = await Promise.all([
-    nrlSupabase
-      .from("matches")
-      .select("url,match_date,round,round_number,team,opponent_team,is_home")
-      .gte("match_date", "2026-01-01")
-      .lt("match_date", "2027-01-01")
-      .eq("is_home", true)
-      .order("match_date", { ascending: true })
-      .limit(PAGE_SIZE),
-    nrlSupabase
-      .from("lineups")
-      .select("match_id,match_date,kickoff_utc,round,match,match_url")
-      .gte("match_date", "2026-01-01")
-      .lt("match_date", "2027-01-01")
-      .eq("team_type", "Home")
-      .eq("number", 1)
-      .order("match_date", { ascending: true })
-      .limit(PAGE_SIZE),
-    publicSupabase
-      .from("NRL Odds")
-      .select("Date,Match")
-      .gte("Date", "2026-01-01")
-      .lt("Date", "2027-01-01")
-      .order("Date", { ascending: true })
-      .limit(PAGE_SIZE),
-  ])
+  const { data, error } = await nrlSupabase
+    .from("fixtures")
+    .select("round,round_number,kickoff_utc,match_url,home_team,away_team")
+    .gte("match_date", "2026-01-01")
+    .lt("match_date", "2027-01-01")
+    .order("kickoff_utc", { ascending: true })
+    .limit(PAGE_SIZE)
 
-  if (matchError) throw new Error(`Supabase fetch nrl.matches fixtures: ${matchError.message}`)
-  if (lineupError) throw new Error(`Supabase fetch nrl.lineups fixtures: ${lineupError.message}`)
-  if (oddsError) console.warn("Unable to load scraped upcoming fixtures from NRL Odds.", oddsError)
+  if (error) throw new Error(`Supabase fetch nrl.fixtures: ${error.message}`)
 
   const fixtures = new Map<string, Draw2026Row>()
-  for (const raw of matchData ?? []) {
+  for (const raw of data ?? []) {
     const round = roundNumber(raw.round_number) || roundNumber(raw.round)
-    const kickoff = String(raw.match_date ?? "")
-    const home = String(raw.team ?? "").trim()
-    const away = String(raw.opponent_team ?? "").trim()
+    const kickoff = String(raw.kickoff_utc ?? "")
+    const home = String(raw.home_team ?? "").trim()
+    const away = String(raw.away_team ?? "").trim()
     if (!round || !kickoff || !home || !away) continue
-    const row = { round, roundLabel: roundLabel(round), kickoff, matchCentreUrl: String(raw.url ?? ""), home, away }
-    fixtures.set(fixtureKey(row), row)
-  }
-
-  const seenMatchIds = new Set<string>()
-  for (const raw of lineupData ?? []) {
-    const matchId = String(raw.match_id ?? "").trim()
-    if (matchId && seenMatchIds.has(matchId)) continue
-    if (matchId) seenMatchIds.add(matchId)
-    const [home = "", away = ""] = String(raw.match ?? "").split(/\s+vs\s+/i).map((team) => team.trim())
-    const round = roundNumber(raw.round)
-    const kickoff = String(raw.kickoff_utc ?? raw.match_date ?? "")
-    if (!round || !kickoff || !home || !away) continue
-    const row = { round, roundLabel: String(raw.round ?? "").trim() || roundLabel(round), kickoff, matchCentreUrl: String(raw.match_url ?? ""), home, away }
-    fixtures.set(fixtureKey(row), row)
-  }
-
-  const roundsByWeek = new Map<string, number>()
-  for (const row of fixtures.values()) {
-    const key = weekKey(row.kickoff)
-    if (key) roundsByWeek.set(key, Math.max(roundsByWeek.get(key) ?? 0, row.round))
-  }
-  const unknownWeeks = new Map<string, number>()
-  const oddsRows = [...(oddsData ?? [])].sort((left, right) => String(left.Date ?? "").localeCompare(String(right.Date ?? "")))
-  for (const raw of oddsRows) {
-    const kickoff = String(raw.Date ?? "").slice(0, 10)
-    const [home = "", away = ""] = String(raw.Match ?? "").split(/\s+v(?:s)?\.?\s+/i).map((team) => team.trim())
-    if (!kickoff || !home || !away) continue
-    const key = weekKey(kickoff)
-    let round = roundsByWeek.get(key) ?? unknownWeeks.get(key)
-    if (!round) {
-      const previousRound = [...fixtures.values()]
-        .filter((fixture) => fixture.kickoff.slice(0, 10) < kickoff)
-        .reduce((highest, fixture) => Math.max(highest, fixture.round), 0)
-      const previousInferredRound = [...unknownWeeks.values()].reduce((highest, value) => Math.max(highest, value), 0)
-      round = Math.max(previousRound, previousInferredRound) + 1
-      unknownWeeks.set(key, round)
+    const row = {
+      round,
+      roundLabel: String(raw.round ?? "").trim() || roundLabel(round),
+      kickoff,
+      matchCentreUrl: String(raw.match_url ?? ""),
+      home,
+      away,
     }
-    const row = { round, roundLabel: roundLabel(round), kickoff, matchCentreUrl: "", home, away }
-    if (!fixtures.has(fixtureKey(row))) fixtures.set(fixtureKey(row), row)
+    fixtures.set(fixtureKey(row), row)
   }
 
   return [...fixtures.values()].sort((left, right) => left.round - right.round || left.kickoff.localeCompare(right.kickoff))
@@ -186,7 +126,7 @@ async function loadDraw2026DataUncached(): Promise<Draw2026Data> {
 
 const loadDraw2026DataCached = unstable_cache(
   loadDraw2026DataUncached,
-  ["scraped-2026-fixtures-with-logos-v2"],
+  ["nrl-fixtures-with-logos-v3"],
   { revalidate: 3600 }
 )
 

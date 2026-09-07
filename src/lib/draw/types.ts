@@ -1,5 +1,6 @@
 export interface Draw2026Row {
   round: number
+  roundLabel?: string
   kickoff: string
   matchCentreUrl: string
   home: string
@@ -10,4 +11,3 @@ export interface Draw2026Data {
   rows: Draw2026Row[]
   teamLogos: Record<string, string>
 }
-

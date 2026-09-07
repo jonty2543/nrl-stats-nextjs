@@ -507,7 +507,12 @@ function getCurrentYearInBrisbane(): number {
 }
 
 function roundSort(value: string | null | undefined): number {
-  const parsed = Number(String(value ?? "").match(/\d+/)?.[0] ?? 0)
+  const label = String(value ?? "")
+  if (/finals week 1/i.test(label)) return 28
+  if (/finals week 2/i.test(label)) return 29
+  if (/finals week 3/i.test(label)) return 30
+  if (/grand final/i.test(label)) return 31
+  const parsed = Number(label.match(/\d+/)?.[0] ?? 0)
   return Number.isFinite(parsed) ? parsed : 0
 }
 
@@ -559,8 +564,8 @@ function matchFromDrawRow(row: Draw2026Row): LineupMatch {
   return {
     matchId: drawMatchId(row),
     matchDate,
-    kickoffUtc: row.kickoff || null,
-    round: `Round ${row.round}`,
+    kickoffUtc: row.kickoff.includes("T") ? row.kickoff : null,
+    round: row.roundLabel ?? `Round ${row.round}`,
     venue: null,
     match: `${row.home} vs ${row.away}`,
     matchUrl: row.matchCentreUrl || null,
@@ -1085,7 +1090,8 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
     }
 
     for (const row of draw2026Data.rows) {
-      addRoundOption(options, `Round ${row.round}`, row.round, row.kickoff.slice(0, 10))
+      const label = row.roundLabel ?? `Round ${row.round}`
+      addRoundOption(options, label, row.round, row.kickoff.slice(0, 10))
     }
 
     return [...options.values()].sort((a, b) => a.roundNumber - b.roundNumber || a.label.localeCompare(b.label))

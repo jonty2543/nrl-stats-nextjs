@@ -161,6 +161,10 @@ function lineupsSummarySparseReason(summary: Awaited<ReturnType<typeof fetchLine
 }
 
 function roundNumberFromLabel(value: string): number | null {
+  if (/finals week 1/i.test(value)) return 28
+  if (/finals week 2/i.test(value)) return 29
+  if (/finals week 3/i.test(value)) return 30
+  if (/grand final/i.test(value)) return 31
   const match = value.match(/\d+/)
   if (!match) return null
   const round = Number(match[0])

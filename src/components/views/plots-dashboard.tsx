@@ -1786,7 +1786,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
         : isTeamDefenceStatsConceded
           ? `${defenceStatAxisLabel(activeTeamXStat as TeamDefenceConcededStat, activeTeamXMeta.axisLabel)} · BETTER →`
           : isAttack
-            ? `${teamAttackXMeta.axisLabel} · BETTER ${teamAttackXHigherIsBetter ? "→" : "←"}`
+            ? `${teamAttackXMeta.axisLabel} · BETTER →`
             : "CONTACT DISRUPTIONS ALLOWED PER 100 RUNS · BETTER →";
   const teamYAxisLabel = isAttackXPoints
     ? mode === "season" ? "AVERAGE ACTUAL POINTS PER GAME ↑" : "ACTUAL POINTS ↑"

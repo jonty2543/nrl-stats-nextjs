@@ -29,6 +29,7 @@ export const TEAM_ATTACK_COMPARISON_STATS = [
   "PTB Rating",
   "Missed tackles",
   "Penalties",
+  "Ruck infringements",
   "Errors",
 ] as const;
 export type TeamAttackComparisonStat = (typeof TEAM_ATTACK_COMPARISON_STATS)[number];
@@ -106,6 +107,7 @@ export const TEAM_ATTACK_TOTAL_STATS = [
   "Disruptions",
   "Missed tackles",
   "Penalties",
+  "Ruck infringements",
   "Errors",
 ] as const;
 export type TeamAttackTotalStat = (typeof TEAM_ATTACK_TOTAL_STATS)[number];
@@ -183,6 +185,7 @@ function attackTotals(row: TeamStat): Record<TeamAttackTotalStat, number> {
     Disruptions: tackleBreaks + offloads,
     "Missed tackles": finite(row["Missed Tackles"]),
     Penalties: finite(row.Penalties),
+    "Ruck infringements": finite(row["Ruck Infringements"]),
     Errors: finite(row.Errors),
   };
 }

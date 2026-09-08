@@ -525,6 +525,7 @@ const TEAM_ATTACK_STAT_META: Record<TeamStatsComparisonStat, {
   },
   "Missed tackles": perGameAttackStat("Missed tackles"),
   Penalties: perGameAttackStat("Penalties"),
+  "Ruck infringements": perGameAttackStat("Ruck infringements"),
   Errors: perGameAttackStat("Errors"),
 };
 

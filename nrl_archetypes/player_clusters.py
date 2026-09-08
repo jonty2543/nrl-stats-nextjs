@@ -1013,7 +1013,10 @@ def generate_outputs(training_agg, models_by_period, configs, periods, plot_suff
                             hoverinfo='text',
                             legendgroup=arch,
                             showlegend=not legend_shown, # Show each archetype once in legend (first year it has data)
-                            customdata=np.full(len(sub_df), y) # Store year for filtering
+                            customdata=[
+                                [int(y), int(games)]
+                                for games in sub_df['games']
+                            ]
                         ))
                         legend_shown = True
 
@@ -1031,7 +1034,7 @@ def generate_outputs(training_agg, models_by_period, configs, periods, plot_suff
                     hoverinfos = []
                     for trace in fig.data:
                         # Each trace has a single year in its customdata
-                        trace_tag = trace.customdata[0]
+                        trace_tag = trace.customdata[0][0]
                         if int(trace_tag) == target_y:
                             opacities.append(0.8)
                             hoverinfos.append("text")

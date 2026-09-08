@@ -70,7 +70,7 @@ function styleIndexHtml(
   const cupReadyHtml = canAccessCup
     ? html
       .replaceAll(/src="(cup_[^"]+)"/g, `src="$1${cupAccessQuery}"`)
-      .replaceAll("nextFrame.src = plotFile;", "nextFrame.src = withCupAccess(plotFile);")
+      .replaceAll("nextFrame.src = withMinGames(plotFile);", "nextFrame.src = withCupAccess(withMinGames(plotFile));")
       .replaceAll("fetch(plotFile)", "fetch(withCupAccess(plotFile))")
     : gateCupIndexAssets(html);
 
@@ -291,7 +291,7 @@ function styleIndexHtml(
         const archetypesCupAccessQuery = ${JSON.stringify(cupAccessQuery)};
         function withCupAccess(assetPath) {
             if (!archetypesCupAccessQuery || !assetPath.startsWith('cup_')) return assetPath;
-            return assetPath + archetypesCupAccessQuery;
+            return assetPath + (assetPath.includes('?') ? '&' + archetypesCupAccessQuery.slice(1) : archetypesCupAccessQuery);
         }
 
         function syncArchetypesBackground() {
@@ -335,9 +335,39 @@ function styleIndexHtml(
 function stylePlotHtml(html: string): string {
   const controlsVersion = Date.now();
   const controlsScript = `<script src="projection-controls.js?v=${controlsVersion}"></script>`;
-  const htmlWithControls = html.includes("projection-controls.js")
+  const minGamesScript = `<script>
+    (function () {
+      const minimumGames = Number.parseInt(new URLSearchParams(window.location.search).get('minGames') || '5', 10);
+      if (!Number.isFinite(minimumGames) || minimumGames <= 5) return;
+      let attempts = 0;
+      const timer = window.setInterval(function () {
+        attempts += 1;
+        const plot = document.querySelector('.plotly-graph-div');
+        if (!plot || !Array.isArray(plot.data) || typeof window.Plotly === 'undefined') {
+          if (attempts >= 40) window.clearInterval(timer);
+          return;
+        }
+        window.clearInterval(timer);
+        const traceIndexes = plot.data.map(function (_, index) { return index; });
+        const update = { x: [], y: [], z: [], hovertext: [], customdata: [] };
+        plot.data.forEach(function (trace) {
+          const customdata = Array.from(trace.customdata || []);
+          const keep = customdata.map(function (entry) {
+            return Number(Array.isArray(entry) ? entry[1] : 0) >= minimumGames;
+          });
+          ['x', 'y', 'z', 'hovertext', 'customdata'].forEach(function (key) {
+            const values = Array.from(trace[key] || []);
+            update[key].push(values.filter(function (_, index) { return keep[index]; }));
+          });
+        });
+        window.Plotly.restyle(plot, update, traceIndexes);
+      }, 50);
+    })();
+  </script>`;
+  const htmlWithControls = (html.includes("projection-controls.js")
     ? html.replaceAll(/src="projection-controls\.js(?:\?v=\d+)?"/g, `src="projection-controls.js?v=${controlsVersion}"`)
-    : html.replace("</body>", `${controlsScript}</body>`);
+    : html.replace("</body>", `${controlsScript}</body>`))
+    .replace("</body>", `${minGamesScript}</body>`);
 
   return htmlWithControls
     .replaceAll("#C9FF00", "#00f58a")

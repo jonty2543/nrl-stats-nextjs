@@ -803,6 +803,14 @@
                         <option value="l10">L10</option>
                     </select>
                 </div>
+                <div class="control-frame" id="minGamesControlFrame">
+                    <select class="control-select" id="minGamesToggle" aria-label="Minimum games">
+                        <option value="5" selected>5+ games</option>
+                        <option value="10">10+ games</option>
+                        <option value="15">15+ games</option>
+                        <option value="20">20+ games</option>
+                    </select>
+                </div>
                 <div class="control-frame" id="decadeControlFrame">
                     <select class="control-select" id="decadeToggle" aria-label="Archetype era">
                         <option value="2020s" selected>20's</option>
@@ -891,6 +899,8 @@
         const competitionToggle = document.getElementById('competitionToggle');
         const modeToggle = document.getElementById('modeToggle');
         const windowToggle = document.getElementById('windowToggle');
+        const minGamesToggle = document.getElementById('minGamesToggle');
+        const minGamesControlFrame = document.getElementById('minGamesControlFrame');
         const decadeToggle = document.getElementById('decadeToggle');
         const rankingsCard = document.getElementById('rankingsCard');
         const rankingsHeader = document.getElementById('rankingsHeader');
@@ -906,6 +916,7 @@
         let currentCompetition = 'nrl';
         let currentMode = 'production';
         let currentWindow = 'all';
+        let currentMinGames = 5;
         let rankingsOpen = false;
         let rankingsView = 'rankings';
         let rankingsYear = 'All';
@@ -1012,6 +1023,11 @@
             return String(getActivePeriodKey()).toLowerCase();
         }
 
+        function withMinGames(assetPath) {
+            const minimum = currentWindow === 'all' ? currentMinGames : 1;
+            return `${assetPath}${assetPath.includes('?') ? '&' : '?'}minGames=${minimum}`;
+        }
+
         // Initialize
         function init() {
             // Check if clusterData exists and has the year structure
@@ -1037,6 +1053,13 @@
             });
 
             windowToggle.onchange = event => selectWindow(event.target.value);
+            minGamesToggle.onchange = event => {
+                currentMinGames = Number.parseInt(event.target.value, 10) || 5;
+                if (!currentPosition) return;
+                const selectedPosition = currentPosition;
+                currentPosition = null;
+                selectPosition(selectedPosition);
+            };
             decadeToggle.onchange = event => selectPeriod(event.target.value);
 
             rankingsHeader.onclick = () => {
@@ -1076,6 +1099,7 @@
             updateModeAvailability();
             updatePeriodAvailability();
             updateRankingsYearOptions();
+            minGamesControlFrame.hidden = currentWindow !== 'all';
 
             const positions = rebuildPositionTabs(getActiveClusterData()[getActivePeriodKey()] || {});
 
@@ -1217,6 +1241,7 @@
         function selectWindow(windowName) {
             if (currentWindow === windowName) return;
             currentWindow = windowName;
+            minGamesControlFrame.hidden = currentWindow !== 'all';
             if (windowName !== 'all') {
                 rankingsYear = '2026';
                 rankingsYearSelect.value = rankingsYear;
@@ -1250,7 +1275,7 @@
             const plotFile = `${getPlotPrefix()}_cluster_plot_${position.toLowerCase().replace(' ', '_')}${getPlotSuffix()}_${getPlotPeriodSuffix()}.html`;
             const requestId = ++plotRequestId;
             const nextFrame = document.createElement('iframe');
-            nextFrame.src = plotFile;
+            nextFrame.src = withMinGames(plotFile);
             nextFrame.title = `${position} Clusters`;
 
             plotContainer.querySelectorAll('iframe:not(.is-ready)').forEach(frame => frame.remove());
@@ -1294,7 +1319,7 @@
                 ? 'Team Share mode uses each player game stat as a percentage of their team total for that same game, then averages those shares by player-season.'
                 : 'Production mode uses the player production stats directly.';
             const windowDescription = currentWindow === 'all'
-                ? `All qualifying games in the ${currentYear === 'All' ? 'available dataset' : currentYear} are included.`
+                ? `Players with at least ${currentMinGames} qualifying games in the ${currentYear === 'All' ? 'available dataset' : currentYear} are included.`
                 : `Only each player’s latest ${{ l3: 'three', l5: 'five', l10: 'ten' }[currentWindow]} qualifying games from 2026 are included.`;
 
             updateRankingsCard(position, data);
@@ -1334,6 +1359,7 @@
             data.archetypes.forEach(arch => {
                 const card = document.createElement('div');
                 card.className = 'archetype-card';
+                card.dataset.archetype = arch.name;
 
                 // Generate a dynamic description based on the name
                 const description = arch.description || generateDescription(arch.name, data.pc_axes);
@@ -1347,6 +1373,25 @@
                 `;
                 archetypeList.appendChild(card);
             });
+            void updateArchetypeCounts(position);
+        }
+
+        async function updateArchetypeCounts(position) {
+            try {
+                const rows = await loadRankings(position, currentWindow);
+                const filteredRows = currentWindow === 'all'
+                    ? rows.filter(row => row.games >= currentMinGames)
+                    : rows;
+                const counts = new Map();
+                filteredRows.forEach(row => counts.set(row.archetype, (counts.get(row.archetype) || 0) + 1));
+                archetypeList.querySelectorAll('[data-archetype]').forEach(card => {
+                    const count = counts.get(card.dataset.archetype) || 0;
+                    const label = card.querySelector('.player-count');
+                    if (label) label.textContent = `${count} Players`;
+                });
+            } catch (error) {
+                console.error('Failed to update archetype counts:', error);
+            }
         }
 
         function updateRankingsCard(position, data) {
@@ -1380,7 +1425,10 @@
                 const rows = await loadRankings(position, currentWindow);
                 if (requestId !== rankingsRequestId) return;
 
-                const filteredRows = rows.filter(row => rankingsYear === 'All' || row.year === rankingsYear);
+                const filteredRows = rows.filter(row =>
+                    (rankingsYear === 'All' || row.year === rankingsYear)
+                    && (currentWindow !== 'all' || row.games >= currentMinGames)
+                );
                 if (!filteredRows.length) {
                     body.innerHTML = '<div class="rankings-empty">No rankings available for this year.</div>';
                     return;
@@ -1435,7 +1483,7 @@
         function renderFormRankings(body, data, seasonRows, recentRows) {
             const seasonByPlayer = new Map(
                 seasonRows
-                    .filter(row => row.year === '2026')
+                    .filter(row => row.year === '2026' && row.games >= currentMinGames)
                     .map(row => [row.player, row])
             );
             const currentRows = recentRows.filter(row => row.year === '2026');
@@ -1513,6 +1561,7 @@
                 const x = decodePlotlyArray(trace.x);
                 const y = decodePlotlyArray(trace.y);
                 const z = decodePlotlyArray(trace.z);
+                const customdata = decodePlotlyMatrix(trace.customdata);
                 const hovertext = Array.isArray(trace.hovertext) ? trace.hovertext : [];
 
                 hovertext.forEach((label, index) => {
@@ -1522,6 +1571,7 @@
                         player: parsed.player,
                         year: parsed.year,
                         archetype: trace.name || '',
+                        games: Number(customdata[index]?.[1] ?? 0),
                         x: x[index],
                         y: y[index],
                         z: z[index],
@@ -1590,9 +1640,31 @@
                 for (let i = 0; i < bytes.length; i += 8) output.push(view.getFloat64(i, true));
             } else if (value.dtype === 'f4') {
                 for (let i = 0; i < bytes.length; i += 4) output.push(view.getFloat32(i, true));
+            } else if (value.dtype === 'i4') {
+                for (let i = 0; i < bytes.length; i += 4) output.push(view.getInt32(i, true));
+            } else if (value.dtype === 'i2') {
+                for (let i = 0; i < bytes.length; i += 2) output.push(view.getInt16(i, true));
+            } else if (value.dtype === 'i1') {
+                for (let i = 0; i < bytes.length; i += 1) output.push(view.getInt8(i));
+            } else if (value.dtype === 'u4') {
+                for (let i = 0; i < bytes.length; i += 4) output.push(view.getUint32(i, true));
+            } else if (value.dtype === 'u2') {
+                for (let i = 0; i < bytes.length; i += 2) output.push(view.getUint16(i, true));
+            } else if (value.dtype === 'u1') {
+                for (let i = 0; i < bytes.length; i += 1) output.push(view.getUint8(i));
             }
 
             return output;
+        }
+
+        function decodePlotlyMatrix(value) {
+            if (Array.isArray(value)) return value;
+            const flat = decodePlotlyArray(value);
+            const columns = Number.parseInt(String(value?.shape || '').split(',')[1], 10);
+            if (!columns) return flat.map(item => [item]);
+            return Array.from({ length: Math.ceil(flat.length / columns) }, (_, index) =>
+                flat.slice(index * columns, (index + 1) * columns)
+            );
         }
 
         function parsePlayerYear(label) {

@@ -61,6 +61,7 @@ export const TEAM_DEFENCE_CONCEDED_STATS = [
   "PTB Rating",
   "Contact Rating",
   "Line Defense Rating",
+  "Ruck infringements",
 ] as const;
 export type TeamDefenceConcededStat = (typeof TEAM_DEFENCE_CONCEDED_STATS)[number];
 

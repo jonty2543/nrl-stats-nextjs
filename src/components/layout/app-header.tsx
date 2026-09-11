@@ -3,8 +3,13 @@
 import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import Image from "next/image";
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
 import { BillingNavButton } from "@/components/billing/billing-action-button";
 import { ToolNav } from "@/components/ui/tool-nav";
+
+const subscribeToHydration = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
 
 interface AppHeaderProps {
   sticky?: boolean;
@@ -19,6 +24,10 @@ export function AppHeader({
   blendBackground = false,
   className = "",
 }: AppHeaderProps) {
+  // Auth can already be loaded in the browser while the server has no session.
+  // Keep the account controls identical through the initial hydration render.
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot);
+
   return (
     <header className={`${sticky ? "sticky top-0 z-50" : ""} relative isolate ${className}`.trim()}>
       <div className={`relative z-10 ${blendBackground ? "" : "bg-[var(--app-bg-base)] bg-fixed [background-image:var(--app-bg-gradient)]"}`}>
@@ -38,26 +47,32 @@ export function AppHeader({
             </div>
 
             <div className="relative z-10 flex shrink-0 items-center gap-2">
-              <SignedIn>
-                {showBillingNav ? <BillingNavButton /> : null}
-                <UserButton
-                  appearance={{
-                    elements: {
-                      avatarBox: "h-8 w-8 ring-1 ring-white/10 sm:h-9 sm:w-9",
-                    },
-                  }}
-                />
-              </SignedIn>
-              <SignedOut>
-                <SignInButton mode="modal">
-                  <button
-                    type="button"
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white sm:px-4 sm:py-2 sm:text-sm"
-                  >
-                    Sign in
-                  </button>
-                </SignInButton>
-              </SignedOut>
+              {hydrated ? (
+                <>
+                  <SignedIn>
+                    {showBillingNav ? <BillingNavButton /> : null}
+                    <UserButton
+                      appearance={{
+                        elements: {
+                          avatarBox: "h-8 w-8 ring-1 ring-white/10 sm:h-9 sm:w-9",
+                        },
+                      }}
+                    />
+                  </SignedIn>
+                  <SignedOut>
+                    <SignInButton mode="modal">
+                      <button
+                        type="button"
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:border-white/20 hover:text-white sm:px-4 sm:py-2 sm:text-sm"
+                      >
+                        Sign in
+                      </button>
+                    </SignInButton>
+                  </SignedOut>
+                </>
+              ) : (
+                <div className="h-9 w-20" aria-hidden="true" />
+              )}
             </div>
           </div>
 

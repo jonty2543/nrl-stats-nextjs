@@ -1,10 +1,16 @@
 (function () {
+  let resolvePlotReady;
+  window.archetypesReady = new Promise((resolve) => { resolvePlotReady = resolve; });
   const isCurrentSeasonWindow = /_(?:l3|l5|l10)(?:_|\.html)/i.test(window.location.pathname);
   const state = {
     activeYearIndex: 0,
     droppedDimension: null,
     originalData: null,
     playerSearch: "",
+    age: "",
+    ageOperator: "eq",
+    ages: null,
+    ageControlsRendered: false,
   };
   const PLAYER_SEARCH_TRACE_NAME = "Player search highlight";
 
@@ -70,6 +76,8 @@
       y: readArray(trace.y),
       z: readArray(trace.z),
       hovertext: readArray(trace.hovertext),
+      customdata: readArray(trace.customdata),
+      marker: JSON.parse(JSON.stringify(trace.marker || {})),
       markerSize: trace.marker && trace.marker.size ? readArray(trace.marker.size) : null,
       markerLineColor: trace.marker && trace.marker.line ? readArray(trace.marker.line.color) : null,
       markerLineWidth: trace.marker && trace.marker.line ? readArray(trace.marker.line.width) : null,
@@ -113,6 +121,7 @@
         y: source.y,
         z: source.z,
         hovertext: source.hovertext,
+        customdata: source.customdata,
         visible: hasPoints,
         showlegend,
       };
@@ -131,7 +140,7 @@
       source.hovertext.forEach((label, pointIndex) => {
         const playerName = playerNameFromHover(label);
         const searchable = `${playerName} ${label}`.toLowerCase();
-        if (!searchable.includes(normalizedQuery)) return;
+        if (!searchable.includes(normalizedQuery) || !matchesAge(label)) return;
         matches.push({ traceIndex, pointIndex, playerName, label });
       });
     });
@@ -233,7 +242,7 @@
       data.push(buildPlayerSearchTrace(matches));
     }
 
-    Plotly.react(gd, data, getPlayerSearchLayout(gd, matches), {
+    return Plotly.react(gd, data, getPlayerSearchLayout(gd, matches), {
       responsive: true,
       scrollZoom: true,
       displaylogo: false,
@@ -252,7 +261,8 @@
     nextTrace.x = filterValues(source[keptDimensions[0].axis], keep);
     nextTrace.y = filterValues(source[keptDimensions[1].axis], keep);
     nextTrace.hovertext = filterValues(source.hovertext, keep);
-    nextTrace.marker = { ...(trace.marker || {}) };
+    nextTrace.customdata = filterValues(source.customdata, keep);
+    nextTrace.marker = { ...source.marker };
 
     return nextTrace;
   }
@@ -270,7 +280,8 @@
     nextTrace.y = filterValues(source.y, keep);
     nextTrace.z = filterValues(source.z, keep);
     nextTrace.hovertext = filterValues(source.hovertext, keep);
-    nextTrace.marker = { ...(trace.marker || {}) };
+    nextTrace.customdata = filterValues(source.customdata, keep);
+    nextTrace.marker = { ...source.marker };
 
     return nextTrace;
   }
@@ -278,11 +289,145 @@
   function getDisplayedTraces(gd) {
     const dimensions = getDimensions(gd);
     const keptDimensions = dimensions.filter((dimension) => dimension.key !== state.droppedDimension);
-    return getBaseTraces(gd).map((trace, index) => (
+    const traces = getBaseTraces(gd).map((trace, index) => (
       state.droppedDimension
         ? getProjectionTrace(trace, index, keptDimensions)
         : getRestoredTrace(trace, index)
-    ));
+    )).map((trace, index) => {
+      const yearStyle = gd.layout.updatemenus?.[0]?.buttons?.[state.activeYearIndex]?.args?.[0] || {};
+      const opacity = yearStyle["marker.opacity"];
+      if (opacity !== undefined) {
+        trace.marker.opacity = Array.isArray(opacity) ? opacity[index] : opacity;
+      }
+      const hoverinfo = yearStyle.hoverinfo;
+      if (hoverinfo !== undefined) {
+        trace.hoverinfo = Array.isArray(hoverinfo) ? hoverinfo[index] : hoverinfo;
+      }
+      return trace;
+    });
+    if (state.age === "" || !state.ages) return traces;
+    const pairs = traces.map(splitTraceByAge);
+    // Keep original trace indices stable for year controls and player search.
+    const displayed = [...pairs.map((pair) => pair[0]), ...pairs.map((pair) => pair[1])];
+    const legendGroups = new Set();
+    displayed.forEach((trace) => {
+      trace.showlegend = trace.x.length > 0 && !legendGroups.has(trace.legendgroup);
+      if (trace.showlegend) legendGroups.add(trace.legendgroup);
+    });
+    return displayed;
+  }
+
+  function matchesAge(label) {
+    if (state.age === "" || !state.ages) return true;
+    const age = state.ages[String(label).trim().toLowerCase()];
+    if (!Number.isFinite(age)) return false;
+    const selected = Number(state.age);
+    return state.ageOperator === "gt" ? age > selected
+      : state.ageOperator === "lt" ? age < selected : age === selected;
+  }
+
+  function splitTraceByAge(trace) {
+    const matching = trace.hovertext.map(matchesAge);
+    return [true, false].map((isMatch) => {
+      const keep = matching.map((match) => match === isMatch);
+      const subset = (values) => Array.isArray(values) || ArrayBuffer.isView(values)
+        ? Array.from(values).filter((_, index) => keep[index]) : values;
+      const next = {
+        ...trace,
+        legendgroup: trace.legendgroup || trace.name,
+        showlegend: isMatch && trace.showlegend,
+        hoverinfo: isMatch ? trace.hoverinfo : "none",
+        marker: {
+          ...trace.marker,
+          // scatter3d needs scalar trace opacity to fade reliably.
+          opacity: isMatch ? (trace.marker.opacity ?? 0.8) : 0.15,
+          color: subset(trace.marker.color),
+          size: subset(trace.marker.size),
+        },
+      };
+      if (!isMatch) delete next.uid;
+      for (const key of ["x", "y", "z", "hovertext", "customdata", "text", "ids"]) {
+        if (trace[key] !== undefined) next[key] = subset(trace[key]);
+      }
+      if (trace.marker.line) {
+        next.marker.line = { ...trace.marker.line };
+        for (const key of ["color", "width"]) next.marker.line[key] = subset(trace.marker.line[key]);
+      }
+      return next;
+    });
+  }
+
+  async function renderAgeControls() {
+    const wrapper = document.getElementById("plotly-wrapper");
+    if (!wrapper || state.ageControlsRendered) return;
+    state.ageControlsRendered = true;
+    let host = null;
+    try {
+      host = window.parent.document.getElementById("archetype-age-controls");
+    } catch (_) { /* Standalone plots keep their own controls. */ }
+    const controls = document.createElement("div");
+    controls.id = "age-filter";
+    controls.style.cssText = "display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#f5f7ff;font-size:11px";
+    controls.innerHTML = '<label for="age-value">Age at July 1</label><select id="age-operator" aria-label="Age comparison"><option value="eq">Exactly</option><option value="gt">Greater than</option><option value="lt">Less than</option></select><select id="age-value" aria-label="Age at July 1" disabled><option value="">All ages</option></select><span id="age-status" role="status">Loading ages…</span>';
+    if (host) {
+      controls.className = "control-frame";
+      controls.title = "Player age at July 1 of each season";
+      controls.style.cssText = "display:flex;align-items:center;gap:4px;margin:0;color:#f5f7ff;font-size:11px";
+      controls.querySelector("label").style.cssText = "padding-left:8px;white-space:nowrap";
+      host.replaceChildren(controls);
+    } else {
+      getControlBar(wrapper).appendChild(controls);
+    }
+    const operator = controls.querySelector("#age-operator");
+    const ageInput = controls.querySelector("#age-value");
+    const status = controls.querySelector("#age-status");
+    controls.querySelectorAll("select").forEach((select) => {
+      if (host) {
+        select.className = "control-select";
+        return;
+      }
+      select.style.cssText = "background:#161c32;color:#f5f7ff;border:1px solid #2a3356;border-radius:8px;padding:6px;font:inherit";
+    });
+    if (host) {
+      // Keep announcements accessible without stretching the top filter row.
+      status.style.cssText = "position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap";
+    }
+    try {
+      const response = await fetch("/api/archetypes/player-ages");
+      if (!response.ok) throw new Error("Ages unavailable");
+      state.ages = await response.json();
+      [...new Set(Object.values(state.ages))].sort((a, b) => a - b).forEach((age) => {
+        ageInput.add(new Option(String(age), String(age)));
+      });
+      try {
+        const saved = JSON.parse(sessionStorage.getItem("archetypes-age-filter") || "null");
+        if (saved && ["eq", "gt", "lt"].includes(saved.operator)) {
+          operator.value = saved.operator;
+          ageInput.value = saved.age;
+        }
+      } catch (_) { /* Storage may be unavailable. */ }
+      ageInput.disabled = false;
+      const update = () => {
+        state.age = ageInput.value;
+        state.ageOperator = operator.value;
+        const labels = state.originalData.flatMap((trace) => trace.hovertext);
+        const count = labels.filter(matchesAge).length;
+        status.textContent = state.age === "" ? "" : `${count} matching player years · unknown ages dimmed`;
+        try {
+          sessionStorage.setItem("archetypes-age-filter", JSON.stringify({ age: state.age, operator: state.ageOperator }));
+        } catch (_) { /* Filtering works without storage. */ }
+        return applyPlayerSearchHighlight();
+      };
+      operator.addEventListener("change", update);
+      ageInput.addEventListener("change", update);
+      await update();
+    } catch (_) {
+      status.style.cssText = "font-size:11px;padding:0 6px";
+      status.textContent = "Age filter unavailable. Reload to retry.";
+      operator.disabled = true;
+    } finally {
+      resolvePlotReady();
+    }
   }
 
   function getProjectedAxis(label, titleStandoff) {
@@ -552,6 +697,7 @@
     updateProjectionAttributes();
     renderYearControls();
     renderPlayerSearch();
+    renderAgeControls();
 
     const existingDimensionToggle = wrapper.querySelector("#dimension-toggle");
     existingDimensionToggle?.remove();

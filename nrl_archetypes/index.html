@@ -117,7 +117,7 @@
         .control-stack {
             display: flex;
             flex: 0 0 auto;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
             gap: 0.6rem;
         }
 
@@ -819,6 +819,7 @@
                         <option value="All">All</option>
                     </select>
                 </div>
+                <div id="archetype-age-controls" style="display:flex;align-items:center;max-width:100%"></div>
             </div>
 
             <div class="tabs" id="positionTabs">
@@ -1277,9 +1278,12 @@
             const nextFrame = document.createElement('iframe');
             nextFrame.src = withMinGames(plotFile);
             nextFrame.title = `${position} Clusters`;
+            nextFrame.style.visibility = 'hidden';
 
             plotContainer.querySelectorAll('iframe:not(.is-ready)').forEach(frame => frame.remove());
-            nextFrame.onload = () => {
+            nextFrame.onload = async () => {
+                // Wait for saved age selection and its Plotly redraw before swapping frames.
+                await nextFrame.contentWindow.archetypesReady;
                 if (requestId !== plotRequestId) {
                     nextFrame.remove();
                     return;
@@ -1289,7 +1293,10 @@
                 Array.from(plotContainer.children).forEach(child => {
                     if (child !== nextFrame) child.remove();
                 });
-                requestAnimationFrame(() => nextFrame.classList.add('is-ready'));
+                requestAnimationFrame(() => {
+                    nextFrame.style.visibility = 'visible';
+                    nextFrame.classList.add('is-ready');
+                });
             };
             plotContainer.appendChild(nextFrame);
 

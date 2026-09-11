@@ -373,7 +373,7 @@
       controls.className = "control-frame";
       controls.title = "Player age at July 1 of each season";
       controls.style.cssText = "display:flex;align-items:center;gap:4px;margin:0;color:#f5f7ff;font-size:11px";
-      controls.querySelector("label").style.cssText = "padding-left:8px;white-space:nowrap";
+      controls.querySelector("label").style.cssText = "padding-left:8px;margin-right:6px;white-space:nowrap";
       host.replaceChildren(controls);
     } else {
       getControlBar(wrapper).appendChild(controls);

@@ -204,14 +204,6 @@ export default function Home() {
                 ctaLabel: "NRL AI",
               },
               */
-              {
-                eyebrow: "Articles",
-                title: "Explaining the method behind the madness",
-                description: "We use articles to give clarity on our process for fantasy projections and betting models, as well as to provide general insights using data driven analysis",
-                bullets: ["Machine learning walkthroughs", "Public article submission"],
-                ctaHref: "/dashboard/articles",
-                ctaLabel: "Articles",
-              },
             ].map((feature) => (
               <FeatureSection key={feature.eyebrow} {...feature} />
             ))}

@@ -610,6 +610,30 @@ type PlotViewId =
   | "team_context_for_against"
   | "team_context_position_share"
   | "team_context_ruck";
+
+const PLOT_VIEW_SUMMARIES: Record<PlotViewId, string> = {
+  player_attack_stats: "Compare player stats",
+  player_attack_efficiency: "Output per action",
+  player_attack_share: "Share of team output",
+  player_attack_vs_team: "Player stats against their team's stats",
+  player_variance: "Game-to-game consistency",
+  player_form: "Recent form vs prior form",
+  player_defense_tackles: "Tackle volume vs efficiency",
+  player_combinations_halves: "Stats share between halves",
+  team_attack_stats: "Compare team stats",
+  team_attack_efficiency: "Output per action",
+  team_variance: "Game-to-game consistency",
+  team_attack_xpoints: "Actual points vs expected points",
+  team_form: "Recent form vs prior form",
+  team_defense_stats: "Stats against a team",
+  team_defense_efficiency: "Conceded per action faced",
+  team_defense_contact: "Contact vs line defence",
+  team_defense_xpoints: "Actual vs expected points conceded",
+  team_context_for_against: "Team output for and against",
+  team_context_position_share: "Percentage of a stat by position",
+  team_context_ruck: "Ruck performance by team",
+};
+
 const HALVES_PAIRING_SORT_OPTIONS = ["Ascending · most different", "Descending · closest to 50/50"] as const;
 type HalvesPairingSortLabel = (typeof HALVES_PAIRING_SORT_OPTIONS)[number];
 
@@ -2396,6 +2420,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
             label="View"
             hideLabel
             value={activePlotView}
+            description={PLOT_VIEW_SUMMARIES[activePlotView]}
             options={[
               { label: "Players · Attack", options: [
                 { value: "player_attack_stats", label: "Player stats" },

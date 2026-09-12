@@ -1040,14 +1040,14 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             <table className="w-full min-w-0 table-fixed border-collapse text-left sm:min-w-[370px] sm:table-auto">
               <thead className="sticky top-0 z-10 bg-[#111733]">
                 <tr className="border-b border-nrl-border text-[7px] font-black uppercase tracking-[0.1em] text-nrl-muted sm:text-[9px] sm:tracking-[0.14em]">
-                  <th className="w-12 py-1.5 pl-4 pr-2 sm:w-12 sm:px-4 sm:py-2">#</th>
-                  <th className="py-1.5 pl-1 pr-2 sm:px-2 sm:py-2">Player</th>
-                  <th className="w-14 px-2 py-1.5 text-right sm:w-16 sm:px-2 sm:py-2">Games</th>
-                  <th className="w-14 px-1 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{totalHeading}</th>
+                  <th className="w-9 py-1.5 pl-3 pr-1 sm:w-12 sm:px-4 sm:py-2">#</th>
+                  <th className="py-1.5 px-1 sm:px-2 sm:py-2">Player</th>
+                  <th className="w-11 px-1 py-1.5 text-right sm:w-16 sm:px-2 sm:py-2">Games</th>
+                  <th className="w-12 px-1 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{totalHeading}</th>
                   {section === "form" || effectivePerStatKey ? (
-                    <th className="w-14 px-2 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? `L${formWindow}` : statInitials(effectivePerStatKey, activeStatOptions)}</th>
+                    <th className="w-11 px-1 py-1.5 text-right sm:w-20 sm:px-2 sm:py-2">{section === "form" ? `L${formWindow}` : statInitials(effectivePerStatKey, activeStatOptions)}</th>
                   ) : null}
-                  <th className="w-[4.5rem] px-1 py-1.5 text-right sm:w-28 sm:px-4 sm:py-2" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
+                  <th className="w-16 px-1 py-1.5 text-right sm:w-28 sm:px-4 sm:py-2" aria-sort={valueSortDirection === "desc" ? "descending" : "ascending"}>
                     <button
                       type="button"
                       onClick={toggleValueSortDirection}
@@ -1062,10 +1062,10 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
               <tbody>
                 {playerRankings.map((entry, index) => (
                   <tr key={entry.name} className="border-b border-nrl-border/70 odd:bg-transparent even:bg-white/[0.018] last:border-b-0">
-                    <td className="py-1.5 pl-4 pr-2 text-[11px] font-black text-nrl-muted sm:px-4 sm:py-2 sm:text-xs">{index + 1}</td>
-                    <td className="overflow-hidden py-1.5 pl-1 pr-2 sm:px-2 sm:py-2">
-                      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                        <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 sm:h-11 sm:w-11">
+                    <td className="py-1.5 pl-3 pr-1 text-[11px] font-black text-nrl-muted sm:px-4 sm:py-2 sm:text-xs">{index + 1}</td>
+                    <td className="overflow-hidden px-1 py-1.5 sm:px-2 sm:py-2">
+                      <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
+                        <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 sm:h-11 sm:w-11">
                           <PlayerImageWithFallback
                             sources={entry.imageSources}
                             alt={`${entry.name} player image`}
@@ -1087,12 +1087,12 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                         </div>
                       </div>
                     </td>
-                    <td className="px-2 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">{entry.games}</td>
+                    <td className="px-1 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">{entry.games}</td>
                     <td className="px-1 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
                       {section === "form" ? formatRankingValue(entry.priorValue ?? 0, ratioRanking) : formatCountValue(entry.statValue)}
                     </td>
                     {section === "form" || effectivePerStatKey ? (
-                      <td className="px-2 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
+                      <td className="px-1 py-1.5 text-right text-[11px] font-bold text-nrl-muted sm:px-2 sm:py-2 sm:text-xs">
                         {section === "form" ? formatRankingValue(entry.recentValue ?? 0, ratioRanking) : formatCountValue(entry.perStatValue ?? 0)}
                       </td>
                     ) : null}

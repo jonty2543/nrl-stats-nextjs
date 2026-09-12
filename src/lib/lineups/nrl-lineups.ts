@@ -1652,7 +1652,7 @@ export async function fetchCompletedMatchStats(match: LineupMatch): Promise<Line
         .lt("match_date", nextDate),
       supabase
         .from(LINEUP_COMPETITION_TABLES.nrl.playerStats)
-        .select("team,total_points")
+        .select("*")
         .gte("match_date", matchDate)
         .lt("match_date", nextDate),
     ])
@@ -1664,26 +1664,21 @@ export async function fetchCompletedMatchStats(match: LineupMatch): Promise<Line
     )
     if (!row) return null
 
-    const fantasyTotals = new Map<string, number>()
-    for (const playerRow of (playerData ?? []) as unknown as RawRow[]) {
-      const team = canonicalTeamKey(text(playerRow.team))
-      const points = numberOrNull(playerRow.total_points)
-      if (!team || points == null) continue
-      fantasyTotals.set(team, (fantasyTotals.get(team) ?? 0) + points)
-    }
     const homeTeam = text(row.team)
     const awayTeam = text(row.opponent_team)
+    const fixtureKey = matchMergeKey(matchDate, homeTeam, awayTeam)
+    const historicalPlayerStats = buildHistoricalPlayerStats((playerData ?? []) as unknown as RawRow[])
     return {
       matchId: match.matchId,
       homeTeam,
       awayTeam,
-      home: teamStatsFromMatchRow(row, fantasyTotals.get(canonicalTeamKey(homeTeam)) ?? null),
-      away: opponentTeamStatsFromMatchRow(row, fantasyTotals.get(canonicalTeamKey(awayTeam)) ?? null),
+      home: teamStatsFromMatchRow(row, historicalPlayerStats.fantasyTotals.get(`${fixtureKey}|${normaliseKey(homeTeam)}`) ?? null),
+      away: opponentTeamStatsFromMatchRow(row, historicalPlayerStats.fantasyTotals.get(`${fixtureKey}|${normaliseKey(awayTeam)}`) ?? null),
       scoringEvents: [
         ...historicalTryEvents(match.matchId, homeTeam, nullableText(row.tries_summary), "home"),
         ...historicalTryEvents(match.matchId, awayTeam, nullableText(row.opponent_tries_summary), "away"),
       ].sort((a, b) => (a.matchMinute ?? 9999) - (b.matchMinute ?? 9999)),
-      playerStats: {},
+      playerStats: historicalPlayerStats.playerStatsByMatchKey.get(fixtureKey) ?? {},
     }
   } catch (error) {
     console.warn(`Unable to fetch completed match stats for ${match.matchId}.`, error)

@@ -12,7 +12,7 @@
                 {
                     "id": 1,
                     "name": "Balanced Fullback",
-                    "count": 7,
+                    "count": 6,
                     "description": "These well rounded fullbacks balance workrate, playmaking and elusiveness making them the complete package."
                 },
                 {
@@ -24,7 +24,7 @@
                 {
                     "id": 3,
                     "name": "Playmaker Fullback",
-                    "count": 5,
+                    "count": 6,
                     "description": "These playmakers save their energy for the big moments, with reduced workrates but high involvement in tries and try assists."
                 },
                 {
@@ -73,13 +73,13 @@
                 {
                     "id": 1,
                     "name": "Finisher Winger",
-                    "count": 7,
+                    "count": 9,
                     "description": "Wingers who are specialist try scorers, often with great positional awareness and speed."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 29,
+                    "count": 28,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -114,7 +114,7 @@
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 11,
+                    "count": 12,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
@@ -126,7 +126,7 @@
                 {
                     "id": 2,
                     "name": "Support Centre",
-                    "count": 19,
+                    "count": 18,
                     "description": "These players are less involved with ball in hand and may play other roles for the team."
                 },
                 {
@@ -169,7 +169,7 @@
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 13,
+                    "count": 14,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
@@ -181,7 +181,7 @@
                 {
                     "id": 2,
                     "name": "Organising Half",
-                    "count": 19,
+                    "count": 18,
                     "description": "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
                 }
             ],
@@ -275,25 +275,25 @@
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 25,
+                    "count": 19,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 15,
+                    "count": 11,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 10,
+                    "count": 11,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 6,
+                    "count": 15,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -329,7 +329,7 @@
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 4,
+                    "count": 1,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
@@ -341,7 +341,7 @@
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 42,
+                    "count": 46,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

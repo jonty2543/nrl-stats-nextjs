@@ -213,6 +213,7 @@ function mergeHydratedMatch(base: LineupMatch | null, hydrated: LineupMatch | nu
 function needsCompletedMatchStats(stats: LineupMatchStats | null | undefined): boolean {
   if (!stats) return true
   return (
+    Object.keys(stats.playerStats ?? {}).length === 0 ||
     stats.home?.possessionPct == null ||
     stats.away?.possessionPct == null ||
     stats.home?.completionRate == null ||
@@ -254,6 +255,7 @@ export async function POST(request: NextRequest) {
       : (
           playerCount(detailMatch) === 0 ||
           hydratedMatchStats == null ||
+          Object.keys(hydratedMatchStats.playerStats ?? {}).length === 0 ||
           hydratedMatchStats.home?.possessionPct == null ||
           hydratedMatchStats.away?.possessionPct == null
         )

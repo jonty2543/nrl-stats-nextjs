@@ -1797,7 +1797,7 @@ const TEAM_PLOT_STATS: Record<Exclude<TeamPlotCategory, "pro">, Array<{
   ],
   defence: [
     { key: "tacklesMade", label: "Tackles" },
-    { key: "missedTackles", label: "Missed tackles" },
+    { key: "missedTackles", label: "Missed tackles", lowerIsBetter: true },
     { key: "tackleEfficiency", label: "Tackle efficiency", suffix: "%" },
     { key: "ruckInfringements", label: "Ruck infringements", lowerIsBetter: true },
   ],

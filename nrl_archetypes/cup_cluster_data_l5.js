@@ -120,7 +120,7 @@ const cupClusterDataL5 = {
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 28,
+                    "count": 29,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
@@ -220,13 +220,13 @@ const cupClusterDataL5 = {
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 16,
+                    "count": 15,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
                     "id": 1,
                     "name": "Running Hooker",
-                    "count": 6,
+                    "count": 7,
                     "description": "Strong ball running hookers who often look to run from dummy half."
                 },
                 {
@@ -335,13 +335,13 @@ const cupClusterDataL5 = {
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 17,
+                    "count": 21,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 86,
+                    "count": 82,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

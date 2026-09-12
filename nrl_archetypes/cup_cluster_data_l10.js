@@ -132,7 +132,7 @@ const cupClusterDataL10 = {
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 23,
+                    "count": 24,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],
@@ -275,13 +275,13 @@ const cupClusterDataL10 = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 35,
+                    "count": 32,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 27,
+                    "count": 30,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
@@ -329,19 +329,19 @@ const cupClusterDataL10 = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 14,
+                    "count": 15,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 14,
+                    "count": 18,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 88,
+                    "count": 83,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

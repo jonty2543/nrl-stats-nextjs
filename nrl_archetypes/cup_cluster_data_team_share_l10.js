@@ -6,13 +6,13 @@ const cupClusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Ball Running Fullback",
-                    "count": 3,
+                    "count": 4,
                     "description": "Fullbacks who are quick and able to break the defensive line, and opt for game breaking runs over tough carries."
                 },
                 {
                     "id": 1,
                     "name": "Balanced Fullback",
-                    "count": 16,
+                    "count": 15,
                     "description": "These well rounded fullbacks balance workrate, playmaking and elusiveness making them the complete package."
                 },
                 {
@@ -132,7 +132,7 @@ const cupClusterDataTeamShareL10 = {
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 18,
+                    "count": 19,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],
@@ -275,25 +275,25 @@ const cupClusterDataTeamShareL10 = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 24,
+                    "count": 34,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 44,
+                    "count": 29,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 17,
+                    "count": 20,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 8,
+                    "count": 10,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],

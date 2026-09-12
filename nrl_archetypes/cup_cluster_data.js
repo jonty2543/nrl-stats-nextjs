@@ -12,7 +12,7 @@ const cupClusterData = {
                 {
                     "id": 1,
                     "name": "Balanced Fullback",
-                    "count": 140,
+                    "count": 141,
                     "description": "These well rounded fullbacks balance workrate, playmaking and elusiveness making them the complete package."
                 },
                 {
@@ -30,7 +30,7 @@ const cupClusterData = {
                 {
                     "id": 4,
                     "name": "Support Fullback",
-                    "count": 150,
+                    "count": 149,
                     "description": "Players who are less involved in attack, but may specialise in defense or defusing kicks."
                 }
             ],
@@ -120,7 +120,7 @@ const cupClusterData = {
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 290,
+                    "count": 291,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
@@ -169,7 +169,7 @@ const cupClusterData = {
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 290,
+                    "count": 291,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
@@ -181,7 +181,7 @@ const cupClusterData = {
                 {
                     "id": 2,
                     "name": "Organising Half",
-                    "count": 506,
+                    "count": 505,
                     "description": "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
                 }
             ],
@@ -275,19 +275,19 @@ const cupClusterData = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 338,
+                    "count": 331,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 340,
+                    "count": 350,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 199,
+                    "count": 196,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
@@ -864,13 +864,13 @@ const cupClusterData = {
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 117,
+                    "count": 119,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 139,
+                    "count": 138,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
@@ -1025,13 +1025,13 @@ const cupClusterData = {
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 168,
+                    "count": 152,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 181,
+                    "count": 196,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
@@ -1043,7 +1043,7 @@ const cupClusterData = {
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 66,
+                    "count": 67,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -1079,19 +1079,19 @@ const cupClusterData = {
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 63,
+                    "count": 68,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 129,
+                    "count": 152,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 485,
+                    "count": 457,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

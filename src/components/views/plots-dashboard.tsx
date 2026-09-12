@@ -1519,7 +1519,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
     : proPlot === "expected-points-conceded"
       ? proMode === "season" ? "AVERAGE ACTUAL POINTS CONCEDED PER GAME →" : "ACTUAL POINTS CONCEDED →"
       : proPlot === "contact-defense"
-        ? "CONTACT DISRUPTIONS ALLOWED PER 100 RUNS · BETTER ←"
+        ? "CONTACT DISRUPTIONS ALLOWED PER 100 RUNS · BETTER →"
         : `${proMetricName.toUpperCase()} · BETTER ${proPlot === "ptb-rating" ? "←" : "→"}`;
   const proYAxisLabel = proPlot === "expected-points"
     ? proMode === "season" ? "AVERAGE ACTUAL POINTS PER GAME ↑" : "ACTUAL POINTS ↑"

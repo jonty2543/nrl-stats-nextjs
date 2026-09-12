@@ -144,6 +144,16 @@ export function ScatterCorrelation({
   const watermarkY = margin.top + (innerHeight - watermarkSize) / 2;
 
   const hovered = hoveredIdx !== null ? points[hoveredIdx] : null;
+  const hoveredPosition = hovered ? {
+    x: scaleX(hovered.x, xDomain, margin, 500),
+    y: scaleY(hovered.y, yDomain, margin, 224),
+  } : null;
+  const tooltipTranslateX = hoveredPosition && hoveredPosition.x < 110
+    ? "0%"
+    : hoveredPosition && hoveredPosition.x > 390
+      ? "-100%"
+      : "-50%";
+  const tooltipTranslateY = hoveredPosition && hoveredPosition.y < 70 ? "20%" : "-130%";
 
   return (
     <div>
@@ -213,9 +223,9 @@ export function ScatterCorrelation({
               background: "var(--color-nrl-panel)",
               border: "1px solid var(--color-nrl-border)",
               color: "var(--color-nrl-text)",
-              left: `${scaleX(hovered.x, xDomain, margin, 500) / 500 * 100}%`,
-              top: `${scaleY(hovered.y, yDomain, margin, 224) / 224 * 100}%`,
-              transform: "translate(-50%, -130%)",
+              left: `${(hoveredPosition?.x ?? 0) / 500 * 100}%`,
+              top: `${(hoveredPosition?.y ?? 0) / 224 * 100}%`,
+              transform: `translate(${tooltipTranslateX}, ${tooltipTranslateY})`,
             }}
           >
             {hovered.tooltipLabel}

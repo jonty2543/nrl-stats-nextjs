@@ -40,6 +40,7 @@ export const TEAM_DEFENCE_CONCEDED_STATS = [
   "Run metres per run",
   "Tries",
   "Points",
+  "Margin",
   "Possession",
   "Completion rate",
   "Time in possession",

@@ -322,8 +322,8 @@
     const age = state.ages[String(label).trim().toLowerCase()];
     if (!Number.isFinite(age)) return false;
     const selected = Number(state.age);
-    return state.ageOperator === "gt" ? age > selected
-      : state.ageOperator === "lt" ? age < selected : age === selected;
+    return state.ageOperator === "gt" ? age >= selected
+      : state.ageOperator === "lt" ? age <= selected : age === selected;
   }
 
   function splitTraceByAge(trace) {

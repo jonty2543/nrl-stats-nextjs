@@ -11,7 +11,8 @@ const tools = [
   { label: "Stats", href: "/dashboard/plots" },
   { label: "Fantasy", href: "/dashboard/fantasy" },
   { label: "Matches", href: "/dashboard/lineups" },
-  { label: "NRL AI", href: "/dashboard/ai" },
+  // Archived: restore this link when NRL AI is ready to return.
+  // { label: "NRL AI", href: "/dashboard/ai" },
   { label: "Articles", href: "/dashboard/articles" },
   { label: "About", href: "/dashboard/about" },
 ];

@@ -6159,12 +6159,12 @@ export function FantasyDashboard({
           </section>
         ) : null}
         {showOwnedCards && showFantasyActions && !showAllPlayersOnly && !showFantasyAnalyticsOnly ? (
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-4 lg:gap-2">
             <Link
               data-fantasy-tour="my-team"
               href="/dashboard/fantasy/my-team"
               onClick={() => setIsMyTeamPending(true)}
-              className={`relative flex min-h-[52px] w-full scroll-mt-24 cursor-pointer items-center gap-3 overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] px-3 py-2 text-left text-nrl-text shadow-[0_8px_16px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] ${
+              className={`relative flex min-h-[46px] w-full scroll-mt-24 cursor-pointer items-center gap-2 overflow-hidden rounded-xl border border-[rgba(123,92,255,0.35)] bg-[#111832] px-2 py-1.5 text-left text-nrl-text shadow-[0_8px_16px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] sm:min-h-[52px] sm:gap-3 sm:px-3 sm:py-2 ${
                 activeTourStep?.target === "my-team" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""
               }`}
             >
@@ -6173,11 +6173,11 @@ export function FantasyDashboard({
                 <span className="absolute -left-3 top-2 h-14 w-36 rounded-full opacity-16 [background-image:radial-gradient(circle,#00f58a_1.25px,transparent_1.6px)] [background-size:9px_9px]" />
                 <span className="absolute -bottom-2 right-8 h-14 w-40 rounded-full opacity-12 [background-image:radial-gradient(circle,#00f58a_1.25px,transparent_1.6px)] [background-size:9px_9px]" />
               </span>
-              <span className="relative z-10 grid h-9 w-9 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10 text-nrl-accent">
+              <span className="relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10 text-nrl-accent sm:h-9 sm:w-9">
                 <PersonIcon className="h-4 w-4" />
               </span>
               <span className="relative z-10 min-w-0">
-                <span className="block truncate text-[13px] font-black leading-tight sm:text-sm">My Team</span>
+                <span className="block truncate text-[11px] font-black leading-tight sm:text-sm">My Team</span>
                 <span className="mt-0.5 hidden truncate text-[9px] font-semibold uppercase tracking-wide text-nrl-muted sm:block">
                   Team tools
                 </span>
@@ -6194,16 +6194,16 @@ export function FantasyDashboard({
                   data-fantasy-tour="find-value"
                   href="/dashboard/fantasy/analytics"
                   onClick={() => setIsFantasyAnalyticsPending(true)}
-                  className={`relative flex h-full min-h-[52px] w-full scroll-mt-24 cursor-pointer items-center justify-start gap-3 rounded-xl border px-3 py-2 text-left text-white shadow-[0_8px_16px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] ${
+                  className={`relative flex h-full min-h-[46px] w-full scroll-mt-24 cursor-pointer items-center justify-start gap-2 rounded-xl border px-2 py-1.5 text-left text-white shadow-[0_8px_16px_rgba(8,10,18,0.16)] transition-colors hover:border-nrl-accent/70 hover:bg-[#17213d] sm:min-h-[52px] sm:gap-3 sm:px-3 sm:py-2 ${
                     showFantasyAnalytics
                       ? "border-nrl-accent bg-[#111832]"
                       : "border-[rgba(123,92,255,0.35)] bg-[#111832]"
                   } ${activeTourStep?.target === "find-value" ? FANTASY_TOUR_HIGHLIGHT_CLASS : ""}`}
                 >
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10 sm:h-8 sm:w-8">
                     <TrendGraphIcon className="h-4 w-4 text-nrl-accent" />
                   </span>
-                  <span className="text-[12px] font-bold leading-tight sm:text-sm">
+                  <span className="text-[11px] font-bold leading-tight sm:text-sm">
                     Find Value
                   </span>
                   {isFantasyAnalyticsPending ? (
@@ -6222,12 +6222,12 @@ export function FantasyDashboard({
                     <Link
                       href="/dashboard/fantasy/draft"
                       onClick={() => setIsFantasyDraftPending(true)}
-                      className="relative inline-flex h-full min-h-[52px] w-full items-center justify-start gap-3 rounded-xl px-3 py-2 text-left leading-tight text-white transition-colors hover:text-white"
+                      className="relative inline-flex h-full min-h-[46px] w-full items-center justify-start gap-2 rounded-xl px-2 py-1.5 text-left leading-tight text-white transition-colors hover:text-white sm:min-h-[52px] sm:gap-3 sm:px-3 sm:py-2"
                     >
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10 sm:h-8 sm:w-8">
                         <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
                       </span>
-                      <span className="text-[12px] font-bold sm:text-sm">
+                      <span className="text-[11px] font-bold sm:text-sm">
                         Draft / H2H Odds
                       </span>
                       {isFantasyDraftPending ? (
@@ -6240,12 +6240,12 @@ export function FantasyDashboard({
                     <Link
                       href="/dashboard/fantasy/draft"
                       onClick={() => setIsFantasyDraftPending(true)}
-                      className="relative flex h-full min-h-[52px] w-full items-center justify-start gap-3 rounded-xl px-3 py-2 text-left transition-colors"
+                      className="relative flex h-full min-h-[46px] w-full items-center justify-start gap-2 rounded-xl px-2 py-1.5 text-left transition-colors sm:min-h-[52px] sm:gap-3 sm:px-3 sm:py-2"
                     >
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10">
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-nrl-accent/20 bg-nrl-accent/10 sm:h-8 sm:w-8">
                         <DollarIcon className="h-3.5 w-3.5 text-nrl-accent" />
                       </span>
-                      <div className="text-[12px] font-bold leading-tight text-white sm:text-sm">
+                      <div className="text-[11px] font-bold leading-tight text-white sm:text-sm">
                         Draft / H2H Odds
                       </div>
                       {isFantasyDraftPending ? (

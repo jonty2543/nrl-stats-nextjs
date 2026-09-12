@@ -194,6 +194,7 @@ export default function Home() {
                 ctaHref: "/dashboard/lineups",
                 ctaLabel: "Matches",
               },
+              /* Archived: restore this card when NRL AI is ready to return.
               {
                 eyebrow: "NRL AI",
                 title: "A personal AI that knows every NRL stat at your fingertips",
@@ -202,6 +203,7 @@ export default function Home() {
                 ctaHref: "/dashboard/ai",
                 ctaLabel: "NRL AI",
               },
+              */
               {
                 eyebrow: "Articles",
                 title: "Explaining the method behind the madness",

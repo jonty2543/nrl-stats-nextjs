@@ -70,8 +70,20 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
 
-function roundUpToStep(value: number, step: number): number {
+function niceAxisMaximum(value: number): number {
+  if (value <= 0) return 1
+  const rawStep = value / 4
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep))
+  const normalizedStep = rawStep / magnitude
+  const niceFactor = [1, 1.25, 1.5, 2, 2.5, 4, 5, 10].find((factor) => normalizedStep <= factor) ?? 10
+  const step = niceFactor * magnitude
   return Math.ceil(value / step) * step
+}
+
+function formatAxisTick(value: number, axisMaximum: number): string {
+  const step = axisMaximum / 4
+  const decimals = step >= 1 ? 0 : step >= 0.1 ? 2 : 3
+  return value.toFixed(decimals).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")
 }
 
 function softenSeriesColor(color: string): string {
@@ -307,7 +319,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
       ...rollingSeries,
       ...compareSeriesData.flatMap((series) => [...series.selectedValues, ...series.rollingSelected])
     )
-    return maxScore > 0 ? roundUpToStep(maxScore, maxScore > 100 ? 20 : 10) : 10
+    return niceAxisMaximum(maxScore)
   }, [compareSeriesData, rollingSeries, selectedFantasyScores])
   const overviewMaxScore = useMemo(() => {
     const maxScore = Math.max(
@@ -316,7 +328,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
       ...overviewRollingSeries,
       ...compareSeriesData.flatMap((series) => [...series.allValues, ...series.rollingAll])
     )
-    return maxScore > 0 ? roundUpToStep(maxScore, maxScore > 100 ? 20 : 10) : 10
+    return niceAxisMaximum(maxScore)
   }, [compareSeriesData, fantasyScores, overviewRollingSeries])
 
   const selectedLinePath = useMemo(
@@ -710,7 +722,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
                       textAnchor="end"
                       className="fill-nrl-muted text-[14px] font-semibold"
                     >
-                      {Math.round(value)}
+                      {formatAxisTick(value, selectedMaxScore)}
                     </text>
                   </g>
                 )

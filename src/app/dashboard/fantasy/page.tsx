@@ -1,7 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { FantasyDashboard } from "@/components/views/fantasy-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { fetchApprovedArticleLinks } from "@/lib/articles"
 import { loadDraw2026Data } from "@/lib/draw/load-draw-2026"
 import {
   fetchFantasyCoachPlayersSnapshot,
@@ -14,7 +13,6 @@ import { fetchAvailableYears, fetchOriginChances, fetchPlayerImages, fetchReleva
 export const dynamic = "force-dynamic"
 const FANTASY_PAGE_CONTEXT_TIMEOUT_MS = 8000
 const FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS = 1500
-const FANTASY_PAGE_ARTICLE_CONTEXT_TIMEOUT_MS = 8000
 
 interface FantasyPageProps {
   searchParams: Promise<{
@@ -24,10 +22,6 @@ interface FantasyPageProps {
 
 function defaultRecentYears(years: string[], maxYears = 4): string[] {
   return years.slice(0, Math.min(maxYears, years.length))
-}
-
-function normaliseArticleTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
 }
 
 async function withFantasyPageContextTimeout<T>(
@@ -58,7 +52,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
   const canAccessLoginSeason = Boolean(userId)
   const canBypassPlotGate = await getServerProPlotAccess(userId)
 
-  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, approvedArticleLinks, relevantOutCandidates, draw2026Data, originChances, precomputedAllPlayersRows] = await Promise.all([
+  const [fantasyPlayers, fantasyCoachPlayers, lineupsProjections, availableYears, ownershipBaselineSnapshot, playerImages, relevantOutCandidates, draw2026Data, originChances, precomputedAllPlayersRows] = await Promise.all([
     withFantasyPageContextTimeout("fantasy players", fetchFantasyPlayersSnapshot(), []),
     withFantasyPageContextTimeout("fantasy coach players", fetchFantasyCoachPlayersSnapshot(), []),
     withFantasyPageContextTimeout("lineup projections", fetchLineupsProjectionsByPlayerId(), {
@@ -73,17 +67,11 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
     fetchAvailableYears(),
     withFantasyPageContextTimeout("ownership baseline", fetchLatestFantasyOwnershipBaselineSnapshot(), null, FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     fetchPlayerImages(),
-    withFantasyPageContextTimeout("approved articles", fetchApprovedArticleLinks(), [], FANTASY_PAGE_ARTICLE_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("relevant casualty candidates", fetchRelevantCasualtyWardOutCandidates(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("2026 draw", loadDraw2026Data(), null, FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("Origin lineups", fetchOriginChances(), [], FANTASY_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS),
     withFantasyPageContextTimeout("top weekly fantasy player card summaries", fetchTopWeeklyFantasyPlayerCardSummaries(), []),
   ])
-  const fantasyProjectionArticle = approvedArticleLinks.find((article) => {
-    const title = normaliseArticleTitle(article.title)
-    return title.includes("fantasy projection model") || (title.includes("fantasy") && title.includes("model"))
-  }) ?? null
-
   const initialYears = defaultRecentYears(availableYears)
   return (
     <FantasyDashboard
@@ -106,15 +94,7 @@ export default async function FantasyPage({ searchParams }: FantasyPageProps) {
       relevantOutCandidates={relevantOutCandidates}
       draw2026Data={draw2026Data}
       originChances={originChances}
-      fantasyProjectionArticle={
-        fantasyProjectionArticle
-          ? {
-              title: fantasyProjectionArticle.title,
-              slug: fantasyProjectionArticle.slug,
-              imageUrls: fantasyProjectionArticle.imageUrls,
-            }
-          : null
-      }
+      fantasyProjectionArticle={null}
     />
   )
 }

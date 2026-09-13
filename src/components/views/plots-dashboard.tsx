@@ -20,6 +20,7 @@ import { BillingPageLink } from "@/components/billing/billing-page-link";
 import { CompetitionToggle } from "@/components/ui/competition-toggle";
 import { PillRadio } from "@/components/ui/pill-radio";
 import { Select } from "@/components/ui/select";
+import { FINALS_MAP } from "@/lib/data/constants";
 
 const TeamQuadrantScatter = dynamic(
   () => import("@/components/charts/defence-scatter").then((module) => module.TeamQuadrantScatter),
@@ -1021,7 +1022,14 @@ function normalisePlayerName(value: string): string {
 
 function roundNumber(value: string | number | null | undefined): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  const match = value?.match(/\d+/);
+  if (!value) return null;
+  for (const [label, finalsRound] of Object.entries(FINALS_MAP)) {
+    if (value.toLowerCase().includes(label.toLowerCase())) return finalsRound;
+  }
+  const abbreviatedFinals = value.match(/\bFW\s*([1-3])\b/i);
+  if (abbreviatedFinals) return 27 + Number(abbreviatedFinals[1]);
+  if (/\bGF\b/i.test(value)) return 31;
+  const match = value.match(/\d+/);
   return match ? Number(match[0]) : null;
 }
 
@@ -1037,18 +1045,18 @@ function forSelectedRound<T>(rows: T[], selectedRound: string, getRound: (row: T
 function roundSelectOptions(entries: Array<{ value: string | number | null | undefined; label?: string | null }>): Array<{ value: string; label: string }> {
   const labels = new Map<number, string>();
   entries.forEach((entry) => {
-    const value = roundNumber(entry.value);
+    const value = roundNumber(entry.label) ?? roundNumber(entry.value);
     if (value !== null && !labels.has(value)) labels.set(value, entry.label || `Round ${value}`);
   });
   return [
-    ...[...labels.entries()].sort(([left], [right]) => left - right).map(([value, label]) => ({ value: String(value), label })),
     { value: "all", label: "All" },
+    ...[...labels.entries()].sort(([left], [right]) => left - right).map(([value, label]) => ({ value: String(value), label })),
   ];
 }
 
 function teamModelPointKey(team: string, year: string, roundLabel: string): string {
-  const roundNumber = roundLabel.match(/\d+/)?.[0] ?? normalisePlayerName(roundLabel);
-  return `${year}|${normalisePlayerName(team)}|${roundNumber}`;
+  const canonicalRound = roundNumber(roundLabel) ?? normalisePlayerName(roundLabel);
+  return `${year}|${normalisePlayerName(team)}|${canonicalRound}`;
 }
 
 function coefficientOfDetermination(points: TeamQuadrantPoint[]): number | null {

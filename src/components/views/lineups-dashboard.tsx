@@ -1557,6 +1557,8 @@ function MatchStatsPanel({
         <MatchStatCompare label="Tackle breaks" home={home.tackleBreaks} away={away.tackleBreaks} />
         <MatchStatCompare label="Tackles" home={home.tacklesMade} away={away.tacklesMade} />
         <MatchStatCompare label="Missed tackles" home={home.missedTackles} away={away.missedTackles} />
+        <MatchStatCompare label="Penalties" home={home.penalties} away={away.penalties} />
+        <MatchStatCompare label="Ruck infringements" home={home.ruckInfringements} away={away.ruckInfringements} />
         <MatchStatCompare label="Errors" home={home.errors} away={away.errors} />
         <MatchStatCompare label="Offloads" home={home.offloads} away={away.offloads} />
       </div>

@@ -13,9 +13,13 @@ export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = f
   const large = size === "large";
 
   return (
-    <div className={`flex shrink-0 flex-col gap-0.5 ${className}`}>
+    <div className={`flex shrink-0 flex-col items-start gap-0.5 pl-2 ${className}`}>
       <span className={hideLabel ? "sr-only" : "text-[8px] font-semibold uppercase tracking-wide text-nrl-muted"}>Competition</span>
-      <div className={`flex rounded-lg border border-nrl-border bg-nrl-panel-2 p-0.5 ${large ? "h-10" : "h-8"}`}>
+      <div
+        role="group"
+        aria-label="Competition"
+        className={`inline-flex w-fit items-stretch gap-6 border-b border-nrl-border/70 ${large ? "h-10" : "h-8"}`}
+      >
         {(["nrl", "cup"] as const).map((option) => {
           const locked = option === "cup" && !canAccessCup;
           const active = value === option;
@@ -27,15 +31,17 @@ export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = f
               aria-pressed={active}
               title={locked ? "Cup stats require Pro or Premium access" : undefined}
               onClick={() => onChange(option)}
-              className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border py-1 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? "px-3 text-[11px]" : "px-2 text-[9px]"} ${
-                active ? "border-nrl-accent text-nrl-accent" : "border-transparent text-nrl-muted hover:text-nrl-text"
+              className={`relative inline-flex min-w-12 items-center justify-center gap-1.5 rounded-t-md border-b-[3px] px-1 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? "text-[11px]" : "text-[9px]"} ${
+                active
+                  ? "border-nrl-accent text-nrl-accent"
+                  : "border-transparent text-nrl-muted hover:bg-nrl-panel-2/60 hover:text-nrl-text"
               }`}
             >
               <span>{option === "nrl" ? "NRL" : "Cup"}</span>
               {locked ? (
                 <span
                   aria-hidden="true"
-                  className="rounded-sm border border-nrl-accent/60 px-0.5 py-px text-[5px] leading-none tracking-wide text-nrl-accent"
+                  className="rounded-sm bg-nrl-accent px-1 py-0.5 text-[6px] leading-none tracking-wide text-nrl-bg"
                 >
                   Pro
                 </span>

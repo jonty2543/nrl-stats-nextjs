@@ -529,6 +529,7 @@ const TEAM_ATTACK_STAT_META: Record<TeamStatsComparisonStat, {
     minPadding: 2,
     value: (point) => point.defenseRating,
   },
+  Tackles: perGameAttackStat("Tackles"),
   "Missed tackles": perGameAttackStat("Missed tackles"),
   Penalties: perGameAttackStat("Penalties"),
   "Ruck infringements": perGameAttackStat("Ruck infringements"),

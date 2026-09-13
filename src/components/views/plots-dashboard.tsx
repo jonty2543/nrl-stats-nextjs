@@ -5,7 +5,13 @@ import dynamic from "next/dynamic";
 import type { PlayerStat, TeamStat } from "@/lib/data/types";
 import { buildAttackRatingPoints, buildConcededRatingPoints, TEAM_ATTACK_COMPARISON_STATS, TEAM_ATTACK_EFFICIENCY_BASE_STATS, TEAM_ATTACK_EFFICIENCY_OUTPUT_STATS, TEAM_DEFENCE_CONCEDED_STATS, type AttackRatingPoint, type TeamAttackComparisonStat, type TeamAttackEfficiencyBaseStat, type TeamAttackEfficiencyOutputStat, type TeamAttackTotalStat, type TeamDefenceConcededStat } from "@/lib/data/attack-ratings";
 import { buildDefenceRatingPoints, type DefencePlotMode } from "@/lib/data/defence-ratings";
-import { buildTeamShareSeries, TEAM_SHARE_METRICS, type TeamShareMetric } from "@/lib/data/receipt-share";
+import {
+  buildTeamShareSeries,
+  selectTeamShareSourceRows,
+  TEAM_SHARE_METRICS,
+  type TeamShareMetric,
+  type TeamShareSourceRow,
+} from "@/lib/data/receipt-share";
 import { buildHalvesPairingPoints, buildPlayerAttackComparisonPoints, buildPlayerAttackPoints, buildPlayerDefencePoints, canonicalPlayerName, PLAYER_ATTACK_COMPARISON_STATS, PLAYER_ATTACK_POSITIONS, PLAYER_ATTACK_STAT_COMPARISON_STATS, PLAYER_BACK_POSITIONS, PLAYER_EFFICIENCY_BASE_METRICS, PLAYER_EFFICIENCY_OUTPUT_METRICS, type HalvesPairingSort, type PlayerAttackComparisonStat, type PlayerAttackPosition, type PlayerEfficiencyBaseMetric, type PlayerEfficiencyOutputMetric, type PlayerGameWindow, type PlayerPlotMode } from "@/lib/data/player-attack";
 import { buildTeamPostMatchStatPoints, buildXPointsPlotPoints, type PostMatchTeamMetricWithRdr, type TeamPostMatchStatPoint } from "@/lib/data/post-match-team-metrics";
 import type { QuadrantLabels, TeamQuadrantPoint } from "@/components/charts/defence-scatter";
@@ -1178,6 +1184,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const [rowsByYear, setRowsByYear] = useState<Record<string, TeamStat[]>>({});
   const [postMatchMetricsByYear, setPostMatchMetricsByYear] = useState<Record<string, PostMatchTeamMetricWithRdr[]>>({});
   const [playerRowsByYear, setPlayerRowsByYear] = useState<Record<string, PlayerStat[]>>({ [`nrl:${initialYear}`]: initialPlayerData });
+  const [teamShareRowsByYear, setTeamShareRowsByYear] = useState<Record<string, TeamShareSourceRow[]>>({
+    [`nrl:${initialYear}`]: selectTeamShareSourceRows(initialPlayerData),
+  });
   const [loading, setLoading] = useState(false);
   const activeAvailableYears = competition === "cup" ? cupAvailableYears : availableYears;
   const competitionQuery = competition === "cup" ? "&competition=cup" : "";
@@ -1249,6 +1258,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const currentPlayerRows = useMemo(
     () => forSelectedRound(playerRowsByYear[activeYearKey] ?? [], round, (row) => row.Round),
     [activeYearKey, playerRowsByYear, round]
+  );
+  const currentTeamShareRows = useMemo(
+    () => forSelectedRound(teamShareRowsByYear[activeYearKey] ?? [], round, (row) => row.Round),
+    [activeYearKey, round, teamShareRowsByYear]
   );
   const currentPlayerPlotRows = useMemo(
     () => currentPlayerRows.filter((row) => {
@@ -1417,9 +1430,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
     : (["Tries", "Try assists", "Line breaks", "Line break assists", "Forced drop outs"] as PlayerEfficiencyOutputMetric[]).includes(playerEfficiencyOutputMetric) ? 3 : 2;
   const teamShareSeries = useMemo(
     () => entity === "Teams" && isTeamSharePlot
-      ? buildTeamShareSeries(currentPlayerRows, teamShareMetric, gameWindow)
+      ? buildTeamShareSeries(currentTeamShareRows, teamShareMetric, gameWindow)
       : [],
-    [currentPlayerRows, entity, gameWindow, isTeamSharePlot, teamShareMetric]
+    [currentTeamShareRows, entity, gameWindow, isTeamSharePlot, teamShareMetric]
   );
   const xPointsData = useMemo(
     () => entity === "Teams" && isXPoints
@@ -1912,6 +1925,21 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
     }
   };
 
+  const loadTeamShareYear = async (targetYear: string, manageLoading = true, targetCompetition = competition) => {
+    const key = `${targetCompetition}:${targetYear}`;
+    if (teamShareRowsByYear[key]) return;
+    if (manageLoading) setLoading(true);
+    try {
+      const query = targetCompetition === "cup" ? "&competition=cup" : "";
+      const response = await fetch(`/api/player-stats?years=${encodeURIComponent(targetYear)}&scope=team-share${query}`);
+      if (!response.ok) return;
+      const rows = await response.json() as TeamShareSourceRow[];
+      setTeamShareRowsByYear((current) => ({ ...current, [key]: rows }));
+    } finally {
+      if (manageLoading) setLoading(false);
+    }
+  };
+
   const refreshSelectedTeamModelStat = (stat: string) => {
     if (canAccessModelPlots && LOCKED_TEAM_STATS.has(stat)) {
       void loadTeamYear(year, true, true, true);
@@ -1944,6 +1972,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
       return;
     }
     if (isOther) {
+      if (isTeamSharePlot) {
+        await loadTeamShareYear(nextYear);
+        return;
+      }
       await loadOtherYear(nextYear, isRuckDominancePlot);
       return;
     }
@@ -1989,6 +2021,14 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
       }
 
       if (isOther) {
+        if (isTeamSharePlot) {
+          if (teamShareRowsByYear[key]) return;
+          const response = await fetch(`/api/player-stats?years=${encodeURIComponent(nextYear)}&scope=team-share${query}`);
+          if (!response.ok) return;
+          const rows = await response.json() as TeamShareSourceRow[];
+          setTeamShareRowsByYear((current) => ({ ...current, [key]: rows }));
+          return;
+        }
         const [playersResponse, teamsResponse] = await Promise.all([
           playerRowsByYear[key] ? null : fetch(`/api/player-stats?years=${encodeURIComponent(nextYear)}${query}`),
           rowsByYear[key] ? null : fetch(`/api/team-stats?years=${encodeURIComponent(nextYear)}${query}`),
@@ -2157,7 +2197,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
       case "team_context_position_share":
         setTeamSection("Other");
         setTeamOtherPlot("Team Share by Position");
-        void loadOtherYear(year);
+        void loadTeamShareYear(year);
         break;
       case "team_context_ruck":
         setTeamSection("Other");
@@ -2253,7 +2293,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
         setTeamSection("Other");
         setTeamOtherPlot("Team Share by Position");
         setTeamShareMetric("Runs");
-        void loadOtherYear(year);
+        void loadTeamShareYear(year);
         break;
     }
   };
@@ -2737,7 +2777,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
             {modelPlotLocked ? (
               <ModelPlotLock plotName={isXPoints ? "xPoints" : isRuckDominancePlot ? "Ruck Dominance Rating" : selectedModelStatName || "contact and line defense rating"} />
             ) : isTeamSharePlot ? (
-              <ReceiptShareLines series={teamShareSeries} metric={teamShareMetric} />
+              <ReceiptShareLines series={teamShareSeries} metric={teamShareMetric} loading={loading} />
             ) : (
               <TeamQuadrantScatter
                 points={plottedTeamPoints}

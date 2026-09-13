@@ -16,13 +16,48 @@ export const TEAM_SHARE_METRICS = [
 export type TeamSharePositionGroup = (typeof TEAM_SHARE_POSITION_GROUPS)[number];
 export type TeamShareMetric = (typeof TEAM_SHARE_METRICS)[number];
 
+export type TeamShareSourceRow = Pick<
+  PlayerStat,
+  | "Team"
+  | "Year"
+  | "Round"
+  | "Number"
+  | "Position"
+  | "Receipts"
+  | "All Runs"
+  | "All Run Metres"
+  | "Post Contact Metres"
+  | "Tackle Breaks"
+  | "Offloads"
+  | "Passes"
+  | "Tackles Made"
+>;
+
 export interface TeamShareSeries {
   team: string;
   games: number;
   values: Record<TeamSharePositionGroup, number>;
 }
 
-const METRIC_FIELDS: Record<TeamShareMetric, keyof PlayerStat> = {
+export function selectTeamShareSourceRows(rows: PlayerStat[]): TeamShareSourceRow[] {
+  return rows.map((row) => ({
+    Team: row.Team,
+    Year: row.Year,
+    Round: row.Round,
+    Number: row.Number,
+    Position: row.Position,
+    Receipts: row.Receipts,
+    "All Runs": row["All Runs"],
+    "All Run Metres": row["All Run Metres"],
+    "Post Contact Metres": row["Post Contact Metres"],
+    "Tackle Breaks": row["Tackle Breaks"],
+    Offloads: row.Offloads,
+    Passes: row.Passes,
+    "Tackles Made": row["Tackles Made"],
+  }));
+}
+
+const METRIC_FIELDS: Record<TeamShareMetric, keyof TeamShareSourceRow> = {
   Receipts: "Receipts",
   Runs: "All Runs",
   "Run Metres": "All Run Metres",
@@ -71,19 +106,19 @@ function emptyValues(): Record<TeamSharePositionGroup, number> {
 }
 
 export function buildTeamShareSeries(
-  rows: PlayerStat[],
+  rows: TeamShareSourceRow[],
   metric: TeamShareMetric,
   gameWindow: 3 | 5 | 10 | null = null
 ): TeamShareSeries[] {
   const field = METRIC_FIELDS[metric];
-  const games = new Map<string, PlayerStat[]>();
+  const games = new Map<string, TeamShareSourceRow[]>();
   for (const row of rows) {
     const key = `${row.Year}|${row.Round}|${row.Team}`;
     games.set(key, [...(games.get(key) ?? []), row]);
   }
 
   const allGames = [...games.values()];
-  const teamGames = new Map<string, PlayerStat[][]>();
+  const teamGames = new Map<string, TeamShareSourceRow[][]>();
   for (const gameRows of allGames) {
     const team = String(gameRows[0]?.Team ?? "");
     teamGames.set(team, [...(teamGames.get(team) ?? []), gameRows]);

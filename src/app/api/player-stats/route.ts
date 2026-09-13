@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
 import { fetchAvailableYears, fetchFantasyPlayerStatsForYears, fetchPlayerStats } from "@/lib/supabase/queries";
 import { isAccessibleSeason } from "@/lib/access/season-access";
+import { selectTeamShareSourceRows } from "@/lib/data/receipt-share";
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
     const yearsParam = searchParams.get("years");
     const playerParam = searchParams.get("player")?.trim();
     const isFantasyContext = searchParams.get("context") === "fantasy";
+    const isTeamShareContext = searchParams.get("scope") === "team-share";
     const competition = searchParams.get("competition") === "cup" ? "cup" : "nrl";
     if (competition === "cup" && !canAccessProSeason) {
       return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
@@ -45,10 +47,11 @@ export async function GET(request: NextRequest) {
     const data = playerParam
       ? await fetchFantasyPlayerStatsForYears(playerParam, allowedYears)
       : await fetchPlayerStats(allowedYears, competition);
+    const responseData = isTeamShareContext ? selectTeamShareSourceRows(data) : data;
     const dataResolvedAt = performance.now();
-    const response = NextResponse.json(data);
-    response.headers.set("x-player-stats-mode", playerParam ? "player" : "bulk");
-    response.headers.set("x-player-stats-count", String(Array.isArray(data) ? data.length : 0));
+    const response = NextResponse.json(responseData);
+    response.headers.set("x-player-stats-mode", playerParam ? "player" : isTeamShareContext ? "team-share" : "bulk");
+    response.headers.set("x-player-stats-count", String(responseData.length));
     response.headers.set("x-player-stats-access-ms", String(Math.round(accessResolvedAt - startedAt)));
     response.headers.set("x-player-stats-data-ms", String(Math.round(dataResolvedAt - accessResolvedAt)));
     response.headers.set("x-player-stats-ms", String(Math.round(dataResolvedAt - startedAt)));

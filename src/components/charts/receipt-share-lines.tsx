@@ -6,6 +6,7 @@ import { TEAM_SHARE_POSITION_GROUPS, type TeamShareMetric, type TeamShareSeries 
 interface ReceiptShareLinesProps {
   series: TeamShareSeries[];
   metric: TeamShareMetric;
+  loading?: boolean;
 }
 
 const COLORS = [
@@ -21,7 +22,7 @@ function teamColor(index: number): string {
   return COLORS[index % COLORS.length];
 }
 
-export function ReceiptShareLines({ series, metric }: ReceiptShareLinesProps) {
+export function ReceiptShareLines({ series, metric, loading = false }: ReceiptShareLinesProps) {
   const [hoveredTeam, setHoveredTeam] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -44,7 +45,11 @@ export function ReceiptShareLines({ series, metric }: ReceiptShareLinesProps) {
   }, [metric, series]);
 
   if (series.length === 0) {
-    return <div className="grid min-h-96 place-items-center text-sm text-nrl-muted">Loading team shares…</div>;
+    return (
+      <div className="grid min-h-96 place-items-center text-sm text-nrl-muted">
+        {loading ? "Loading team shares…" : "No team share data is available for this selection."}
+      </div>
+    );
   }
 
   const { width, height, margin } = isMobile ? MOBILE_LAYOUT : DESKTOP_LAYOUT;

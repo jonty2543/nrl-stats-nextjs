@@ -2,7 +2,16 @@ import type { PlayerStat } from "@/lib/data/types";
 
 export const TEAM_SHARE_POSITION_GROUPS = ["Fullback", "Wingers", "Centres", "Halves", "Edges", "Middles"] as const;
 
-export const TEAM_SHARE_METRICS = ["Receipts", "Runs", "Tackle Breaks", "Offloads", "Passes", "Tackles"] as const;
+export const TEAM_SHARE_METRICS = [
+  "Receipts",
+  "Runs",
+  "Run Metres",
+  "Post Contact Metres",
+  "Tackle Breaks",
+  "Offloads",
+  "Passes",
+  "Tackles",
+] as const;
 
 export type TeamSharePositionGroup = (typeof TEAM_SHARE_POSITION_GROUPS)[number];
 export type TeamShareMetric = (typeof TEAM_SHARE_METRICS)[number];
@@ -16,6 +25,8 @@ export interface TeamShareSeries {
 const METRIC_FIELDS: Record<TeamShareMetric, keyof PlayerStat> = {
   Receipts: "Receipts",
   Runs: "All Runs",
+  "Run Metres": "All Run Metres",
+  "Post Contact Metres": "Post Contact Metres",
   "Tackle Breaks": "Tackle Breaks",
   Offloads: "Offloads",
   Passes: "Passes",

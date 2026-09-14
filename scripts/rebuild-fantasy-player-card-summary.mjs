@@ -675,16 +675,22 @@ function getProjectionFixtureCutoffUtc() {
 
 function parseRoundNumber(value) {
   const label = String(value ?? "");
+  if (/finals week 1/i.test(label)) return 28;
+  if (/finals week 2/i.test(label)) return 29;
+  if (/finals week 3/i.test(label)) return 30;
+  if (/grand final/i.test(label)) return 31;
   const match = String(value ?? "").match(/\d+/);
   if (match) {
     const round = Number.parseInt(match[0], 10);
     if (Number.isFinite(round)) return round;
   }
-  if (/finals week 1/i.test(label)) return 28;
-  if (/finals week 2/i.test(label)) return 29;
-  if (/finals week 3/i.test(label)) return 30;
-  if (/grand final/i.test(label)) return 31;
   return null;
+}
+
+function roundLabel(round) {
+  if (round >= 28 && round <= 30) return `Finals Week ${round - 27}`;
+  if (round === 31) return "Grand Final";
+  return `Round ${round}`;
 }
 
 function isZeroProjectionPosition(value) {
@@ -852,7 +858,7 @@ async function fetchOriginChanceNames(supabase) {
 }
 
 async function fetchScrapedFixtureRows(supabase, year) {
-  const [matchRows, lineupRows] = await Promise.all([
+  const [matchRows, lineupRows, fixtureRows] = await Promise.all([
     fetchAllRows(
       supabase,
       "matches",
@@ -865,6 +871,12 @@ async function fetchScrapedFixtureRows(supabase, year) {
       "match_id,match_date,kickoff_utc,round,match,match_url",
       (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).eq("team_type", "Home").eq("number", 1).order("match_date", { ascending: true })
     ),
+    fetchAllRows(
+      supabase,
+      "fixtures",
+      "round,round_number,kickoff_utc,match_url,home_team,away_team",
+      (query) => query.gte("match_date", `${year}-01-01`).lt("match_date", `${year + 1}-01-01`).order("kickoff_utc", { ascending: true })
+    ),
   ]);
   const fixtures = new Map();
   const addFixture = (row) => {
@@ -873,8 +885,10 @@ async function fetchScrapedFixtureRows(supabase, year) {
   };
 
   for (const row of matchRows) {
+    const round = parseRoundNumber(row.round) ?? parseRoundNumber(row.round_number);
     addFixture({
-      round: parseRoundNumber(row.round_number) || parseRoundNumber(row.round),
+      round,
+      roundLabel: text(row.round) || (round ? roundLabel(round) : ""),
       kickoff: text(row.match_date),
       matchCentreUrl: text(row.url),
       home: text(row.team),
@@ -883,12 +897,25 @@ async function fetchScrapedFixtureRows(supabase, year) {
   }
   for (const row of lineupRows) {
     const [home = "", away = ""] = text(row.match).split(/\s+vs\s+/i).map((team) => team.trim());
+    const round = parseRoundNumber(row.round);
     addFixture({
-      round: parseRoundNumber(row.round),
+      round,
+      roundLabel: text(row.round) || (round ? roundLabel(round) : ""),
       kickoff: text(row.kickoff_utc || row.match_date),
       matchCentreUrl: text(row.match_url),
       home,
       away,
+    });
+  }
+  for (const row of fixtureRows) {
+    const round = parseRoundNumber(row.round) ?? parseRoundNumber(row.round_number);
+    addFixture({
+      round,
+      roundLabel: text(row.round) || (round ? roundLabel(round) : ""),
+      kickoff: text(row.kickoff_utc),
+      matchCentreUrl: text(row.match_url),
+      home: text(row.home_team),
+      away: text(row.away_team),
     });
   }
 
@@ -944,10 +971,6 @@ function nominalSide(number) {
 
 function currentRoundOption(options, preferredRoundNumber = null) {
   if (options.length === 0) return null;
-  if (preferredRoundNumber != null) {
-    const preferredRound = options.find((option) => option.roundNumber === preferredRoundNumber);
-    if (preferredRound) return preferredRound;
-  }
   const now = new Date();
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Australia/Brisbane",
@@ -957,7 +980,13 @@ function currentRoundOption(options, preferredRoundNumber = null) {
   }).format(now);
   const activeRound = options.find((option) => today >= option.startDate && today <= option.endDate);
   if (activeRound) return activeRound;
-  return options.find((option) => option.startDate >= today) ?? options.findLast((option) => option.startDate <= today) ?? options[0] ?? null;
+  const nextRound = options.find((option) => option.startDate >= today);
+  if (nextRound) return nextRound;
+  if (preferredRoundNumber != null) {
+    const preferredRound = options.find((option) => option.roundNumber === preferredRoundNumber);
+    if (preferredRound) return preferredRound;
+  }
+  return options.findLast((option) => option.startDate <= today) ?? options[0] ?? null;
 }
 
 function matchMergeKey(matchDate, homeTeam, awayTeam) {
@@ -1001,8 +1030,8 @@ function addLineupRoundOption(options, round, roundNumber, matchDate) {
 }
 
 function drawRowsForRound(rows, round) {
-  const roundNumber = Number.parseInt(String(round ?? "").match(/\d+/)?.[0] ?? "", 10);
-  if (!Number.isFinite(roundNumber)) return [];
+  const roundNumber = parseRoundNumber(round);
+  if (roundNumber == null) return [];
   return rows.filter((row) => row.round === roundNumber);
 }
 
@@ -1016,7 +1045,7 @@ function matchFromDrawRow(row) {
     matchId: drawMatchId(row),
     matchDate,
     kickoffUtc: row.kickoff || null,
-    round: `Round ${row.round}`,
+    round: row.roundLabel || roundLabel(row.round),
     venue: null,
     match: `${row.home} vs ${row.away}`,
     matchUrl: row.matchCentreUrl || null,
@@ -1031,11 +1060,13 @@ function addRecentResults(match, results) {
   const { home, away } = matchTeams(match);
   if (!home || !away) return match;
   const previousResults = results.filter((result) => resultBeforeMatch(result, match.matchDate));
+  const matchYear = String(match.matchDate ?? "").slice(0, 4);
+  const seasonResults = previousResults.filter((result) => String(result.matchDate ?? "").slice(0, 4) === matchYear);
   return {
     ...match,
     recentHeadToHead: previousResults.filter((result) => resultIncludesMatchup(result, home, away)).slice(0, 30),
-    homeRecentResults: previousResults.filter((result) => resultIncludesTeam(result, home)).slice(0, 30),
-    awayRecentResults: previousResults.filter((result) => resultIncludesTeam(result, away)).slice(0, 30),
+    homeRecentResults: seasonResults.filter((result) => resultIncludesTeam(result, home)).slice(0, 30),
+    awayRecentResults: seasonResults.filter((result) => resultIncludesTeam(result, away)).slice(0, 30),
   };
 }
 
@@ -1072,7 +1103,13 @@ async function fetchRecentMatchResultsSummary(supabase, year) {
     supabase,
     "matches",
     "match_date,round,team,opponent_team,score,opponent_score,is_home",
-    (query) => query.lt("match_date", `${year + 1}-01-01`).not("score", "is", null).not("opponent_score", "is", null).order("match_date", { ascending: false })
+    (query) => query
+      .eq("is_home", 1)
+      .gte("match_date", `${Math.max(2013, year - 10)}-01-01`)
+      .lt("match_date", `${year + 1}-01-01`)
+      .not("score", "is", null)
+      .not("opponent_score", "is", null)
+      .order("match_date", { ascending: false })
   );
   const results = new Map();
   for (const row of rows) {
@@ -1134,7 +1171,7 @@ function addLineupsSummaryXPoints(match, metrics) {
   };
 }
 
-async function fetchLineupRoundOptionsSummary(supabase, year) {
+async function fetchLineupRoundOptionsSummary(supabase, year, fixtureRows = []) {
   const matchRows = await fetchAllRows(
     supabase,
     "matches",
@@ -1154,7 +1191,7 @@ async function fetchLineupRoundOptionsSummary(supabase, year) {
     const current = byRound.get(round) ?? {
       value: round,
       label: round,
-      roundNumber: toNum(row.round_number) ?? Number.parseInt(round.match(/\d+/)?.[0] ?? "0", 10),
+      roundNumber: parseRoundNumber(round) ?? toNum(row.round_number) ?? 0,
       startDate: text(row.match_date).slice(0, 10),
       endDate: text(row.match_date).slice(0, 10),
     };
@@ -1166,6 +1203,12 @@ async function fetchLineupRoundOptionsSummary(supabase, year) {
     if (!round) continue;
     const date = text(row.match_date || row.kickoff_utc).slice(0, 10);
     addLineupRoundOption(byRound, round, parseRoundNumber(round), date);
+  }
+  for (const row of fixtureRows) {
+    const roundNumber = parseRoundNumber(row.roundLabel) ?? parseRoundNumber(row.round);
+    if (roundNumber == null) continue;
+    const label = row.roundLabel || roundLabel(roundNumber);
+    addLineupRoundOption(byRound, label, roundNumber, text(row.kickoff).slice(0, 10));
   }
   return [...byRound.values()].sort((a, b) => a.roundNumber - b.roundNumber);
 }
@@ -1596,7 +1639,7 @@ async function main() {
   const pageRows = [];
   const tryHistoryRows = buildLineupPlayerTryHistorySummary(playerTryHistoryRows);
   const playerTryHistory = buildLineupPlayerTryHistoryObject(playerTryHistoryRows);
-  const lineupsRoundOptions = await fetchLineupRoundOptionsSummary(supabaseNrl, currentYear).catch((error) => {
+  const lineupsRoundOptions = await fetchLineupRoundOptionsSummary(supabaseNrl, currentYear, drawRows).catch((error) => {
     console.warn("Unable to fetch lineups round options for page summary.", error);
     return [];
   });

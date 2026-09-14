@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { getServerPremiumAccess, getServerProPlotAccess } from "@/lib/access/pro-access-server"
-import { fetchCompletedMatchStats, fetchLineupsForRound, fetchMatchStatDistributions, fetchUpcomingTryscorerOdds } from "@/lib/lineups/nrl-lineups"
+import { fetchCompletedMatchStats, fetchLineupMatchHistory, fetchLineupsForRound, fetchMatchStatDistributions, fetchUpcomingTryscorerOdds } from "@/lib/lineups/nrl-lineups"
 import {
   fetchLineupPlayerAverageSources,
   fetchLineupsMatchDetailSummary,
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
       }
       : null
 
-    const responseDetail = detail
+    let responseDetail = detail
       ? {
           ...detail,
           match: mergeHydratedMatch(detail.match, hydratedMatch) ?? detail.match,
@@ -314,6 +314,19 @@ export async function POST(request: NextRequest) {
         }
       : fallbackDetail
     if (!responseDetail) return NextResponse.json({ detail: null }, { status: 404 })
+
+    const needsMatchHistory =
+      !responseDetail.match.recentHeadToHead?.length ||
+      !responseDetail.match.homeRecentResults?.length ||
+      !responseDetail.match.awayRecentResults?.length
+    if (needsMatchHistory) {
+      const matchWithHistory = await withTimeout(
+        fetchLineupMatchHistory(responseDetail.match, year, competition),
+        responseDetail.match,
+        "Lineup match history"
+      )
+      responseDetail = { ...responseDetail, match: matchWithHistory }
+    }
 
     let postMatchMetrics: PostMatchTeamMetricWithRdr[] = []
     let postMatchMetricDistributions: PostMatchModelMetricDistributions | null = null

@@ -15,12 +15,12 @@ function normaliseTeamKey(value: unknown): string {
 
 function roundNumber(value: unknown): number | null {
   const label = String(value ?? "").trim()
-  const numeric = Number.parseInt(label.match(/\d+/)?.[0] ?? "", 10)
-  if (Number.isFinite(numeric)) return numeric
   if (/finals week 1/i.test(label)) return 28
   if (/finals week 2/i.test(label)) return 29
   if (/finals week 3/i.test(label)) return 30
   if (/grand final/i.test(label)) return 31
+  const numeric = Number.parseInt(label.match(/\d+/)?.[0] ?? "", 10)
+  if (Number.isFinite(numeric)) return numeric
   return null
 }
 
@@ -48,7 +48,7 @@ async function fetchScrapedFixtureRows(): Promise<Draw2026Row[]> {
 
   const fixtures = new Map<string, Draw2026Row>()
   for (const raw of data ?? []) {
-    const round = roundNumber(raw.round_number) || roundNumber(raw.round)
+    const round = roundNumber(raw.round) ?? roundNumber(raw.round_number)
     const kickoff = String(raw.kickoff_utc ?? "")
     const home = String(raw.home_team ?? "").trim()
     const away = String(raw.away_team ?? "").trim()
@@ -126,7 +126,7 @@ async function loadDraw2026DataUncached(): Promise<Draw2026Data> {
 
 const loadDraw2026DataCached = unstable_cache(
   loadDraw2026DataUncached,
-  ["nrl-fixtures-with-logos-v3"],
+  ["nrl-fixtures-with-logos-v4"],
   { revalidate: 3600 }
 )
 

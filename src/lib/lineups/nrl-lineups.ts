@@ -541,11 +541,13 @@ function addRecentResults(match: LineupMatch, results: LineupRecentResult[]): Li
   if (!homeTeam || !awayTeam) return match
 
   const previousResults = results.filter((result) => resultBeforeMatch(result, match.matchDate))
+  const matchYear = match.matchDate.slice(0, 4)
+  const seasonResults = previousResults.filter((result) => result.matchDate.slice(0, 4) === matchYear)
   return {
     ...match,
     recentHeadToHead: previousResults.filter((result) => resultIncludesMatchup(result, homeTeam, awayTeam)).slice(0, 30),
-    homeRecentResults: previousResults.filter((result) => resultIncludesTeam(result, homeTeam)).slice(0, 30),
-    awayRecentResults: previousResults.filter((result) => resultIncludesTeam(result, awayTeam)).slice(0, 30),
+    homeRecentResults: seasonResults.filter((result) => resultIncludesTeam(result, homeTeam)).slice(0, 30),
+    awayRecentResults: seasonResults.filter((result) => resultIncludesTeam(result, awayTeam)).slice(0, 30),
   }
 }
 
@@ -1085,7 +1087,7 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
       const round = text(row.round)
       const matchDate = text(row.match_date).slice(0, 10)
       if (!round || !matchDate) continue
-      const roundNumber = numberOrNull(row.round_number) ?? roundSort(round)
+      const roundNumber = roundSort(round) || numberOrNull(row.round_number) || 0
       addRoundOption(options, round, roundNumber, matchDate)
     }
 
@@ -1748,6 +1750,8 @@ async function fetchRecentMatchResults(year: number, competition: LineupCompetit
           .not("away_score", "is", null)
       } else {
         query = query
+          .eq("is_home", 1)
+          .gte("match_date", `${Math.max(2013, year - 10)}-01-01`)
           .lt("match_date", `${year + 1}-01-01`)
           .not("score", "is", null)
           .not("opponent_score", "is", null)
@@ -1771,6 +1775,15 @@ async function fetchRecentMatchResults(year: number, competition: LineupCompetit
   } catch {
     return []
   }
+}
+
+export async function fetchLineupMatchHistory(
+  match: LineupMatch,
+  year = getCurrentYearInBrisbane(),
+  competition: LineupCompetition = "nrl"
+): Promise<LineupMatch> {
+  const results = await fetchRecentMatchResults(year, competition)
+  return addRecentResults(match, results)
 }
 
 interface HistoricalRoundPlayerStats {

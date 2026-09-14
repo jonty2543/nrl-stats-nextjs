@@ -176,9 +176,9 @@ function styleIndexHtml(
         }
 
         .control-select {
-            min-width: 4.7rem;
+            min-width: 3.8rem;
             border-radius: 999px;
-            padding: 0.34rem 1.6rem 0.34rem 0.58rem;
+            padding: 0.34rem 1rem 0.34rem 0.5rem;
             font-size: 0.62rem;
             letter-spacing: 0.08em;
         }
@@ -381,9 +381,11 @@ function stylePlotHtml(html: string): string {
     .replaceAll('"paper_bgcolor":"#111733"', '"paper_bgcolor":"rgba(0,0,0,0)"')
     .replaceAll('"plot_bgcolor":"#111733"', '"plot_bgcolor":"rgba(0,0,0,0)"')
     .replaceAll("#2a3f5f", "#f5f7ff")
-    .replaceAll('"gridcolor":"white"', '"gridcolor":"rgba(245,247,255,0.14)"')
-    .replaceAll('"zerolinecolor":"white"', '"zerolinecolor":"rgba(245,247,255,0.18)"')
+    .replaceAll('"gridcolor":"white"', '"gridcolor":"rgba(245,247,255,0.09)"')
+    .replaceAll('"zerolinecolor":"white"', '"zerolinecolor":"rgba(245,247,255,0.13)"')
     .replaceAll('"gridwidth":2', '"gridwidth":1')
+    .replaceAll('"zerolinewidth":2', '"zerolinewidth":1')
+    .replaceAll('"linecolor":"white"', '"linecolor":"rgba(245,247,255,0.13)"')
     .replaceAll('"opacity":0.8,"size":5', '"opacity":0.82,"size":3.5')
     .replaceAll("'marker.size': 6", "'marker.size': 4")
     .replaceAll("rect.style.fill = 'white';", "rect.style.fill = parentGroup && parentGroup.classList.contains('active') ? 'rgba(0, 245, 138, 0.18)' : 'rgba(17, 24, 46, 0.96)';")

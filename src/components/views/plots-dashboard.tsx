@@ -157,6 +157,7 @@ const FORM_STAT_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerStat> = {
   Kicks: "Kicks",
   "Kicking metres": "Kicking Metres",
   "Forced drop outs": "Forced Drop Outs",
+  "Tackles made": "Tackles Made",
   "Missed tackles": "Missed Tackles",
   Penalties: "Penalties",
   "Ruck infringements": "Ruck Infringements",

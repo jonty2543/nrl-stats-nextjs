@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server"
 import { RankingsDashboard } from "@/components/views/rankings-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { isAccessibleSeason } from "@/lib/access/season-access"
-import { fetchAvailableYears, fetchPlayerStats } from "@/lib/supabase/queries"
+import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -30,14 +30,17 @@ export default async function RankingsPage() {
   const selectedYear = yearPool.includes(DEFAULT_RANKINGS_YEAR)
     ? DEFAULT_RANKINGS_YEAR
     : (sortedYears[0] ?? "")
-  const playerRows = selectedYear ? await fetchPlayerStats([selectedYear]) : []
+  const [playerRows, playerImages] = await Promise.all([
+    selectedYear ? fetchPlayerStats([selectedYear]) : Promise.resolve([]),
+    fetchPlayerImages(),
+  ])
 
   return (
     <RankingsDashboard
       selectedYear={selectedYear}
       playerRows={playerRows}
       teamRows={[]}
-      playerImages={[]}
+      playerImages={playerImages}
       teamLogos={{}}
       availableYears={yearPool}
       cupAvailableYears={cupAvailableYears}

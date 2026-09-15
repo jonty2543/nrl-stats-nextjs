@@ -917,9 +917,13 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             <Select label="Per stat" compact value={effectivePerStatKey} options={[{ value: "", label: "Add per stat" }, ...activeStatOptions.map((option) => ({ value: option.key, label: option.label }))]} onChange={setPerStatKey} />
           </div>
           {view === "players" ? <div className="w-32 shrink-0"><Select label="Position" compact value={positionFilter} options={POSITION_FILTERS} onChange={setPositionFilter} /></div> : null}
+          {competition === "cup" && view === "players" ? (
+            <div className="w-24 shrink-0"><Select label="Cup" compact value={cupLeague} options={["All Cup", "NSW Cup", "QLD Cup"]} onChange={setCupLeague} /></div>
+          ) : null}
           <div className="flex shrink-0 flex-col gap-0.5">
             <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">{section === "form" ? "Form sample" : "Values"}</span>
             <PillRadio
+              variant="outline"
               options={section === "form" ? ["L3", "L5"] : ["Average", "Total"]}
               value={section === "form" ? `L${formWindow}` : mode === "average" ? "Average" : "Total"}
               onChange={(value) => section === "form" ? setFormWindow(value === "L5" ? 5 : 3) : setMode(value === "Total" ? "total" : "average")}
@@ -961,11 +965,6 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                 <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Min minutes</span>
                 <input type="number" min={0} max={80} value={minMinutes} onChange={(event) => setMinMinutes(Math.max(0, Number(event.target.value) || 0))} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" />
               </label>
-            ) : null}
-            {competition === "cup" && view === "players" ? (
-              <>
-                <div className="w-24 shrink-0"><Select label="Cup" compact value={cupLeague} options={["All Cup", "NSW Cup", "QLD Cup"]} onChange={setCupLeague} /></div>
-              </>
             ) : null}
             <div className="flex shrink-0 flex-col gap-0.5">
               <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Season</span>

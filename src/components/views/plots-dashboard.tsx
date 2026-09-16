@@ -2454,19 +2454,18 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-6 sm:grid-cols-[minmax(210px,0.28fr)_minmax(220px,320px)_minmax(0,1fr)]">
-        <div className="flex min-w-0 items-end sm:col-start-1 sm:row-start-1">
+      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-6 sm:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]">
+        <div className="flex min-w-0 items-end sm:col-span-2">
           <CompetitionToggle
             value={competition}
             onChange={(value) => void changeCompetition(value)}
             canAccessCup={canAccessCup}
             hideLabel
             fullWidth
-            size="large"
             className="w-full"
           />
         </div>
-        <div className="min-w-0 sm:col-start-2 sm:row-start-1">
+        <div className="min-w-0 sm:col-start-1 sm:row-start-2">
           <Select
             label="View"
             hideLabel
@@ -2509,7 +2508,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
             onChange={changePlotView}
           />
         </div>
-        <div ref={plotFinderRef} className="relative min-w-0 sm:col-start-3 sm:row-start-1">
+        <div ref={plotFinderRef} className="relative min-w-0 sm:col-start-2 sm:row-start-2">
           <label htmlFor="plot-finder-input" className="sr-only">Find a plot</label>
           <input
             ref={plotFinderInputRef}

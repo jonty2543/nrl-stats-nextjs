@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 interface CompetitionToggleProps {
   value: "nrl" | "cup";
   onChange: (value: "nrl" | "cup") => void;
@@ -32,12 +34,25 @@ export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = f
               aria-pressed={active}
               title={locked ? "Cup stats require Pro or Premium access" : undefined}
               onClick={() => onChange(option)}
-              className={`relative inline-flex min-w-12 items-center justify-center gap-1.5 rounded-t-md border-b-[3px] px-1 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? "text-[11px]" : "text-[9px]"} ${
+              className={`relative inline-flex min-w-12 items-center justify-center gap-1.5 rounded-t-md border-b-[3px] border-transparent px-1 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? "text-[11px]" : "text-[9px]"} ${
                 active
-                  ? "border-nrl-accent text-nrl-accent"
-                  : "border-transparent text-nrl-muted hover:bg-nrl-panel-2/60 hover:text-nrl-text"
+                  ? "text-nrl-accent"
+                  : "text-nrl-muted hover:bg-nrl-panel-2/60 hover:text-nrl-text"
               }`}
             >
+              {active ? <span aria-hidden="true" className="pointer-events-none absolute inset-x-[10%] -bottom-[3px] h-[3px] bg-nrl-accent" /> : null}
+              <span className="inline-flex shrink-0 items-center gap-0.5" aria-hidden="true">
+                {(option === "nrl" ? ["nrl"] : ["nsw-cup", "qld-cup"]).map((logo) => (
+                  <Image
+                    key={logo}
+                    src={`/images/competitions/${logo}.png`}
+                    alt=""
+                    width={large ? 24 : 20}
+                    height={large ? 24 : 20}
+                    className="shrink-0 object-contain"
+                  />
+                ))}
+              </span>
               <span>{option === "nrl" ? "NRL" : "Cup"}</span>
               {locked ? (
                 <span

@@ -2454,7 +2454,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-10 sm:grid-cols-[minmax(210px,0.28fr)_minmax(220px,320px)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-x-3 gap-y-6 sm:grid-cols-[minmax(210px,0.28fr)_minmax(220px,320px)_minmax(0,1fr)]">
         <div className="flex min-w-0 items-end sm:col-start-1 sm:row-start-1">
           <CompetitionToggle
             value={competition}

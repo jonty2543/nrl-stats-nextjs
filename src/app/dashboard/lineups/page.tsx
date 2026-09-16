@@ -122,7 +122,11 @@ function mergeRoundOptions(...optionGroups: LineupRoundOption[][]): LineupRoundO
       })
     }
   }
-  return [...byRound.values()].sort((a, b) => a.roundNumber - b.roundNumber || a.label.localeCompare(b.label))
+  return [...byRound.values()].sort((a, b) => {
+    // Finals round numbers can restart at 1 in cached summaries.
+    const dateOrder = a.startDate && b.startDate ? a.startDate.localeCompare(b.startDate) : 0
+    return dateOrder || a.roundNumber - b.roundNumber || a.label.localeCompare(b.label)
+  })
 }
 
 function mergeYearOptions(...optionGroups: LineupYearOption[][]): LineupYearOption[] {

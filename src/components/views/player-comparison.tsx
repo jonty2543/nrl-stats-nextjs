@@ -2127,7 +2127,7 @@ export function PlayerComparison({
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-3">
-        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} />
+        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} hideLabel />
       </div>
       {loading && (
         <div className="flex justify-center py-6 md:py-8">

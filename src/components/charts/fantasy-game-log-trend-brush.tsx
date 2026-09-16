@@ -140,7 +140,8 @@ function buildLinePath(
   width: number,
   height: number,
   padding: { top: number; right: number; bottom: number; left: number },
-  maxValue: number
+  maxValue: number,
+  xPositions?: number[]
 ): string {
   if (values.length === 0) return ""
 
@@ -150,11 +151,24 @@ function buildLinePath(
 
   return values
     .map((value, index) => {
-      const x = padding.left + (index / denominator) * innerWidth
+      const x = xPositions?.[index] ?? padding.left + (index / denominator) * innerWidth
       const y = padding.top + innerHeight - (value / maxValue) * innerHeight
       return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`
     })
     .join(" ")
+}
+
+function buildSeasonXPositions(rows: TrendBrushRow[]): number[] {
+  const innerWidth = MAIN_CHART_WIDTH - MAIN_PADDING.left - MAIN_PADDING.right
+  const seasonOffsets: number[] = []
+  let boundaries = 0
+  rows.forEach((row, index) => {
+    if (index > 0 && getYearLabel(row) !== getYearLabel(rows[index - 1])) boundaries += 1
+    seasonOffsets.push(boundaries)
+  })
+  const gap = boundaries > 0 ? Math.min(28, innerWidth * 0.4 / boundaries) : 0
+  const step = (innerWidth - boundaries * gap) / Math.max(rows.length - 1, 1)
+  return rows.map((_, index) => MAIN_PADDING.left + index * step + seasonOffsets[index] * gap)
 }
 
 function findYearBoundaries(rows: TrendBrushRow[]): YearBoundary[] {
@@ -331,9 +345,11 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
     return niceAxisMaximum(maxScore)
   }, [compareSeriesData, fantasyScores, overviewRollingSeries])
 
+  const selectedXPositions = useMemo(() => buildSeasonXPositions(selectedRows), [selectedRows])
+
   const selectedLinePath = useMemo(
-    () => buildLinePath(rollingSeries, MAIN_CHART_WIDTH, MAIN_CHART_HEIGHT, MAIN_PADDING, selectedMaxScore),
-    [rollingSeries, selectedMaxScore]
+    () => buildLinePath(rollingSeries, MAIN_CHART_WIDTH, MAIN_CHART_HEIGHT, MAIN_PADDING, selectedMaxScore, selectedXPositions),
+    [rollingSeries, selectedMaxScore, selectedXPositions]
   )
   const overviewLinePath = useMemo(
     () =>
@@ -371,10 +387,11 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
           MAIN_CHART_WIDTH,
           MAIN_CHART_HEIGHT,
           MAIN_PADDING,
-          selectedMaxScore
+          selectedMaxScore,
+          selectedXPositions
         ),
       })),
-    [compareSeriesData, selectedMaxScore]
+    [compareSeriesData, selectedMaxScore, selectedXPositions]
   )
 
   const snapThreshold = useMemo(
@@ -548,7 +565,6 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
   const mainBarWidth = clamp((mainInnerWidth / Math.max(selectedRows.length, 1)) * 0.68, 4, 22)
   const totalBarSeries = 1 + compareSeriesData.length
   const groupedBarWidth = totalBarSeries > 1 ? Math.max(3, Math.min(10, mainBarWidth / totalBarSeries)) : mainBarWidth
-  const selectedCountDenominator = Math.max(selectedRows.length - 1, 1)
   const overviewCountDenominator = Math.max(orderedRows.length - 1, 1)
 
   const selectionLeft =
@@ -588,7 +604,9 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
     const rect = svg.getBoundingClientRect()
     if (rect.width <= 0) return
     const ratio = clamp((event.clientX - rect.left - (MAIN_PADDING.left / MAIN_CHART_WIDTH) * rect.width) / (((MAIN_CHART_WIDTH - MAIN_PADDING.left - MAIN_PADDING.right) / MAIN_CHART_WIDTH) * rect.width), 0, 1)
-    const index = Math.round(ratio * Math.max(selectedRows.length - 1, 0))
+    const pointerX = MAIN_PADDING.left + ratio * mainInnerWidth
+    const index = selectedXPositions.reduce((nearest, x, candidate) =>
+      Math.abs(x - pointerX) < Math.abs(selectedXPositions[nearest] - pointerX) ? candidate : nearest, 0)
 
     setHoveredChartPoint({
       index,
@@ -734,19 +752,13 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
                   const prev = boundaries[index - 1]
                   const currentLocalStart = Math.max(boundary.startIndex, safeStartIndex) - safeStartIndex
                   const prevLocalStart = Math.max(prev.startIndex, safeStartIndex) - safeStartIndex
-                  const currentX =
-                    MAIN_PADDING.left +
-                    (currentLocalStart / selectedCountDenominator) * mainInnerWidth
-                  const prevX =
-                    MAIN_PADDING.left +
-                    (prevLocalStart / selectedCountDenominator) * mainInnerWidth
+                  const currentX = selectedXPositions[currentLocalStart]
+                  const prevX = selectedXPositions[prevLocalStart]
                   return currentX - prevX >= 42
                 })
                 .map((boundary) => {
                   const localStartIndex = Math.max(boundary.startIndex, safeStartIndex) - safeStartIndex
-                  const x =
-                    MAIN_PADDING.left +
-                    (localStartIndex / selectedCountDenominator) * mainInnerWidth
+                  const x = selectedXPositions[localStartIndex]
 
                   return (
                     <g key={boundary.year}>
@@ -771,9 +783,7 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
 
               {selectedRows.map((row, index) => {
                 const score = getValue(row)
-                const x =
-                  MAIN_PADDING.left +
-                  (index / selectedCountDenominator) * mainInnerWidth
+                const x = selectedXPositions[index]
                 const barHeight = (score / selectedMaxScore) * mainInnerHeight
                 const y = MAIN_PADDING.top + mainInnerHeight - barHeight
                 const seriesOffsetBase = -((totalBarSeries - 1) * groupedBarWidth) / 2
@@ -835,14 +845,8 @@ export function FantasyGameLogTrendBrush<T extends TrendBrushRow = PlayerStat>({
               )}
               {hoveredChartPoint ? (
                 <line
-                  x1={
-                    MAIN_PADDING.left +
-                    (hoveredChartPoint.index / selectedCountDenominator) * mainInnerWidth
-                  }
-                  x2={
-                    MAIN_PADDING.left +
-                    (hoveredChartPoint.index / selectedCountDenominator) * mainInnerWidth
-                  }
+                  x1={selectedXPositions[hoveredChartPoint.index]}
+                  x2={selectedXPositions[hoveredChartPoint.index]}
                   y1={MAIN_PADDING.top}
                   y2={MAIN_CHART_HEIGHT - MAIN_PADDING.bottom}
                   stroke="rgba(245,247,255,0.28)"

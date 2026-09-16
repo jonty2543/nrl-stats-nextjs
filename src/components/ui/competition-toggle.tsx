@@ -5,20 +5,21 @@ interface CompetitionToggleProps {
   onChange: (value: "nrl" | "cup") => void;
   canAccessCup: boolean;
   hideLabel?: boolean;
+  fullWidth?: boolean;
   size?: "default" | "large";
   className?: string;
 }
 
-export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = false, size = "default", className = "" }: CompetitionToggleProps) {
+export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = false, fullWidth = false, size = "default", className = "" }: CompetitionToggleProps) {
   const large = size === "large";
 
   return (
-    <div className={`flex shrink-0 flex-col items-start gap-0.5 pl-2 ${className}`}>
+    <div className={`flex shrink-0 flex-col items-start gap-0.5 ${fullWidth ? "w-full" : "pl-2"} ${className}`}>
       <span className={hideLabel ? "sr-only" : "text-[8px] font-semibold uppercase tracking-wide text-nrl-muted"}>Competition</span>
       <div
         role="group"
         aria-label="Competition"
-        className={`inline-flex w-fit items-stretch gap-6 border-b border-nrl-border/70 ${large ? "h-10" : "h-8"}`}
+        className={`${fullWidth ? "grid w-full grid-cols-2" : "inline-flex w-fit gap-6"} items-stretch border-b border-nrl-border/70 ${large ? "h-10" : "h-8"}`}
       >
         {(["nrl", "cup"] as const).map((option) => {
           const locked = option === "cup" && !canAccessCup;

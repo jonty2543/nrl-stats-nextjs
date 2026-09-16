@@ -2461,6 +2461,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
             onChange={(value) => void changeCompetition(value)}
             canAccessCup={canAccessCup}
             hideLabel
+            fullWidth
             size="large"
             className="w-full"
           />

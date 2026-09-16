@@ -766,7 +766,7 @@ export function TeamComparison({
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-3">
-        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} hideLabel />
+        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} hideLabel fullWidth />
       </div>
       {TEAM_STATS_TABLE_ENABLED && allData.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">

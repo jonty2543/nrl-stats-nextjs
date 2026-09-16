@@ -34,7 +34,7 @@ export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = f
               aria-pressed={active}
               title={locked ? "Cup stats require Pro or Premium access" : undefined}
               onClick={() => onChange(option)}
-              className={`relative inline-flex min-w-12 items-center justify-center gap-1.5 rounded-t-md border-b-[3px] border-transparent px-1 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? "text-[11px]" : "text-[9px]"} ${
+              className={`relative inline-flex min-w-12 items-center justify-center gap-1.5 rounded-t-md border-b-[3px] border-transparent px-1 pb-1.5 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? "text-[11px]" : "text-[9px]"} ${
                 active
                   ? "text-nrl-accent"
                   : "text-nrl-muted hover:bg-nrl-panel-2/60 hover:text-nrl-text"

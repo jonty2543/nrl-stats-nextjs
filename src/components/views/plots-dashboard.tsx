@@ -667,23 +667,23 @@ type PlotDiscoveryOption = {
 };
 
 const PLOT_DISCOVERY_OPTIONS: PlotDiscoveryOption[] = [
-  { id: "player-metres", sentence: "Who gains the most run metres?", category: "Players · Attack", keywords: "player running carries fullback winger centre", view: "player_attack_stats", preset: "player_metres" },
-  { id: "player-efficiency", sentence: "Which players combine run volume and efficiency?", category: "Players · Attack", keywords: "player metres per run output middle forward", view: "player_attack_efficiency", preset: "player_efficiency" },
-  { id: "player-team-role", sentence: "Who contributes the largest share of their team's output?", category: "Players · Attack", keywords: "player team role proportion share receipts runs metres", view: "player_attack_share", preset: "player_team_role" },
-  { id: "player-vs-team", sentence: "How does a player's output compare with their team in the same matches?", category: "Players · Attack", keywords: "player versus vs team same matches average", view: "player_attack_vs_team" },
+  { id: "player-metres", sentence: "Who gains the most run metres?", category: "Player stats", keywords: "player running carries fullback winger centre", view: "player_attack_stats", preset: "player_metres" },
+  { id: "player-efficiency", sentence: "Which players combine run volume and efficiency?", category: "Player stats", keywords: "player metres per run output middle forward", view: "player_attack_efficiency", preset: "player_efficiency" },
+  { id: "player-team-role", sentence: "Who contributes the largest share of their team's output?", category: "Player stats", keywords: "player team role proportion share receipts runs metres", view: "player_attack_share", preset: "player_team_role" },
+  { id: "player-vs-team", sentence: "How does a player's output compare with their team in the same matches?", category: "Player stats", keywords: "player versus vs team same matches average", view: "player_attack_vs_team" },
   { id: "player-variance", sentence: "Which players are most consistent from match to match?", category: "Players · Variance", keywords: "player variance consistency standard deviation reliable", view: "player_variance" },
   { id: "player-form", sentence: "Whose recent form has improved most?", category: "Players · Form", keywords: "player form recent l3 l5 improvement prior", view: "player_form" },
-  { id: "player-defence", sentence: "Who tackles most effectively?", category: "Players · Defense", keywords: "player defence defense tackles tackle efficiency middles", view: "player_defense_tackles", preset: "player_defence" },
+  { id: "player-defence", sentence: "Who tackles most effectively?", category: "Player stats", keywords: "player defence defense tackles tackle efficiency middles", view: "player_defense_tackles", preset: "player_defence" },
   { id: "player-halves", sentence: "How do each team's halves split kicking metres?", category: "Players · Combinations", keywords: "halfback five eighth halves pairing kicks contribution", view: "player_combinations_halves", preset: "player_halves" },
-  { id: "team-metres", sentence: "Which teams gain the most run metres?", category: "Teams · Attack", keywords: "team attack running carries", view: "team_attack_stats", preset: "team_metres" },
-  { id: "team-efficiency", sentence: "Which attacks combine run volume and efficiency?", category: "Teams · Attack", keywords: "team metres per run output", view: "team_attack_efficiency", preset: "team_efficiency" },
+  { id: "team-metres", sentence: "Which teams gain the most run metres?", category: "Team stats", keywords: "team attack running carries", view: "team_attack_stats", preset: "team_metres" },
+  { id: "team-efficiency", sentence: "Which attacks combine run volume and efficiency?", category: "Team stats", keywords: "team metres per run output", view: "team_attack_efficiency", preset: "team_efficiency" },
   { id: "team-variance", sentence: "Which teams are most consistent from match to match?", category: "Teams · Variance", keywords: "team variance consistency standard deviation reliable", view: "team_variance" },
   { id: "team-form", sentence: "Which teams' recent form has improved most?", category: "Teams · Form", keywords: "team form recent l3 l5 improvement prior", view: "team_form" },
-  { id: "team-xpoints", sentence: "Which teams score more points than expected?", category: "Teams · Attack", keywords: "team attack actual expected xpoints overperform", view: "team_attack_xpoints", locked: true },
-  { id: "team-defence", sentence: "Which defenses concede the fewest points?", category: "Teams · Defense", keywords: "team defence defense points allowed", view: "team_defense_stats", preset: "team_defence" },
-  { id: "team-defence-efficiency", sentence: "Which defenses limit attacking output most efficiently?", category: "Teams · Defense", keywords: "team defence defense opponent runs metres volume", view: "team_defense_efficiency" },
-  { id: "team-contact", sentence: "Which teams combine strong contact and line defense ratings?", category: "Teams · Defense", keywords: "team defence tackle breaks offloads line rating", view: "team_defense_contact", locked: true },
-  { id: "team-xpoints-against", sentence: "Which teams concede fewer points than expected?", category: "Teams · Defense", keywords: "team defence actual expected xpoints against overperform", view: "team_defense_xpoints", locked: true },
+  { id: "team-xpoints", sentence: "Which teams score more points than expected?", category: "Team stats", keywords: "team attack actual expected xpoints overperform", view: "team_attack_xpoints", locked: true },
+  { id: "team-defence", sentence: "Which defenses concede the fewest points?", category: "Team stats", keywords: "team defence defense points allowed", view: "team_defense_stats", preset: "team_defence" },
+  { id: "team-defence-efficiency", sentence: "Which defenses limit attacking output most efficiently?", category: "Team stats", keywords: "team defence defense opponent runs metres volume", view: "team_defense_efficiency" },
+  { id: "team-contact", sentence: "Which teams combine strong contact and line defense ratings?", category: "Team stats", keywords: "team defence tackle breaks offloads line rating", view: "team_defense_contact", locked: true },
+  { id: "team-xpoints-against", sentence: "Which teams concede fewer points than expected?", category: "Team stats", keywords: "team defence actual expected xpoints against overperform", view: "team_defense_xpoints", locked: true },
   { id: "team-for-against", sentence: "Which teams score most and concede least?", category: "Teams · Team context", keywords: "team points for against attack defence balance", view: "team_context_for_against", preset: "team_for_against" },
   { id: "team-position-share", sentence: "Which starting positions drive each team's runs?", category: "Teams · Team context", keywords: "team player position share fullback winger centres halves edges middles", view: "team_context_position_share", preset: "team_position_share" },
   { id: "team-ruck", sentence: "Which teams dominate the ruck?", category: "Teams · Team context", keywords: "team ruck dominance rating play the ball ptb", view: "team_context_ruck", locked: true },
@@ -924,7 +924,7 @@ function buildPlotRequestSuggestions(query: string): PlotDiscoveryOption[] {
     add({
       id: `request-team-expected-${defensiveExpected}`,
       sentence: defensiveExpected ? "Which teams concede fewer points than expected?" : "Which teams score more points than expected?",
-      category: `Teams · ${defensiveExpected ? "Defense" : "Attack"}`,
+      category: "Team stats",
       keywords: normalized,
       view: defensiveExpected ? "team_defense_xpoints" : "team_attack_xpoints",
       locked: true,
@@ -952,27 +952,27 @@ function buildPlotRequestSuggestions(query: string): PlotDiscoveryOption[] {
     const base = findRequestedStat(baseQuery, PLAYER_EFFICIENCY_BASE_METRICS) ?? (wantsEfficiency ? "Runs" : null);
 
     if (wantsDefence && /\btackl(?:e|es|ing)\b/.test(normalized)) {
-      add({ id: `request-player-defense-${position}`, sentence: `Which ${position.toLowerCase()} tackle most effectively?`, category: "Players · Defense", keywords: normalized, view: "player_defense_tackles", action: { kind: "player-defense", position } });
+      add({ id: `request-player-defense-${position}`, sentence: `Which ${position.toLowerCase()} tackle most effectively?`, category: "Player stats", keywords: normalized, view: "player_defense_tackles", action: { kind: "player-defense", position } });
     }
 
     if (wantsEfficiency && output && base) {
-      add({ id: `request-player-efficiency-${position}-${output}-${base}`, sentence: `Which ${position.toLowerCase()} average the most ${output.toLowerCase()} per ${statUnit(base)}?`, category: "Players · Attack", keywords: normalized, view: "player_attack_efficiency", action: { kind: "player-efficiency", position, output, base, volumeAxis: wantsVolumeAxis } });
+      add({ id: `request-player-efficiency-${position}-${output}-${base}`, sentence: `Which ${position.toLowerCase()} average the most ${output.toLowerCase()} per ${statUnit(base)}?`, category: "Player stats", keywords: normalized, view: "player_attack_efficiency", action: { kind: "player-efficiency", position, output, base, volumeAxis: wantsVolumeAxis } });
     }
 
     if (wantsShare && primary) {
-      add({ id: `request-player-share-${position}-${primary}`, sentence: `Which ${position.toLowerCase()} contribute the largest share of their team's ${primary.toLowerCase()}?`, category: "Players · Attack", keywords: normalized, view: "player_attack_share", action: { kind: "player-share", position, primary, comparison: "None" } });
+      add({ id: `request-player-share-${position}-${primary}`, sentence: `Which ${position.toLowerCase()} contribute the largest share of their team's ${primary.toLowerCase()}?`, category: "Player stats", keywords: normalized, view: "player_attack_share", action: { kind: "player-share", position, primary, comparison: "None" } });
     }
 
     if (comparisonParts.length > 1) {
       const left = findRequestedStat(comparisonParts[0], PLAYER_ATTACK_STAT_COMPARISON_STATS);
       const right = findRequestedStat(comparisonParts.slice(1).join(" "), PLAYER_ATTACK_STAT_COMPARISON_STATS);
       if (left && right) {
-        add({ id: `request-player-vs-${position}-${left}-${right}`, sentence: `${left} vs ${right.toLowerCase()} for ${position.toLowerCase()}`, category: "Players · Attack", keywords: normalized, view: "player_attack_stats", action: { kind: "player-stats", position, primary: left, comparison: right } });
+        add({ id: `request-player-vs-${position}-${left}-${right}`, sentence: `${left} vs ${right.toLowerCase()} for ${position.toLowerCase()}`, category: "Player stats", keywords: normalized, view: "player_attack_stats", action: { kind: "player-stats", position, primary: left, comparison: right } });
       }
     }
 
     if (primary) {
-      add({ id: `request-player-stat-${position}-${primary}`, sentence: `Which ${position.toLowerCase()} record the most ${primary.toLowerCase()}?`, category: "Players · Attack", keywords: normalized, view: "player_attack_stats", action: { kind: "player-stats", position, primary, comparison: "None" } });
+      add({ id: `request-player-stat-${position}-${primary}`, sentence: `Which ${position.toLowerCase()} record the most ${primary.toLowerCase()}?`, category: "Player stats", keywords: normalized, view: "player_attack_stats", action: { kind: "player-stats", position, primary, comparison: "None" } });
     }
   }
 
@@ -985,7 +985,7 @@ function buildPlotRequestSuggestions(query: string): PlotDiscoveryOption[] {
     const base = findRequestedStat(baseQuery, TEAM_ATTACK_EFFICIENCY_BASE_STATS) ?? (wantsEfficiency ? "Runs" : null);
 
     if (wantsEfficiency && output && base) {
-      add({ id: `request-team-efficiency-${wantsDefence}-${output}-${base}`, sentence: wantsDefence ? `Which teams concede the fewest ${output.toLowerCase()} per ${statUnit(base)} faced?` : `Which teams produce the most ${output.toLowerCase()} per ${statUnit(base)}?`, category: `Teams · ${wantsDefence ? "Defense" : "Attack"}`, keywords: normalized, view: wantsDefence ? "team_defense_efficiency" : "team_attack_efficiency", action: { kind: "team-efficiency", defensive: wantsDefence, output, base, volumeAxis: wantsVolumeAxis } });
+      add({ id: `request-team-efficiency-${wantsDefence}-${output}-${base}`, sentence: wantsDefence ? `Which teams concede the fewest ${output.toLowerCase()} per ${statUnit(base)} faced?` : `Which teams produce the most ${output.toLowerCase()} per ${statUnit(base)}?`, category: "Team stats", keywords: normalized, view: wantsDefence ? "team_defense_efficiency" : "team_attack_efficiency", action: { kind: "team-efficiency", defensive: wantsDefence, output, base, volumeAxis: wantsVolumeAxis } });
     }
 
     if (comparisonParts.length > 1) {
@@ -994,12 +994,12 @@ function buildPlotRequestSuggestions(query: string): PlotDiscoveryOption[] {
       if (left && right) {
         const leftLabel = teamStatRequestLabel(left);
         const rightLabel = teamStatRequestLabel(right).toLowerCase();
-        add({ id: `request-team-vs-${wantsDefence}-${left}-${right}`, sentence: `${leftLabel} vs ${rightLabel} for ${wantsDefence ? "team defenses" : "teams"}`, category: `Teams · ${wantsDefence ? "Defense" : "Attack"}`, keywords: normalized, view: wantsDefence ? "team_defense_stats" : "team_attack_stats", locked: LOCKED_TEAM_STATS.has(left) || LOCKED_TEAM_STATS.has(right), action: { kind: "team-stats", defensive: wantsDefence, primary: left, comparison: right } });
+        add({ id: `request-team-vs-${wantsDefence}-${left}-${right}`, sentence: `${leftLabel} vs ${rightLabel} for ${wantsDefence ? "team defenses" : "teams"}`, category: "Team stats", keywords: normalized, view: wantsDefence ? "team_defense_stats" : "team_attack_stats", locked: LOCKED_TEAM_STATS.has(left) || LOCKED_TEAM_STATS.has(right), action: { kind: "team-stats", defensive: wantsDefence, primary: left, comparison: right } });
       }
     }
 
     if (primary) {
-      add({ id: `request-team-stat-${wantsDefence}-${primary}`, sentence: teamStatQuestion(primary, wantsDefence), category: `Teams · ${wantsDefence ? "Defense" : "Attack"}`, keywords: normalized, view: wantsDefence ? "team_defense_stats" : "team_attack_stats", locked: LOCKED_TEAM_STATS.has(primary), action: { kind: "team-stats", defensive: wantsDefence, primary, comparison: "None" } });
+      add({ id: `request-team-stat-${wantsDefence}-${primary}`, sentence: teamStatQuestion(primary, wantsDefence), category: "Team stats", keywords: normalized, view: wantsDefence ? "team_defense_stats" : "team_attack_stats", locked: LOCKED_TEAM_STATS.has(primary), action: { kind: "team-stats", defensive: wantsDefence, primary, comparison: "None" } });
     }
   }
 
@@ -2469,10 +2469,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
           <Select
             label="View"
             hideLabel
-            value={activePlotView}
+            value={activePlotView === "player_defense_tackles" ? "player_attack_stats" : activePlotView === "team_defense_stats" ? "team_attack_stats" : activePlotView === "team_defense_efficiency" ? "team_attack_efficiency" : activePlotView}
             description={PLOT_VIEW_SUMMARIES[activePlotView]}
             options={[
-              { label: "Players · Attack", options: [
+              { label: "Player stats", options: [
                 { value: "player_attack_stats", label: "Player stats" },
                 { value: "player_attack_efficiency", label: "Player efficiency" },
                 { value: "player_attack_share", label: "Player team share" },
@@ -2482,23 +2482,16 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
               { label: "Players · Form", options: [
                 { value: "player_form", label: "Player form" },
               ] },
-              { label: "Players · Defense", options: [
-                { value: "player_defense_tackles", label: "Tackling effectiveness" },
-              ] },
               { label: "Players · Combinations", options: [
                 { value: "player_combinations_halves", label: "Halves contribution split" },
               ] },
-              { label: "Teams · Attack", options: [
+              { label: "Team stats", options: [
                 { value: "team_attack_stats", label: "Team stats" },
                 { value: "team_attack_efficiency", label: "Team efficiency" },
                 { value: "team_variance", label: "Team variance" },
               ] },
               { label: "Teams · Form", options: [
                 { value: "team_form", label: "Team form" },
-              ] },
-              { label: "Teams · Defense", options: [
-                { value: "team_defense_stats", label: "Stats conceded" },
-                { value: "team_defense_efficiency", label: "Defensive efficiency" },
               ] },
               { label: "Teams · Team context", options: [
                 { value: "team_context_for_against", label: "For vs against" },
@@ -2746,6 +2739,15 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
           {entity === "Teams" ? (
             <div className="flex items-end gap-3 border-b border-nrl-border px-4 py-3">
               <div className="flex min-w-0 flex-1 items-end gap-2 overflow-x-auto [scrollbar-width:thin]">
+                {isTeamStatsComparison || isTeamEfficiency ? (
+                  <div className="w-28 shrink-0">
+                    <Select label="Stats" compact value={isDefense ? "Against" : "For"} options={["For", "Against"]} onChange={(value) => {
+                      setTeamSection(value === "Against" ? "Defense" : "Attack");
+                      if (value === "Against") setDefencePlot(isTeamEfficiency ? "Defensive Efficiency" : "Stats Conceded");
+                      else setAttackPlot(isTeamEfficiency ? "Efficiency" : "Stats");
+                    }} />
+                  </div>
+                ) : null}
                 {isTeamStatsComparison ? <div className="w-36 shrink-0"><Select label="Primary stat" compact value={activeTeamXStat} options={teamStatSelectOptions(isTeamDefenceStatsConceded ? TEAM_DEFENCE_CONCEDED_STATS : TEAM_ATTACK_COMPARISON_STATS, canAccessModelPlots)} onChange={(value) => { if (isTeamDefenceStatsConceded) setTeamDefenceXStat(value as TeamDefenceConcededStat); else setTeamAttackXStat(value as TeamAttackComparisonStat); refreshSelectedTeamModelStat(value); }} /></div> : null}
                 {isTeamStatsComparison ? <div className="w-40 shrink-0"><Select label="Comparison stat" compact value={activeTeamYStat} options={[{ value: "None", label: "Add comparison" }, ...teamStatSelectOptions(isTeamDefenceStatsConceded ? TEAM_DEFENCE_CONCEDED_STATS : TEAM_ATTACK_COMPARISON_STATS, canAccessModelPlots)]} onChange={(value) => { if (isTeamDefenceStatsConceded) setTeamDefenceYStat(value as OptionalTeamDefenceComparisonStat); else setTeamAttackYStat(value as OptionalTeamAttackComparisonStat); refreshSelectedTeamModelStat(value); }} /></div> : null}
                 {isTeamVariance ? <div className="w-36 shrink-0"><Select label="Variance stat" compact value={teamVarianceStat} options={TEAM_ATTACK_COMPARISON_STATS.filter((stat) => !LOCKED_TEAM_STATS.has(stat))} onChange={(value) => setTeamVarianceStat(value as TeamAttackComparisonStat)} /></div> : null}

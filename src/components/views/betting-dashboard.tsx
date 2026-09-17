@@ -882,19 +882,23 @@ function PlayerProfileImage({
   name,
   className = "h-10 w-10 p-0.5",
   reveal = true,
+  loading = "lazy",
+  fetchPriority = "low",
 }: {
   image?: string | null;
   name: string;
   className?: string;
   reveal?: boolean;
+  loading?: "eager" | "lazy";
+  fetchPriority?: "high" | "low" | "auto";
 }) {
   return (
     <PlayerImageWithFallback
       sources={[image ?? ""]}
       alt={name}
       className={`${className} shrink-0 rounded-full border border-white/10 bg-nrl-panel object-cover transition-opacity duration-150 ${reveal ? "opacity-100" : "opacity-0"}`}
-      loading="eager"
-      fetchPriority="high"
+      loading={loading}
+      fetchPriority={fetchPriority}
     />
   );
 }
@@ -4635,27 +4639,27 @@ export function BettingDashboard({
       >
         <MarketTabsRail orderedMarkets={orderedMarkets} selectedMarket={selectedMarket} onMarketChange={handleMarketChange} />
         {selectedMarketGroups.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto [scrollbar-width:thin]">
             {hasTeamListsInModel ? (
-              <div className="w-fit max-w-full rounded-lg border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-[10px] font-semibold text-emerald-300 sm:text-xs">
+              <div className="w-fit shrink-0 whitespace-nowrap rounded-lg border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-[10px] font-semibold text-emerald-300 sm:text-xs">
                 Team lists processed by model.
               </div>
             ) : teamListsAnnouncementPassed ? (
-              <div className="rounded-lg border border-orange-400/30 bg-orange-400/[0.06] px-3 py-2 text-[10px] font-semibold text-orange-300 sm:text-xs">
+              <div className="shrink-0 whitespace-nowrap rounded-lg border border-orange-400/30 bg-orange-400/[0.06] px-3 py-2 text-[10px] font-semibold text-orange-300 sm:text-xs">
                 Team list info will be processed by the model shortly.
               </div>
             ) : (
-              <div className="rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
+              <div className="shrink-0 whitespace-nowrap rounded-lg border border-nrl-border bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-nrl-muted sm:text-xs">
                 Note: edge and ratings are more accurate once team lists have been announced.
               </div>
             )}
-            <div className="rounded-lg border border-red-300/25 bg-red-300/[0.06] px-3 py-2 text-[10px] font-semibold text-red-200 sm:text-xs">
-              Sportsbet feed is currently down, we are looking into a fix
+            <div className="shrink-0 whitespace-nowrap rounded-lg border border-blue-300/25 bg-blue-300/[0.06] px-3 py-2 text-[10px] font-semibold text-blue-200 sm:text-xs">
+              Sportsbet odds currently unavailable, we are looking into a fix
             </div>
             <button
               type="button"
               onClick={() => setBetRatingExplainerOpen(true)}
-              className="rounded-lg border border-blue-300/25 bg-blue-300/[0.06] px-3 py-2 text-[10px] font-semibold text-blue-200 transition-colors hover:border-blue-300/45 hover:bg-blue-300/[0.1] sm:text-xs"
+              className="shrink-0 whitespace-nowrap rounded-lg border border-blue-300/25 bg-blue-300/[0.06] px-3 py-2 text-[10px] font-semibold text-blue-200 transition-colors hover:border-blue-300/45 hover:bg-blue-300/[0.1] sm:text-xs"
             >
               Bet rating explained
             </button>

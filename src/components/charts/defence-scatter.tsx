@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { PLAYER_SILHOUETTE_SRC } from "@/components/ui/player-image-with-fallback";
+import { singleAxisHeatColor } from "@/lib/data/heat-colors";
 
 export interface TeamQuadrantPoint {
   id: string;
@@ -154,21 +155,6 @@ function dataPadding(values: number[], flatFallback: number): number {
 function paddedMinimum(values: number[], padding: number): number {
   const minimum = Math.min(...values);
   return minimum < 0 ? minimum - padding : Math.max(0, minimum - padding);
-}
-
-function interpolateRgb(start: [number, number, number], end: [number, number, number], ratio: number): string {
-  const boundedRatio = Math.max(0, Math.min(1, ratio));
-  const channels = start.map((channel, index) => Math.round(channel + (end[index] - channel) * boundedRatio));
-  return `rgb(${channels.join(", ")})`;
-}
-
-function singleAxisHeatColor(ratio: number): string {
-  const red: [number, number, number] = [255, 83, 100];
-  const amber: [number, number, number] = [246, 196, 69];
-  const green: [number, number, number] = [16, 240, 139];
-  if (ratio < 0.32) return interpolateRgb(red, amber, ratio / 0.32);
-  if (ratio < 0.62) return interpolateRgb(amber, green, (ratio - 0.32) / 0.3);
-  return "rgb(16, 240, 139)";
 }
 
 function groupNearbyPoints(

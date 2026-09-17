@@ -270,7 +270,7 @@ function positionFromNumber(value: unknown): PlayerAttackPosition | null {
   return null;
 }
 
-function positionFromRow(row: PlayerStat): PlayerAttackPosition | null {
+export function positionFromRow(row: PlayerStat): PlayerAttackPosition | null {
   const position = String(row.Position ?? "").trim().toUpperCase();
   if (["FB", "FULLBACK", "FULL BACK"].includes(position)) return "Fullbacks";
   if (["WG", "W", "WING", "WINGER"].includes(position)) return "Wingers";
@@ -413,6 +413,8 @@ export function buildPlayerAttackComparisonPoints(
 ): PlayerAttackComparisonPoint[] {
   const xField = ATTACK_COMPARISON_FIELDS[xStat];
   const yField = ATTACK_COMPARISON_FIELDS[yStat];
+  const xIsPassRunRatio = xStat === "Pass to run ratio";
+  const yIsPassRunRatio = yStat === "Pass to run ratio";
   const xIsRate = PLAYER_RATE_STATS.has(xStat);
   const yIsRate = PLAYER_RATE_STATS.has(yStat);
   const teamGameTotals = new Map<string, { x: number; y: number }>();
@@ -456,13 +458,23 @@ export function buildPlayerAttackComparisonPoints(
     }, 0);
     const xRateValues = xIsRate ? qualifyingRows.map((row) => finite(row[xField])).filter((value) => value > 0) : [];
     const yRateValues = yIsRate ? qualifyingRows.map((row) => finite(row[yField])).filter((value) => value > 0) : [];
-    if ((xIsRate && xRateValues.length === 0) || (yIsRate && yRateValues.length === 0)) continue;
-    const comparisonX = xIsRate
+    const totalRuns = (xIsPassRunRatio || yIsPassRunRatio)
+      ? qualifyingRows.reduce((sum, row) => sum + finite(row["All Runs"]), 0)
+      : 0;
+    if ((xIsRate && xRateValues.length === 0) || (yIsRate && yRateValues.length === 0) || ((xIsPassRunRatio || yIsPassRunRatio) && totalRuns <= 0)) continue;
+    const totalPasses = (xIsPassRunRatio || yIsPassRunRatio)
+      ? qualifyingRows.reduce((sum, row) => sum + finite(row.Passes), 0)
+      : 0;
+    const comparisonX = xIsPassRunRatio
+      ? totalPasses / totalRuns
+      : xIsRate
       ? xRateValues.reduce((sum, value) => sum + value, 0) / xRateValues.length
       : mode === "totals"
       ? qualifyingRows.reduce((sum, row) => sum + finite(row[xField]), 0)
       : comparisonXTotal / qualifyingRows.length;
-    const comparisonY = yIsRate
+    const comparisonY = yIsPassRunRatio
+      ? totalPasses / totalRuns
+      : yIsRate
       ? yRateValues.reduce((sum, value) => sum + value, 0) / yRateValues.length
       : mode === "totals"
       ? qualifyingRows.reduce((sum, row) => sum + finite(row[yField]), 0)

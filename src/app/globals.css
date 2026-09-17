@@ -215,6 +215,14 @@ button:disabled {
 }
 
 /* Clerk theme overrides */
+.team-logo-rabbitohs,
+img[src*="rabbitohs"],
+img[src*="Rabbitohs"],
+svg image[href*="rabbitohs"],
+svg image[href*="Rabbitohs"] {
+  filter: drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff);
+}
+
 .cl-card {
   background: #161c32 !important;
   border: 1px solid #2a3356 !important;

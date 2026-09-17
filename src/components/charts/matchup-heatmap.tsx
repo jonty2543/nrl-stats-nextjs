@@ -1,0 +1,115 @@
+"use client";
+
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
+import type { PlayerStat } from "@/lib/data/types";
+import { PLAYER_ATTACK_POSITIONS } from "@/lib/data/player-attack";
+import { buildMatchupHeatmap, MATCHUP_METRICS, type MatchupDirection, type MatchupMetric, type MatchupValueMode } from "@/lib/data/matchup-heatmap";
+import { Select } from "@/components/ui/select";
+import { singleAxisHeatColor } from "@/lib/data/heat-colors";
+
+function logoFor(team: string, logos: Record<string, string>): string | undefined {
+  const normalise = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const key = normalise(team);
+  const aliases: Record<string, string[]> = {
+    brisbanebroncos: ["broncos"], canterburybankstownbulldogs: ["bulldogs", "canterburybulldogs"],
+    canberraraiders: ["raiders"], cronullasutherlandsharks: ["sharks", "cronullasharks"],
+    goldcoasttitans: ["titans"], manlywarringahseaeagles: ["seaeagles", "manlyseaeagles"],
+    melbournestorm: ["storm"], newcastleknights: ["knights"],
+    northqueenslandcowboys: ["cowboys", "northqueenslandcowboys"], parramattaeels: ["eels"],
+    penrithpanthers: ["panthers"], southsydneyrabbitohs: ["rabbitohs"],
+    stgeorgeillawarradragons: ["dragons", "stgeorgedragons"], sydneyroosters: ["roosters"],
+    newzealandwarriors: ["warriors"], weststigers: ["tigers"], thedolphins: ["dolphins"],
+  };
+  const candidates = [key, ...(aliases[key] ?? [])];
+  for (const candidate of candidates) {
+    const match = Object.entries(logos).find(([name]) => normalise(name) === candidate);
+    if (match) return match[1];
+  }
+  return Object.entries(logos).find(([name]) => {
+    const logoKey = normalise(name);
+    return candidates.some((candidate) => logoKey.includes(candidate) || candidate.includes(logoKey));
+  })?.[1];
+}
+
+function isRabbitohs(team: string): boolean {
+  return /rabbitoh|south\s*sydney/i.test(team);
+}
+
+export function MatchupHeatmap({ year, competition, round, roundOptions, gameWindow, teamLogos, direction = "defense", onRoundChange, onDirectionChange }: {
+  teamLogos: Record<string, string>; year: string; competition: "nrl" | "cup"; round: string; roundOptions: { value: string; label: string }[]; gameWindow: number | null; direction?: MatchupDirection; onRoundChange: (round: string) => void; onDirectionChange: (direction: MatchupDirection) => void;
+}) {
+  const [metric, setMetric] = useState<MatchupMetric>("Run metres");
+  const [valueMode, setValueMode] = useState<MatchupValueMode>("Average");
+  const [source, setSource] = useState<{ key: string; rows: PlayerStat[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [loadedLogos, setLoadedLogos] = useState<Record<string, string> | null>(null);
+  const logos = useMemo(() => ({ ...teamLogos, ...loadedLogos }), [teamLogos, loadedLogos]);
+  const key = `${competition}:${year}:${attempt}`;
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/player-stats?years=${encodeURIComponent(year)}${competition === "cup" ? "&competition=cup" : ""}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load matchup data.");
+        const rows = await response.json() as PlayerStat[];
+        if (!controller.signal.aborted) { setSource({ key, rows }); setError(null); }
+      })
+      .catch(() => { if (!controller.signal.aborted) setError(key); });
+    return () => controller.abort();
+  }, [competition, year, key]);
+  const teams = useMemo(() => buildMatchupHeatmap(
+    source?.key === key ? source.rows.filter((row) => round === "all" || String(row.Round) === round) : [],
+    metric, round === "all" ? gameWindow : null, valueMode, direction
+  ), [source, key, round, metric, gameWindow, valueMode, direction]);
+  const missingLogos = teams.some((team) => !logoFor(team.team, logos));
+  useEffect(() => {
+    if (!missingLogos || loadedLogos !== null) return;
+    const controller = new AbortController();
+    fetch("/api/team-logos", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load team logos");
+        const result = await response.json() as Record<string, string>;
+        if (!controller.signal.aborted) setLoadedLogos(result);
+      })
+      .catch(() => { if (!controller.signal.aborted) setLoadedLogos({}); });
+    return () => controller.abort();
+  }, [missingLogos, loadedLogos]);
+  const columnRanges = useMemo(
+    () => PLAYER_ATTACK_POSITIONS.map((_, index) => {
+      const values = teams.flatMap((team) => {
+        const value = team.cells[index]?.value;
+        return value == null ? [] : [value];
+      });
+      return { min: Math.min(...values), max: Math.max(...values) };
+    }),
+    [teams]
+  );
+
+  return <div className="space-y-3">
+    <div className="flex flex-wrap gap-3"><div className="w-24"><Select label="For / Against" compact value={direction === "defense" ? "Against" : "For"} options={["For", "Against"]} onChange={(value) => onDirectionChange(value === "Against" ? "defense" : "attack")} /></div><div className="w-36"><Select label="Stat" compact value={metric} options={Object.keys(MATCHUP_METRICS)} onChange={(value) => setMetric(value as MatchupMetric)} /></div><div className="w-28"><Select label="Display" compact value={valueMode} options={["Average", "Percentage"]} onChange={(value) => setValueMode(value as MatchupValueMode)} /></div><div className="w-24"><Select label="Round" compact value={round} options={roundOptions} onChange={onRoundChange} /></div></div>
+    {error === key ? <div role="alert">Unable to load matchup data. <button className="text-nrl-accent underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div>
+      : source?.key !== key ? <div role="status" className="p-8 text-center text-nrl-muted">Loading matchup data…</div>
+      : !teams.length ? <div className="p-8 text-center text-nrl-muted">No matchup data for this selection.</div>
+      : <>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] border-separate border-spacing-0.5 text-[11px]">
+            <caption className="sr-only">Team {metric.toLowerCase()} {valueMode.toLowerCase()} by position</caption>
+            <thead><tr><th scope="col" className="w-12"><span className="sr-only">Team</span></th>{PLAYER_ATTACK_POSITIONS.map((position) => <th scope="col" key={position} className="px-1.5 py-2">{position}</th>)}</tr></thead>
+            <tbody>{teams.map((team) => <tr key={team.team}>
+              <th scope="row" className="px-2" title={`${team.team} · ${team.games} games`}>
+                {logoFor(team.team, logos) ? <Image src={logoFor(team.team, logos)!} alt={team.team} width={28} height={28} unoptimized className="mx-auto h-7 w-7 object-contain" style={isRabbitohs(team.team) ? { filter: "drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white) drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white)" } : undefined} /> : <span aria-label={team.team} className="text-nrl-muted">{team.team.slice(0, 3).toUpperCase()}</span>}
+              </th>
+              {team.cells.map((cell, index) => {
+                const range = columnRanges[index];
+                const fraction = cell.value == null || !Number.isFinite(range.min) || range.max === range.min
+                  ? 0.5
+                  : (cell.value - range.min) / (range.max - range.min);
+                return <td key={cell.position} className={`rounded px-1.5 py-2 text-center font-bold ${cell.value === null ? "text-nrl-muted" : "text-nrl-bg"}`} style={cell.value === null ? undefined : { backgroundColor: `color-mix(in srgb, ${singleAxisHeatColor(1 - fraction)} 82%, var(--color-nrl-panel))` }} title={`${team.team} vs ${cell.position}: ${cell.value?.toFixed(1) ?? "No data"}${valueMode === "Percentage" ? "%" : ` ${metric.toLowerCase()} per game`} (${cell.games} games)`}>{cell.value?.toFixed(1) ?? "—"}{cell.value === null || valueMode === "Average" ? "" : "%"}</td>;
+              })}
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </>}
+  </div>;
+}

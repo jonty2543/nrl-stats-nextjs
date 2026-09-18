@@ -41,6 +41,7 @@ export function RoundByRound({ entity, competition, year, years, initialRows, on
   const selectedInputValue = selected || effectiveSelected;
   const effectiveDirection = entity === "Teams" ? direction : "For";
   const points = useMemo(() => buildRoundByRound(rows, entity, effectiveSelected, stat, effectiveDirection === "Against"), [rows, entity, effectiveSelected, stat, effectiveDirection]);
+  const selectedPoint = points.find((point) => point.round === selectedRound);
   const rounds = [...new Set(rows.map((row) => Number(row.Round)))].filter(Number.isFinite).sort((a, b) => a - b);
   const min = Math.min(0, ...points.flatMap((point) => point.value === null ? [] : [point.value]));
   const max = Math.max(1, ...points.flatMap((point) => point.value === null ? [] : [point.value]));
@@ -67,6 +68,13 @@ export function RoundByRound({ entity, competition, year, years, initialRows, on
       <div className="w-20"><Select label="Season" compact value={year} options={years} onChange={onYearChange} /></div>
     </div>
     <h2 className="text-sm font-bold">Round by Round · {effectiveSelected} · {stat} {effectiveDirection.toLowerCase()}</h2>
+    {selectedPoint ? (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-[11px] text-nrl-muted">
+        <span className="font-black text-nrl-text">{selectedPoint.label}</span>
+        <span>vs {selectedPoint.opponent ?? "Unknown"}</span>
+        <span className="font-black text-nrl-accent">{selectedPoint.value == null ? "No data" : selectedPoint.value.toFixed(1)}</span>
+      </div>
+    ) : null}
     {error === key ? <div role="alert">Unable to load rounds. <button className="text-nrl-accent underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div>
       : !hasRowsSource ? <p role="status" className="py-12 text-center text-nrl-muted">Loading rounds…</p>
       : !points.length ? <p className="py-12 text-center text-nrl-muted">No games available for this selection.</p>

@@ -103,7 +103,7 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
     : LOWER_IS_BETTER_MATCHUP_METRICS.has(metric);
 
   return <div className="space-y-3">
-    <div className="flex flex-wrap gap-3"><div className="w-24"><Select label="For / Against" compact value={direction === "defense" ? "Against" : "For"} options={["For", "Against"]} onChange={(value) => onDirectionChange(value === "Against" ? "defense" : "attack")} /></div><div className="w-36"><Select label="Stat" compact value={metric} options={Object.keys(MATCHUP_METRICS)} onChange={(value) => setMetric(value as MatchupMetric)} /></div><div className="w-28"><Select label="Display" compact value={valueMode} options={["Average", "Percentage"]} onChange={(value) => setValueMode(value as MatchupValueMode)} /></div><div className="w-24"><Select label="Round" compact value={round} options={roundOptions} onChange={onRoundChange} /></div></div>
+    <div className="flex flex-nowrap gap-3 overflow-x-auto [scrollbar-width:thin]"><div className="w-24 shrink-0"><Select label="For / Against" compact value={direction === "defense" ? "Against" : "For"} options={["For", "Against"]} onChange={(value) => onDirectionChange(value === "Against" ? "defense" : "attack")} /></div><div className="w-36 shrink-0"><Select label="Stat" compact value={metric} options={Object.keys(MATCHUP_METRICS)} onChange={(value) => setMetric(value as MatchupMetric)} /></div><div className="w-28 shrink-0"><Select label="Display" compact value={valueMode} options={["Average", "Percentage"]} onChange={(value) => setValueMode(value as MatchupValueMode)} /></div><div className="w-24 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={onRoundChange} /></div></div>
     {error === key ? <div role="alert">Unable to load matchup data. <button className="text-nrl-accent underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div>
       : !hasRowsSource ? <div role="status" className="p-8 text-center text-nrl-muted">Loading matchup data…</div>
       : !teams.length ? <div className="p-8 text-center text-nrl-muted">No matchup data for this selection.</div>
@@ -111,9 +111,9 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-separate border-spacing-0.5 text-[11px]">
             <caption className="sr-only">Team {metric.toLowerCase()} {valueMode.toLowerCase()} by position</caption>
-            <thead><tr><th scope="col" className="w-12"><span className="sr-only">Team</span></th>{PLAYER_ATTACK_POSITIONS.map((position) => <th scope="col" key={position} className="px-1.5 py-2">{position}</th>)}</tr></thead>
+            <thead><tr><th scope="col" className="sticky left-0 z-20 w-12 bg-nrl-panel px-2"><span className="sr-only">Team</span></th>{PLAYER_ATTACK_POSITIONS.map((position) => <th scope="col" key={position} className="px-1.5 py-2">{position}</th>)}</tr></thead>
             <tbody>{teams.map((team) => <tr key={team.team}>
-              <th scope="row" className="px-2" title={`${team.team} · ${team.games} games`}>
+              <th scope="row" className="sticky left-0 z-10 bg-nrl-panel px-2" title={`${team.team} · ${team.games} games`}>
                 {logoFor(team.team, logos) ? <Image src={logoFor(team.team, logos)!} alt={team.team} width={28} height={28} unoptimized data-team-logo={isRabbitohs(team.team) ? "rabbitohs" : undefined} className={`mx-auto h-7 w-7 object-contain ${isRabbitohs(team.team) ? "team-logo-rabbitohs" : ""}`} /> : <span aria-label={team.team} className="text-nrl-muted">{team.team.slice(0, 3).toUpperCase()}</span>}
               </th>
               {team.cells.map((cell, index) => {

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import type { PlayerStat } from "@/lib/data/types";
-import { PLAYER_ATTACK_POSITIONS } from "@/lib/data/player-attack";
+import { PLAYER_ATTACK_POSITIONS, type PlayerAttackPosition } from "@/lib/data/player-attack";
 import { buildMatchupHeatmap, MATCHUP_METRICS, type MatchupDirection, type MatchupMetric, type MatchupValueMode } from "@/lib/data/matchup-heatmap";
 import { Select } from "@/components/ui/select";
 import { singleAxisHeatColor } from "@/lib/data/heat-colors";
@@ -49,6 +49,7 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
 }) {
   const [metric, setMetric] = useState<MatchupMetric>("Run metres");
   const [valueMode, setValueMode] = useState<MatchupValueMode>("Average");
+  const [sortPosition, setSortPosition] = useState<PlayerAttackPosition | "Team">("Team");
   const [source, setSource] = useState<{ key: string; rows: PlayerStat[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -101,9 +102,22 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
   const higherIsGood = direction === "attack"
     ? !LOWER_IS_BETTER_MATCHUP_METRICS.has(metric)
     : LOWER_IS_BETTER_MATCHUP_METRICS.has(metric);
+  const sortedTeams = useMemo(() => {
+    if (sortPosition === "Team") return teams;
+    const positionIndex = PLAYER_ATTACK_POSITIONS.indexOf(sortPosition);
+    if (positionIndex === -1) return teams;
+    return [...teams].sort((left, right) => {
+      const leftValue = left.cells[positionIndex]?.value;
+      const rightValue = right.cells[positionIndex]?.value;
+      if (leftValue == null && rightValue == null) return left.team.localeCompare(right.team);
+      if (leftValue == null) return 1;
+      if (rightValue == null) return -1;
+      return rightValue - leftValue || left.team.localeCompare(right.team);
+    });
+  }, [sortPosition, teams]);
 
   return <div className="space-y-3">
-    <div className="flex flex-nowrap gap-3 overflow-x-auto [scrollbar-width:thin]"><div className="w-24 shrink-0"><Select label="For / Against" compact value={direction === "defense" ? "Against" : "For"} options={["For", "Against"]} onChange={(value) => onDirectionChange(value === "Against" ? "defense" : "attack")} /></div><div className="w-36 shrink-0"><Select label="Stat" compact value={metric} options={Object.keys(MATCHUP_METRICS)} onChange={(value) => setMetric(value as MatchupMetric)} /></div><div className="w-28 shrink-0"><Select label="Display" compact value={valueMode} options={["Average", "Percentage"]} onChange={(value) => setValueMode(value as MatchupValueMode)} /></div><div className="w-24 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={onRoundChange} /></div></div>
+    <div className="flex flex-nowrap gap-3 overflow-x-auto [scrollbar-width:thin]"><div className="w-24 shrink-0"><Select label="For / Against" compact value={direction === "defense" ? "Against" : "For"} options={["For", "Against"]} onChange={(value) => onDirectionChange(value === "Against" ? "defense" : "attack")} /></div><div className="w-36 shrink-0"><Select label="Stat" compact value={metric} options={Object.keys(MATCHUP_METRICS)} onChange={(value) => setMetric(value as MatchupMetric)} /></div><div className="w-28 shrink-0"><Select label="Display" compact value={valueMode} options={["Average", "Percentage"]} onChange={(value) => setValueMode(value as MatchupValueMode)} /></div><div className="w-24 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={onRoundChange} /></div><div className="w-28 shrink-0"><Select label="Sort" compact value={sortPosition} options={["Team", ...PLAYER_ATTACK_POSITIONS]} onChange={(value) => setSortPosition(value as PlayerAttackPosition | "Team")} /></div></div>
     {error === key ? <div role="alert">Unable to load matchup data. <button className="text-nrl-accent underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div>
       : !hasRowsSource ? <div role="status" className="p-8 text-center text-nrl-muted">Loading matchup data…</div>
       : !teams.length ? <div className="p-8 text-center text-nrl-muted">No matchup data for this selection.</div>
@@ -111,9 +125,9 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-separate border-spacing-0.5 text-[11px]">
             <caption className="sr-only">Team {metric.toLowerCase()} {valueMode.toLowerCase()} by position</caption>
-            <thead><tr><th scope="col" className="sticky left-0 z-20 w-12 bg-nrl-panel px-2"><span className="sr-only">Team</span></th>{PLAYER_ATTACK_POSITIONS.map((position) => <th scope="col" key={position} className="px-1.5 py-2">{position}</th>)}</tr></thead>
-            <tbody>{teams.map((team) => <tr key={team.team}>
-              <th scope="row" className="sticky left-0 z-10 bg-nrl-panel px-2" title={`${team.team} · ${team.games} games`}>
+            <thead><tr><th scope="col" className="sticky left-0 z-20 w-14 min-w-14 bg-nrl-panel px-2 shadow-[8px_0_0_var(--color-nrl-panel)]"><span className="sr-only">Team</span></th>{PLAYER_ATTACK_POSITIONS.map((position) => <th scope="col" key={position} className="px-1.5 py-2">{position}</th>)}</tr></thead>
+            <tbody>{sortedTeams.map((team) => <tr key={team.team}>
+              <th scope="row" className="sticky left-0 z-10 w-14 min-w-14 bg-nrl-panel px-2 shadow-[8px_0_0_var(--color-nrl-panel)]" title={`${team.team} · ${team.games} games`}>
                 {logoFor(team.team, logos) ? <Image src={logoFor(team.team, logos)!} alt={team.team} width={28} height={28} unoptimized data-team-logo={isRabbitohs(team.team) ? "rabbitohs" : undefined} className={`mx-auto h-7 w-7 object-contain ${isRabbitohs(team.team) ? "team-logo-rabbitohs" : ""}`} /> : <span aria-label={team.team} className="text-nrl-muted">{team.team.slice(0, 3).toUpperCase()}</span>}
               </th>
               {team.cells.map((cell, index) => {

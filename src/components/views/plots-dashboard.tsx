@@ -2595,7 +2595,15 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
       </div>
 
       {isRoundByRound ? (
-        <RoundByRound key={entity} entity={entity === "Players" ? "Players" : "Teams"} competition={competition} year={year} years={activeAvailableYears} onYearChange={(value) => void changeYear(value)} />
+        <RoundByRound
+          key={entity}
+          entity={entity === "Players" ? "Players" : "Teams"}
+          competition={competition}
+          year={year}
+          years={activeAvailableYears}
+          initialRows={entity === "Players" ? playerRowsByYear[activeYearKey] : rowsByYear[activeYearKey]}
+          onYearChange={(value) => void changeYear(value)}
+        />
       ) : entity === "Players" ? (
         <section className="overflow-hidden rounded-2xl border border-nrl-border bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
           {playerSection === "Other" ? (
@@ -2843,7 +2851,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
               </div>
             ) : null}
             {isMatchupHeatmap || isAttackHeatmap ? (
-              <MatchupHeatmap teamLogos={teamLogos} year={year} competition={competition} round={round} roundOptions={roundOptions} gameWindow={gameWindow} direction={isAttackHeatmap ? "attack" : "defense"} onRoundChange={changeRound} onDirectionChange={(direction) => {
+              <MatchupHeatmap teamLogos={teamLogos} year={year} competition={competition} round={round} roundOptions={roundOptions} gameWindow={gameWindow} initialRows={playerRowsByYear[activeYearKey]} direction={isAttackHeatmap ? "attack" : "defense"} onRoundChange={changeRound} onDirectionChange={(direction) => {
                 if (direction === "attack") {
                   setTeamSection("Attack");
                   setAttackPlot("Attack heatmap");

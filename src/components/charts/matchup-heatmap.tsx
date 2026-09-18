@@ -8,6 +8,14 @@ import { buildMatchupHeatmap, MATCHUP_METRICS, type MatchupDirection, type Match
 import { Select } from "@/components/ui/select";
 import { singleAxisHeatColor } from "@/lib/data/heat-colors";
 
+const playerRowsCache = new Map<string, PlayerStat[]>();
+const LOWER_IS_BETTER_MATCHUP_METRICS = new Set<MatchupMetric>([
+  "Missed tackles" as MatchupMetric,
+  "Ineffective tackles" as MatchupMetric,
+  "Errors" as MatchupMetric,
+  "Penalties" as MatchupMetric,
+]);
+
 function logoFor(team: string, logos: Record<string, string>): string | undefined {
   const normalise = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
   const key = normalise(team);
@@ -36,8 +44,8 @@ function isRabbitohs(team: string): boolean {
   return /rabbitoh|south\s*sydney/i.test(team);
 }
 
-export function MatchupHeatmap({ year, competition, round, roundOptions, gameWindow, teamLogos, direction = "defense", onRoundChange, onDirectionChange }: {
-  teamLogos: Record<string, string>; year: string; competition: "nrl" | "cup"; round: string; roundOptions: { value: string; label: string }[]; gameWindow: number | null; direction?: MatchupDirection; onRoundChange: (round: string) => void; onDirectionChange: (direction: MatchupDirection) => void;
+export function MatchupHeatmap({ year, competition, round, roundOptions, gameWindow, teamLogos, initialRows, direction = "defense", onRoundChange, onDirectionChange }: {
+  teamLogos: Record<string, string>; year: string; competition: "nrl" | "cup"; round: string; roundOptions: { value: string; label: string }[]; gameWindow: number | null; initialRows?: PlayerStat[]; direction?: MatchupDirection; onRoundChange: (round: string) => void; onDirectionChange: (direction: MatchupDirection) => void;
 }) {
   const [metric, setMetric] = useState<MatchupMetric>("Run metres");
   const [valueMode, setValueMode] = useState<MatchupValueMode>("Average");
@@ -47,21 +55,26 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
   const [loadedLogos, setLoadedLogos] = useState<Record<string, string> | null>(null);
   const logos = useMemo(() => ({ ...teamLogos, ...loadedLogos }), [teamLogos, loadedLogos]);
   const key = `${competition}:${year}:${attempt}`;
+  const dataKey = `${competition}:${year}`;
+  const cachedRows = playerRowsCache.get(dataKey);
+  const immediateRows = initialRows ?? cachedRows;
   useEffect(() => {
+    if (immediateRows) return;
     const controller = new AbortController();
     fetch(`/api/player-stats?years=${encodeURIComponent(year)}${competition === "cup" ? "&competition=cup" : ""}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Unable to load matchup data.");
         const rows = await response.json() as PlayerStat[];
-        if (!controller.signal.aborted) { setSource({ key, rows }); setError(null); }
+        if (!controller.signal.aborted) { playerRowsCache.set(dataKey, rows); setSource({ key, rows }); setError(null); }
       })
       .catch(() => { if (!controller.signal.aborted) setError(key); });
     return () => controller.abort();
-  }, [competition, year, key]);
+  }, [competition, year, key, dataKey, immediateRows]);
   const teams = useMemo(() => buildMatchupHeatmap(
-    source?.key === key ? source.rows.filter((row) => round === "all" || String(row.Round) === round) : [],
+    (immediateRows ?? (source?.key === key ? source.rows : [])).filter((row) => round === "all" || String(row.Round) === round),
     metric, round === "all" ? gameWindow : null, valueMode, direction
-  ), [source, key, round, metric, gameWindow, valueMode, direction]);
+  ), [immediateRows, source, key, round, metric, gameWindow, valueMode, direction]);
+  const hasRowsSource = Boolean(immediateRows) || source?.key === key;
   const missingLogos = teams.some((team) => !logoFor(team.team, logos));
   useEffect(() => {
     if (!missingLogos || loadedLogos !== null) return;
@@ -85,11 +98,14 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
     }),
     [teams]
   );
+  const higherIsGood = direction === "attack"
+    ? !LOWER_IS_BETTER_MATCHUP_METRICS.has(metric)
+    : LOWER_IS_BETTER_MATCHUP_METRICS.has(metric);
 
   return <div className="space-y-3">
     <div className="flex flex-wrap gap-3"><div className="w-24"><Select label="For / Against" compact value={direction === "defense" ? "Against" : "For"} options={["For", "Against"]} onChange={(value) => onDirectionChange(value === "Against" ? "defense" : "attack")} /></div><div className="w-36"><Select label="Stat" compact value={metric} options={Object.keys(MATCHUP_METRICS)} onChange={(value) => setMetric(value as MatchupMetric)} /></div><div className="w-28"><Select label="Display" compact value={valueMode} options={["Average", "Percentage"]} onChange={(value) => setValueMode(value as MatchupValueMode)} /></div><div className="w-24"><Select label="Round" compact value={round} options={roundOptions} onChange={onRoundChange} /></div></div>
     {error === key ? <div role="alert">Unable to load matchup data. <button className="text-nrl-accent underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div>
-      : source?.key !== key ? <div role="status" className="p-8 text-center text-nrl-muted">Loading matchup data…</div>
+      : !hasRowsSource ? <div role="status" className="p-8 text-center text-nrl-muted">Loading matchup data…</div>
       : !teams.length ? <div className="p-8 text-center text-nrl-muted">No matchup data for this selection.</div>
       : <>
         <div className="overflow-x-auto">
@@ -98,14 +114,15 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
             <thead><tr><th scope="col" className="w-12"><span className="sr-only">Team</span></th>{PLAYER_ATTACK_POSITIONS.map((position) => <th scope="col" key={position} className="px-1.5 py-2">{position}</th>)}</tr></thead>
             <tbody>{teams.map((team) => <tr key={team.team}>
               <th scope="row" className="px-2" title={`${team.team} · ${team.games} games`}>
-                {logoFor(team.team, logos) ? <Image src={logoFor(team.team, logos)!} alt={team.team} width={28} height={28} unoptimized className="mx-auto h-7 w-7 object-contain" style={isRabbitohs(team.team) ? { filter: "drop-shadow(1px 0 0 white) drop-shadow(-1px 0 0 white) drop-shadow(0 1px 0 white) drop-shadow(0 -1px 0 white)" } : undefined} /> : <span aria-label={team.team} className="text-nrl-muted">{team.team.slice(0, 3).toUpperCase()}</span>}
+                {logoFor(team.team, logos) ? <Image src={logoFor(team.team, logos)!} alt={team.team} width={28} height={28} unoptimized data-team-logo={isRabbitohs(team.team) ? "rabbitohs" : undefined} className={`mx-auto h-7 w-7 object-contain ${isRabbitohs(team.team) ? "team-logo-rabbitohs" : ""}`} /> : <span aria-label={team.team} className="text-nrl-muted">{team.team.slice(0, 3).toUpperCase()}</span>}
               </th>
               {team.cells.map((cell, index) => {
                 const range = columnRanges[index];
                 const fraction = cell.value == null || !Number.isFinite(range.min) || range.max === range.min
                   ? 0.5
                   : (cell.value - range.min) / (range.max - range.min);
-                return <td key={cell.position} className={`rounded px-1.5 py-2 text-center font-bold ${cell.value === null ? "text-nrl-muted" : "text-nrl-bg"}`} style={cell.value === null ? undefined : { backgroundColor: `color-mix(in srgb, ${singleAxisHeatColor(1 - fraction)} 82%, var(--color-nrl-panel))` }} title={`${team.team} vs ${cell.position}: ${cell.value?.toFixed(1) ?? "No data"}${valueMode === "Percentage" ? "%" : ` ${metric.toLowerCase()} per game`} (${cell.games} games)`}>{cell.value?.toFixed(1) ?? "—"}{cell.value === null || valueMode === "Average" ? "" : "%"}</td>;
+                const colorRatio = higherIsGood ? fraction : 1 - fraction;
+                return <td key={cell.position} className={`rounded px-1.5 py-2 text-center font-bold ${cell.value === null ? "text-nrl-muted" : "text-nrl-bg"}`} style={cell.value === null ? undefined : { backgroundColor: `color-mix(in srgb, ${singleAxisHeatColor(colorRatio)} 82%, var(--color-nrl-panel))` }} title={`${team.team} vs ${cell.position}: ${cell.value?.toFixed(1) ?? "No data"}${valueMode === "Percentage" ? "%" : ` ${metric.toLowerCase()} per game`} (${cell.games} games)`}>{cell.value?.toFixed(1) ?? "—"}{cell.value === null || valueMode === "Average" ? "" : "%"}</td>;
               })}
             </tr>)}</tbody>
           </table>

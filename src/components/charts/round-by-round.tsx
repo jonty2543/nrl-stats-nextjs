@@ -5,8 +5,10 @@ import { Select } from "@/components/ui/select";
 import { buildRoundByRound, ROUND_BY_ROUND_STATS, type RoundRow, type RoundStat } from "@/lib/data/round-by-round";
 import type { PlayerStat } from "@/lib/data/types";
 
-export function RoundByRound({ entity, competition, year, years, onYearChange }: {
-  entity: "Players" | "Teams"; competition: "nrl" | "cup"; year: string; years: string[]; onYearChange: (year: string) => void;
+const rowsCache = new Map<string, RoundRow[]>();
+
+export function RoundByRound({ entity, competition, year, years, initialRows, onYearChange }: {
+  entity: "Players" | "Teams"; competition: "nrl" | "cup"; year: string; years: string[]; initialRows?: RoundRow[]; onYearChange: (year: string) => void;
 }) {
   const [stat, setStat] = useState<RoundStat>("Run metres");
   const [selected, setSelected] = useState("");
@@ -17,20 +19,26 @@ export function RoundByRound({ entity, competition, year, years, onYearChange }:
   const chartScrollRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const key = `${entity}:${competition}:${year}:${attempt}`;
+  const dataKey = `${entity}:${competition}:${year}`;
+  const cachedRows = rowsCache.get(dataKey);
+  const immediateRows = initialRows?.length ? initialRows : cachedRows;
   useEffect(() => {
+    if (immediateRows) return;
     const controller = new AbortController();
     const endpoint = entity === "Players" ? "player-stats" : "team-stats";
     fetch(`/api/${endpoint}?years=${encodeURIComponent(year)}&competition=${competition}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Unable to load rounds");
         const rows = await response.json() as RoundRow[];
-        if (!controller.signal.aborted) { setSource({ key, rows }); setError(null); }
+        if (!controller.signal.aborted) { rowsCache.set(dataKey, rows); setSource({ key, rows }); setError(null); }
       }).catch(() => { if (!controller.signal.aborted) setError(key); });
     return () => controller.abort();
-  }, [entity, competition, year, key]);
-  const rows = useMemo(() => source?.key === key ? source.rows : [], [source, key]);
+  }, [entity, competition, year, key, dataKey, immediateRows]);
+  const rows = useMemo(() => immediateRows ?? (source?.key === key ? source.rows : []), [immediateRows, source, key]);
+  const hasRowsSource = Boolean(immediateRows) || source?.key === key;
   const options = useMemo(() => [...new Set(rows.map((row) => entity === "Players" ? (row as PlayerStat).Name : row.Team))].filter(Boolean).sort(), [rows, entity]);
   const effectiveSelected = options.includes(selected) ? selected : options[0] ?? "";
+  const selectedInputValue = selected || effectiveSelected;
   const effectiveDirection = entity === "Teams" ? direction : "For";
   const points = useMemo(() => buildRoundByRound(rows, entity, effectiveSelected, stat, effectiveDirection === "Against"), [rows, entity, effectiveSelected, stat, effectiveDirection]);
   const rounds = [...new Set(rows.map((row) => Number(row.Round)))].filter(Number.isFinite).sort((a, b) => a - b);
@@ -50,7 +58,7 @@ export function RoundByRound({ entity, competition, year, years, onYearChange }:
       {entity === "Players" ? (
         <label className="flex w-40 shrink-0 flex-col gap-0.5">
           <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Player</span>
-          <input list="round-by-round-players" value={selected} placeholder="Search player" onChange={(event) => setSelected(event.target.value)} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" />
+          <input list="round-by-round-players" value={selectedInputValue} placeholder="Search player" onChange={(event) => setSelected(event.target.value)} className="h-8 rounded-md border border-nrl-border bg-nrl-panel px-2.5 text-[10px] text-nrl-text outline-none focus:border-nrl-accent" />
           <datalist id="round-by-round-players">{options.map((option) => <option key={option} value={option} />)}</datalist>
         </label>
       ) : <div className="w-40 shrink-0"><Select label="Team" compact value={effectiveSelected} options={options} onChange={setSelected} /></div>}
@@ -60,7 +68,7 @@ export function RoundByRound({ entity, competition, year, years, onYearChange }:
     </div>
     <h2 className="text-sm font-bold">Round by Round · {effectiveSelected} · {stat} {effectiveDirection.toLowerCase()}</h2>
     {error === key ? <div role="alert">Unable to load rounds. <button className="text-nrl-accent underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div>
-      : source?.key !== key ? <p role="status" className="py-12 text-center text-nrl-muted">Loading rounds…</p>
+      : !hasRowsSource ? <p role="status" className="py-12 text-center text-nrl-muted">Loading rounds…</p>
       : !points.length ? <p className="py-12 text-center text-nrl-muted">No games available for this selection.</p>
       : <div ref={chartScrollRef} className="overflow-x-auto"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${effectiveSelected}: ${stat} ${effectiveDirection.toLowerCase()} by round`} className="h-auto w-full" style={{ minWidth: width }}>
         {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {

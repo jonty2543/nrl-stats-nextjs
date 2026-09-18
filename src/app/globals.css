@@ -216,10 +216,11 @@ button:disabled {
 
 /* Clerk theme overrides */
 .team-logo-rabbitohs,
-img[src*="rabbitohs"],
-img[src*="Rabbitohs"],
-svg image[href*="rabbitohs"],
-svg image[href*="Rabbitohs"] {
+img[data-team-logo="rabbitohs"],
+img[alt*="Rabbitohs" i][src*="rabbitohs"],
+img[alt*="South Sydney" i][src*="rabbitohs"],
+svg image[href*="rabbitohs"][preserveAspectRatio="xMidYMid meet"],
+svg image[data-team-logo="rabbitohs"] {
   filter: drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff);
 }
 

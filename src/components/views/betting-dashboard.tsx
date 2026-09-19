@@ -1269,6 +1269,19 @@ function formatBestBetSelection(market: BettingMarket, selection: string, lineVa
   return selection;
 }
 
+function formatCompactBetSelection(market: BettingMarket, selection: string, lineValue: number | null): string {
+  if (market === "Tryscorer") return formatBestBetSelection(market, selection, lineValue);
+  if (market === "Total") return lineValue == null ? selection : `${selection} ${formatMarketLineValue(market, lineValue)}`;
+
+  const teamName = shortTeamName(stripSelectionLineSuffix(selection));
+  if (market === "Line" && lineValue != null) return `${teamName} ${formatMarketLineValue(market, lineValue)}`;
+
+  const marginSuffix = selection.trim().match(/\b(1\s*[-–]\s*12|13\s*\+)\s*$/i)?.[1]?.replace(/\s+/g, "");
+  if (market === "Margin" && marginSuffix) return `${teamName} ${marginSuffix}`;
+
+  return teamName;
+}
+
 function formatPct(value: number | null): string {
   if (value == null) return "-";
   return `${value.toFixed(2)}%`;
@@ -2759,16 +2772,21 @@ export function BettingDashboard({
   }, [bets, betsHydrated, hasPremiumBettingAccess, isLoaded, userId]);
 
   useEffect(() => {
-    if (!betAddedMessage) return;
-    const timeout = window.setTimeout(() => setBetAddedMessage(null), 2200);
-    return () => window.clearTimeout(timeout);
-  }, [betAddedMessage]);
-
-  useEffect(() => {
     if (!betRemovedMessage) return;
     const timeout = window.setTimeout(() => setBetRemovedMessage(null), 2200);
     return () => window.clearTimeout(timeout);
   }, [betRemovedMessage]);
+
+  useEffect(() => {
+    if (!betAddedMessage) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setBetAddedMessage(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [betAddedMessage]);
 
   const activeTourStep = tourStepIndex == null ? null : BETTING_TOUR_STEPS[tourStepIndex] ?? null;
   const tourIsOpen = activeTourStep != null;
@@ -4620,8 +4638,29 @@ export function BettingDashboard({
       ) : null}
 
       {betAddedMessage ? (
-        <div className="fixed bottom-4 right-4 z-[120] rounded-md border border-emerald-300/40 bg-nrl-panel px-3 py-2 text-xs font-semibold text-emerald-300 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
-          {betAddedMessage}
+        <div
+          className="fixed inset-0 z-[160] grid place-items-center bg-black/70 px-4"
+          onClick={() => setBetAddedMessage(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bet-added-title"
+            className="w-full max-w-sm rounded-xl border border-emerald-300/40 bg-[#10162f] p-5 text-center shadow-[0_24px_80px_rgba(0,0,0,0.58)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div id="bet-added-title" className="text-base font-bold text-emerald-300">
+              {betAddedMessage}
+            </div>
+            <p className="mt-2 text-xs text-nrl-muted">Your tracker has been updated.</p>
+            <button
+              type="button"
+              onClick={() => setBetAddedMessage(null)}
+              className="mt-4 w-full cursor-pointer rounded-md border border-emerald-300/40 bg-emerald-400/12 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/18"
+            >
+              Done
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -4633,7 +4672,7 @@ export function BettingDashboard({
 
       <div
         data-betting-tour="main-dashboard"
-        className={`scroll-mt-24 space-y-7 rounded-xl ${bookieSlipOpen ? "hidden" : ""} ${
+        className={`scroll-mt-24 space-y-7 rounded-xl ${bookieSlipOpen || betAddedMessage ? "hidden" : ""} ${
           activeTourStep?.target === "main-dashboard" ? BETTING_TOUR_HIGHLIGHT_CLASS : ""
         }`}
       >
@@ -6160,6 +6199,8 @@ function MarketSection({
                           match: group.match,
                           selection: row.result,
                         });
+                    const mobileSelectionLabel = formatCompactBetSelection(group.market, row.result, row.bestValueComputed);
+                    const fullSelectionLabel = formatBestBetSelection(group.market, row.result, row.bestValueComputed);
                     const mobileBetAction = canAccessPremium ? (
                       <button
                         type="button"
@@ -6218,7 +6259,7 @@ function MarketSection({
                             )}
                             <div className="min-w-0 flex-1">
                               <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-y-3 text-xs font-semibold text-nrl-text">
-                                <span className="min-w-0 truncate pr-1">{row.result}</span>
+                                <span className="min-w-0 truncate pr-1" title={fullSelectionLabel}>{mobileSelectionLabel}</span>
                                 <div className="flex flex-col gap-3.5">
                                   <div className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-nrl-muted">

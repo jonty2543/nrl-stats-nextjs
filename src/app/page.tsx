@@ -179,7 +179,10 @@ export default function Home() {
               },
               */
             ].map((feature) => (
-              <div key={feature.eyebrow} data-landing-reveal>
+              <div
+                key={feature.eyebrow}
+                data-landing-reveal={feature.eyebrow === "Betting" ? undefined : ""}
+              >
                 <FeatureSection {...feature} />
               </div>
             ))}

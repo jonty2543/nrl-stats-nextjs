@@ -10,9 +10,6 @@
   opacity: 1;
   transform: translateY(0);
 }
-.landing [data-landing-artwork][data-loaded="true"] {
-  animation: arrive 1100ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
 .landing [data-landing-feature] {
   border-top: 2px solid var(--feature-accent);
   transition: border-color 220ms ease, background-color 220ms ease, box-shadow 220ms ease;
@@ -33,16 +30,11 @@
   outline: 2px solid #6ee7b7;
   outline-offset: 5px;
 }
-@keyframes arrive {
-  from { opacity: 0; transform: translateY(24px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0); }
-}
 @media (min-width: 1024px) {
   .landing [data-landing-reveal]:nth-child(even) { transition-delay: 100ms; }
 }
 @media (prefers-reduced-motion: reduce) {
   .landing [data-landing-reveal],
-  .landing [data-landing-artwork][data-loaded="true"],
   .landing [data-landing-feature],
   .landing [data-landing-feature] a span {
     animation: none;

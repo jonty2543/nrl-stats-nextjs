@@ -1,21 +1,10 @@
-import Image from "next/image"
 import Link from "next/link"
 import type { CSSProperties } from "react"
 import { LandingHeroScrollShell } from "@/components/views/landing-hero-scroll-shell"
+import { LandingPlayerImage } from "@/components/views/landing-player-image"
 import { AppHeader } from "@/components/layout/app-header"
 
 export const dynamic = "force-static"
-
-function heroPlayerImageMaskStyle(mobile = false): CSSProperties {
-  const mask = mobile
-    ? "radial-gradient(102% 112% at 50% 88%, rgba(0,0,0,1) 0%, rgba(0,0,0,0.98) 42%, rgba(0,0,0,0.9) 58%, rgba(0,0,0,0.52) 72%, rgba(0,0,0,0.18) 84%, transparent 94%)"
-    : "radial-gradient(108% 116% at 50% 88%, rgba(0,0,0,1) 0%, rgba(0,0,0,0.98) 44%, rgba(0,0,0,0.9) 60%, rgba(0,0,0,0.54) 74%, rgba(0,0,0,0.18) 86%, transparent 95%)"
-
-  return {
-    WebkitMaskImage: mask,
-    maskImage: mask,
-  }
-}
 
 function LiveBroadcastIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
@@ -61,7 +50,18 @@ function FeatureSection({
   children?: React.ReactNode
 }) {
   return (
-    <section className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(16,20,42,0.92),rgba(11,14,29,0.92))] p-5 sm:p-7 lg:p-8">
+    <section
+      data-landing-feature
+      style={{
+        "--feature-accent": ({
+          Betting: "#6ee7b7",
+          Stats: "#7dd3fc",
+          Fantasy: "#f9a8d4",
+          Matches: "#fde68a",
+        } as Record<string, string>)[eyebrow] ?? "#6ee7b7",
+      } as CSSProperties}
+      className="flex h-full flex-col overflow-hidden rounded-lg border border-white/8 bg-white/[0.02] p-5 sm:p-7 lg:p-8"
+    >
       <div className="flex min-w-0 flex-1 flex-col px-1 sm:px-2">
         <div className="flex flex-wrap items-center gap-3">
           <SectionEyebrow>{eyebrow}</SectionEyebrow>
@@ -73,7 +73,7 @@ function FeatureSection({
           ) : null}
         </div>
         <h3 className="mt-3 text-xl font-bold text-white sm:text-2xl">{title}</h3>
-        <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(16rem,0.85fr)] lg:items-start">
+        <div className="mt-4 grid gap-5">
           <p className="max-w-2xl text-sm leading-6 text-white/58 sm:leading-7">{description}</p>
           <div className="grid gap-x-5 gap-y-2 md:grid-cols-2">
             {bullets.map((bullet) => (
@@ -107,7 +107,7 @@ export default function Home() {
 
         <LandingHeroScrollShell>
           <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
-            <div className="max-w-2xl lg:pb-10">
+            <div data-landing-reveal className="max-w-2xl lg:pb-10">
               <div className="inline-flex items-center rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
                 NRL Analysis Platform
               </div>
@@ -122,36 +122,10 @@ export default function Home() {
                 Short Side combines the tools every fantasy player and bettor needs to see the game from a data driven perspective.
               </p>
 
-              <div className="relative mt-6 flex items-end justify-center lg:hidden">
-                <div className="relative flex h-[15.5rem] w-full max-w-[26rem] items-end justify-center overflow-hidden px-1 pt-3">
-                  <Image
-                    src="/nrl_players-removebg-preview.png"
-                    alt="NRL players"
-                    width={666}
-                    height={375}
-                    priority
-                    className="relative z-10 h-auto w-[126%] max-w-none translate-x-2 object-contain object-bottom"
-                    style={heroPlayerImageMaskStyle(true)}
-                  />
-                </div>
-              </div>
             </div>
 
-            <div className="relative hidden lg:flex lg:items-end lg:justify-center lg:self-end">
-              <div className="relative flex h-[17.25rem] w-full max-w-[31.75rem] items-end justify-center overflow-visible px-1 pt-3">
-                <Image
-                  src="/nrl_players-removebg-preview.png"
-                  alt="NRL players"
-                  width={666}
-                  height={375}
-                  priority
-                  className="relative z-10 h-auto w-[146%] max-w-none translate-x-4 object-contain object-bottom"
-                  style={heroPlayerImageMaskStyle()}
-                />
-              </div>
-            </div>
+            <LandingPlayerImage />
           </section>
-        </LandingHeroScrollShell>
 
 
         <section className="space-y-6 border-t border-white/8 px-4 py-10 sm:px-6 lg:px-8">
@@ -172,9 +146,9 @@ export default function Home() {
               },
               {
                 eyebrow: "Stats",
-                title: "Player stats, Team stats, Player archetypes",
-                description: "Use the stats section to compare players and teams directly, inspect plot comparisons, profile archetypes, and see stat leaders across seasons.",
-                bullets: ["Player archetype profiles", "Player comparison and filtered charts", "Percentile ranks and recent form", "Season leader cards"],
+                title: "Player rankings, Team rankings, Player archetypes",
+                description: "Use the stats section to compare players and teams directly, inspect plot comparisons, profile archetypes, and track player and team rankings across the season.",
+                bullets: ["Player archetype profiles", "Player comparison and filtered charts", "Percentile ranks and recent form", "Player and team rankings"],
                 ctaHref: "/dashboard/players",
                 ctaLabel: "Stats",
               },
@@ -205,10 +179,13 @@ export default function Home() {
               },
               */
             ].map((feature) => (
-              <FeatureSection key={feature.eyebrow} {...feature} />
+              <div key={feature.eyebrow} data-landing-reveal>
+                <FeatureSection {...feature} />
+              </div>
             ))}
           </div>
         </section>
+        </LandingHeroScrollShell>
       </div>
     </div>
   )

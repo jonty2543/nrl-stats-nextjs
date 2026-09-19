@@ -13,6 +13,7 @@ const LOCALHOST_NAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 const BETTING_PAGE_SNAPSHOT_TIMEOUT_MS = 8000;
 const BETTING_PAGE_RAW_SNAPSHOT_TIMEOUT_MS = 4000;
 const BETTING_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS = 2500;
+const BETTING_PAGE_SUMMARY_TIMEOUT_MS = 10000;
 
 function emptyBettingOddsSnapshot(): BettingOddsSnapshot {
   return {
@@ -339,7 +340,7 @@ export default async function BettingPage() {
   const [snapshot, canAccessPremium, bettingSummary, playerImages, teamLogos, localhostRequest] = await Promise.all([
     withOptionalContextTimeout("betting odds snapshot", fetchBettingOddsSnapshot(), emptyBettingOddsSnapshot(), BETTING_PAGE_SNAPSHOT_TIMEOUT_MS),
     getServerPremiumAccess(userId),
-    withOptionalContextTimeout("betting summary", fetchBettingPageSummary(), emptyBettingPageSummary()),
+    withOptionalContextTimeout("betting summary", fetchBettingPageSummary(), emptyBettingPageSummary(), BETTING_PAGE_SUMMARY_TIMEOUT_MS),
     withOptionalContextTimeout("player images", fetchPlayerImages(), []),
     withOptionalContextTimeout("team logos", fetchTeamLogos(), {}),
     isLocalhostRequest(),

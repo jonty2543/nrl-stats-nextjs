@@ -15,7 +15,7 @@ import type { PostMatchTeamMetric } from "@/lib/data/post-match-team-metrics"
 
 export const dynamic = "force-dynamic"
 
-const LINEUPS_PAGE_FETCH_TIMEOUT_MS = 2500
+const LINEUPS_PAGE_FETCH_TIMEOUT_MS = 10000
 
 function withFallback<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null

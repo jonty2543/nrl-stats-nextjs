@@ -3689,20 +3689,21 @@ export function BettingDashboard({
           </div>
         ) : (
         <>
-        <div className="mt-4 grid gap-2 md:grid-cols-3">
+        <div className="mt-4 grid grid-cols-3 gap-1.5 sm:gap-2">
           {STAKING_OPTIONS.map((option) => {
             const active = option.mode === stakingMode;
             const locked = !hasPremiumBettingAccess && option.mode === "kelly";
+            const displayLabel = option.label.replace(" Staking", "");
             if (locked) {
               return (
                 <div
                   key={option.mode}
-                  className="rounded-md border border-nrl-border bg-[#10162f]/96 px-3 py-2 text-left text-nrl-muted opacity-65"
+                  className="rounded-md border border-nrl-border bg-[#10162f]/96 px-1.5 py-1.5 text-center text-nrl-muted opacity-65 sm:px-3"
                 >
-                  <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
-                    <span>{option.label}</span>
-                    <span className="rounded border border-nrl-border px-1.5 py-0.5 text-[9px] text-nrl-muted">
-                      Premium
+                  <div className="flex min-h-6 items-center justify-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] sm:text-xs sm:tracking-wide">
+                    <span className="truncate">{displayLabel}</span>
+                    <span className="rounded border border-nrl-border px-1 py-0.5 text-[8px] text-nrl-muted sm:px-1.5 sm:text-[9px]">
+                      Pro
                     </span>
                   </div>
                 </div>
@@ -3713,14 +3714,14 @@ export function BettingDashboard({
                 key={option.mode}
                 type="button"
                 onClick={() => handleStakingModeChange(option.mode)}
-                className={`rounded-md border px-3 py-2 text-left transition-colors ${
+                className={`rounded-md border px-1.5 py-1.5 text-center transition-colors sm:px-3 ${
                   active
                     ? "border-emerald-300/40 bg-[#10162f]/96 text-emerald-300"
                     : "cursor-pointer border-nrl-border bg-[#10162f]/96 text-nrl-muted hover:border-emerald-300/40 hover:text-nrl-text"
                 }`}
               >
-                <div className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide">
-                  <span>{option.label}</span>
+                <div className="flex min-h-6 items-center justify-center text-[9px] font-bold uppercase tracking-[0.08em] sm:text-xs sm:tracking-wide">
+                  <span className="truncate">{displayLabel}</span>
                 </div>
               </button>
             );

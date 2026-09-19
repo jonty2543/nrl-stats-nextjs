@@ -5080,6 +5080,13 @@ function BestBetsHero({
         <div className="space-y-4 p-4">
           {featuredItem ? (
             <>
+          {(() => {
+            const featuredBestBet = !isArbitrage ? featuredItem as BestBetCandidate : null;
+            const featuredSelectionLabel = featuredBestBet
+              ? formatCompactBetSelection(featuredBestBet.market, featuredBestBet.selection, featuredBestBet.lineValue)
+              : null;
+            return (
+            <>
           {!isArbitrage ? (
             <div className="flex items-center justify-between gap-3 px-1 py-1.5">
               <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-nrl-text">
@@ -5121,8 +5128,8 @@ function BestBetsHero({
                       className="h-7 w-7"
                     />
                   )}
-                  <span className="min-w-0 truncate">
-                    {isArbitrage ? (featuredItem as ArbitrageCandidate).match : (featuredItem as BestBetCandidate).selectionLabel}
+                  <span className="min-w-0 truncate" title={featuredBestBet?.selectionLabel}>
+                    {isArbitrage ? (featuredItem as ArbitrageCandidate).match : featuredSelectionLabel}
                   </span>
                 </div>
                 <div className="mt-1 truncate text-xs text-nrl-muted">
@@ -5285,6 +5292,9 @@ function BestBetsHero({
             )}
           </article>
             </>
+            );
+          })()}
+            </>
           ) : null}
 
           {queueItems.length > 0 ? (
@@ -5314,6 +5324,10 @@ function BestBetsHero({
                   </div>
                 ) : queueItems.map((item) => {
                   const isLocked = !canAccessPremium;
+                  const bestBetItem = !isArbitrage ? item as BestBetCandidate : null;
+                  const itemSelectionLabel = bestBetItem
+                    ? formatCompactBetSelection(bestBetItem.market, bestBetItem.selection, bestBetItem.lineValue)
+                    : null;
                   const rowContent = isArbitrage ? (
                     <div className={`flex min-h-[38px] items-center justify-between gap-3 rounded-md border border-white/8 bg-nrl-panel/72 px-2.5 py-1.5 text-left transition-colors ${canAccessPremium ? "hover:border-white/20" : ""}`}>
                       <div className="min-w-0">
@@ -5382,8 +5396,8 @@ function BestBetsHero({
                                 className="h-6 w-6"
                               />
                             ) : null}
-                            <span className="min-w-0 truncate">
-                              {isLocked ? "Selection hidden" : (item as BestBetCandidate).selectionLabel}
+                            <span className="min-w-0 truncate" title={bestBetItem?.selectionLabel}>
+                              {isLocked ? "Selection hidden" : itemSelectionLabel}
                             </span>
                           </div>
                           <div className="mt-1 truncate text-xs text-nrl-muted">

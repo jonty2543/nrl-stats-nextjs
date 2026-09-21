@@ -693,6 +693,19 @@
         }
 
         /* Responsive */
+        .loading-spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid rgba(52, 211, 153, 0.2);
+            border-top-color: #34d399;
+            border-radius: 50%;
+            animation: loading-spin 0.8s linear infinite;
+        }
+
+        @keyframes loading-spin {
+            to { transform: rotate(360deg); }
+        }
+
         @media (max-width: 1024px) {
             .content-grid {
                 grid-template-columns: 1fr;
@@ -853,7 +866,9 @@
 
         <div class="content-grid">
             <div class="plot-container" id="plotContainer">
-                <div class="loading">Select a position to view archetypes</div>
+                <div class="loading" role="status" aria-label="Loading archetype plot">
+                    <span class="loading-spinner" aria-hidden="true"></span>
+                </div>
             </div>
 
             <div class="sidebar" id="archetypeSidebar">
@@ -1058,6 +1073,7 @@
             // Check if clusterData exists and has the year structure
             if (typeof clusterData === 'undefined' || !clusterData[currentYear]) {
                 console.error("Cluster data not loaded or invalid format");
+                renderNoCompetitionData();
                 return;
             }
             const hasCupData = hasCompetitionData('cup');

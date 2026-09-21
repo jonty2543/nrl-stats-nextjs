@@ -10,6 +10,11 @@ export function ArchetypesFrame({ cupAccessToken }: { cupAccessToken: string | n
       aria-busy={!isReady}
       className="relative min-h-0 bg-[#111733]"
     >
+      {!isReady ? (
+        <div role="status" aria-label="Loading archetypes" className="absolute inset-0 flex items-center justify-center">
+          <span aria-hidden="true" className="h-7 w-7 animate-spin rounded-full border-[3px] border-emerald-400/20 border-t-emerald-400" />
+        </div>
+      ) : null}
       <iframe
         src={`/api/archetypes/index.html${cupAccessToken ? `?cupAccess=${encodeURIComponent(cupAccessToken)}` : ""}`}
         title="NRL player archetypes"

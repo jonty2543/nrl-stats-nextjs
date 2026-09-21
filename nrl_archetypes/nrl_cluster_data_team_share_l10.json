@@ -67,7 +67,7 @@
                 {
                     "id": 0,
                     "name": "Support Winger",
-                    "count": 20,
+                    "count": 21,
                     "description": "These wingers tend to be less involved in the game, perhaps due to lack of skill or opportunity."
                 },
                 {
@@ -79,7 +79,7 @@
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 28,
+                    "count": 27,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -120,7 +120,7 @@
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 11,
+                    "count": 10,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
@@ -132,7 +132,7 @@
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 14,
+                    "count": 15,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],
@@ -169,7 +169,7 @@
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 14,
+                    "count": 13,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
@@ -181,7 +181,7 @@
                 {
                     "id": 2,
                     "name": "Organising Half",
-                    "count": 18,
+                    "count": 19,
                     "description": "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
                 }
             ],
@@ -220,7 +220,7 @@
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 12,
+                    "count": 11,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
@@ -232,7 +232,7 @@
                 {
                     "id": 2,
                     "name": "Link Hooker",
-                    "count": 7,
+                    "count": 8,
                     "description": "Hookers that look to pass rather than run, usually having strong ball playing."
                 },
                 {

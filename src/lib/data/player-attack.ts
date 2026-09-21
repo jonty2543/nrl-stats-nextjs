@@ -83,6 +83,7 @@ export const PLAYER_ATTACK_STAT_COMPARISON_STATS = [
   ...PLAYER_ATTACK_COMPARISON_STATS,
   "Fantasy",
   "Play-the-ball speed",
+  "Tackle efficiency",
 ] as const;
 
 export type PlayerEfficiencyBaseMetric = (typeof PLAYER_EFFICIENCY_BASE_METRICS)[number];
@@ -243,9 +244,10 @@ const ATTACK_COMPARISON_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerS
   Errors: "Errors",
   Fantasy: "Fantasy",
   "Play-the-ball speed": "Average Play The Ball Speed",
+  "Tackle efficiency": "Tackle Efficiency",
 };
 
-const PLAYER_RATE_STATS = new Set<PlayerAttackComparisonStat>(["Play-the-ball speed"]);
+const PLAYER_RATE_STATS = new Set<PlayerAttackComparisonStat>(["Play-the-ball speed", "Tackle efficiency"]);
 
 function finite(value: unknown): number {
   const number = typeof value === "number" ? value : Number(value);
@@ -456,8 +458,8 @@ export function buildPlayerAttackComparisonPoints(
       const value = finite(row[yField]);
       return sum + (isPer80 && !yIsRate ? value * (80 / finite(row["Mins Played"])) : value);
     }, 0);
-    const xRateValues = xIsRate ? qualifyingRows.map((row) => finite(row[xField])).filter((value) => value > 0) : [];
-    const yRateValues = yIsRate ? qualifyingRows.map((row) => finite(row[yField])).filter((value) => value > 0) : [];
+    const xRateValues = xIsRate ? qualifyingRows.map((row) => finite(row[xField])).filter((value) => xStat === "Tackle efficiency" || value > 0) : [];
+    const yRateValues = yIsRate ? qualifyingRows.map((row) => finite(row[yField])).filter((value) => yStat === "Tackle efficiency" || value > 0) : [];
     const totalRuns = (xIsPassRunRatio || yIsPassRunRatio)
       ? qualifyingRows.reduce((sum, row) => sum + finite(row["All Runs"]), 0)
       : 0;
@@ -498,7 +500,7 @@ export function buildPlayerAttackComparisonPoints(
         if (mode === "team-proportion" && (xTeamTotal <= 0 || yTeamTotal <= 0)) continue;
         const xValue = finite(row[xField]);
         const yValue = finite(row[yField]);
-        if ((xIsRate && xValue <= 0) || (yIsRate && yValue <= 0)) continue;
+        if ((xStat === "Play-the-ball speed" && xValue <= 0) || (yStat === "Play-the-ball speed" && yValue <= 0)) continue;
         points.push({
           id: `${player}|${row.Year}|${row.Round_Label || row.Round}|${row.Team}|${mode}|${xStat}|${yStat}`,
           player,

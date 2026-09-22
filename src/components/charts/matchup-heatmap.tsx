@@ -3,8 +3,8 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import type { PlayerStat } from "@/lib/data/types";
-import { PLAYER_ATTACK_POSITIONS, type PlayerAttackPosition } from "@/lib/data/player-attack";
-import { buildMatchupHeatmap, MATCHUP_METRICS, type MatchupDirection, type MatchupMetric, type MatchupValueMode } from "@/lib/data/matchup-heatmap";
+import { PLAYER_ATTACK_POSITIONS } from "@/lib/data/player-attack";
+import { buildMatchupHeatmap, GROUPED_MATCHUP_POSITIONS, MATCHUP_METRICS, type MatchupPosition, type MatchupDirection, type MatchupMetric, type MatchupValueMode } from "@/lib/data/matchup-heatmap";
 import { Select } from "@/components/ui/select";
 import { singleAxisHeatColor } from "@/lib/data/heat-colors";
 
@@ -57,7 +57,9 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
 }) {
   const [metric, setMetric] = useState<MatchupMetric>("Run metres");
   const [valueMode, setValueMode] = useState<MatchupValueMode>("Average");
-  const [sortPosition, setSortPosition] = useState<PlayerAttackPosition | "Team">("Team");
+  const [sortPosition, setSortPosition] = useState<MatchupPosition | "Team">("Team");
+  const [groupOutsideBacks, setGroupOutsideBacks] = useState(false);
+  const positions: readonly MatchupPosition[] = groupOutsideBacks ? GROUPED_MATCHUP_POSITIONS : PLAYER_ATTACK_POSITIONS;
   const [sortAscending, setSortAscending] = useState(false);
   const [source, setSource] = useState<{ key: string; rows: PlayerStat[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,8 +84,8 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
   }, [competition, year, key, dataKey, immediateRows]);
   const teams = useMemo(() => buildMatchupHeatmap(
     (immediateRows ?? (source?.key === key ? source.rows : [])).filter((row) => round === "all" || String(row.Round) === round),
-    metric, round === "all" ? gameWindow : null, valueMode, direction
-  ), [immediateRows, source, key, round, metric, gameWindow, valueMode, direction]);
+    metric, round === "all" ? gameWindow : null, valueMode, direction, groupOutsideBacks
+  ), [immediateRows, source, key, round, metric, gameWindow, valueMode, direction, groupOutsideBacks]);
   const hasRowsSource = Boolean(immediateRows) || source?.key === key;
   const missingLogos = teams.some((team) => !logoFor(team.team, logos));
   useEffect(() => {
@@ -99,21 +101,21 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
     return () => controller.abort();
   }, [missingLogos, loadedLogos]);
   const columnRanges = useMemo(
-    () => PLAYER_ATTACK_POSITIONS.map((_, index) => {
+    () => positions.map((_, index) => {
       const values = teams.flatMap((team) => {
         const value = team.cells[index]?.value;
         return value == null ? [] : [value];
       });
       return { min: Math.min(...values), max: Math.max(...values) };
     }),
-    [teams]
+    [teams, positions]
   );
   const higherIsGood = direction === "attack"
     ? !LOWER_IS_BETTER_MATCHUP_METRICS.has(metric)
     : LOWER_IS_BETTER_MATCHUP_METRICS.has(metric);
   const sortedTeams = useMemo(() => {
     if (sortPosition === "Team") return teams;
-    const positionIndex = PLAYER_ATTACK_POSITIONS.indexOf(sortPosition);
+    const positionIndex = positions.indexOf(sortPosition);
     if (positionIndex === -1) return teams;
     return [...teams].sort((left, right) => {
       const leftValue = left.cells[positionIndex]?.value;
@@ -123,7 +125,7 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
       if (rightValue == null) return -1;
       return (sortAscending ? leftValue - rightValue : rightValue - leftValue) || left.team.localeCompare(right.team);
     });
-  }, [sortPosition, sortAscending, teams]);
+  }, [sortPosition, sortAscending, teams, positions]);
 
   return <div className="space-y-3">
     <div className="flex flex-wrap items-end gap-3">
@@ -131,6 +133,11 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
       <div className="w-36 shrink-0"><Select label="Stat" compact value={metric} options={Object.keys(MATCHUP_METRICS)} onChange={(value) => setMetric(value as MatchupMetric)} /></div>
       <div className="w-28 shrink-0"><Select label="Display" compact value={valueMode} options={["Average", "Percentage"]} onChange={(value) => setValueMode(value as MatchupValueMode)} /></div>
       <div className="w-24 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={onRoundChange} /></div>
+      <button type="button" aria-pressed={groupOutsideBacks} className={`min-h-[34px] rounded-md border px-3 py-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-nrl-accent ${groupOutsideBacks ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent" : "border-nrl-border bg-nrl-panel-2 text-nrl-text"}`} onClick={() => {
+        setGroupOutsideBacks(!groupOutsideBacks);
+        if (!groupOutsideBacks && ["Fullbacks", "Wingers", "Centres"].includes(sortPosition)) setSortPosition("Outside Backs");
+        else if (groupOutsideBacks && sortPosition === "Outside Backs") setSortPosition("Fullbacks");
+      }}>Group Outside Backs</button>
     </div>
     {error === key ? <div role="alert">Unable to load matchup data. <button className="text-nrl-accent underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div>
       : !hasRowsSource ? <div role="status" className="p-8 text-center text-nrl-muted">Loading matchup data…</div>
@@ -139,7 +146,7 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-separate border-spacing-1.5 text-[11px]">
             <caption className="sr-only">Team {metric.toLowerCase()} {valueMode.toLowerCase()} by position</caption>
-            <thead><tr><th scope="col" className="sticky left-0 z-20 w-14 min-w-14 bg-nrl-panel px-2 shadow-[8px_0_0_var(--color-nrl-panel)]"><button type="button" onClick={() => setSortPosition("Team")} title="Restore team order" className="rounded py-2 focus-visible:outline-2 focus-visible:outline-nrl-accent">Team</button></th>{PLAYER_ATTACK_POSITIONS.map((position) => <th scope="col" key={position} aria-sort={sortPosition === position ? sortAscending ? "ascending" : "descending" : "none"} className="px-1.5 py-2">
+            <thead><tr><th scope="col" className="sticky left-0 z-20 w-14 min-w-14 bg-nrl-panel px-2 shadow-[8px_0_0_var(--color-nrl-panel)]"><button type="button" onClick={() => setSortPosition("Team")} title="Restore team order" className="rounded py-2 focus-visible:outline-2 focus-visible:outline-nrl-accent">Team</button></th>{positions.map((position) => <th scope="col" key={position} aria-sort={sortPosition === position ? sortAscending ? "ascending" : "descending" : "none"} className="px-1.5 py-2">
               <button type="button" className={`w-full whitespace-nowrap rounded py-1 focus-visible:outline-2 focus-visible:outline-nrl-accent ${sortPosition === position ? "text-nrl-accent" : "hover:text-nrl-accent"}`} onClick={() => {
                 setSortAscending(sortPosition === position ? !sortAscending : false);
                 setSortPosition(position);

@@ -26,6 +26,8 @@ export const MATCHUP_METRICS = {
   "Dummy half runs": "Dummy Half Runs",
   "Dummy half run metres": "Dummy Half Run Metres",
   Passes: "Passes",
+  "Pass to run ratio": "Passes To Run Ratio",
+  "Tackle efficiency": "Tackle Efficiency",
   "Dummy passes": "Dummy Passes",
   "Tackles made": "Tackles Made",
   "Missed tackles": "Missed Tackles",

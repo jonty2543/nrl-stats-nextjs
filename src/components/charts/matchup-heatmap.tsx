@@ -126,9 +126,16 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
       return (sortAscending ? leftValue - rightValue : rightValue - leftValue) || left.team.localeCompare(right.team);
     });
   }, [sortPosition, sortAscending, teams, positions]);
+  const averageCells = useMemo(() => positions.map((position, index) => {
+    const values = sortedTeams.flatMap((team) => {
+      const value = team.cells[index]?.value;
+      return value == null ? [] : [value];
+    });
+    return { position, value: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null };
+  }), [positions, sortedTeams]);
 
   return <div className="space-y-3">
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="flex flex-nowrap items-end gap-3 overflow-x-auto [scrollbar-width:thin]">
       <div className="w-24 shrink-0"><Select label="For / Against" compact value={direction === "defense" ? "Against" : "For"} options={["For", "Against"]} onChange={(value) => onDirectionChange(value === "Against" ? "defense" : "attack")} /></div>
       <div className="w-36 shrink-0"><Select label="Stat" compact value={metric} options={Object.keys(MATCHUP_METRICS)} onChange={(value) => setMetric(value as MatchupMetric)} /></div>
       <div className="w-28 shrink-0"><Select label="Display" compact value={valueMode} options={["Average", "Percentage"]} onChange={(value) => setValueMode(value as MatchupValueMode)} /></div>
@@ -164,9 +171,11 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
                   ? 0.5
                   : (cell.value - range.min) / (range.max - range.min);
                 const colorRatio = higherIsGood ? fraction : 1 - fraction;
-                return <td key={cell.position} className={`rounded px-1.5 py-1.5 text-center font-bold ${cell.value === null ? "text-nrl-muted" : "text-nrl-bg"}`} style={cell.value === null ? undefined : { backgroundColor: `color-mix(in srgb, ${singleAxisHeatColor(colorRatio)} 82%, var(--color-nrl-panel))` }} title={`${team.team} vs ${cell.position}: ${cell.value?.toFixed(1) ?? "No data"}${valueMode === "Percentage" ? "%" : ` ${metric.toLowerCase()} per game`} (${cell.games} games)`}>{cell.value?.toFixed(1) ?? "—"}{cell.value === null || valueMode === "Average" ? "" : "%"}</td>;
+                const valueSuffix = metric === "Tackle efficiency" ? "%" : valueMode === "Percentage" ? "%" : "";
+                return <td key={cell.position} className={`rounded px-1.5 py-1.5 text-center font-bold ${cell.value === null ? "text-nrl-muted" : "text-nrl-bg"}`} style={cell.value === null ? undefined : { backgroundColor: `color-mix(in srgb, ${singleAxisHeatColor(colorRatio)} 82%, var(--color-nrl-panel))` }} title={`${team.team} vs ${cell.position}: ${cell.value?.toFixed(1) ?? "No data"}${valueSuffix}${metric === "Tackle efficiency" ? " tackle efficiency" : valueMode === "Percentage" ? " share" : ` ${metric.toLowerCase()} per game`} (${cell.games} games)`}>{cell.value?.toFixed(1) ?? "—"}{cell.value == null ? "" : valueSuffix}</td>;
               })}
             </tr>)}</tbody>
+            <tfoot><tr><th scope="row" className="sticky left-0 z-10 bg-nrl-panel px-2 py-2 text-center font-black text-nrl-accent shadow-[8px_0_0_var(--color-nrl-panel)]" title="Average across visible teams">AVG</th>{averageCells.map((cell) => <td key={cell.position} className="rounded bg-nrl-panel-2 px-1.5 py-1.5 text-center font-black text-nrl-accent" title={`${cell.position} column average across ${sortedTeams.length} teams`}>{cell.value == null ? "—" : `${cell.value.toFixed(1)}${metric === "Tackle efficiency" || valueMode === "Percentage" ? "%" : ""}`}</td>)}</tr></tfoot>
           </table>
         </div>
       </>}

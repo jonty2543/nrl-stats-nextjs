@@ -10,10 +10,18 @@ import { singleAxisHeatColor } from "@/lib/data/heat-colors";
 
 const playerRowsCache = new Map<string, PlayerStat[]>();
 const LOWER_IS_BETTER_MATCHUP_METRICS = new Set<MatchupMetric>([
-  "Missed tackles" as MatchupMetric,
-  "Ineffective tackles" as MatchupMetric,
-  "Errors" as MatchupMetric,
-  "Penalties" as MatchupMetric,
+  "Missed tackles",
+  "Ineffective tackles",
+  "Errors",
+  "Penalties",
+  "Handling errors",
+  "One on one lost",
+  "Ruck infringements",
+  "Inside 10 metres",
+  "On report",
+  "Sin bins",
+  "Send offs",
+  "Kicked dead",
 ]);
 
 function logoFor(team: string, logos: Record<string, string>): string | undefined {

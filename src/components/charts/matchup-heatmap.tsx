@@ -129,7 +129,7 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
       : !teams.length ? <div className="p-8 text-center text-nrl-muted">No matchup data for this selection.</div>
       : <>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-separate border-spacing-0.5 text-[11px]">
+          <table className="w-full min-w-[640px] border-separate border-spacing-1.5 text-[11px]">
             <caption className="sr-only">Team {metric.toLowerCase()} {valueMode.toLowerCase()} by position</caption>
             <thead><tr><th scope="col" className="sticky left-0 z-20 w-14 min-w-14 bg-nrl-panel px-2 shadow-[8px_0_0_var(--color-nrl-panel)]"><button type="button" onClick={() => setSortPosition("Team")} title="Restore team order" className="rounded py-2 focus-visible:outline-2 focus-visible:outline-nrl-accent">Team</button></th>{PLAYER_ATTACK_POSITIONS.map((position) => <th scope="col" key={position} aria-sort={sortPosition === position ? sortAscending ? "ascending" : "descending" : "none"} className="px-1.5 py-2">
               <button type="button" className={`w-full whitespace-nowrap rounded py-1 focus-visible:outline-2 focus-visible:outline-nrl-accent ${sortPosition === position ? "text-nrl-accent" : "hover:text-nrl-accent"}`} onClick={() => {
@@ -149,7 +149,7 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
                   ? 0.5
                   : (cell.value - range.min) / (range.max - range.min);
                 const colorRatio = higherIsGood ? fraction : 1 - fraction;
-                return <td key={cell.position} className={`rounded px-1.5 py-2 text-center font-bold ${cell.value === null ? "text-nrl-muted" : "text-nrl-bg"}`} style={cell.value === null ? undefined : { backgroundColor: `color-mix(in srgb, ${singleAxisHeatColor(colorRatio)} 82%, var(--color-nrl-panel))` }} title={`${team.team} vs ${cell.position}: ${cell.value?.toFixed(1) ?? "No data"}${valueMode === "Percentage" ? "%" : ` ${metric.toLowerCase()} per game`} (${cell.games} games)`}>{cell.value?.toFixed(1) ?? "—"}{cell.value === null || valueMode === "Average" ? "" : "%"}</td>;
+                return <td key={cell.position} className={`rounded px-1.5 py-1.5 text-center font-bold ${cell.value === null ? "text-nrl-muted" : "text-nrl-bg"}`} style={cell.value === null ? undefined : { backgroundColor: `color-mix(in srgb, ${singleAxisHeatColor(colorRatio)} 82%, var(--color-nrl-panel))` }} title={`${team.team} vs ${cell.position}: ${cell.value?.toFixed(1) ?? "No data"}${valueMode === "Percentage" ? "%" : ` ${metric.toLowerCase()} per game`} (${cell.games} games)`}>{cell.value?.toFixed(1) ?? "—"}{cell.value === null || valueMode === "Average" ? "" : "%"}</td>;
               })}
             </tr>)}</tbody>
           </table>

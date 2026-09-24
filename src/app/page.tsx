@@ -56,8 +56,8 @@ function FeatureSection({
         "--feature-accent": ({
           Betting: "#6ee7b7",
           Stats: "#7dd3fc",
-          Fantasy: "#f9a8d4",
-          Matches: "#fde68a",
+          Fantasy: "#c4b5fd",
+          Matches: "#a7f3d0",
         } as Record<string, string>)[eyebrow] ?? "#6ee7b7",
       } as CSSProperties}
       className="flex h-full flex-col overflow-hidden rounded-lg border border-white/8 bg-white/[0.02] p-5 sm:p-7 lg:p-8"

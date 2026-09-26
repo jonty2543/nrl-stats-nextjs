@@ -192,6 +192,10 @@ function populationStandardDeviation(values: number[]): number {
   return Math.sqrt(variance);
 }
 
+function isOutsideBackPosition(position: PlayerAttackPosition): boolean {
+  return (OUTSIDE_BACK_PLAYER_POSITIONS as readonly PlayerAttackPosition[]).includes(position);
+}
+
 function buildPlayerVariancePoints(
   rows: PlayerStat[],
   position: PlayerAttackPosition,
@@ -601,6 +605,7 @@ type OptionalPlayerComparisonStat = PlayerAttackComparisonStat | "None";
 type OptionalTeamAttackComparisonStat = TeamAttackComparisonStat | "None";
 type OptionalTeamDefenceComparisonStat = TeamDefenceConcededStat | "None";
 type FormWindow = 3 | 5;
+const OUTSIDE_BACK_PLAYER_POSITIONS = ["Fullbacks", "Wingers", "Centres"] as const satisfies readonly PlayerAttackPosition[];
 type PlotViewId =
   | "player_round_by_round"
   | "team_round_by_round"
@@ -1161,6 +1166,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const [halvesPairingStat, setHalvesPairingStat] = useState<PlayerAttackComparisonStat>("Kicking metres");
   const [halvesPairingSort, setHalvesPairingSort] = useState<HalvesPairingSort>("ascending");
   const [playerPosition, setPlayerPosition] = useState<PlayerAttackPosition>("Fullbacks");
+  const [groupPlayerOutsideBacks, setGroupPlayerOutsideBacks] = useState(false);
   const [playerPlotMode, setPlayerPlotMode] = useState<PlayerPlotMode>("players");
   const [playerMinimumMinutes, setPlayerMinimumMinutes] = useState(10);
   const [playerCupLeague, setPlayerCupLeague] = useState("All Cup");
@@ -1301,14 +1307,24 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
     () => forSelectedRound(rowsByYear[activeYearKey] ?? [], round, (row) => row.Round),
     [activeYearKey, round, rowsByYear]
   );
+  const playerPositionGroupActive = groupPlayerOutsideBacks && isOutsideBackPosition(playerPosition);
+  const playerPlotPositions = useMemo<readonly PlayerAttackPosition[]>(
+    () => playerPositionGroupActive ? OUTSIDE_BACK_PLAYER_POSITIONS : [playerPosition],
+    [playerPosition, playerPositionGroupActive]
+  );
+  const playerPositionDisplay = playerPositionGroupActive ? "Outside backs" : playerPosition;
+  const playerPositionDisplayLower = playerPositionDisplay.toLowerCase();
   const playerVsTeamPlayerOptions = useMemo(() => [
     "All players",
     ...[...new Set(currentPlayerPlotRows
-      .filter((row) => formPositionFromRow(row) === playerPosition)
+      .filter((row) => {
+        const position = formPositionFromRow(row);
+        return position !== null && playerPlotPositions.includes(position);
+      })
       .map((row) => canonicalPlayerName(row.Name))
       .filter(Boolean))]
       .sort((left, right) => left.localeCompare(right)),
-  ], [currentPlayerPlotRows, playerPosition]);
+  ], [currentPlayerPlotRows, playerPlotPositions]);
   const effectivePlayerVsTeamPlayer = playerVsTeamPlayerOptions.includes(playerVsTeamPlayer) ? playerVsTeamPlayer : "All players";
   const teamFilterOptions = useMemo(() => {
     const teams = [...new Set(currentRows.map((row) => row.Team).filter(Boolean))].sort((left, right) => left.localeCompare(right));
@@ -1434,7 +1450,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const teamEfficiencyYDecimals = activeTeamEfficiencyOutputMetric.includes("metres")
     ? 1
     : (["Tries", "Try assists", "Line breaks", "Line break assists", "Forced drop outs"] as TeamAttackEfficiencyOutputStat[]).includes(activeTeamEfficiencyOutputMetric) ? 3 : 2;
-  const playerUsesPer80 = (PLAYER_BACK_POSITIONS as readonly PlayerAttackPosition[]).includes(playerPosition);
+  const playerUsesPer80 = playerPlotPositions.every((position) => (PLAYER_BACK_POSITIONS as readonly PlayerAttackPosition[]).includes(position));
   const isPlayerEfficiency = playerAttackPlot === "Efficiency";
   const isPlayerVariance = playerSection === "Attack" && playerAttackPlot === "Variance";
   const isPlayerForm = playerSection === "Attack" && playerAttackPlot === "Form";
@@ -1583,57 +1599,57 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
         : "";
   const playerAttackData = useMemo(
     () => entity === "Players" && playerSection === "Attack" && isPlayerEfficiency
-      ? buildPlayerAttackPoints(currentPlayerPlotRows, playerPosition, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, gameWindow, playerPlotMode, playerMinimumGames)
+      ? playerPlotPositions.flatMap((position) => buildPlayerAttackPoints(currentPlayerPlotRows, position, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, gameWindow, playerPlotMode, playerMinimumGames))
       : [],
-    [currentPlayerPlotRows, entity, gameWindow, isPlayerEfficiency, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, playerMinimumGames, playerPlotMode, playerPosition, playerSection]
+    [currentPlayerPlotRows, entity, gameWindow, isPlayerEfficiency, playerEfficiencyBaseMetric, playerEfficiencyOutputMetric, playerMinimumGames, playerPlotMode, playerPlotPositions, playerSection]
   );
   const playerFormPoints = useMemo(
     () => entity === "Players" && isPlayerForm
-      ? buildPlayerFormPoints(currentPlayerPlotRows, playerPosition, playerFormStat, playerFormPerStat, formWindow, minPriorGames, year)
+      ? playerPlotPositions.flatMap((position) => buildPlayerFormPoints(currentPlayerPlotRows, position, playerFormStat, playerFormPerStat, formWindow, minPriorGames, year))
       : [],
-    [currentPlayerPlotRows, entity, formWindow, isPlayerForm, minPriorGames, playerFormPerStat, playerFormStat, playerPosition, year]
+    [currentPlayerPlotRows, entity, formWindow, isPlayerForm, minPriorGames, playerFormPerStat, playerFormStat, playerPlotPositions, year]
   );
   const playerVariancePoints = useMemo(
     () => entity === "Players" && isPlayerVariance
-      ? buildPlayerVariancePoints(currentPlayerPlotRows, playerPosition, playerVarianceStat, gameWindow, year)
+      ? playerPlotPositions.flatMap((position) => buildPlayerVariancePoints(currentPlayerPlotRows, position, playerVarianceStat, gameWindow, year))
       : [],
-    [currentPlayerPlotRows, entity, gameWindow, isPlayerVariance, playerPosition, playerVarianceStat, year]
+    [currentPlayerPlotRows, entity, gameWindow, isPlayerVariance, playerPlotPositions, playerVarianceStat, year]
   );
   const playerAttackComparisonData = useMemo(
     () => entity === "Players" && playerSection === "Attack" && !isPlayerEfficiency
-      ? buildPlayerAttackComparisonPoints(
+      ? playerPlotPositions.flatMap((position) => buildPlayerAttackComparisonPoints(
           currentPlayerPlotRows,
-          playerPosition,
+          position,
           activePlayerComparisonXStat,
           effectivePlayerComparisonYStat,
           isPlayerTeamProportion ? "team-proportion" : isPlayerStatsTotals ? "totals" : "per-game",
           gameWindow,
           playerPlotMode,
           playerMinimumGames
-        )
+        ))
       : [],
-    [activePlayerComparisonXStat, currentPlayerPlotRows, effectivePlayerComparisonYStat, entity, gameWindow, isPlayerEfficiency, isPlayerStatsTotals, isPlayerTeamProportion, playerMinimumGames, playerPlotMode, playerPosition, playerSection]
+    [activePlayerComparisonXStat, currentPlayerPlotRows, effectivePlayerComparisonYStat, entity, gameWindow, isPlayerEfficiency, isPlayerStatsTotals, isPlayerTeamProportion, playerMinimumGames, playerPlotMode, playerPlotPositions, playerSection]
   );
   const playerVsTeamPoints = useMemo(
     () => entity === "Players" && isPlayerVsTeam
-      ? buildPlayerVsTeamPoints(
+      ? playerPlotPositions.flatMap((position) => buildPlayerVsTeamPoints(
           currentPlayerPlotRows,
           currentRows,
-          playerPosition,
+          position,
           playerVsTeamStat,
           playerVsTeamTeamStat,
           effectivePlayerVsTeamPlayer,
           gameWindow,
           round === "all" ? undefined : 1
-        )
+        ))
       : [],
-    [currentPlayerPlotRows, currentRows, effectivePlayerVsTeamPlayer, entity, gameWindow, isPlayerVsTeam, playerPosition, playerVsTeamStat, playerVsTeamTeamStat, round]
+    [currentPlayerPlotRows, currentRows, effectivePlayerVsTeamPlayer, entity, gameWindow, isPlayerVsTeam, playerPlotPositions, playerVsTeamStat, playerVsTeamTeamStat, round]
   );
   const playerDefenceData = useMemo(
     () => entity === "Players" && playerSection === "Defense"
-      ? buildPlayerDefencePoints(currentPlayerPlotRows, playerPosition, gameWindow, playerPlotMode, playerMinimumGames)
+      ? playerPlotPositions.flatMap((position) => buildPlayerDefencePoints(currentPlayerPlotRows, position, gameWindow, playerPlotMode, playerMinimumGames))
       : [],
-    [currentPlayerPlotRows, entity, gameWindow, playerMinimumGames, playerPlotMode, playerPosition, playerSection]
+    [currentPlayerPlotRows, entity, gameWindow, playerMinimumGames, playerPlotMode, playerPlotPositions, playerSection]
   );
   const halvesPairings = useMemo(
     () => entity === "Players" && playerSection === "Other"
@@ -2455,24 +2471,24 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const playerPlotTitle = playerSection === "Other"
     ? `${halvesPairingStat} contribution — halves pairings`
     : playerSection === "Defense"
-      ? `Tackles vs tackle efficiency — ${playerPosition}`
+      ? `Tackles vs tackle efficiency — ${playerPositionDisplay}`
       : isPlayerForm
-        ? `${playerFormStat}${playerFormPerStat === "None" ? "" : ` per ${playerFormPerStat.toLowerCase()}`} — ${playerPosition} · L${formWindow} form`
+        ? `${playerFormStat}${playerFormPerStat === "None" ? "" : ` per ${playerFormPerStat.toLowerCase()}`} — ${playerPositionDisplay} · L${formWindow} form`
         : isPlayerEfficiency
           ? playerEfficiencyShowsVolume
-            ? `${playerEfficiencyOutputMetric} efficiency vs ${playerEfficiencyBaseMetric} volume — ${playerPosition}`
-            : `${playerEfficiencyOutputMetric} per ${playerEfficiencyUnit} — ${playerPosition}`
+            ? `${playerEfficiencyOutputMetric} efficiency vs ${playerEfficiencyBaseMetric} volume — ${playerPositionDisplay}`
+            : `${playerEfficiencyOutputMetric} per ${playerEfficiencyUnit} — ${playerPositionDisplay}`
         : isPlayerVariance
-          ? `${playerVarianceStat} variance — ${playerPosition}`
+          ? `${playerVarianceStat} variance — ${playerPositionDisplay}`
         : isPlayerVsTeam
-          ? `${playerVsTeamStat} vs team ${playerVsTeamTeamStat.toLowerCase()} — ${effectivePlayerVsTeamPlayer === "All players" ? playerPosition : effectivePlayerVsTeamPlayer}`
+          ? `${playerVsTeamStat} vs team ${playerVsTeamTeamStat.toLowerCase()} — ${effectivePlayerVsTeamPlayer === "All players" ? playerPositionDisplay : effectivePlayerVsTeamPlayer}`
         : isPlayerTeamProportion
           ? activePlayerComparisonYStat === "None"
-            ? `${activePlayerComparisonXStat} team share — ${playerPosition}`
-            : `${activePlayerComparisonXStat} vs ${effectivePlayerComparisonYStat} team share — ${playerPosition}`
+            ? `${activePlayerComparisonXStat} team share — ${playerPositionDisplay}`
+            : `${activePlayerComparisonXStat} vs ${effectivePlayerComparisonYStat} team share — ${playerPositionDisplay}`
           : activePlayerComparisonYStat === "None"
-            ? `${activePlayerComparisonXStat} — ${playerPosition}`
-            : `${activePlayerComparisonXStat} vs ${effectivePlayerComparisonYStat} — ${playerPosition}`;
+            ? `${activePlayerComparisonXStat} — ${playerPositionDisplay}`
+            : `${activePlayerComparisonXStat} vs ${effectivePlayerComparisonYStat} — ${playerPositionDisplay}`;
   const teamPlotTitle = isAttackHeatmap ? "Team heatmap — For" : isMatchupHeatmap ? "Team heatmap — Against" : isOther
     ? isForVsAgainstPlot
       ? `${teamForStat} for vs ${teamAgainstStat} against`
@@ -2661,7 +2677,18 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                   {playerSection === "Attack" && !isPlayerEfficiency && !isPlayerForm && !isPlayerVsTeam && !isPlayerVariance ? <div className="w-28 shrink-0"><Select label="Primary stat" compact value={activePlayerComparisonXStat} options={[...(isPlayerTeamProportion ? PLAYER_ATTACK_COMPARISON_STATS : PLAYER_ATTACK_STAT_COMPARISON_STATS)]} onChange={(value) => isPlayerTeamProportion ? setPlayerTeamProportionXStat(value as PlayerAttackComparisonStat) : setPlayerComparisonXStat(value as PlayerAttackComparisonStat)} /></div> : null}
                   {playerSection === "Attack" && !isPlayerEfficiency && !isPlayerForm && !isPlayerVsTeam && !isPlayerVariance ? <div className="w-32 shrink-0"><Select label="Comparison stat" compact value={activePlayerComparisonYStat} options={isPlayerTeamProportion ? [{ value: "None", label: "Add comparison" }, ...PLAYER_ATTACK_COMPARISON_STATS] : [{ value: "None", label: "Add comparison" }, ...PLAYER_ATTACK_STAT_COMPARISON_STATS]} onChange={(value) => isPlayerTeamProportion ? setPlayerTeamProportionYStat(value as OptionalPlayerComparisonStat) : setPlayerComparisonYStat(value as OptionalPlayerComparisonStat)} /></div> : null}
                   {isPlayerForm ? <div className="shrink-0"><span className="mb-0.5 block text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">Form sample</span><PillRadio options={["L3", "L5"]} value={`L${formWindow}`} onChange={(value) => setFormWindow(value === "L3" ? 3 : 5)} /></div> : null}
-                  <div className="w-22 shrink-0"><Select label="Position" compact value={playerPosition} options={[...PLAYER_ATTACK_POSITIONS]} onChange={(value) => { setPlayerPosition(value as PlayerAttackPosition); if (isPlayerVsTeam) setPlayerVsTeamPlayer("All players"); }} /></div>
+                  <div className="w-22 shrink-0"><Select label="Position" compact value={playerPosition} options={[...PLAYER_ATTACK_POSITIONS]} onChange={(value) => {
+                    const nextPosition = value as PlayerAttackPosition;
+                    setPlayerPosition(nextPosition);
+                    if (!isOutsideBackPosition(nextPosition)) setGroupPlayerOutsideBacks(false);
+                    if (isPlayerVsTeam) setPlayerVsTeamPlayer("All players");
+                  }} /></div>
+                  <button type="button" aria-pressed={playerPositionGroupActive} className={`min-h-[34px] shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-nrl-accent ${playerPositionGroupActive ? "border-nrl-accent bg-nrl-accent/15 text-nrl-accent" : "border-nrl-border bg-nrl-panel-2 text-nrl-text"}`} onClick={() => {
+                    const selectingOutsideBacks = isOutsideBackPosition(playerPosition);
+                    if (!selectingOutsideBacks) setPlayerPosition("Fullbacks");
+                    setGroupPlayerOutsideBacks((current) => !current || !selectingOutsideBacks);
+                    if (isPlayerVsTeam) setPlayerVsTeamPlayer("All players");
+                  }}>Group OB</button>
                   <div className="w-22 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={changeRound} disabled={isPlayerVariance} /></div>
                 </div>
               </div>
@@ -2703,28 +2730,28 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                   </div>
                 ) : null}
                 <TeamQuadrantScatter
-                  key={`${playerSection}-${playerAttackPlot}-${playerPlotMode}-${playerStatsAggregation}-${playerEfficiencyBaseMetric}-${playerEfficiencyOutputMetric}-${playerEfficiencyView}-${activePlayerComparisonXStat}-${activePlayerComparisonYStat}-${playerVsTeamStat}-${playerVsTeamTeamStat}-${playerVarianceStat}-${effectivePlayerVsTeamPlayer}-${playerPosition}-${year}`}
+                  key={`${playerSection}-${playerAttackPlot}-${playerPlotMode}-${playerStatsAggregation}-${playerEfficiencyBaseMetric}-${playerEfficiencyOutputMetric}-${playerEfficiencyView}-${activePlayerComparisonXStat}-${activePlayerComparisonYStat}-${playerVsTeamStat}-${playerVsTeamTeamStat}-${playerVarianceStat}-${effectivePlayerVsTeamPlayer}-${playerPositionDisplay}-${year}`}
                   points={isPlayerVariance ? playerVariancePoints : isPlayerVsTeam ? playerVsTeamPoints : isPlayerForm ? playerFormPoints : playerSection === "Defense" ? playerDefencePoints : isPlayerEfficiency ? playerAttackPoints : playerAttackComparisonPoints}
                   teamLogos={{}}
                   useLogos={false}
                   pointImages={isPlayerVariance ? playerVariancePointImages : isPlayerVsTeam ? playerVsTeamPointImages : isPlayerForm ? playerFormPointImages : playerPointImages}
                   searchEntityLabel="players"
-                  emptyMessage={isPlayerVariance ? `No ${playerPosition.toLowerCase()} have ${gameWindow ?? 4} qualifying games for a variance calculation.` : isPlayerVsTeam ? `No matched player and team games are available for ${effectivePlayerVsTeamPlayer === "All players" ? playerPosition.toLowerCase() : effectivePlayerVsTeamPlayer}.` : isPlayerForm ? `No ${playerPosition.toLowerCase()} have L${formWindow} plus ${minPriorGames} prior games this season.` : round !== "all" ? `No ${playerPosition.toLowerCase()} recorded a qualifying appearance in Round ${round}.` : `No ${playerPosition.toLowerCase()} have ${gameWindow ?? 4} qualifying games this season.`}
+                  emptyMessage={isPlayerVariance ? `No ${playerPositionDisplayLower} have ${gameWindow ?? 4} qualifying games for a variance calculation.` : isPlayerVsTeam ? `No matched player and team games are available for ${effectivePlayerVsTeamPlayer === "All players" ? playerPositionDisplayLower : effectivePlayerVsTeamPlayer}.` : isPlayerForm ? `No ${playerPositionDisplayLower} have L${formWindow} plus ${minPriorGames} prior games this season.` : round !== "all" ? `No ${playerPositionDisplayLower} recorded a qualifying appearance in Round ${round}.` : `No ${playerPositionDisplayLower} have ${gameWindow ?? 4} qualifying games this season.`}
                   ariaLabel={isPlayerVariance
-                    ? `${playerPosition} ${playerVarianceStat.toLowerCase()} standard deviation dot plot`
+                    ? `${playerPositionDisplay} ${playerVarianceStat.toLowerCase()} standard deviation dot plot`
                     : isPlayerVsTeam
-                    ? `${effectivePlayerVsTeamPlayer === "All players" ? playerPosition : effectivePlayerVsTeamPlayer} player ${playerVsTeamStat.toLowerCase()} against team ${playerVsTeamTeamStat.toLowerCase()} scatter plot`
+                    ? `${effectivePlayerVsTeamPlayer === "All players" ? playerPositionDisplay : effectivePlayerVsTeamPlayer} player ${playerVsTeamStat.toLowerCase()} against team ${playerVsTeamTeamStat.toLowerCase()} scatter plot`
                     : isPlayerForm
-                    ? `${playerPosition} ${playerFormStat.toLowerCase()} prior average against L${formWindow} form scatter plot`
+                    ? `${playerPositionDisplay} ${playerFormStat.toLowerCase()} prior average against L${formWindow} form scatter plot`
                     : playerSection === "Defense"
-                    ? `${playerPosition} tackles against tackle efficiency scatter plot`
+                    ? `${playerPositionDisplay} tackles against tackle efficiency scatter plot`
                     : isPlayerEfficiency
                       ? playerEfficiencyShowsVolume
-                        ? `${playerPosition} ${playerEfficiencyOutputMetric.toLowerCase()} per ${playerEfficiencyUnit} efficiency against ${playerEfficiencyBaseMetric.toLowerCase()} volume scatter plot`
-                        : `${playerPosition} ${playerEfficiencyOutputMetric.toLowerCase()} per ${playerEfficiencyUnit} efficiency dot plot`
+                        ? `${playerPositionDisplay} ${playerEfficiencyOutputMetric.toLowerCase()} per ${playerEfficiencyUnit} efficiency against ${playerEfficiencyBaseMetric.toLowerCase()} volume scatter plot`
+                        : `${playerPositionDisplay} ${playerEfficiencyOutputMetric.toLowerCase()} per ${playerEfficiencyUnit} efficiency dot plot`
                       : isPlayerSingleStat
-                        ? `${playerPosition} ${activePlayerComparisonXStat.toLowerCase()} ${isPlayerTeamProportion ? "team proportion" : isPlayerStatsTotals ? "totals" : playerUsesPer80 ? "per 80 minutes" : "per qualifying game"} dot plot`
-                        : `${playerPosition} ${activePlayerComparisonXStat.toLowerCase()} against ${effectivePlayerComparisonYStat.toLowerCase()} ${isPlayerTeamProportion ? "team proportion" : isPlayerStatsTotals ? "totals" : playerUsesPer80 ? "per 80 minutes" : "per qualifying game"} scatter plot`}
+                        ? `${playerPositionDisplay} ${activePlayerComparisonXStat.toLowerCase()} ${isPlayerTeamProportion ? "team proportion" : isPlayerStatsTotals ? "totals" : playerUsesPer80 ? "per 80 minutes" : "per qualifying game"} dot plot`
+                        : `${playerPositionDisplay} ${activePlayerComparisonXStat.toLowerCase()} against ${effectivePlayerComparisonYStat.toLowerCase()} ${isPlayerTeamProportion ? "team proportion" : isPlayerStatsTotals ? "totals" : playerUsesPer80 ? "per 80 minutes" : "per qualifying game"} scatter plot`}
                   xAxisLabel={withGameWindow(isPlayerVariance
                     ? `${playerVarianceStat.toUpperCase()} STANDARD DEVIATION · LOWER IS BETTER →`
                     : isPlayerVsTeam
@@ -2762,7 +2789,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
               </div>
               {playerInfoOpen ? (
                 <div id="player-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-2">
-                  <div><span className="font-black text-nrl-text">Position sample</span><br />{isPlayerVsTeam ? effectivePlayerVsTeamPlayer === "All players" ? `${playerPosition} with at least ${gameWindow ?? 4} matched player and team games.` : `${effectivePlayerVsTeamPlayer}'s matched games while selected as ${playerPosition.toLowerCase()}.` : round !== "all" && !isPlayerForm ? `${playerPosition} with a qualifying appearance in Round ${round}.` : `${playerPosition} with at least ${isPlayerForm ? formWindow + minPriorGames : gameWindow ?? 4} qualifying games in position.`} Games below {playerMinimumMinutes} minutes are excluded. Recorded positions are used, with jersey number only used when position data is unavailable.</div>
+                  <div><span className="font-black text-nrl-text">Position sample</span><br />{isPlayerVsTeam ? effectivePlayerVsTeamPlayer === "All players" ? `${playerPositionDisplay} with at least ${gameWindow ?? 4} matched player and team games.` : `${effectivePlayerVsTeamPlayer}'s matched games while selected as ${playerPositionDisplayLower}.` : round !== "all" && !isPlayerForm ? `${playerPositionDisplay} with a qualifying appearance in Round ${round}.` : `${playerPositionDisplay} with at least ${isPlayerForm ? formWindow + minPriorGames : gameWindow ?? 4} qualifying games in position.`} Games below {playerMinimumMinutes} minutes are excluded. Recorded positions are used, with jersey number only used when position data is unavailable.</div>
                   <div><span className="font-black text-nrl-text">{isPlayerVariance ? "Standard deviation" : isPlayerVsTeam ? "Player vs team" : isPlayerForm ? "Prior" : "Player / Games"}</span><br />{isPlayerVariance ? `Each point is one player's population standard deviation for match-level ${playerVarianceStat.toLowerCase()}. Lower values mean more consistent output.` : isPlayerVsTeam ? effectivePlayerVsTeamPlayer === "All players" ? "Each point is one player. The horizontal value is their team's average in the same matches; the vertical value is the player's average." : "Each point is one match for the selected player, comparing their result with their team's result in that match." : isPlayerForm ? `The horizontal value averages every qualifying season game before the latest ${formWindow}. At least ${minPriorGames} prior games are required.` : "Player mode combines each player's qualifying sample into one point. Games mode shows every game from that same sample as its own point."}</div>
                   <div><span className="font-black text-nrl-text">{isPlayerForm ? `L${formWindow} form` : "Game window"}</span><br />{isPlayerForm ? `The vertical value averages the latest ${formWindow} games. The diagonal is no change; point colour shows whether the selected stat improved or worsened.` : round !== "all" ? `Only qualifying appearances from Round ${round} are included.` : gameWindow === null ? isPlayerVsTeamSelected ? "All matched games for the selected player are included." : "All qualifying games are included for players with at least four appearances." : `L${gameWindow} uses each player's latest ${gameWindow} qualifying games from 2026 and requires that full sample.`}</div>
                   <div><span className="font-black text-nrl-text">Minutes adjustment</span><br />{

@@ -144,7 +144,7 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
         setGroupOutsideBacks(!groupOutsideBacks);
         if (!groupOutsideBacks && ["Fullbacks", "Wingers", "Centres"].includes(sortPosition)) setSortPosition("Outside Backs");
         else if (groupOutsideBacks && sortPosition === "Outside Backs") setSortPosition("Fullbacks");
-      }}>Group Outside Backs</button>
+      }}>Group OB</button>
     </div>
     {error === key ? <div role="alert">Unable to load matchup data. <button className="text-nrl-accent underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div>
       : !hasRowsSource ? <div role="status" className="p-8 text-center text-nrl-muted">Loading matchup data…</div>

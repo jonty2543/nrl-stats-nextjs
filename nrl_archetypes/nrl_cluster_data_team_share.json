@@ -114,7 +114,7 @@
                 {
                     "id": 0,
                     "name": "Link Centre",
-                    "count": 233,
+                    "count": 234,
                     "description": "These centres play more of a Five-Eighth role with a high pass to run ratio, often looking to set up their winger."
                 },
                 {
@@ -132,7 +132,7 @@
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 310,
+                    "count": 309,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],
@@ -169,13 +169,13 @@
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 371,
+                    "count": 372,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
                     "id": 1,
                     "name": "Running Half",
-                    "count": 348,
+                    "count": 347,
                     "description": "Halves with strong running games who look to break the line, usually Five-Eighths."
                 },
                 {
@@ -275,25 +275,25 @@
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 474,
+                    "count": 475,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 457,
+                    "count": 459,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 172,
+                    "count": 171,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 200,
+                    "count": 198,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -1251,13 +1251,13 @@
                 {
                     "id": 2,
                     "name": "Support Centre",
-                    "count": 116,
+                    "count": 115,
                     "description": "These players are less involved with ball in hand and may play other roles for the team."
                 },
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 88,
+                    "count": 89,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],

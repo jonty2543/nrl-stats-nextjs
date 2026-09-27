@@ -67,7 +67,7 @@
                 {
                     "id": 0,
                     "name": "Support Winger",
-                    "count": 20,
+                    "count": 21,
                     "description": "These wingers tend to be less involved in the game, perhaps due to lack of skill or opportunity."
                 },
                 {
@@ -79,7 +79,7 @@
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 27,
+                    "count": 26,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -120,7 +120,7 @@
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 7,
+                    "count": 8,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
@@ -132,7 +132,7 @@
                 {
                     "id": 3,
                     "name": "Strike Centre",
-                    "count": 19,
+                    "count": 18,
                     "description": "Centres who are heavily involved in try scoring, and may look to set up those around them rather than taking tough carries."
                 }
             ],
@@ -169,19 +169,19 @@
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 14,
+                    "count": 13,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
                     "id": 1,
                     "name": "Running Half",
-                    "count": 15,
+                    "count": 14,
                     "description": "Halves with strong running games who look to break the line, usually Five-Eighths."
                 },
                 {
                     "id": 2,
                     "name": "Organising Half",
-                    "count": 22,
+                    "count": 24,
                     "description": "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
                 }
             ],
@@ -220,7 +220,7 @@
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 10,
+                    "count": 8,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
@@ -232,13 +232,13 @@
                 {
                     "id": 2,
                     "name": "Link Hooker",
-                    "count": 6,
+                    "count": 7,
                     "description": "Hookers that look to pass rather than run, usually having strong ball playing."
                 },
                 {
                     "id": 3,
                     "name": "Crafty Hooker",
-                    "count": 6,
+                    "count": 7,
                     "description": "Creative types who specialise in finding the right pass for their forwards."
                 }
             ],

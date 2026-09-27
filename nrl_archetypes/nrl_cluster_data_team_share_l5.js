@@ -6,13 +6,13 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 0,
                     "name": "Ball Running Fullback",
-                    "count": 5,
+                    "count": 4,
                     "description": "Fullbacks who are quick and able to break the defensive line, and opt for game breaking runs over tough carries."
                 },
                 {
                     "id": 1,
                     "name": "Balanced Fullback",
-                    "count": 2,
+                    "count": 3,
                     "description": "These well rounded fullbacks balance workrate, playmaking and elusiveness making them the complete package."
                 },
                 {
@@ -67,19 +67,19 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 0,
                     "name": "Support Winger",
-                    "count": 23,
+                    "count": 24,
                     "description": "These wingers tend to be less involved in the game, perhaps due to lack of skill or opportunity."
                 },
                 {
                     "id": 1,
                     "name": "Finisher Winger",
-                    "count": 11,
+                    "count": 9,
                     "description": "Wingers who are specialist try scorers, often with great positional awareness and speed."
                 },
                 {
                     "id": 2,
                     "name": "Workhorse Winger",
-                    "count": 23,
+                    "count": 24,
                     "description": "High involvement wingers who are strong in contact, often taking carries out of their own end."
                 }
             ],
@@ -175,13 +175,13 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 1,
                     "name": "Running Half",
-                    "count": 14,
+                    "count": 13,
                     "description": "Halves with strong running games who look to break the line, usually Five-Eighths."
                 },
                 {
                     "id": 2,
                     "name": "Organising Half",
-                    "count": 23,
+                    "count": 24,
                     "description": "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
                 }
             ],
@@ -220,7 +220,7 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 9,
+                    "count": 8,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
@@ -232,7 +232,7 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 2,
                     "name": "Link Hooker",
-                    "count": 7,
+                    "count": 8,
                     "description": "Hookers that look to pass rather than run, usually having strong ball playing."
                 },
                 {
@@ -335,13 +335,13 @@ const clusterDataTeamShareL5 = {
                 {
                     "id": 1,
                     "name": "Impact Middle",
-                    "count": 14,
+                    "count": 15,
                     "description": "The most effective ball runners, these middles are characterised by strong carries, tackle breaks and post-contact metres."
                 },
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 47,
+                    "count": 46,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

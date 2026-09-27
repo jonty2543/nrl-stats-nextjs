@@ -175,13 +175,13 @@
                 {
                     "id": 1,
                     "name": "Running Half",
-                    "count": 319,
+                    "count": 318,
                     "description": "Halves with strong running games who look to break the line, usually Five-Eighths."
                 },
                 {
                     "id": 2,
                     "name": "Organising Half",
-                    "count": 520,
+                    "count": 521,
                     "description": "Less dominant halves who may rely on their halves partner to control the attack, focusing on organising their edge."
                 }
             ],
@@ -275,25 +275,25 @@
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 446,
+                    "count": 449,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 473,
+                    "count": 470,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
                     "id": 2,
                     "name": "Strong Attacking Edge",
-                    "count": 103,
+                    "count": 102,
                     "description": "These players are strong in contact and are relied upon to make metres for their team, often involved in tries as a result."
                 },
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 281,
+                    "count": 282,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -1294,13 +1294,13 @@
                 {
                     "id": 0,
                     "name": "Dominant Half",
-                    "count": 85,
+                    "count": 84,
                     "description": "These players control the attack, and are usually relied upon to set up tries and do most of the kicking."
                 },
                 {
                     "id": 1,
                     "name": "Running Half",
-                    "count": 100,
+                    "count": 101,
                     "description": "Halves with strong running games who look to break the line, usually Five-Eighths."
                 },
                 {
@@ -1400,13 +1400,13 @@
                 {
                     "id": 0,
                     "name": "Defensive Enforcer Edge",
-                    "count": 108,
+                    "count": 106,
                     "description": "Defensive specialists who are key in protecting their edge. Less involved in attacking situations."
                 },
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 101,
+                    "count": 102,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
@@ -1418,7 +1418,7 @@
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 88,
+                    "count": 89,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -1454,7 +1454,7 @@
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 66,
+                    "count": 68,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
@@ -1466,7 +1466,7 @@
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 310,
+                    "count": 308,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

@@ -120,13 +120,13 @@
                 {
                     "id": 1,
                     "name": "Workhorse Centre",
-                    "count": 10,
+                    "count": 9,
                     "description": "Attacking weapons who are heavily involved in gaining metres aswell as breaking the line and scoring tries."
                 },
                 {
                     "id": 2,
                     "name": "Support Centre",
-                    "count": 18,
+                    "count": 19,
                     "description": "These players are less involved with ball in hand and may play other roles for the team."
                 },
                 {
@@ -220,7 +220,7 @@
                 {
                     "id": 0,
                     "name": "Balanced Hooker",
-                    "count": 12,
+                    "count": 11,
                     "description": "Hookers who balance dummy half runs and creativity."
                 },
                 {
@@ -238,7 +238,7 @@
                 {
                     "id": 3,
                     "name": "Crafty Hooker",
-                    "count": 5,
+                    "count": 6,
                     "description": "Creative types who specialise in finding the right pass for their forwards."
                 }
             ],
@@ -281,7 +281,7 @@
                 {
                     "id": 1,
                     "name": "Support Edge",
-                    "count": 16,
+                    "count": 17,
                     "description": "These edges are less involved in attack and defense, and may specialise in other areas."
                 },
                 {
@@ -293,7 +293,7 @@
                 {
                     "id": 3,
                     "name": "Strike Attacking Edge",
-                    "count": 14,
+                    "count": 13,
                     "description": "Great line runners, often breaking the line and scoring tries, playing like a centre in attack."
                 }
             ],
@@ -329,7 +329,7 @@
                 {
                     "id": 0,
                     "name": "Ball Playing Middle",
-                    "count": 9,
+                    "count": 10,
                     "description": "These middles often play in the lock position with strong ball playing skills, directing players in the middle of the park."
                 },
                 {
@@ -341,7 +341,7 @@
                 {
                     "id": 2,
                     "name": "Standard Middle",
-                    "count": 59,
+                    "count": 58,
                     "description": "Making up the rest of the middle, these players share the hit up and tackling duties."
                 }
             ],

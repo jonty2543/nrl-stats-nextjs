@@ -348,12 +348,33 @@ def table_column_exists(table, column):
         return False
 
 
+def fetch_table_columns(table):
+    try:
+        response = (
+            supabase
+            .schema("nrl")
+            .table(table)
+            .select("*")
+            .limit(1)
+            .execute()
+        )
+        if response.data:
+            return set(response.data[0].keys())
+    except Exception:
+        pass
+    return None
+
+
 def resolve_source_columns(table, columns):
+    available_table_columns = fetch_table_columns(table)
     resolved = {}
     missing = []
     for column in columns:
         candidates = SOURCE_COLUMN_ALIASES.get(column, [column])
-        source = next((candidate for candidate in candidates if table_column_exists(table, candidate)), None)
+        if available_table_columns is not None:
+            source = next((candidate for candidate in candidates if candidate in available_table_columns), None)
+        else:
+            source = next((candidate for candidate in candidates if table_column_exists(table, candidate)), None)
         if source:
             resolved[column] = source
         else:
@@ -361,7 +382,7 @@ def resolve_source_columns(table, columns):
     return resolved, missing
 
 
-def fetch_player_stats_for_years(years, configs, table=PLAYER_STATS_TABLE, batch=500):
+def fetch_player_stats_for_years(years, configs, table=PLAYER_STATS_TABLE, batch=1000):
     columns = _player_stat_columns(configs)
     source_columns, missing_columns = resolve_source_columns(table, columns)
     available_columns = sorted(set(source_columns.values()))
@@ -394,6 +415,7 @@ def fetch_player_stats_for_years(years, configs, table=PLAYER_STATS_TABLE, batch
         start_date = f"{year}-01-01"
         end_date = f"{year + 1}-01-01"
         offset = 0
+        year_rows = 0
 
         while True:
             query = (
@@ -420,7 +442,9 @@ def fetch_player_stats_for_years(years, configs, table=PLAYER_STATS_TABLE, batch
             for column in missing_columns:
                 frame[column] = None if column in {'number', 'position'} else 0
             frames.append(frame)
+            year_rows += len(data)
             offset += batch
+        print(f"  {year}: fetched {year_rows} rows")
 
     if not frames:
         return pd.DataFrame(columns=columns)

@@ -37,6 +37,18 @@ interface KeyMetricsProps {
   groupCol?: "Name" | "Team";
 }
 
+function statAverage(rows: (PlayerStat | TeamStat)[], col: string): number | null {
+  if (col === "Passes To Run Ratio") {
+    const passes = rows.reduce((sum, row) => sum + (typeof row.Passes === "number" && Number.isFinite(row.Passes) ? row.Passes : 0), 0);
+    const runs = rows.reduce((sum, row) => sum + (typeof row["All Runs"] === "number" && Number.isFinite(row["All Runs"]) ? row["All Runs"] : 0), 0);
+    return runs > 0 ? passes / runs : null;
+  }
+  const vals = rows
+    .map((r) => r[col as keyof typeof r])
+    .filter((v): v is number => typeof v === "number" && !isNaN(v));
+  return vals.length > 0 ? mean(vals) : null;
+}
+
 export function KeyMetrics({
   entities,
   statCols = DEFAULT_PLAYER_STATS,
@@ -68,6 +80,11 @@ export function KeyMetrics({
       const avgs = new Map<string, number>();
       for (const [stat, { sum, count }] of statsMap) {
         avgs.set(stat, sum / count);
+      }
+      if (statCols.some(([col]) => col === "Passes To Run Ratio")) {
+        const rows = allRows.filter((row) => row[groupCol] === key);
+        const value = statAverage(rows, "Passes To Run Ratio");
+        if (value !== null) avgs.set("Passes To Run Ratio", value);
       }
       allEntityAvgs.set(key, avgs);
     }
@@ -110,12 +127,7 @@ export function KeyMetrics({
             <tr key={col}>
               <td className="p-0.5 text-[0.72rem] text-nrl-muted">{label}</td>
               {entities.map((entity) => {
-                const vals = entity.rows
-                  .map((r) => r[col as keyof typeof r])
-                  .filter(
-                    (v): v is number => typeof v === "number" && !isNaN(v)
-                  );
-                const avg = vals.length > 0 ? mean(vals) : null;
+                const avg = statAverage(entity.rows, col);
 
                 return (
                   <td
@@ -127,12 +139,7 @@ export function KeyMetrics({
                 );
               })}
               {showPct && allEntityAvgs && (() => {
-                const vals = entities[0].rows
-                  .map((r) => r[col as keyof typeof r])
-                  .filter(
-                    (v): v is number => typeof v === "number" && !isNaN(v)
-                  );
-                const avg = vals.length > 0 ? mean(vals) : null;
+                const avg = statAverage(entities[0].rows, col);
 
                 if (avg === null) {
                   return (

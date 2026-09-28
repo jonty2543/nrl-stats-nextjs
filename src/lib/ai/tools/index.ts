@@ -605,6 +605,20 @@ function average(values: number[]): number | null {
   return roundToTwoDecimals(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
+function numericValue(row: Record<string, unknown>, key: string): number {
+  const value = row[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function aggregateStatAverage<T extends Record<string, unknown>>(rows: T[], statKey: string, fallbackValues?: number[]): number | null {
+  if (statKey === "Passes To Run Ratio") {
+    const passes = rows.reduce((sum, row) => sum + numericValue(row, "Passes"), 0);
+    const runs = rows.reduce((sum, row) => sum + numericValue(row, "All Runs"), 0);
+    return runs > 0 ? roundToTwoDecimals(passes / runs) : null;
+  }
+  return average(fallbackValues ?? rows.map((row) => row[statKey]).filter((value): value is number => typeof value === "number"));
+}
+
 function selectNumericStatKeys<T extends Record<string, unknown>>(
   rows: T[],
   dimensionKeys: Set<string>
@@ -716,7 +730,7 @@ function summariseStatBlock<T extends Record<string, unknown>>(rows: T[], statKe
       return [
         statKey,
         {
-          avg: average(values),
+          avg: aggregateStatAverage(rows, statKey, values),
           min: values.length > 0 ? Math.min(...values) : null,
           max: values.length > 0 ? Math.max(...values) : null,
         },
@@ -2070,7 +2084,7 @@ async function runRankTeamsByStat(
     return buildError(`Unsupported statKey "${parsed.statKey}" for team ranking.`);
   }
 
-  const perTeam = new Map<string, number[]>();
+  const perTeam = new Map<string, TeamStat[]>();
   rows.forEach((row) => {
     const value = row[statKey];
     if (typeof value !== "number") {
@@ -2079,22 +2093,27 @@ async function runRankTeamsByStat(
 
     const bucket = perTeam.get(row.Team);
     if (bucket) {
-      bucket.push(value);
+      bucket.push(row);
       return;
     }
 
-    perTeam.set(row.Team, [value]);
+    perTeam.set(row.Team, [row]);
   });
 
   const rankings = [...perTeam.entries()]
-    .map(([team, values]) => ({
-      team,
-      games: values.length,
-      avg: average(values),
-      total: roundToTwoDecimals(values.reduce((sum, value) => sum + value, 0)),
-      min: values.length > 0 ? Math.min(...values) : null,
-      max: values.length > 0 ? Math.max(...values) : null,
-    }))
+    .map(([team, teamRows]) => {
+      const values = teamRows
+        .map((row) => row[statKey])
+        .filter((value): value is number => typeof value === "number");
+      return {
+        team,
+        games: values.length,
+        avg: aggregateStatAverage(teamRows, statKey, values),
+        total: roundToTwoDecimals(values.reduce((sum, value) => sum + value, 0)),
+        min: values.length > 0 ? Math.min(...values) : null,
+        max: values.length > 0 ? Math.max(...values) : null,
+      };
+    })
     .filter((entry) => entry.avg != null)
     .sort((left, right) => {
       const avgDelta =
@@ -2285,7 +2304,7 @@ async function runRankPlayersByStat(
         return best;
       }, playerRows[0]);
 
-      const avg = average(values);
+      const avg = aggregateStatAverage(playerRows, statKey, values);
       const total = roundToTwoDecimals(values.reduce((sum, value) => sum + value, 0));
       const max = roundToTwoDecimals(Math.max(...values));
       const totalMinutes = roundToTwoDecimals(

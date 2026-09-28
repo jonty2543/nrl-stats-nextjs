@@ -175,10 +175,11 @@ export function computeSummary(
     const values = rows
       .map((r) => toFiniteNumber(r[stat]))
       .filter((v): v is number => v !== null);
+    const passRunAverage = passRunRatio(rows, stat);
     return {
       label: name,
       stat,
-      avg: mean(values),
+      avg: passRunAverage ?? mean(values),
       med: median(values),
       min: min(values),
       max: max(values),
@@ -228,6 +229,11 @@ export function computePercentileRanks(
     for (const [stat, { sum, count }] of statsMap) {
       avgs.set(stat, sum / count);
     }
+    if (stats.includes("Passes To Run Ratio")) {
+      const groupRows = allRows.filter((row) => row[groupCol] === key);
+      const value = passRunRatio(groupRows, "Passes To Run Ratio");
+      if (value !== null) avgs.set("Passes To Run Ratio", value);
+    }
     entityAvgs.set(key, avgs);
   }
 
@@ -243,7 +249,7 @@ export function computePercentileRanks(
       .filter((v): v is number => v !== null);
     if (vals.length === 0) continue;
 
-    const playerAvg = mean(vals);
+    const playerAvg = passRunRatio(entityValues, stat) ?? mean(vals);
     const allAvgs: number[] = [];
     for (const avgs of entityAvgs.values()) {
       const avg = avgs.get(stat);
@@ -282,6 +288,13 @@ export function computePercentileRanks(
   }
 
   return results;
+}
+
+function passRunRatio(rows: Array<Pick<PlayerStat, "Passes" | "All Runs">>, stat: string): number | null {
+  if (stat !== "Passes To Run Ratio") return null;
+  const passes = rows.reduce((sum, row) => sum + (toFiniteNumber(row.Passes) ?? 0), 0);
+  const runs = rows.reduce((sum, row) => sum + (toFiniteNumber(row["All Runs"]) ?? 0), 0);
+  return runs > 0 ? passes / runs : null;
 }
 
 // ---------------------------------------------------------------------------

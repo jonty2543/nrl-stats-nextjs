@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server";
-import { fetchAvailableYears, fetchFantasyPlayerStatsForYears, fetchPlayerStats } from "@/lib/supabase/queries";
+import { fetchAvailableYears, fetchFantasyPlayerStatsForYears, fetchPlayerStats, fetchPlayerStatsFromSupabase } from "@/lib/supabase/queries";
 import { isAccessibleSeason } from "@/lib/access/season-access";
 import { selectTeamShareSourceRows } from "@/lib/data/receipt-share";
 
@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const playerParam = searchParams.get("player")?.trim();
     const isFantasyContext = searchParams.get("context") === "fantasy";
     const isTeamShareContext = searchParams.get("scope") === "team-share";
+    const fresh = searchParams.get("fresh") === "1";
     const competition = searchParams.get("competition") === "cup" ? "cup" : "nrl";
     if (competition === "cup" && !canAccessProSeason) {
       return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
@@ -46,7 +47,9 @@ export async function GET(request: NextRequest) {
 
     const data = playerParam
       ? await fetchFantasyPlayerStatsForYears(playerParam, allowedYears)
-      : await fetchPlayerStats(allowedYears, competition);
+      : fresh
+        ? await fetchPlayerStatsFromSupabase(allowedYears, competition)
+        : await fetchPlayerStats(allowedYears, competition);
     const responseData = isTeamShareContext ? selectTeamShareSourceRows(data) : data;
     const dataResolvedAt = performance.now();
     const response = NextResponse.json(responseData);

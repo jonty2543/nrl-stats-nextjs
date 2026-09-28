@@ -455,6 +455,12 @@ function average(values: number[]): number | null {
   return roundToTwoDecimals(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
+function passRunRatio(rows: Array<Record<string, unknown>>): number | null {
+  const passes = rows.reduce((sum, row) => sum + (typeof row.Passes === "number" && Number.isFinite(row.Passes) ? row.Passes : 0), 0);
+  const runs = rows.reduce((sum, row) => sum + (typeof row["All Runs"] === "number" && Number.isFinite(row["All Runs"]) ? row["All Runs"] : 0), 0);
+  return runs > 0 ? roundToTwoDecimals(passes / runs) : null;
+}
+
 const REVERSE_COLUMN_RENAME_MAP = Object.entries(COLUMN_RENAME_MAP).reduce<Record<string, string[]>>(
   (accumulator, [rawKey, displayKey]) => {
     const bucket = accumulator[displayKey] ?? [];
@@ -821,7 +827,7 @@ function aggregateRows(
           );
           break;
         case "avg":
-          nextRow[alias] = average(numericValues);
+          nextRow[alias] = aggregation.field === "Passes To Run Ratio" ? passRunRatio(groupedRows) : average(numericValues);
           break;
         case "min":
           nextRow[alias] = numericValues.length > 0 ? Math.min(...numericValues) : null;

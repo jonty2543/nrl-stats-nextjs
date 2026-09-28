@@ -175,6 +175,11 @@ function numericStat(row: PlayerStat | TeamStat, stat: PlayerAttackComparisonSta
 }
 
 function formAverage(rows: Array<PlayerStat | TeamStat>, stat: PlayerAttackComparisonStat, perStat: OptionalPlayerComparisonStat): number | null {
+  if (stat === "Pass to run ratio" && perStat === "None") {
+    const passes = rows.reduce((sum, row) => sum + numericStat(row, "Passes"), 0);
+    const runs = rows.reduce((sum, row) => sum + numericStat(row, "Runs"), 0);
+    return runs > 0 ? passes / runs : null;
+  }
   if (stat === "Play-the-ball speed" && perStat === "None") {
     const speeds = rows.map((row) => numericStat(row, stat)).filter((value) => value > 0);
     return speeds.length > 0 ? speeds.reduce((sum, value) => sum + value, 0) / speeds.length : null;
@@ -595,8 +600,8 @@ const PLAYER_TACKLE_QUADRANTS: QuadrantLabels = {
 };
 
 type TeamSection = "Attack" | "Defense" | "Other";
-type AttackPlot = "Stats" | "Efficiency" | "Variance" | "Form" | "Round by Round" | "Attack heatmap" | "xPoints vs actual points";
-type DefencePlot = "Matchup heatmap" | "Contact vs line defense rating" | "Stats Conceded" | "Defensive Efficiency" | "Actual points conceded vs xPoints conceded";
+type AttackPlot = "Stats" | "Efficiency" | "Variance" | "Form" | "Round by Round" | "Attack heatmap" | "Efficiency heatmap" | "xPoints vs actual points";
+type DefencePlot = "Matchup heatmap" | "Efficiency heatmap" | "Contact vs line defense rating" | "Stats Conceded" | "Defensive Efficiency" | "Actual points conceded vs xPoints conceded";
 type EfficiencyView = "Efficiency" | "Volume axis";
 type TeamOtherPlot = "For vs Against" | "Team Share by Position" | "Ruck Dominance Rating";
 type PlayerAttackPlot = "Stats" | "Efficiency" | "Variance" | "Team Proportion" | "Player vs Team" | "Form" | "Round by Round";
@@ -623,7 +628,9 @@ type PlotViewId =
   | "team_attack_xpoints"
   | "team_form"
   | "team_attack_heatmap"
+  | "team_attack_efficiency_heatmap"
   | "team_defense_heatmap"
+  | "team_defense_efficiency_heatmap"
   | "team_defense_stats"
   | "team_defense_efficiency"
   | "team_defense_contact"
@@ -649,7 +656,9 @@ const PLOT_VIEW_SUMMARIES: Record<PlotViewId, string> = {
   team_attack_xpoints: "Actual points vs expected points",
   team_form: "Recent form vs prior form",
   team_attack_heatmap: "Team output by position",
+  team_attack_efficiency_heatmap: "Team output per action by position",
   team_defense_heatmap: "Opposition output allowed by position",
+  team_defense_efficiency_heatmap: "Opposition output per action allowed by position",
   team_defense_stats: "Stats against a team",
   team_defense_efficiency: "Conceded per action faced",
   team_defense_contact: "Contact vs line defence",
@@ -687,6 +696,7 @@ const PLOT_DISCOVERY_OPTIONS: PlotDiscoveryOption[] = [
   { id: "team-round-by-round", sentence: "How does a team's output change each round?", category: "Team stats", keywords: "round by round team season games for against conceded", view: "team_round_by_round" },
   { id: "team-matchup-heatmap", sentence: "Which teams allow the most output to each position?", category: "Team Defense", keywords: "matchup heatmap opposition position allowed conceded", view: "team_defense_heatmap" },
   { id: "team-attack-heatmap", sentence: "Which positions drive each team’s output?", category: "Team stats", keywords: "attack heatmap team position output", view: "team_attack_heatmap" },
+  { id: "team-efficiency-heatmap", sentence: "Which positions are most efficient for each team?", category: "Team stats", keywords: "team efficiency heatmap position output per runs receipts passes kicks", view: "team_attack_efficiency_heatmap" },
   { id: "player-metres", sentence: "Who gains the most run metres?", category: "Player stats", keywords: "player running carries fullback winger centre", view: "player_attack_stats", preset: "player_metres" },
   { id: "player-efficiency", sentence: "Which players combine run volume and efficiency?", category: "Player stats", keywords: "player metres per run output middle forward", view: "player_attack_efficiency", preset: "player_efficiency" },
   { id: "player-team-role", sentence: "Who contributes the largest share of their team's output?", category: "Player stats", keywords: "player team role proportion share receipts runs metres", view: "player_attack_share", preset: "player_team_role" },
@@ -1348,6 +1358,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const isTeamAttackStatComparison = isAttack && attackPlot === "Stats";
   const isMatchupHeatmap = isDefense && defencePlot === "Matchup heatmap";
   const isAttackHeatmap = isAttack && attackPlot === "Attack heatmap";
+  const isTeamAttackEfficiencyHeatmap = isAttack && attackPlot === "Efficiency heatmap";
+  const isTeamDefenceEfficiencyHeatmap = isDefense && defencePlot === "Efficiency heatmap";
+  const isTeamEfficiencyHeatmap = isTeamAttackEfficiencyHeatmap || isTeamDefenceEfficiencyHeatmap;
+  const isTeamPositionHeatmap = isMatchupHeatmap || isAttackHeatmap || isTeamEfficiencyHeatmap;
   const isTeamDefenceStatsConceded = isDefense && defencePlot === "Stats Conceded";
   const isTeamDefenceEfficiency = isDefense && defencePlot === "Defensive Efficiency";
   const teamDefenceEfficiencyShowsVolume = isTeamDefenceEfficiency && teamDefenceEfficiencyView === "Volume axis";
@@ -1375,6 +1389,10 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
               : playerAttackPlot === "Variance"
                 ? "player_variance"
             : "player_attack_stats"
+    : isTeamAttackEfficiencyHeatmap
+      ? "team_attack_efficiency_heatmap"
+    : isTeamDefenceEfficiencyHeatmap
+      ? "team_defense_efficiency_heatmap"
     : isAttackHeatmap
       ? "team_attack_heatmap"
     : isMatchupHeatmap
@@ -2100,6 +2118,22 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
         return;
       }
 
+      if (isTeamPositionHeatmap) {
+        const [playersResponse, teamsResponse] = await Promise.all([
+          playerRowsByYear[key] ? null : fetch(`/api/player-stats?years=${encodeURIComponent(nextYear)}${query}`),
+          rowsByYear[key] ? null : fetch(`/api/team-stats?years=${encodeURIComponent(nextYear)}${query}`),
+        ]);
+        if (playersResponse?.ok) {
+          const rows = await playersResponse.json() as PlayerStat[];
+          setPlayerRowsByYear((current) => ({ ...current, [key]: rows }));
+        }
+        if (teamsResponse?.ok) {
+          const rows = await teamsResponse.json() as TeamStat[];
+          setRowsByYear((current) => ({ ...current, [key]: rows }));
+        }
+        return;
+      }
+
       if (rowsByYear[key]) return;
       const response = await fetch(`/api/team-stats?years=${encodeURIComponent(nextYear)}${query}`);
       if (!response.ok) return;
@@ -2239,13 +2273,24 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
       case "team_attack_heatmap":
         setTeamSection("Attack");
         setAttackPlot("Attack heatmap");
-        void loadTeamYear(year);
+        void loadOtherYear(year);
+        break;
+      case "team_attack_efficiency_heatmap":
+        setTeamSection("Attack");
+        setAttackPlot("Efficiency heatmap");
+        void loadOtherYear(year);
         break;
       case "team_defense_heatmap":
         setTeamSection("Defense");
         setDefencePlot("Matchup heatmap");
         setMode("season");
-        void loadTeamYear(year);
+        void loadOtherYear(year);
+        break;
+      case "team_defense_efficiency_heatmap":
+        setTeamSection("Defense");
+        setDefencePlot("Efficiency heatmap");
+        setMode("season");
+        void loadOtherYear(year);
         break;
       case "team_defense_stats":
         setTeamSection("Defense");
@@ -2489,7 +2534,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
           : activePlayerComparisonYStat === "None"
             ? `${activePlayerComparisonXStat} — ${playerPositionDisplay}`
             : `${activePlayerComparisonXStat} vs ${effectivePlayerComparisonYStat} — ${playerPositionDisplay}`;
-  const teamPlotTitle = isAttackHeatmap ? "Team heatmap — For" : isMatchupHeatmap ? "Team heatmap — Against" : isOther
+  const teamPlotTitle = isTeamAttackEfficiencyHeatmap ? "Team efficiency heatmap — For" : isTeamDefenceEfficiencyHeatmap ? "Team efficiency heatmap — Against" : isAttackHeatmap ? "Team heatmap — For" : isMatchupHeatmap ? "Team heatmap — Against" : isOther
     ? isForVsAgainstPlot
       ? `${teamForStat} for vs ${teamAgainstStat} against`
       : isTeamSharePlot
@@ -2537,7 +2582,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
           <Select
             label="View"
             hideLabel
-            value={activePlotView === "player_defense_tackles" ? "player_attack_stats" : activePlotView === "team_defense_stats" ? "team_attack_stats" : activePlotView === "team_defense_efficiency" ? "team_attack_efficiency" : activePlotView === "team_defense_heatmap" ? "team_attack_heatmap" : activePlotView}
+            value={activePlotView === "player_defense_tackles" ? "player_attack_stats" : activePlotView === "team_defense_stats" ? "team_attack_stats" : activePlotView === "team_defense_efficiency" ? "team_attack_efficiency" : activePlotView === "team_defense_heatmap" ? "team_attack_heatmap" : activePlotView === "team_defense_efficiency_heatmap" ? "team_attack_efficiency_heatmap" : activePlotView}
             description={PLOT_VIEW_SUMMARIES[activePlotView]}
             options={[
               { label: "Player stats", options: [
@@ -2560,6 +2605,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                 { value: "team_variance", label: "Team variance" },
                 { value: "team_round_by_round", label: "Round by Round" },
                 { value: "team_attack_heatmap", label: "Team heatmap" },
+                { value: "team_attack_efficiency_heatmap", label: "Team efficiency heatmap" },
               ] },
               { label: "Teams · Form", options: [
                 { value: "team_form", label: "Team form" },
@@ -2839,8 +2885,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                   <div className="w-24 shrink-0">
                     <Select label="Stats" compact value={isDefense ? "Against" : "For"} options={["For", "Against"]} onChange={(value) => {
                       setTeamSection(value === "Against" ? "Defense" : "Attack");
-                      if (value === "Against") setDefencePlot(isMatchupHeatmap || isAttackHeatmap ? "Matchup heatmap" : isTeamEfficiency ? "Defensive Efficiency" : "Stats Conceded");
-                      else setAttackPlot(isMatchupHeatmap || isAttackHeatmap ? "Attack heatmap" : isTeamEfficiency ? "Efficiency" : "Stats");
+                      if (value === "Against") setDefencePlot(isTeamEfficiencyHeatmap ? "Efficiency heatmap" : isTeamPositionHeatmap ? "Matchup heatmap" : isTeamEfficiency ? "Defensive Efficiency" : "Stats Conceded");
+                      else setAttackPlot(isTeamEfficiencyHeatmap ? "Efficiency heatmap" : isTeamPositionHeatmap ? "Attack heatmap" : isTeamEfficiency ? "Efficiency" : "Stats");
                     }} />
                   </div>
                 ) : null}
@@ -2855,7 +2901,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                 {isForVsAgainstPlot ? <div className="w-32 shrink-0"><Select label="For stat" compact value={teamForStat} options={[...TEAM_FOR_AGAINST_STATS]} onChange={(value) => setTeamForStat(value as TeamAttackComparisonStat)} /></div> : null}
                 {isForVsAgainstPlot ? <div className="w-32 shrink-0"><Select label="Against stat" compact value={teamAgainstStat} options={[...TEAM_FOR_AGAINST_STATS]} onChange={(value) => setTeamAgainstStat(value as TeamAttackComparisonStat)} /></div> : null}
                 {isTeamSharePlot ? <div className="w-24 shrink-0"><Select label="Stat" compact value={teamShareMetric} options={[...TEAM_SHARE_METRICS]} onChange={(value) => setTeamShareMetric(value as TeamShareMetric)} /></div> : null}
-                {!isMatchupHeatmap && !isAttackHeatmap ? <div className="w-22 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={changeRound} disabled={isTeamVariance} /></div> : null}
+                {!isTeamPositionHeatmap ? <div className="w-22 shrink-0"><Select label="Round" compact value={round} options={roundOptions} onChange={changeRound} disabled={isTeamVariance} /></div> : null}
               </div>
             </div>
           ) : null}
@@ -2866,8 +2912,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
           </PlotSummary>
           {teamFiltersOpen ? (
             <div id="team-plot-filters" className="flex items-end gap-3 overflow-x-auto border-b border-nrl-border bg-nrl-panel-2 px-4 py-3 [scrollbar-width:thin]">
-              {!isMatchupHeatmap && !isAttackHeatmap && (!isOther || isRuckDominancePlot || isForVsAgainstPlot) && !isTeamForm && !isTeamVariance ? <div className="w-28 shrink-0"><Select label="Plot points" compact value={mode === "season" ? "Team" : "Games"} options={[{ value: "Team", label: "One per team" }, { value: "Games", label: "One per game" }]} onChange={(value) => setMode(value === "Team" ? "season" : "games")} disabled={round !== "all"} /></div> : null}
-              {!isMatchupHeatmap && !isAttackHeatmap && mode === "games" && !isTeamForm && !isTeamVariance ? <div className="w-28 shrink-0"><Select label="Team" compact value={selectedTeam} options={teamFilterOptions} onChange={setSelectedTeam} /></div> : null}
+              {!isTeamPositionHeatmap && (!isOther || isRuckDominancePlot || isForVsAgainstPlot) && !isTeamForm && !isTeamVariance ? <div className="w-28 shrink-0"><Select label="Plot points" compact value={mode === "season" ? "Team" : "Games"} options={[{ value: "Team", label: "One per team" }, { value: "Games", label: "One per game" }]} onChange={(value) => setMode(value === "Team" ? "season" : "games")} disabled={round !== "all"} /></div> : null}
+              {!isTeamPositionHeatmap && mode === "games" && !isTeamForm && !isTeamVariance ? <div className="w-28 shrink-0"><Select label="Team" compact value={selectedTeam} options={teamFilterOptions} onChange={setSelectedTeam} /></div> : null}
               {isTeamAttackEfficiency ? <VolumeAxisToggle checked={teamEfficiencyShowsVolume} onChange={(checked) => setTeamEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
               {isTeamDefenceEfficiency ? <VolumeAxisToggle checked={teamDefenceEfficiencyShowsVolume} onChange={(checked) => setTeamDefenceEfficiencyView(checked ? "Volume axis" : "Efficiency")} /> : null}
               {!isTeamForm ? <GameWindowButtons value={gameWindow} onChange={(value) => void changeGameWindow(value)} disabled={round !== "all"} /> : null}
@@ -2882,14 +2928,14 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                 <span aria-label="Loading season" role="status" className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/25 border-t-nrl-accent" />
               </div>
             ) : null}
-            {isMatchupHeatmap || isAttackHeatmap ? (
-              <MatchupHeatmap teamLogos={teamLogos} year={year} competition={competition} round={round} roundOptions={roundOptions} gameWindow={gameWindow} initialRows={playerRowsByYear[activeYearKey]} direction={isAttackHeatmap ? "attack" : "defense"} onRoundChange={changeRound} onDirectionChange={(direction) => {
+            {isTeamPositionHeatmap ? (
+              <MatchupHeatmap teamLogos={teamLogos} year={year} competition={competition} round={round} roundOptions={roundOptions} gameWindow={gameWindow} initialRows={playerRowsByYear[activeYearKey]} direction={isAttackHeatmap || isTeamAttackEfficiencyHeatmap ? "attack" : "defense"} efficiency={isTeamEfficiencyHeatmap} onRoundChange={changeRound} onDirectionChange={(direction) => {
                 if (direction === "attack") {
                   setTeamSection("Attack");
-                  setAttackPlot("Attack heatmap");
+                  setAttackPlot(isTeamEfficiencyHeatmap ? "Efficiency heatmap" : "Attack heatmap");
                 } else {
                   setTeamSection("Defense");
-                  setDefencePlot("Matchup heatmap");
+                  setDefencePlot(isTeamEfficiencyHeatmap ? "Efficiency heatmap" : "Matchup heatmap");
                 }
               }} />
             ) : modelPlotLocked ? (
@@ -2926,8 +2972,8 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
 
           {teamInfoOpen ? <div id="team-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-2">
             <div><span className="font-black text-nrl-text">{isTeamForm ? "Prior" : "Game window"}</span><br />{isTeamForm ? `The horizontal value averages every season game before the latest ${formWindow}. Teams need at least ${minPriorGames} prior games.` : gameWindow === null ? "All team games in the selected season are included." : `L${gameWindow} uses each team's latest ${gameWindow} games from 2026. Season mode aggregates that sample; Team Games mode shows those individual games.`}</div>
-            {isMatchupHeatmap || isAttackHeatmap ? (
-              <div><span className="font-black text-nrl-text">{isAttackHeatmap ? "Team output" : "Opposition output"}</span><br />Raw average combined output per position group per game. Green means less and red means more, scaled independently within each position.</div>
+            {isTeamPositionHeatmap ? (
+              <div><span className="font-black text-nrl-text">{isTeamEfficiencyHeatmap ? "Team efficiency" : isAttackHeatmap ? "Team output" : "Opposition output"}</span><br />{isTeamEfficiencyHeatmap ? "Output is divided by the selected per stat for each position group. Green means better and red means worse, scaled independently within each position." : "Raw average combined output per position group per game. Green means less and red means more, scaled independently within each position."}</div>
             ) : isTeamSharePlot ? (
               <>
                 <div><span className="font-black text-nrl-text">Starter groups</span><br />Recorded starting positions are used. Each position group&apos;s share of team {teamShareMetric.toLowerCase()}. Fullback, Wingers, Centres, Halves, Edges and Middles are included; Hooker and interchange are excluded.</div>

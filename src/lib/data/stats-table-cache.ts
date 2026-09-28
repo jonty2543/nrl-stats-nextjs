@@ -139,7 +139,9 @@ function addCachedValues(target: CachedAggregateValues, source: CachedAggregateV
 function finalizeValues(target: CachedAggregateValues, statKeys: readonly string[]): void {
   for (const stat of statKeys) {
     const count = target.counts[stat] ?? 0;
-    target.averages[stat] = count > 0 ? (target.totals[stat] ?? 0) / count : null;
+    target.averages[stat] = stat === "Passes To Run Ratio"
+      ? (target.totals["All Runs"] ?? 0) > 0 ? (target.totals.Passes ?? 0) / (target.totals["All Runs"] ?? 0) : null
+      : count > 0 ? (target.totals[stat] ?? 0) / count : null;
     if (count === 0) target.totals[stat] = null;
   }
 }

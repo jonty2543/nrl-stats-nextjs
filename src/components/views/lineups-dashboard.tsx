@@ -444,6 +444,7 @@ function mergeLiveAndHistoricalMatch(
 ): LineupLiveMatch | null {
   if (!isLiveDataVisible(liveMatch)) return historicalMatch
   if (!liveMatch || !historicalMatch) return liveMatch ?? historicalMatch
+  if (isStaleUnfinishedMatch(liveMatch)) return historicalMatch
 
   return {
     ...liveMatch,

@@ -4,6 +4,7 @@ import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { createServerSupabaseClient } from "@/lib/supabase/client";
 
 type BetMarket = "H2H" | "Line" | "Margin" | "Total" | "Tryscorer" | "MOTM" | "Futures";
+type StoredBetMarket = Exclude<BetMarket, "MOTM" | "Futures">;
 type BetStatus = "pending" | "won" | "lost" | "push";
 type BetType = "single" | "multi" | "sgm";
 
@@ -101,6 +102,15 @@ function isBetType(value: unknown): value is BetType {
 
 function isBetMarket(value: unknown): value is BetMarket {
   return value === "H2H" || value === "Line" || value === "Margin" || value === "Total" || value === "Tryscorer" || value === "MOTM" || value === "Futures";
+}
+
+function isStoredBetMarket(value: BetMarket): value is StoredBetMarket {
+  return value === "H2H" || value === "Line" || value === "Margin" || value === "Total" || value === "Tryscorer";
+}
+
+function storedMarketForLegs(legs: BetLeg[]): StoredBetMarket {
+  const storedLeg = legs.find((leg): leg is BetLeg & { market: StoredBetMarket } => isStoredBetMarket(leg.market));
+  return storedLeg?.market ?? "H2H";
 }
 
 function normaliseBetLeg(raw: unknown): BetLeg | null {
@@ -679,6 +689,7 @@ export async function POST(request: NextRequest) {
   const parsedOdds = toFinite(odds);
   const parsedStake = toFinite(stake);
   const parsedStatus: BetStatus = isBetStatus(status) ? status : "pending";
+  const storedMarket = betType === "single" ? market : storedMarketForLegs(legs);
   if (parsedOdds == null || parsedOdds <= 1) {
     return NextResponse.json({ error: "odds must be > 1" }, { status: 400 });
   }
@@ -693,7 +704,7 @@ export async function POST(request: NextRequest) {
     .insert({
       clerk_user_id: userId,
       bet_type: betType,
-      market,
+      market: storedMarket,
       match_date: matchDate,
       match_name: normalizedMatchName,
       selection,

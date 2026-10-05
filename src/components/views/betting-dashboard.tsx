@@ -1352,6 +1352,11 @@ function manualMultiLegKey(leg: BetLeg): string {
   return `${leg.matchDate}|${normaliseMatchLabel(leg.matchName)}`;
 }
 
+function manualTopLevelMarketForLegs(legs: BetLeg[]): BettingMarket {
+  const storedLeg = legs.find((leg): leg is BetLeg & { market: BettingMarket } => isBettingMarket(leg.market));
+  return storedLeg?.market ?? "H2H";
+}
+
 function parseManualLegs(legs: ManualBetLegDraft[]): BetLeg[] {
   return legs.flatMap((leg) => {
     const odds = Number(leg.odds);
@@ -3291,7 +3296,7 @@ export function BettingDashboard({
     const firstLeg = parsedBookieSlipLegs[0];
     const added = await handleAddBet({
       betType: bookieSlipType,
-      market: firstLeg.market,
+      market: manualTopLevelMarketForLegs(parsedBookieSlipLegs),
       matchDate: firstLeg.matchDate,
       matchName: bookieSlipType === "multi" ? "Multiple games" : firstLeg.matchName,
       selection: `${parsedBookieSlipLegs.length}-leg ${bookieSlipType === "multi" ? "Multi" : "SGM"}`,
@@ -3487,7 +3492,7 @@ export function BettingDashboard({
 
       const added = await handleAddBet({
         betType: manualBetType,
-        market: firstLeg.market,
+        market: manualTopLevelMarketForLegs(validLegs),
         matchDate: firstLeg.matchDate,
         matchName: matchLabel,
         selection: selectionLabel,

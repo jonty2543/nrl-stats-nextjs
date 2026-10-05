@@ -459,6 +459,16 @@ function mergeLiveAndHistoricalMatch(
   }
 }
 
+function hasStoredFinalScore(match: LineupMatch): boolean {
+  return match.homeScore != null && match.awayScore != null
+}
+
+function suppressIncompleteLiveForFinalScore(match: LineupMatch, liveMatch: LineupLiveMatch | null | undefined): LineupLiveMatch | null {
+  if (!hasStoredFinalScore(match)) return liveMatch ?? null
+  if (isCompletedMatchState(liveMatch?.state?.matchState)) return liveMatch ?? null
+  return null
+}
+
 function formatGameClock(seconds: number | null | undefined): string | null {
   if (seconds == null || !Number.isFinite(seconds)) return null
   const minutes = Math.floor(seconds / 60)
@@ -520,7 +530,7 @@ function liveScore(liveMatch: LineupLiveMatch | null | undefined): { homeScore: 
 }
 
 function matchScore(match: LineupMatch, liveMatch: LineupLiveMatch | null | undefined): { homeScore: number | null; awayScore: number | null } {
-  if (match.homeScore != null && match.awayScore != null && !isMatchLive(liveMatch)) {
+  if (hasStoredFinalScore(match)) {
     return { homeScore: match.homeScore, awayScore: match.awayScore }
   }
 
@@ -4054,7 +4064,7 @@ function LineupCard({
   const playerTryHistory = detail?.playerTryHistory ?? {}
   const positionPpmBaselines = detail?.positionPpmBaselines ?? {}
   const historicalData = historicalLiveMatch(detailMatch, matchStats)
-  const displayLiveMatch = mergeLiveAndHistoricalMatch(liveMatch, historicalData)
+  const displayLiveMatch = mergeLiveAndHistoricalMatch(suppressIncompleteLiveForFinalScore(detailMatch, liveMatch), historicalData)
   const completedHomePlayers = applyCompletedPlayerStats(detailMatch.homeTeam?.players ?? [], matchStats, detailMatch.homeTeam)
   const completedAwayPlayers = applyCompletedPlayerStats(detailMatch.awayTeam?.players ?? [], matchStats, detailMatch.awayTeam)
   const homePlayers =

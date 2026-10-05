@@ -530,8 +530,10 @@ function liveScore(liveMatch: LineupLiveMatch | null | undefined): { homeScore: 
 }
 
 function matchScore(match: LineupMatch, liveMatch: LineupLiveMatch | null | undefined): { homeScore: number | null; awayScore: number | null } {
-  if (hasStoredFinalScore(match)) {
-    return { homeScore: match.homeScore, awayScore: match.awayScore }
+  const storedHomeScore = match.homeScore
+  const storedAwayScore = match.awayScore
+  if (storedHomeScore != null && storedAwayScore != null) {
+    return { homeScore: storedHomeScore, awayScore: storedAwayScore }
   }
 
   const score = liveScore(liveMatch)

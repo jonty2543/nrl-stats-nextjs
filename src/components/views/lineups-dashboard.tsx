@@ -1541,6 +1541,22 @@ function MatchStatsPanel({
     .filter((section) => section.rows.length > 0)
 
   if (!home || !away) {
+    if (showPostMatchModel && modelMetricSections.length > 0) {
+      return (
+        <div className="space-y-3 rounded-lg border border-nrl-border bg-nrl-panel/70 p-3 text-nrl-text shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
+          {modelMetricSections.map((section) => (
+            <section key={section.title} className="relative rounded-lg border border-emerald-300/20 bg-emerald-400/[0.035] p-2.5">
+              <div className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.16em] text-nrl-text">{section.title}</div>
+              <div className="grid gap-2">
+                {section.rows.map((row) => (
+                  <MatchStatCompare key={row.label} label={row.label} home={row.home} away={row.away} shadeScale={row.shadeScale} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )
+    }
     if (isPregame) return <PregameMatchStatsPreview match={match} teamLogos={teamLogos} />
     if (isFixtureOnly) return <FixtureOnlyPanel />
     return (

@@ -112,13 +112,18 @@ function normaliseBetLeg(raw: unknown): BetLeg | null {
   const odds = toFinite(raw.odds);
   if (!isBetMarket(market)) return null;
   if (typeof matchDate !== "string" || matchDate.trim().length === 0) return null;
-  if (typeof matchName !== "string" || matchName.trim().length === 0) return null;
+  const normalisedMatchName = typeof matchName === "string" && matchName.trim().length > 0
+    ? matchName.trim()
+    : market === "Futures"
+      ? "Futures"
+      : "";
+  if (!normalisedMatchName) return null;
   if (typeof selection !== "string" || selection.trim().length === 0) return null;
   if (odds == null || odds <= 1) return null;
   return {
     market,
     matchDate: matchDate.trim(),
-    matchName: matchName.trim(),
+    matchName: normalisedMatchName,
     selection: selection.trim(),
     lineValue: toFinite(raw.lineValue),
     odds,
@@ -176,14 +181,24 @@ function matchLegKey(leg: BetLeg): string {
   return `${leg.matchDate}|${normaliseTeam(leg.matchName)}`;
 }
 
+function multiLegKey(leg: BetLeg): string {
+  if (leg.market === "Futures") {
+    return ["Futures", leg.matchDate, normaliseTeam(leg.selection), leg.lineValue ?? ""].join("|");
+  }
+  return matchLegKey(leg);
+}
+
 function validateLegsForBetType(betType: BetType, legs: BetLeg[]): string | null {
   if (betType === "single") return null;
   if (legs.length < 2) return `${betType === "sgm" ? "SGM" : "Multi"} bets require at least 2 legs`;
   if (betType === "multi") {
-    if (new Set(legs.map(matchLegKey)).size !== legs.length) return "multi legs must be from different games";
+    if (new Set(legs.map(multiLegKey)).size !== legs.length) return "multi legs must be from different games";
   }
-  if (betType === "sgm" && new Set(legs.map(matchLegKey)).size !== 1) {
-    return "sgm legs must be from the same game";
+  if (betType === "sgm") {
+    if (legs.some((leg) => leg.market === "Futures")) return "Futures legs cannot be used in SGMs";
+    if (new Set(legs.map(matchLegKey)).size !== 1) {
+      return "sgm legs must be from the same game";
+    }
   }
   return null;
 }

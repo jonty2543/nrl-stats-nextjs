@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { createServerSupabaseClient } from "@/lib/supabase/client";
 
-type BetMarket = "H2H" | "Line" | "Margin" | "Total" | "Tryscorer";
+type BetMarket = "H2H" | "Line" | "Margin" | "Total" | "Tryscorer" | "MOTM" | "Futures";
 type BetStatus = "pending" | "won" | "lost" | "push";
 type BetType = "single" | "multi" | "sgm";
 
@@ -100,7 +100,7 @@ function isBetType(value: unknown): value is BetType {
 }
 
 function isBetMarket(value: unknown): value is BetMarket {
-  return value === "H2H" || value === "Line" || value === "Margin" || value === "Total" || value === "Tryscorer";
+  return value === "H2H" || value === "Line" || value === "Margin" || value === "Total" || value === "Tryscorer" || value === "MOTM" || value === "Futures";
 }
 
 function normaliseBetLeg(raw: unknown): BetLeg | null {
@@ -143,6 +143,7 @@ function isSelectionAutoSettleSupported(
   if ((market === "Line" || market === "Total") && lineValue == null) return false;
   if (market === "Margin" && parseMarginSelection(selection) == null) return false;
   if (market === "Tryscorer" && /\b(first|last)\b/i.test(selection)) return false;
+  if (market === "MOTM" || market === "Futures") return false;
   return true;
 }
 
@@ -639,7 +640,7 @@ export async function POST(request: NextRequest) {
   const status = body.status;
 
   if (!isBetMarket(market)) {
-    return NextResponse.json({ error: "market must be H2H, Line, Margin, Total, or Tryscorer" }, { status: 400 });
+    return NextResponse.json({ error: "market must be H2H, Line, Margin, Total, Tryscorer, MOTM, or Futures" }, { status: 400 });
   }
   const legsError = validateLegsForBetType(betType, legs);
   if (legsError) {
@@ -648,7 +649,12 @@ export async function POST(request: NextRequest) {
   if (typeof matchDate !== "string" || matchDate.trim().length === 0) {
     return NextResponse.json({ error: "matchDate is required" }, { status: 400 });
   }
-  if (typeof matchName !== "string" || matchName.trim().length === 0) {
+  const normalizedMatchName = typeof matchName === "string" && matchName.trim().length > 0
+    ? matchName.trim()
+    : market === "Futures"
+      ? "Futures"
+      : "";
+  if (!normalizedMatchName) {
     return NextResponse.json({ error: "matchName is required" }, { status: 400 });
   }
   if (typeof selection !== "string" || selection.trim().length === 0) {
@@ -674,7 +680,7 @@ export async function POST(request: NextRequest) {
       bet_type: betType,
       market,
       match_date: matchDate,
-      match_name: matchName,
+      match_name: normalizedMatchName,
       selection,
       line_value: toFinite(lineValue),
       odds: parsedOdds,

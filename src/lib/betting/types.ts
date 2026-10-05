@@ -9,6 +9,7 @@ export const BETTING_BOOKIE_COLUMNS = [
 export type BettingBookie = (typeof BETTING_BOOKIE_COLUMNS)[number];
 export type BettingOddsTable = "NRL Odds" | "NRL Line Odds" | "NRL Margin Odds" | "NRL Total Odds" | "NRL Tryscorers";
 export type BettingMarket = "H2H" | "Line" | "Margin" | "Total" | "Tryscorer";
+export type TrackedBetMarket = BettingMarket | "MOTM" | "Futures";
 
 export interface BettingOddsRow {
   table: BettingOddsTable;

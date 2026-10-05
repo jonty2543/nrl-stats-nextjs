@@ -21,6 +21,7 @@ import {
   type BettingBookie,
   type BettingOddsRow,
   type BettingOddsSnapshot,
+  type TrackedBetMarket,
 } from "@/lib/betting/types";
 import { calculateEdgePercentagePoints } from "@/lib/betting/calculations";
 
@@ -180,7 +181,7 @@ type TrackedBetType = "single" | "multi" | "sgm";
 type BettingTourTarget = "best-bets" | "staking-calculator" | "bet-tracker" | "main-dashboard";
 
 interface BetLeg {
-  market: BettingMarket;
+  market: TrackedBetMarket;
   matchDate: string;
   matchName: string;
   selection: string;
@@ -192,7 +193,7 @@ interface BetLeg {
 
 interface ManualBetLegDraft {
   id: string;
-  market: BettingMarket;
+  market: TrackedBetMarket;
   matchDate: string;
   matchName: string;
   selection: string;
@@ -205,7 +206,7 @@ interface ManualBetLegDraft {
 interface TrackedBet {
   id: string;
   betType?: TrackedBetType;
-  market: BettingMarket;
+  market: TrackedBetMarket;
   matchDate: string;
   matchName: string;
   selection: string;
@@ -225,7 +226,7 @@ interface TrackedBet {
 
 interface BetDraft {
   betType?: TrackedBetType;
-  market: BettingMarket;
+  market: TrackedBetMarket;
   matchDate: string;
   matchName: string;
   selection: string;
@@ -300,6 +301,8 @@ function BufferedSlipInput({
 }
 
 const MARKET_TABS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Total"];
+const MANUAL_SINGLE_MARKET_OPTIONS: TrackedBetMarket[] = ["H2H", "Line", "Margin", "Total", "Tryscorer", "MOTM", "Futures"];
+const MANUAL_MATCH_MARKET_OPTIONS: TrackedBetMarket[] = ["H2H", "Line", "Margin", "Total", "Tryscorer", "MOTM"];
 const BEST_BET_MODEL_MARKETS: BettingMarket[] = ["Tryscorer", "H2H", "Line", "Margin", "Total"];
 const DEFAULT_BETTING_MARKET: BettingMarket = "Tryscorer";
 const TOTAL_MODEL_BETA_MARKET: BettingMarket = "Total";
@@ -309,6 +312,10 @@ const SUSPICIOUS_EDGE_WARNING_COPY =
 const BETTING_PREFERENCES_LOCAL_KEY = "betting-preferences-local-v1";
 const BET_TRACKER_LOCAL_KEY = "bet-tracker-local-v1";
 const BET_TRACKER_INITIAL_VISIBLE_BETS = 6;
+
+function isBettingMarket(value: TrackedBetMarket): value is BettingMarket {
+  return MARKET_TABS.includes(value as BettingMarket);
+}
 const WEEKLY_FREE_BET_LOCAL_KEY_PREFIX = "weekly-free-bet-v1";
 const WEEKLY_FREE_BET_NONE_VALUE = "none";
 const FREE_BET_MIN_EDGE_PP = 3;
@@ -1259,6 +1266,11 @@ function formatLineValue(value: number): string {
 
 function formatMarketLineValue(market: BettingMarket, value: number): string {
   return market === "Total" ? `${value}` : formatLineValue(value);
+}
+
+function formatTrackedBetSelection(market: TrackedBetMarket, selection: string, lineValue: number | null): string {
+  if (lineValue == null || !isBettingMarket(market)) return selection;
+  return `${selection} ${formatMarketLineValue(market, lineValue)}`;
 }
 
 function formatBestBetSelection(market: BettingMarket, selection: string, lineValue: number | null): string {
@@ -2374,6 +2386,7 @@ export function BettingDashboard({
     createManualLegDraft(todayIso),
   ]);
   const [manualOddsEdited, setManualOddsEdited] = useState(false);
+  const [manualMarket, setManualMarket] = useState<TrackedBetMarket>("H2H");
   const [manualMatchDate, setManualMatchDate] = useState(todayIso);
   const [manualMatchName, setManualMatchName] = useState("");
   const [manualSelection, setManualSelection] = useState("");
@@ -3030,6 +3043,7 @@ export function BettingDashboard({
     leg: Pick<ManualBetLegDraft, "market" | "matchDate" | "matchName" | "selection" | "lineValue">,
     bookie: BettingBookie
   ): BookieBetSlipSelection | null => {
+    if (!isBettingMarket(leg.market)) return null;
     const group = marketGroupsByMarket[leg.market].find((candidate) =>
       candidate.date === leg.matchDate && buildMatchGroupKey(candidate.match) === buildMatchGroupKey(leg.matchName)
     );
@@ -3487,7 +3501,8 @@ export function BettingDashboard({
       setManualError("Date is required.");
       return false;
     }
-    if (!manualMatchName.trim()) {
+    const manualMarketHasMatch = manualMarket !== "Futures";
+    if (manualMarketHasMatch && !manualMatchName.trim()) {
       setManualError("Match is required.");
       return false;
     }
@@ -3509,9 +3524,9 @@ export function BettingDashboard({
 
     const added = await handleAddBet({
       betType: "single",
-      market: selectedMarket,
+      market: manualMarket,
       matchDate: manualMatchDate,
-      matchName: manualMatchName.trim(),
+      matchName: manualMarketHasMatch ? manualMatchName.trim() : "Futures",
       selection: manualSelection.trim(),
       lineValue: parseLineValueFromSelection(manualSelection),
       odds: parsedOdds,
@@ -3528,6 +3543,7 @@ export function BettingDashboard({
     }
 
     setManualMatchName("");
+    setManualMarket("H2H");
     setManualSelection("");
     setManualOdds("1.90");
     setManualStake("10");
@@ -3985,12 +4001,12 @@ export function BettingDashboard({
                                 {betStatusIconLabel(bet.status)}
                               </div>
                               <div className="flex min-w-0 flex-1 items-center gap-2">
-                                {(bet.betType ?? "single") === "single" ? (
+                                {(bet.betType ?? "single") === "single" && isBettingMarket(bet.market) ? (
                                   <BettingTeamLogos selection={bet.selection} match={bet.matchName} market={bet.market} teamLogos={teamLogos} className="h-6 w-6" />
                                 ) : null}
                                 <div className="min-w-0">
                                   <div className="truncate text-sm font-bold leading-tight text-white">
-                                    {bet.selection}{bet.lineValue != null ? ` ${formatMarketLineValue(bet.market, bet.lineValue)}` : ""}
+                                    {formatTrackedBetSelection(bet.market, bet.selection, bet.lineValue)}
                                   </div>
                                   <div className="mt-0.5 truncate text-[10px] font-semibold text-nrl-muted">
                                     {betTypeLabel(bet.betType)} | {bet.matchName}
@@ -4014,7 +4030,7 @@ export function BettingDashboard({
                                   <div key={`${bet.id}-leg-${index}`} className="flex items-start justify-between gap-2 text-[10px] text-nrl-muted">
                                     <div className="min-w-0">
                                       <span className="font-semibold text-nrl-text">{index + 1}. {leg.selection}</span>
-                                      {leg.lineValue != null ? <span> {formatMarketLineValue(leg.market, leg.lineValue)}</span> : null}
+                                      {leg.lineValue != null && isBettingMarket(leg.market) ? <span> {formatMarketLineValue(leg.market, leg.lineValue)}</span> : null}
                                       <span> | {leg.market} | {leg.matchName}</span>
                                     </div>
                                     <div className="shrink-0 text-right tabular-nums">
@@ -4177,25 +4193,27 @@ export function BettingDashboard({
                 <label className="flex flex-col gap-1">
                   <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Market</span>
                   <select
-                    value={selectedMarket}
-                    onChange={(event) => handleMarketChange(event.target.value)}
+                    value={manualMarket}
+                    onChange={(event) => setManualMarket(event.target.value as TrackedBetMarket)}
                     className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40"
                   >
-                    {MARKET_TABS.map((marketOption) => (
+                    {MANUAL_SINGLE_MARKET_OPTIONS.map((marketOption) => (
                       <option key={marketOption} value={marketOption}>{marketOption}</option>
                     ))}
                   </select>
                 </label>
-                <label className="flex flex-col gap-1 sm:col-span-2">
-                  <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Match</span>
-                  <input
-                    type="text"
-                    value={manualMatchName}
-                    onChange={(event) => setManualMatchName(event.target.value)}
-                    placeholder="Team A vs Team B"
-                    className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
-                  />
-                </label>
+                {manualMarket !== "Futures" ? (
+                  <label className="flex flex-col gap-1 sm:col-span-2">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Match</span>
+                    <input
+                      type="text"
+                      value={manualMatchName}
+                      onChange={(event) => setManualMatchName(event.target.value)}
+                      placeholder="Team A vs Team B"
+                      className="h-9 rounded-md border border-white/10 bg-[#0e1530] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40"
+                    />
+                  </label>
+                ) : null}
                 <label className="flex flex-col gap-1 sm:col-span-2">
                   <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-nrl-muted">Selection</span>
                   <input
@@ -4233,8 +4251,8 @@ export function BettingDashboard({
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <input type="date" value={leg.matchDate} onChange={(event) => updateManualLeg(leg.id, { matchDate: event.target.value })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />
-                      <select value={leg.market} onChange={(event) => updateManualLeg(leg.id, { market: event.target.value as BettingMarket })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40">
-                        {MARKET_TABS.map((marketOption) => <option key={marketOption} value={marketOption}>{marketOption}</option>)}
+                      <select value={leg.market} onChange={(event) => updateManualLeg(leg.id, { market: event.target.value as TrackedBetMarket })} className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs font-semibold text-nrl-text outline-none focus:border-emerald-300/40">
+                        {MANUAL_MATCH_MARKET_OPTIONS.map((marketOption) => <option key={marketOption} value={marketOption}>{marketOption}</option>)}
                       </select>
                       <input type="text" value={leg.matchName} onChange={(event) => updateManualLeg(leg.id, { matchName: event.target.value })} placeholder="Match" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40 sm:col-span-2" />
                       <input type="text" value={leg.selection} onChange={(event) => updateManualLeg(leg.id, { selection: event.target.value })} placeholder="Selection" className="h-9 rounded-md border border-white/10 bg-[#10162f] px-2 text-xs text-nrl-text outline-none focus:border-emerald-300/40" />

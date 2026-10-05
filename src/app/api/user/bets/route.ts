@@ -293,14 +293,16 @@ function teamsMatchByLastWord(
 
 function mapRowToResponse(row: UserBetRow) {
   const betType = isBetType(row.bet_type) ? row.bet_type : "single";
+  const legs = normaliseBetLegs(row.legs);
+  const singleLeg = betType === "single" && legs.length === 1 ? legs[0] : null;
   return {
     id: row.id,
     betType,
-    market: row.market,
-    matchDate: row.match_date,
-    matchName: row.match_name,
-    selection: row.selection,
-    lineValue: row.line_value,
+    market: singleLeg?.market ?? row.market,
+    matchDate: singleLeg?.matchDate ?? row.match_date,
+    matchName: singleLeg?.matchName ?? row.match_name,
+    selection: singleLeg?.selection ?? row.selection,
+    lineValue: singleLeg?.lineValue ?? row.line_value,
     odds: row.odds,
     stake: row.stake,
     modelProb: row.model_prob,
@@ -310,7 +312,7 @@ function mapRowToResponse(row: UserBetRow) {
     profit: row.profit,
     placedAt: row.placed_at,
     settledAt: row.settled_at,
-    legs: normaliseBetLegs(row.legs),
+    legs,
     autoSettle: canAutoSettleBet(row),
   };
 }
@@ -480,6 +482,8 @@ function findPlayerTries(
 function settlementLegsForBet(row: UserBetRow): BetLeg[] {
   const betType = isBetType(row.bet_type) ? row.bet_type : "single";
   if (betType !== "single") return normaliseBetLegs(row.legs);
+  const legs = normaliseBetLegs(row.legs);
+  if (legs.length === 1) return legs;
   return [{
     market: row.market,
     matchDate: row.match_date,
@@ -689,13 +693,26 @@ export async function POST(request: NextRequest) {
   const parsedOdds = toFinite(odds);
   const parsedStake = toFinite(stake);
   const parsedStatus: BetStatus = isBetStatus(status) ? status : "pending";
-  const storedMarket = betType === "single" ? market : storedMarketForLegs(legs);
   if (parsedOdds == null || parsedOdds <= 1) {
     return NextResponse.json({ error: "odds must be > 1" }, { status: 400 });
   }
   if (parsedStake == null || parsedStake <= 0) {
     return NextResponse.json({ error: "stake must be > 0" }, { status: 400 });
   }
+
+  const insertedLegs = betType === "single" && !isStoredBetMarket(market)
+    ? [{
+      market,
+      matchDate: matchDate.trim(),
+      matchName: normalizedMatchName,
+      selection: selection.trim(),
+      lineValue: toFinite(lineValue),
+      odds: parsedOdds,
+      bookie: null,
+      autoResult: false,
+    }]
+    : legs;
+  const storedMarket = betType === "single" && isStoredBetMarket(market) ? market : storedMarketForLegs(insertedLegs);
 
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
@@ -718,7 +735,7 @@ export async function POST(request: NextRequest) {
       profit: computeProfitForStatus(parsedStatus, parsedStake, parsedOdds),
       placed_at: new Date().toISOString(),
       settled_at: computeSettledAtForStatus(parsedStatus),
-      legs,
+      legs: insertedLegs,
     })
     .select(USER_BET_COLUMNS)
     .single();

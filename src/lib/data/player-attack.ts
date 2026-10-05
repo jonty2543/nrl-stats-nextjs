@@ -56,6 +56,7 @@ export const PLAYER_ATTACK_COMPARISON_STATS = [
   "Passes",
   "Pass to run ratio",
   "Run metres",
+  "Non-kick return metres",
   "Post-contact metres",
   "Points",
   "Tries",
@@ -215,7 +216,7 @@ const EFFICIENCY_OUTPUT_FIELDS: Record<PlayerEfficiencyOutputMetric, keyof Playe
   "Send offs": "Send Offs",
 };
 
-const ATTACK_COMPARISON_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerStat> = {
+const ATTACK_COMPARISON_FIELDS: Partial<Record<PlayerAttackComparisonStat, keyof PlayerStat>> = {
   Receipts: "Receipts",
   Runs: "All Runs",
   Passes: "Passes",
@@ -252,6 +253,14 @@ const PLAYER_RATE_STATS = new Set<PlayerAttackComparisonStat>(["Play-the-ball sp
 function finite(value: unknown): number {
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function attackComparisonValue(row: PlayerStat, stat: PlayerAttackComparisonStat): number {
+  if (stat === "Non-kick return metres") {
+    return Math.max(0, finite(row["All Run Metres"]) - finite(row["Kick Return Metres"]));
+  }
+  const field = ATTACK_COMPARISON_FIELDS[stat];
+  return field ? finite(row[field]) : 0;
 }
 
 function jerseyNumber(value: unknown): number | null {
@@ -413,8 +422,6 @@ export function buildPlayerAttackComparisonPoints(
   plotMode: PlayerPlotMode = "players",
   minimumGamesOverride?: number
 ): PlayerAttackComparisonPoint[] {
-  const xField = ATTACK_COMPARISON_FIELDS[xStat];
-  const yField = ATTACK_COMPARISON_FIELDS[yStat];
   const xIsPassRunRatio = xStat === "Pass to run ratio";
   const yIsPassRunRatio = yStat === "Pass to run ratio";
   const xIsRate = PLAYER_RATE_STATS.has(xStat);
@@ -427,8 +434,8 @@ export function buildPlayerAttackComparisonPoints(
     if (team) {
       const key = teamGameKey(row);
       const totals = teamGameTotals.get(key) ?? { x: 0, y: 0 };
-      totals.x += finite(row[xField]);
-      totals.y += finite(row[yField]);
+      totals.x += attackComparisonValue(row, xStat);
+      totals.y += attackComparisonValue(row, yStat);
       teamGameTotals.set(key, totals);
     }
     if (positionFromRow(row) !== position || finite(row["Mins Played"]) <= 0) continue;
@@ -451,15 +458,15 @@ export function buildPlayerAttackComparisonPoints(
 
     const isPer80 = BACK_POSITIONS.has(position);
     const comparisonXTotal = qualifyingRows.reduce((sum, row) => {
-      const value = finite(row[xField]);
+      const value = attackComparisonValue(row, xStat);
       return sum + (isPer80 && !xIsRate ? value * (80 / finite(row["Mins Played"])) : value);
     }, 0);
     const comparisonYTotal = qualifyingRows.reduce((sum, row) => {
-      const value = finite(row[yField]);
+      const value = attackComparisonValue(row, yStat);
       return sum + (isPer80 && !yIsRate ? value * (80 / finite(row["Mins Played"])) : value);
     }, 0);
-    const xRateValues = xIsRate ? qualifyingRows.map((row) => finite(row[xField])).filter((value) => xStat === "Tackle efficiency" || value > 0) : [];
-    const yRateValues = yIsRate ? qualifyingRows.map((row) => finite(row[yField])).filter((value) => yStat === "Tackle efficiency" || value > 0) : [];
+    const xRateValues = xIsRate ? qualifyingRows.map((row) => attackComparisonValue(row, xStat)).filter((value) => xStat === "Tackle efficiency" || value > 0) : [];
+    const yRateValues = yIsRate ? qualifyingRows.map((row) => attackComparisonValue(row, yStat)).filter((value) => yStat === "Tackle efficiency" || value > 0) : [];
     const totalRuns = (xIsPassRunRatio || yIsPassRunRatio)
       ? qualifyingRows.reduce((sum, row) => sum + finite(row["All Runs"]), 0)
       : 0;
@@ -472,22 +479,22 @@ export function buildPlayerAttackComparisonPoints(
       : xIsRate
       ? xRateValues.reduce((sum, value) => sum + value, 0) / xRateValues.length
       : mode === "totals"
-      ? qualifyingRows.reduce((sum, row) => sum + finite(row[xField]), 0)
+      ? qualifyingRows.reduce((sum, row) => sum + attackComparisonValue(row, xStat), 0)
       : comparisonXTotal / qualifyingRows.length;
     const comparisonY = yIsPassRunRatio
       ? totalPasses / totalRuns
       : yIsRate
       ? yRateValues.reduce((sum, value) => sum + value, 0) / yRateValues.length
       : mode === "totals"
-      ? qualifyingRows.reduce((sum, row) => sum + finite(row[yField]), 0)
+      ? qualifyingRows.reduce((sum, row) => sum + attackComparisonValue(row, yStat), 0)
       : comparisonYTotal / qualifyingRows.length;
     const xShares = qualifyingRows.flatMap((row) => {
       const teamTotal = teamGameTotals.get(teamGameKey(row))?.x ?? 0;
-      return teamTotal > 0 ? [(finite(row[xField]) / teamTotal) * 100] : [];
+      return teamTotal > 0 ? [(attackComparisonValue(row, xStat) / teamTotal) * 100] : [];
     });
     const yShares = qualifyingRows.flatMap((row) => {
       const teamTotal = teamGameTotals.get(teamGameKey(row))?.y ?? 0;
-      return teamTotal > 0 ? [(finite(row[yField]) / teamTotal) * 100] : [];
+      return teamTotal > 0 ? [(attackComparisonValue(row, yStat) / teamTotal) * 100] : [];
     });
     const averageXShare = xShares.reduce((sum, share) => sum + share, 0) / Math.max(xShares.length, 1);
     const averageYShare = yShares.reduce((sum, share) => sum + share, 0) / Math.max(yShares.length, 1);
@@ -498,8 +505,8 @@ export function buildPlayerAttackComparisonPoints(
         const xTeamTotal = teamGameTotals.get(teamGameKey(row))?.x ?? 0;
         const yTeamTotal = teamGameTotals.get(teamGameKey(row))?.y ?? 0;
         if (mode === "team-proportion" && (xTeamTotal <= 0 || yTeamTotal <= 0)) continue;
-        const xValue = finite(row[xField]);
-        const yValue = finite(row[yField]);
+        const xValue = attackComparisonValue(row, xStat);
+        const yValue = attackComparisonValue(row, yStat);
         if ((xStat === "Play-the-ball speed" && xValue <= 0) || (yStat === "Play-the-ball speed" && yValue <= 0)) continue;
         points.push({
           id: `${player}|${row.Year}|${row.Round_Label || row.Round}|${row.Team}|${mode}|${xStat}|${yStat}`,
@@ -539,7 +546,6 @@ export function buildHalvesPairingPoints(
   gameWindow: PlayerGameWindow = null,
   minimumGamesOverride?: number
 ): HalvesPairingPoint[] {
-  const field = ATTACK_COMPARISON_FIELDS[stat];
   const games = new Map<string, PlayerStat[]>();
   for (const row of rows) {
     const team = String(row.Team ?? "").trim();
@@ -577,8 +583,8 @@ export function buildHalvesPairingPoints(
     const pairing = pairings.get(key) ?? { team, playerA, playerB, samples: [] };
     pairing.samples.push({
       round: finite(playerARow.Round),
-      playerAValue: finite(playerARow[field]),
-      playerBValue: finite(playerBRow[field]),
+      playerAValue: attackComparisonValue(playerARow, stat),
+      playerBValue: attackComparisonValue(playerBRow, stat),
       playerAIsHalfback: halfRoleFromRow(playerARow) === 7,
     });
     pairings.set(key, pairing);

@@ -137,7 +137,7 @@ const TEAM_FOR_AGAINST_STATS = TEAM_ATTACK_COMPARISON_STATS.filter((stat) => !LO
 const CURRENT_GAME_WINDOW_YEAR = "2026";
 type PlayerStatsAggregation = "Per game" | "Season total";
 
-const FORM_STAT_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerStat> = {
+const FORM_STAT_FIELDS: Partial<Record<PlayerAttackComparisonStat, keyof PlayerStat>> = {
   Receipts: "Receipts",
   Runs: "All Runs",
   Passes: "Passes",
@@ -170,7 +170,13 @@ const FORM_STAT_FIELDS: Record<PlayerAttackComparisonStat, keyof PlayerStat> = {
 };
 
 function numericStat(row: PlayerStat | TeamStat, stat: PlayerAttackComparisonStat): number {
-  const value = Number(row[FORM_STAT_FIELDS[stat]]);
+  if (stat === "Non-kick return metres") {
+    const value = Number(row["All Run Metres"]) - Number(row["Kick Return Metres"]);
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+  }
+  const field = FORM_STAT_FIELDS[stat];
+  if (!field) return 0;
+  const value = Number(row[field]);
   return Number.isFinite(value) ? value : 0;
 }
 
@@ -799,6 +805,7 @@ const STAT_SEARCH_ALIASES: Record<string, string[]> = {
   Passes: ["pass", "passes"],
   "Pass to run ratio": ["pass run ratio", "passes run ratio", "pass to run ratio", "passes to run ratio", "pass/run", "passes/run"],
   "Run metres": ["run metre", "run metres", "running metre", "running metres", "run meter", "run meters"],
+  "Non-kick return metres": ["non kick return metre", "non kick return metres", "non-kick return metre", "non-kick return metres", "run metres excluding kick returns", "run metres minus kick returns"],
   "Post-contact metres": ["post contact metre", "post contact metres", "post-contact metre", "post-contact metres", "pcm"],
   "Kick return metres": ["kick return metre", "kick return metres"],
   "Dummy half run metres": ["dummy half run metre", "dummy half run metres"],

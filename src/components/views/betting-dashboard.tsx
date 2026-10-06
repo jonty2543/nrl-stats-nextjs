@@ -5995,7 +5995,7 @@ function MarketSection({
           </div>
           {dateGroups.map((group, groupIndex) => {
             const { home, away } = parseMatch(group.match);
-            const lineupHref = lineupLinksByMatchKey[`${group.date}|${buildMatchGroupKey(group.match)}`] ?? null;
+            const lineupHref = lineupLinksByMatchKey[`${group.date}|${buildMatchGroupKey(group.match)}`] ?? "/dashboard/lineups";
             const teamListsProcessed = hasAnnouncedLineupsForGroup(group, lineupPlayersByMatch);
             const kickoffKey = buildMatchKickoffKey(group.date, group.match);
             const eventKickoff = kickoffKey ? tryscorerKickoffsByMatch[kickoffKey] ?? null : null;
@@ -6070,14 +6070,12 @@ function MarketSection({
                     <div className="text-xs text-nrl-muted">{group.market}</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {lineupHref ? (
-                      <Link
-                        href={lineupHref}
-                        className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
-                      >
-                        Matches
-                      </Link>
-                    ) : null}
+                    <Link
+                      href={lineupHref}
+                      className="rounded-md border border-nrl-border bg-nrl-panel-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-nrl-muted transition-colors hover:border-emerald-300/40 hover:text-nrl-text"
+                    >
+                      Matches
+                    </Link>
                     {group.market === "Tryscorer" ? (
                       <button
                         type="button"

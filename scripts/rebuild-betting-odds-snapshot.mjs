@@ -75,10 +75,6 @@ async function fetchAllRows(supabase, table, select, applyQuery = (query) => que
 }
 
 function computeBestBookie(row) {
-  if (row.bestBookie != null && row.bestPrice != null) {
-    return { bestBookie: row.bestBookie, bestPrice: row.bestPrice };
-  }
-
   let bestBookie = null;
   let bestPrice = null;
   for (const bookie of BETTING_BOOKIE_COLUMNS) {
@@ -90,9 +86,102 @@ function computeBestBookie(row) {
     }
   }
   return {
-    bestBookie: row.bestBookie ?? bestBookie,
-    bestPrice: row.bestPrice ?? bestPrice,
+    bestBookie: bestBookie ?? row.bestBookie,
+    bestPrice: bestPrice ?? row.bestPrice,
   };
+}
+
+function isValidTryscorerRow(row) {
+  if (!row.date || !row.match || !row.result) return false;
+  if (!/[A-Za-z]/.test(row.result)) return false;
+  if (row.value == null) return true;
+  return Number.isInteger(row.value) && row.value >= 1 && row.value <= 3;
+}
+
+function isValidOddsRow(row) {
+  return Boolean(row.date && row.match && row.result);
+}
+
+function mapOddsMarket(table, rawMarket) {
+  if (table.includes("Line")) return "Line";
+  if (table.includes("Total")) return "Total";
+  if (typeof rawMarket === "string") {
+    const normalized = rawMarket.trim().toLowerCase();
+    if (normalized === "line") return "Line";
+    if (normalized === "total") return "Total";
+  }
+  return "H2H";
+}
+
+function mapLegacyOddsRow(table, raw) {
+  const market = mapOddsMarket(table, raw.Market);
+  const row = {
+    table,
+    market,
+    date: toIsoDate(raw.Date),
+    match: toNullableString(raw.Match) ?? "",
+    result: toNullableString(raw.Result) ?? "",
+    value: market === "H2H" ? null : toNullableFinite(raw.Value),
+    model: toNullableFinite(raw.Model),
+    bestBookie: toNullableString(raw["Best Bookie"]),
+    bestPrice: toNullableOdds(raw["Best Price"]),
+    marketPercentage: toNullableFinite(raw["Market %"]),
+    Sportsbet: toNullableOdds(raw.Sportsbet),
+    Pointsbet: toNullableOdds(raw.Pointsbet),
+    Unibet: toNullableOdds(raw.Unibet),
+    Palmerbet: toNullableOdds(raw.Palmerbet),
+    Betright: toNullableOdds(raw.Betright),
+    Betr: null,
+  };
+  return {
+    ...row,
+    ...computeBestBookie(row),
+  };
+}
+
+function hasBookSpecificOddsColumns(raw) {
+  return BETTING_BOOKIE_COLUMNS.some((bookie) => `${bookie}_odds` in raw || `${bookie}_line` in raw);
+}
+
+function mapBookSpecificOddsRows(table, raw) {
+  const market = mapOddsMarket(table, raw.Market);
+  const date = toIsoDate(raw.Date);
+  const match = toNullableString(raw.Match) ?? "";
+  const result = toNullableString(raw.Result) ?? "";
+  const model = toNullableFinite(raw.Model);
+
+  return BETTING_BOOKIE_COLUMNS.flatMap((bookie) => {
+    const price = toNullableOdds(raw[`${bookie}_odds`]);
+    const value = toNullableFinite(raw[`${bookie}_line`]);
+    if (price == null || value == null) return [];
+    return [{
+      table,
+      market,
+      date,
+      match,
+      result,
+      value,
+      model,
+      bestBookie: bookie,
+      bestPrice: price,
+      marketPercentage: null,
+      Sportsbet: null,
+      Pointsbet: null,
+      Unibet: null,
+      Palmerbet: null,
+      Betright: null,
+      [bookie]: price,
+      Betr: null,
+    }];
+  });
+}
+
+function mapOddsRows(table, raw) {
+  const market = mapOddsMarket(table, raw.Market);
+  if ((market === "Line" || market === "Total") && hasBookSpecificOddsColumns(raw)) {
+    return mapBookSpecificOddsRows(table, raw);
+  }
+  return [mapLegacyOddsRow(table, raw)];
 }
 
 function mapTryscorerRow(raw) {
@@ -129,6 +218,29 @@ function countBookieRows(rows) {
   );
 }
 
+function oddsRowKey(row) {
+  return [
+    row.table,
+    row.market,
+    row.date,
+    row.match,
+    row.result,
+    row.value ?? "",
+    row.bestBookie ?? "",
+    row.bestPrice ?? "",
+  ].join("|");
+}
+
+function mergeSnapshotRows(existing, incoming, internationalTables) {
+  const rowsByKey = new Map();
+  for (const row of existing ?? []) {
+    if (internationalTables.has(row?.table)) continue;
+    rowsByKey.set(oddsRowKey(row), row);
+  }
+  for (const row of incoming) rowsByKey.set(oddsRowKey(row), row);
+  return [...rowsByKey.values()];
+}
+
 function todayIsoInBrisbane() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Australia/Brisbane",
@@ -152,9 +264,46 @@ async function main() {
     'Match,Date,Result,Value,Market,"Best Bookie","Best Price","Market %",Sportsbet,Pointsbet,Unibet,Palmerbet,Betright',
     (query) => query.gte("Date", today)
   );
+  const [snapshotResponse, rawInternationalH2h, rawInternationalLine, rawInternationalTotal] = await Promise.all([
+    supabaseSummary
+      .from("betting_odds_snapshot")
+      .select("h2h,line,total")
+      .eq("id", "current")
+      .maybeSingle(),
+    fetchAllRows(
+      supabasePublic,
+      "Rugby League Internationals Odds",
+      'Match,Date,Result,"Best Bookie","Best Price","Market %",Sportsbet,Pointsbet,Palmerbet,Betright',
+      (query) => query.gte("Date", today)
+    ),
+    fetchAllRows(
+      supabasePublic,
+      "Rugby League Internationals Line Odds",
+      "Match,Date,Result,Market,Sportsbet_odds,Sportsbet_line,Pointsbet_odds,Pointsbet_line,Palmerbet_odds,Palmerbet_line,Betright_odds,Betright_line",
+      (query) => query.gte("Date", today)
+    ),
+    fetchAllRows(
+      supabasePublic,
+      "Rugby League Internationals Total Odds",
+      "Match,Date,Result,Market,Sportsbet_odds,Sportsbet_line,Pointsbet_odds,Pointsbet_line,Palmerbet_odds,Palmerbet_line,Betright_odds,Betright_line",
+      (query) => query.gte("Date", today)
+    ),
+  ]);
+  if (snapshotResponse.error) throw new Error(`Fetch summary.betting_odds_snapshot failed: ${snapshotResponse.error.message}`);
+
+  const internationalH2h = rawInternationalH2h
+    .flatMap((row) => mapOddsRows("Rugby League Internationals Odds", row))
+    .filter(isValidOddsRow);
+  const internationalLine = rawInternationalLine
+    .flatMap((row) => mapOddsRows("Rugby League Internationals Line Odds", row))
+    .filter(isValidOddsRow);
+  const internationalTotal = rawInternationalTotal
+    .flatMap((row) => mapOddsRows("Rugby League Internationals Total Odds", row))
+    .filter(isValidOddsRow);
+
   const tryscorer = rawTryscorers
     .map(mapTryscorerRow)
-    .filter((row) => row.date && row.match && row.result)
+    .filter(isValidTryscorerRow)
     .sort((a, b) => {
       if (a.date !== b.date) return b.date.localeCompare(a.date);
       if (a.match !== b.match) return a.match.localeCompare(b.match);
@@ -162,13 +311,34 @@ async function main() {
     });
 
   const now = new Date().toISOString();
+  const currentSnapshot = snapshotResponse.data ?? {};
   const { error } = await supabaseSummary
     .from("betting_odds_snapshot")
-    .update({ tryscorer, generated_at: now, updated_at: now })
+    .update({
+      h2h: mergeSnapshotRows(
+        currentSnapshot.h2h,
+        internationalH2h,
+        new Set(["Rugby League Internationals Odds"])
+      ),
+      line: mergeSnapshotRows(
+        currentSnapshot.line,
+        internationalLine,
+        new Set(["Rugby League Internationals Line Odds"])
+      ),
+      total: mergeSnapshotRows(
+        currentSnapshot.total,
+        internationalTotal,
+        new Set(["Rugby League Internationals Total Odds"])
+      ),
+      tryscorer,
+      generated_at: now,
+      updated_at: now,
+    })
     .eq("id", "current");
   if (error) throw new Error(`Update summary.betting_odds_snapshot failed: ${error.message}`);
 
   console.log(`Updated summary.betting_odds_snapshot.tryscorer with ${tryscorer.length} rows.`);
+  console.log(`Merged international odds: H2H ${internationalH2h.length}, Line ${internationalLine.length}, Total ${internationalTotal.length}.`);
   console.log(JSON.stringify(countBookieRows(tryscorer), null, 2));
 }
 

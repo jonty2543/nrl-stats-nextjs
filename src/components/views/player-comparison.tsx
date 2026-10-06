@@ -2338,7 +2338,7 @@ export function PlayerComparison({
                         </td>
                         <td className={`w-44 min-w-44 max-w-44 px-2 py-1.5 text-sm font-black sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem] sm:px-2.5 sm:text-sm ${statsTableSort.column === "name" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "bg-nrl-panel text-nrl-text"}`}>
                         <Link
-                          href={`/dashboard/players/${playerSlug(row.name)}`}
+                          href={`/dashboard/players/${playerSlug(row.name)}${competition === "cup" ? "?competition=cup" : ""}`}
                           className="block min-w-0 truncate transition-colors hover:text-nrl-accent"
                           title={row.name}
                         >

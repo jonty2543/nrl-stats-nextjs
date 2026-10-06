@@ -86,6 +86,7 @@ export const TEAM_ATTACK_EFFICIENCY_OUTPUT_STATS = [
   "Kicks",
   "Kicking metres",
   "Forced drop outs",
+  "Errors",
 ] as const;
 export type TeamAttackEfficiencyOutputStat = (typeof TEAM_ATTACK_EFFICIENCY_OUTPUT_STATS)[number];
 

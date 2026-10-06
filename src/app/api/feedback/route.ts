@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createServerSupabaseClient } from "@/lib/supabase/client";
 
-const INTEREST_OPTIONS = new Set(["Fantasy", "Draft", "Betting", "Lineups", "Stats"]);
+const INTEREST_OPTIONS = new Set(["Fantasy", "Draft", "Betting", "Matches", "Stats"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   const interest = cleanString(body.interest, 40);
   if (!interest || !INTEREST_OPTIONS.has(interest)) {
-    return NextResponse.json({ error: "Interest must be Fantasy, Draft, Betting, Lineups, or Stats" }, { status: 400 });
+    return NextResponse.json({ error: "Interest must be Fantasy, Draft, Betting, Matches, or Stats" }, { status: 400 });
   }
 
   const changeRequest = cleanString(body.changeRequest, 1000);

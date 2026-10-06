@@ -1,4 +1,3 @@
-import type { Article } from "@/lib/articles"
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types"
 import type { Draw2026Data } from "@/lib/draw/types"
 import type {
@@ -27,7 +26,6 @@ interface LandingStaticSnapshotData {
   availableYears: string[]
   bettingSnapshot: BettingOddsSnapshot
   playerImages: PlayerImageRecord[]
-  approvedArticles: Article[]
   teamLogos: Record<string, string>
   draw2026Data: Draw2026Data
   lineups: LineupMatch[]
@@ -186,40 +184,6 @@ const STATIC_DATA: LandingStaticSnapshotData = {
     { player: "Harry Grant", team: "Storm", number: "9", position: "HOK", head_image: null, body_image: null, last_seen_match_date: "2026-05-29" },
     { player: "Dylan Edwards", team: "Panthers", number: "1", position: "WFB", head_image: null, body_image: PLAYER_IMAGES.dylanEdwards, last_seen_match_date: "2026-05-31" },
     { player: "Kalyn Ponga", team: "Knights", number: "1", position: "WFB", head_image: null, body_image: null, last_seen_match_date: "2026-05-29" },
-  ],
-  approvedArticles: [
-    {
-      id: "landing-article-1",
-      authorId: "static",
-      displayName: "Short Side",
-      authorImageUrl: null,
-      isAnonymous: false,
-      title: "Round 13 fantasy roles to watch",
-      slug: "round-13-fantasy-roles-to-watch",
-      body: "A compact look at the teams, roles, and price points that matter most for the current week.",
-      status: "approved",
-      imageUrls: [],
-      rejectionReason: null,
-      createdAt: "2026-05-29T00:00:00+10:00",
-      updatedAt: "2026-05-29T00:00:00+10:00",
-      approvedAt: "2026-05-29T00:00:00+10:00",
-    },
-    {
-      id: "landing-article-2",
-      authorId: "static",
-      displayName: "Short Side",
-      authorImageUrl: null,
-      isAnonymous: false,
-      title: "Market watch: best prices and model edges",
-      slug: "market-watch-best-prices-and-model-edges",
-      body: "This weekly preview tracks matchup prices, model lean, and where prices have moved across books.",
-      status: "approved",
-      imageUrls: [],
-      rejectionReason: null,
-      createdAt: "2026-05-29T00:00:00+10:00",
-      updatedAt: "2026-05-29T00:00:00+10:00",
-      approvedAt: "2026-05-29T00:00:00+10:00",
-    },
   ],
   teamLogos: {},
   draw2026Data: {

@@ -290,6 +290,7 @@ function enrichLineupMatchImages(match: LineupMatch, lookup: Map<string, PlayerI
 
 function parseCompetition(value: string | undefined): LineupCompetition {
   if (value === "origin") return "origin"
+  if (value === "international") return "international"
   if (value === "nswCup" || value === "nsw-cup") return "nswCup"
   if (value === "qldCup" || value === "qld-cup") return "qldCup"
   return "nrl"

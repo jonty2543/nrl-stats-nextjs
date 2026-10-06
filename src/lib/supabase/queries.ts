@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "./client";
 import { unstable_cache } from "next/cache";
+import { request as httpsRequest } from "node:https";
 import {
   COLUMN_RENAME_MAP,
   FINALS_MAP,
@@ -48,6 +49,7 @@ const DIRECT_PLAYER_STATS_TIMEOUT_MS = 2000;
 const DIRECT_CUP_PLAYER_STATS_TIMEOUT_MS = 8000;
 const FALLBACK_CUP_AVAILABLE_YEARS = ["2026", "2025", "2024", "2023"];
 const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
+const BETTING_SUMMARY_SNAPSHOT_REQUEST_TIMEOUT_MS = 20_000;
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
 
@@ -1406,6 +1408,8 @@ function mapBettingMarket(table: BettingOddsTable, rawMarket: unknown): BettingM
   if (table === "NRL Margin Odds") return "Margin";
   if (table === "NRL Total Odds") return "Total";
   if (table === "NRL Tryscorers") return "Tryscorer";
+  if (table === "Rugby League Internationals Line Odds") return "Line";
+  if (table === "Rugby League Internationals Total Odds") return "Total";
   return "H2H";
 }
 
@@ -1514,7 +1518,8 @@ function mapBookSpecificBettingRows(
 }
 
 function mapBettingRows(table: BettingOddsTable, raw: Record<string, unknown>): BettingOddsRow[] {
-  if ((table === "NRL Line Odds" || table === "NRL Total Odds") && hasBookSpecificOddsColumns(raw)) {
+  const market = mapBettingMarket(table, raw.Market);
+  if ((market === "Line" || market === "Total") && hasBookSpecificOddsColumns(raw)) {
     return mapBookSpecificBettingRows(table, raw);
   }
 
@@ -1522,7 +1527,14 @@ function mapBettingRows(table: BettingOddsTable, raw: Record<string, unknown>): 
 }
 
 function isBettingOddsTable(value: unknown): value is BettingOddsTable {
-  return value === "NRL Odds" || value === "NRL Line Odds" || value === "NRL Margin Odds" || value === "NRL Total Odds" || value === "NRL Tryscorers";
+  return value === "NRL Odds" ||
+    value === "NRL Line Odds" ||
+    value === "NRL Margin Odds" ||
+    value === "NRL Total Odds" ||
+    value === "NRL Tryscorers" ||
+    value === "Rugby League Internationals Odds" ||
+    value === "Rugby League Internationals Line Odds" ||
+    value === "Rugby League Internationals Total Odds";
 }
 
 function tableForBettingMarket(market: BettingMarket): BettingOddsTable {
@@ -1569,7 +1581,8 @@ function mapBettingSnapshotRows(raw: unknown, market: BettingMarket): BettingOdd
     .flatMap((row) => {
       const record = asRecord(row);
       const table = isBettingOddsTable(record.table) ? record.table : tableForBettingMarket(market);
-      if ((table === "NRL Line Odds" || table === "NRL Total Odds") && hasBookSpecificOddsColumns(record)) {
+      const mappedMarket = mapBettingMarket(table, record.market ?? record.Market);
+      if ((mappedMarket === "Line" || mappedMarket === "Total") && hasBookSpecificOddsColumns(record)) {
         return mapBookSpecificBettingRows(table, record).filter((mapped) => mapped.date && mapped.match && mapped.result);
       }
       const mapped = mapBettingSnapshotRow(record, market);
@@ -3373,95 +3386,64 @@ export async function fetchBettingPageSummary(): Promise<BettingPageSummary> {
   }
 }
 
-function shouldEnrichBettingSnapshotModels(snapshot: BettingOddsSnapshot): boolean {
-  return snapshot.line.length > 0 || snapshot.margin.length > 0 ||
-    [...snapshot.h2h, ...snapshot.tryscorer].some((row) => row.model == null) ||
-    snapshot.total.length > 0;
+function fetchJsonViaHttps<T>(url: string, headers: Record<string, string>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const request = httpsRequest({
+      family: 4,
+      headers,
+      hostname: parsedUrl.hostname,
+      method: "GET",
+      path: `${parsedUrl.pathname}${parsedUrl.search}`,
+      protocol: parsedUrl.protocol,
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk: Buffer) => chunks.push(chunk));
+      response.on("end", () => {
+        const body = Buffer.concat(chunks).toString("utf8");
+        if ((response.statusCode ?? 500) < 200 || (response.statusCode ?? 500) >= 300) {
+          reject(new Error(`Supabase REST fetch failed: ${response.statusCode} ${response.statusMessage ?? ""}`.trim()));
+          return;
+        }
+        try {
+          resolve(JSON.parse(body) as T);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    request.setTimeout(BETTING_SUMMARY_SNAPSHOT_REQUEST_TIMEOUT_MS, () => {
+      request.destroy(new Error("Supabase REST fetch timed out"));
+    });
+    request.on("error", reject);
+    request.end();
+  });
 }
 
-async function enrichBettingSnapshotModels(snapshot: BettingOddsSnapshot): Promise<BettingOddsSnapshot> {
-  if (!shouldEnrichBettingSnapshotModels(snapshot)) return snapshot;
+async function fetchBettingOddsSnapshotSummaryRowFromRest(): Promise<Record<string, unknown>> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Missing Supabase environment variables for betting odds summary REST fetch");
+  }
 
-  const shouldEnrichH2hModels = snapshot.h2h.some((row) => row.model == null);
-  const shouldEnrichTryscorerModels = snapshot.tryscorer.some((row) => row.model == null);
-  const [predictionRows, totalPredictionRows, tryscorerPredictionRows, discreteProbabilityRows] = await Promise.all([
-    shouldEnrichH2hModels
-      ? fetchPredictionModelRowsFromSupabase(snapshot.h2h).catch((error) => {
-        console.warn("Unable to enrich summary H2H odds with prediction rows.", error);
-        return [];
-      })
-      : Promise.resolve([]),
-    fetchTotalPredictionRowsFromSupabase(snapshot.total).catch((error) => {
-      console.warn("Unable to enrich summary total odds with prediction rows.", error);
-      return [];
-    }),
-    shouldEnrichTryscorerModels
-      ? fetchTryscorerPredictionRowsFromSupabase(snapshot.tryscorer).catch((error) => {
-        console.warn("Unable to enrich summary tryscorer odds with prediction rows.", error);
-        return [];
-      })
-      : Promise.resolve([]),
-    fetchDiscreteMarketProbabilityRowsFromSupabase([
-      ...snapshot.line,
-      ...snapshot.margin,
-    ]).catch((error) => {
-      console.warn("Unable to fetch summary.discrete_market_probabilities; Line and Margin models are unavailable.", error);
-      return [];
-    }),
-  ]);
-  const marginOverrideRows = shouldEnrichH2hModels
-    ? await fetchMarginOverrideRowsFromSupabase(predictionRows).catch((error) => {
-      console.warn("Unable to fetch betting margin overrides for summary enrichment; using saved prediction margins.", error);
-      return [];
-    })
-    : [];
-  const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
-  const totalPredictionLookup = buildTotalPredictionLookup(totalPredictionRows);
-  const tryscorerPredictionLookup = buildTryscorerPredictionLookup(tryscorerPredictionRows);
-
-  return {
-    ...snapshot,
-    h2h: shouldEnrichH2hModels ? snapshot.h2h.map((row) => applyPredictionModelToRow(row, predictionLookup)) : snapshot.h2h,
-    line: enrichDiscreteMarketRows(snapshot.line, discreteProbabilityRows),
-    margin: enrichDiscreteMarketRows(snapshot.margin, discreteProbabilityRows),
-    total: snapshot.total.map((row) => applyTotalPredictionModelToRow(row, totalPredictionLookup)),
-    tryscorer: shouldEnrichTryscorerModels
-      ? snapshot.tryscorer.map((row) => applyTryscorerPredictionModelToRow(row, tryscorerPredictionLookup))
-      : snapshot.tryscorer,
-  };
-}
-
-function isMissingSummaryMarginColumnError(error: { message?: string } | null): boolean {
-  const message = String(error?.message ?? "").toLowerCase();
-  return message.includes("margin") &&
-    (message.includes("column") || message.includes("schema cache") || message.includes("could not find"));
+  const select = encodeURIComponent("id,h2h,line,margin,total,tryscorer,generated_at,updated_at");
+  const rows = await fetchJsonViaHttps<Record<string, unknown>[]>(
+    `${supabaseUrl}/rest/v1/betting_odds_snapshot?select=${select}&id=eq.current&limit=1`,
+    {
+      "Accept-Profile": "summary",
+      apikey: serviceRoleKey,
+      authorization: `Bearer ${serviceRoleKey}`,
+    }
+  );
+  const row = rows[0];
+  if (!row) throw new Error("Supabase REST fetch summary.betting_odds_snapshot: current row not found");
+  return row;
 }
 
 export async function fetchBettingOddsSnapshotFromSummary(): Promise<BettingOddsSnapshot> {
-  const supabase = createServerSupabaseClient("summary");
-  let summaryHasMargin = true;
-  let response = await supabase
-    .from("betting_odds_snapshot")
-    .select("id,h2h,line,margin,total,tryscorer,generated_at,updated_at")
-    .eq("id", "current")
-    .maybeSingle();
-
-  if (response.error && isMissingSummaryMarginColumnError(response.error)) {
-    summaryHasMargin = false;
-    response = await supabase
-      .from("betting_odds_snapshot")
-      .select("id,h2h,line,total,tryscorer,generated_at,updated_at")
-      .eq("id", "current")
-      .maybeSingle();
-  }
-
-  const { data, error } = response;
-
-  if (error) throw new Error(`Supabase fetch summary.betting_odds_snapshot: ${error.message}`);
-  if (!data) throw new Error("Supabase fetch summary.betting_odds_snapshot: current row not found");
-
-  const row = data as Record<string, unknown>;
-  summaryHasMargin = summaryHasMargin && Object.prototype.hasOwnProperty.call(row, "margin");
+  const row = await fetchBettingOddsSnapshotSummaryRowFromRest();
+  const summaryHasMargin = Object.prototype.hasOwnProperty.call(row, "margin");
   const summaryMargin = summaryHasMargin ? mapBettingSnapshotRows(row.margin, "Margin") : [];
   const margin = summaryMargin.length > 0
     ? summaryMargin
@@ -3474,17 +3456,23 @@ export async function fetchBettingOddsSnapshotFromSummary(): Promise<BettingOdds
     tryscorer: mapBettingSnapshotRows(row.tryscorer, "Tryscorer"),
     generatedAt: toNullableString(row.generated_at) ?? toNullableString(row.updated_at) ?? new Date().toISOString(),
   };
-  return enrichBettingSnapshotModels(snapshot);
+  return snapshot;
 }
 
 export async function fetchBettingOddsSnapshotFromRawTables(): Promise<BettingOddsSnapshot> {
-  const [h2hRaw, lineRaw, marginRaw, totalRaw, tryscorer] = await Promise.all([
+  const [nrlH2hRaw, nrlLineRaw, marginRaw, nrlTotalRaw, tryscorer, internationalH2h, internationalLine, internationalTotal] = await Promise.all([
     fetchBettingOddsTableOrEmpty("NRL Odds"),
     fetchBettingOddsTableOrEmpty("NRL Line Odds"),
     fetchBettingOddsTableOrEmpty("NRL Margin Odds"),
     fetchBettingOddsTableOrEmpty("NRL Total Odds"),
     fetchBettingOddsTableOrEmpty("NRL Tryscorers"),
+    fetchBettingOddsTableOrEmpty("Rugby League Internationals Odds"),
+    fetchBettingOddsTableOrEmpty("Rugby League Internationals Line Odds"),
+    fetchBettingOddsTableOrEmpty("Rugby League Internationals Total Odds"),
   ]);
+  const h2hRaw = [...internationalH2h, ...nrlH2hRaw];
+  const lineRaw = [...internationalLine, ...nrlLineRaw];
+  const totalRaw = [...internationalTotal, ...nrlTotalRaw];
   const predictionRows = await fetchPredictionModelRowsFromSupabase(h2hRaw).catch((error) => {
     console.warn("Unable to fetch betting prediction rows; rendering odds without model values.", error);
     return [];
@@ -3533,7 +3521,7 @@ export async function fetchBettingOddsSnapshotFromRawTables(): Promise<BettingOd
 
 export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
   try {
-    return await fetchBettingOddsSnapshotFromSummaryCached();
+    return await fetchBettingOddsSnapshotFromSummary();
   } catch (error) {
     console.warn("Unable to fetch summary betting odds snapshot; falling back to raw odds tables.", error);
     try {
@@ -3551,12 +3539,6 @@ export async function fetchBettingOddsSnapshot(): Promise<BettingOddsSnapshot> {
     }
   }
 }
-
-const fetchBettingOddsSnapshotFromSummaryCached = unstable_cache(
-  fetchBettingOddsSnapshotFromSummary,
-  ["betting-odds-snapshot-v2"],
-  { revalidate: 30 }
-);
 
 export async function fetchCasualtyWardForPlayer(playerName: string): Promise<CasualtyWardRecord[]> {
   const name = playerName.trim();

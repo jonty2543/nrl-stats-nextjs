@@ -225,6 +225,12 @@ function computeSettledAtForStatus(status: BetStatus, previousSettledAt?: string
   return previousSettledAt ?? new Date().toISOString();
 }
 
+function timestampForMatchDate(value: string): string | null {
+  const date = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return `${date}T12:00:00.000Z`;
+}
+
 function normaliseTeam(value: string): string {
   return value
     .replace(/-/g, " ")
@@ -713,6 +719,8 @@ export async function POST(request: NextRequest) {
     }]
     : legs;
   const storedMarket = betType === "single" && isStoredBetMarket(market) ? market : storedMarketForLegs(insertedLegs);
+  const resultedAt = parsedStatus === "pending" ? null : timestampForMatchDate(matchDate) ?? new Date().toISOString();
+  const placedAt = resultedAt ?? new Date().toISOString();
 
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
@@ -733,8 +741,8 @@ export async function POST(request: NextRequest) {
       edge_pp: toFinite(edgePp),
       status: parsedStatus,
       profit: computeProfitForStatus(parsedStatus, parsedStake, parsedOdds),
-      placed_at: new Date().toISOString(),
-      settled_at: computeSettledAtForStatus(parsedStatus),
+      placed_at: placedAt,
+      settled_at: resultedAt,
       legs: insertedLegs,
     })
     .select(USER_BET_COLUMNS)

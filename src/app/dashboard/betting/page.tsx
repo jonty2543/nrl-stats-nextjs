@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 const SUNDAY_BETTING_RELEASE_UTC_HOUR = 11;
 const LOCALHOST_NAMES = new Set(["localhost", "127.0.0.1", "::1"]);
-const BETTING_PAGE_SNAPSHOT_TIMEOUT_MS = 8000;
+const BETTING_PAGE_SNAPSHOT_TIMEOUT_MS = 15000;
 const BETTING_PAGE_RAW_SNAPSHOT_TIMEOUT_MS = 4000;
 const BETTING_PAGE_OPTIONAL_CONTEXT_TIMEOUT_MS = 2500;
 const BETTING_PAGE_SUMMARY_TIMEOUT_MS = 10000;
@@ -222,10 +222,13 @@ function localhostScreenshotWindowSnapshot(
   }
 
   if (selectedDates.size === 0) {
+    const latestDate = dates[dates.length - 1] ?? null;
+    if (latestDate) selectedDates.add(latestDate);
+
     return {
       snapshot: filterBettingSnapshotToDates(snapshot, selectedDates),
       displayTodayIso: todayIso,
-      showPastMarkets: false,
+      showPastMarkets: true,
     };
   }
 
@@ -337,8 +340,13 @@ function buildTeamFormByMatchKey(games: BettingSummaryGame[]): Record<string, st
 
 export default async function BettingPage() {
   const { userId } = await auth();
-  const [snapshot, canAccessPremium, bettingSummary, playerImages, teamLogos, localhostRequest] = await Promise.all([
-    withOptionalContextTimeout("betting odds snapshot", fetchBettingOddsSnapshot(), emptyBettingOddsSnapshot(), BETTING_PAGE_SNAPSHOT_TIMEOUT_MS),
+  const snapshot = await withOptionalContextTimeout(
+    "betting odds snapshot",
+    fetchBettingOddsSnapshot(),
+    emptyBettingOddsSnapshot(),
+    BETTING_PAGE_SNAPSHOT_TIMEOUT_MS
+  );
+  const [canAccessPremium, bettingSummary, playerImages, teamLogos, localhostRequest] = await Promise.all([
     getServerPremiumAccess(userId),
     withOptionalContextTimeout("betting summary", fetchBettingPageSummary(), emptyBettingPageSummary(), BETTING_PAGE_SUMMARY_TIMEOUT_MS),
     withOptionalContextTimeout("player images", fetchPlayerImages(), []),

@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 const PAGE_SIZE = 1000;
+const BETTING_BOOKIE_COLUMNS = ["Sportsbet", "Pointsbet", "Unibet", "Palmerbet", "Betright"];
 const PROJECTION_RANGE_Z_SCORE = 1.6448536269514722;
 const FANTASY_POSITION_MAP = {
   1: "HOK",
@@ -48,6 +49,26 @@ function toNum(value) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function isValidTryscorerOddsRow(player, value) {
+  if (!player || !/[A-Za-z]/.test(player)) return false;
+  if (value == null) return true;
+  return Number.isInteger(value) && value >= 1 && value <= 3;
+}
+
+function bestTryscorerBookiePrice(row) {
+  let bestBookie = null;
+  let bestPrice = null;
+  for (const bookie of BETTING_BOOKIE_COLUMNS) {
+    const price = toNum(row[bookie]);
+    if (price == null || price <= 1) continue;
+    if (bestPrice == null || price > bestPrice) {
+      bestBookie = bookie;
+      bestPrice = price;
+    }
+  }
+  return { bestBookie, bestPrice };
 }
 
 function toInt(value) {
@@ -1398,12 +1419,14 @@ async function fetchLineupsSummaryTryscorerOdds(supabase, today) {
   const odds = new Map();
   for (const row of rows) {
     const player = text(row.Result);
-    const bestPrice = toNum(row["Best Price"]);
+    const value = toNum(row.Value);
+    if (!isValidTryscorerOddsRow(player, value)) continue;
+    const { bestBookie, bestPrice } = bestTryscorerBookiePrice(row);
     const key = normaliseName(player);
     if (!key || bestPrice == null) continue;
     const current = odds.get(key);
     if (current?.bestPrice != null && current.bestPrice >= bestPrice) continue;
-    odds.set(key, { player, bestBookie: nullableText(row["Best Bookie"]), bestPrice });
+    odds.set(key, { player, bestBookie, bestPrice });
   }
   return Object.fromEntries(odds);
 }

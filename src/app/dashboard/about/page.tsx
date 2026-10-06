@@ -21,7 +21,7 @@ export default function AboutPage() {
 
         <div className="mt-5 flex flex-wrap gap-3">
           <a
-            href="https://www.instagram.com/shortside.nrl/?hl=en"
+            href="https://www.instagram.com/shortside.stats/?hl=en"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-md border border-nrl-border bg-nrl-panel-2 px-3 py-1.5 text-sm font-semibold text-nrl-text transition-colors hover:border-nrl-accent hover:text-nrl-accent"

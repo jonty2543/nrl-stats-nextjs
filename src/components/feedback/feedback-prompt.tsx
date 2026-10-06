@@ -7,7 +7,7 @@ const FEEDBACK_SUBMITTED_KEY = "nrl-feedback-submitted-v1";
 const FEEDBACK_DISMISSED_KEY = "nrl-feedback-dismissed-v1";
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const SUBMITTED_COOLDOWN_MS = 90 * 24 * 60 * 60 * 1000;
-const INTEREST_OPTIONS = ["Fantasy", "Draft", "Betting", "Lineups", "Stats"] as const;
+const INTEREST_OPTIONS = ["Fantasy", "Draft", "Betting", "Matches", "Stats"] as const;
 const LOCALHOST_NAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 type FeedbackInterest = (typeof INTEREST_OPTIONS)[number];

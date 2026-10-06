@@ -2884,7 +2884,7 @@ function PitchPlayer({
           </div>
         ) : null}
       </div>
-      <div className={`${compact ? "line-clamp-2 h-[1.4rem] max-w-[4.25rem] text-[9px] leading-[0.7rem]" : "text-[11px]"} mx-auto mt-0.5 overflow-hidden whitespace-normal break-normal font-bold text-white drop-shadow`} title={player.player}>
+      <div className={`${compact ? "line-clamp-2 max-w-[4.25rem] text-[9px] leading-[0.7rem]" : "text-[11px]"} mx-auto mt-0.5 overflow-hidden whitespace-normal break-normal font-bold text-white drop-shadow`} title={player.player}>
         {compact ? compactPitchDisplayName(player) : displayName(player)}
       </div>
       {showPlayerMetric ? (
@@ -4018,6 +4018,81 @@ function predictedTeamPoints(matchPrediction: LineupMatchPrediction | null, side
   return Number.isFinite(value) ? value : null
 }
 
+function MatchRead({
+  match,
+  prediction,
+  odds,
+  weather,
+}: {
+  match: LineupMatch
+  prediction: LineupMatchPrediction | null
+  odds: Record<string, LineupSportsbetOdds>
+  weather: LineupWeatherForecast | null
+}) {
+  const home = teamDisplayName(match.homeTeam, "Home")
+  const away = teamDisplayName(match.awayTeam, "Away")
+  const margin = prediction?.predMargin
+  const total = prediction?.predTotal
+  const hasMargin = typeof margin === "number" && Number.isFinite(margin)
+  const hasTotal = typeof total === "number" && Number.isFinite(total)
+  const observations: string[] = []
+
+  for (const [team, results, side] of [
+    [home, match.homeRecentResults, "home"],
+    [away, match.awayRecentResults, "away"],
+  ] as const) {
+    const recent = (results ?? [])
+      .filter((result) => result.matchDate.slice(0, 10) < match.matchDate.slice(0, 10))
+      .sort((a, b) => b.matchDate.localeCompare(a.matchDate))
+      .filter((result) => resultScoreForTeam(result, team) != null)
+      .slice(0, 5)
+    const form = buildTeamFormSummary(team, recent, side)
+    if (recent.length > 0) {
+      observations.push(`${team} won ${form.wins} of their last ${recent.length}${recent.length === 1 ? " match" : " matches"}, averaging ${form.pointsFor?.toFixed(1)} points scored and ${form.pointsAgainst?.toFixed(1)} conceded.`)
+    }
+  }
+
+  if (weather) {
+    const conditions = [weather.condition]
+    if (weather.temperatureC != null && Number.isFinite(weather.temperatureC)) conditions.push(`${Math.round(weather.temperatureC)}\u00b0C`)
+    if (weather.precipitationProbabilityPct != null && Number.isFinite(weather.precipitationProbabilityPct)) conditions.push(`${Math.round(weather.precipitationProbabilityPct)}% chance of rain`)
+    if (weather.windKmh != null && Number.isFinite(weather.windKmh)) conditions.push(`wind ${Math.round(weather.windKmh)} km/h`)
+    observations.push(`Kickoff forecast: ${conditions.filter(Boolean).join(", ")}.`)
+  }
+
+  const market = [match.homeTeam, match.awayTeam].map((team) => {
+    const aliases = new Set([team?.team, team?.teamName].flatMap(teamAliases))
+    return Object.values(odds).find((entry) =>
+      entry.matchDate === match.matchDate.slice(0, 10) &&
+      teamAliases(entry.team).some((alias) => aliases.has(alias)) &&
+      Number.isFinite(entry.price) && entry.price > 1
+    )
+  })
+  if (!hasMargin && !hasTotal && !observations.length && !market.some(Boolean)) return null
+
+  return (
+    <section aria-label="Match read" className="mb-4 border-b border-white/10 px-2 pb-4 sm:px-3">
+      <h3 className="text-sm font-bold text-nrl-text">Match read</h3>
+      {hasMargin || hasTotal ? (
+        <p className="mt-2 break-words text-sm font-semibold text-nrl-text">
+          {hasMargin ? margin === 0 ? "Model: level on points" : `Model: ${margin > 0 ? home : away} by ${formatRatingNumber(Math.abs(margin))}` : "Model"}
+          {hasTotal ? `${hasMargin ? " · " : ": "}${formatRatingNumber(total)} total points` : ""}
+        </p>
+      ) : null}
+      {market.some(Boolean) ? (
+        <p className="mt-1 break-words text-xs text-nrl-muted">
+          Sportsbet H2H: {market.map((entry, index) => entry ? `${index === 0 ? home : away} $${entry.price.toFixed(2)}` : null).filter(Boolean).join(" · ")}
+        </p>
+      ) : null}
+      {observations.length ? (
+        <ul className="mt-3 space-y-1.5 pl-4 text-xs leading-relaxed text-nrl-muted list-disc marker:text-nrl-accent">
+          {observations.map((observation) => <li key={observation} className="break-words pl-0.5">{observation}</li>)}
+        </ul>
+      ) : null}
+    </section>
+  )
+}
+
 function LineupCard({
   match,
   liveMatch,
@@ -4335,6 +4410,14 @@ function LineupCard({
         ) : (
           <>
         <LiveTryScorersStrip match={detailMatch} liveMatch={displayLiveMatch} />
+        {showPregameContent ? (
+          <MatchRead
+            match={detailMatch}
+            prediction={canAccessFantasyProjections ? matchPrediction : null}
+            odds={detail?.sportsbetOdds ?? {}}
+            weather={weatherForecast}
+          />
+        ) : null}
         {availableDetailViews.length > 0 ? (
           <div className="mb-5 w-full overflow-x-auto border-b border-white/10 sm:mb-3">
             <div className="flex w-max min-w-full items-stretch justify-center">
@@ -4552,6 +4635,7 @@ function LineupSelectors({
           className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
         >
           <option value="nrl">NRL</option>
+          <option value="international">International</option>
           <option value="origin">Origin</option>
           <option value="qldCup">QLD Cup</option>
           <option value="nswCup">NSW Cup</option>

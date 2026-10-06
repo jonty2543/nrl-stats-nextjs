@@ -7,7 +7,7 @@ import { unstable_cache } from "next/cache"
 const BETTING_BOOKIE_COLUMNS = ["Sportsbet", "Pointsbet", "Unibet", "Palmerbet", "Betright"] as const
 
 export type LineupSide = "left" | "right" | "middle" | "spine" | "bench" | "unknown"
-export type LineupCompetition = "nrl" | "origin" | "nswCup" | "qldCup"
+export type LineupCompetition = "nrl" | "origin" | "nswCup" | "qldCup" | "international"
 
 export interface LineupPlayer {
   matchId: string
@@ -287,11 +287,12 @@ type RawRow = Record<string, unknown>
 
 const PAGE_SIZE = 1000
 const LINEUPS_FETCH_TIMEOUT_MS = 2000
-const LINEUP_COMPETITION_TABLES: Record<LineupCompetition, { lineups: string; matches: string; playerStats: string }> = {
+const LINEUP_COMPETITION_TABLES: Record<LineupCompetition, { lineups: string; matches: string; playerStats: string; fixtures?: string }> = {
   nrl: { lineups: "lineups", matches: "matches", playerStats: "player_stats" },
   origin: { lineups: "origin_lineups", matches: "origin_matches", playerStats: "origin_player_stats" },
   nswCup: { lineups: "state_cup_player_stats", matches: "state_cup_matches", playerStats: "state_cup_player_stats" },
   qldCup: { lineups: "state_cup_player_stats", matches: "state_cup_matches", playerStats: "state_cup_player_stats" },
+  international: { lineups: "international_player_stats", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
 }
 
 const STATE_CUP_COMPETITION_IDS: Partial<Record<LineupCompetition, number>> = {
@@ -301,6 +302,10 @@ const STATE_CUP_COMPETITION_IDS: Partial<Record<LineupCompetition, number>> = {
 
 function stateCupCompetitionId(competition: LineupCompetition): number | null {
   return STATE_CUP_COMPETITION_IDS[competition] ?? null
+}
+
+function usesMatchRows(competition: LineupCompetition): boolean {
+  return competition === "origin" || competition === "international" || stateCupCompetitionId(competition) != null
 }
 
 const LINEUP_SELECT_BASE = [
@@ -674,13 +679,28 @@ async function fetchStateCupMatchRowsForYear(
   )
 }
 
+async function fetchInternationalFixtureRowsForYear(year: number, round?: string): Promise<RawRow[]> {
+  const supabase = createServerSupabaseClient("nrl")
+  const { data, error } = await supabase
+    .from("international_fixtures")
+    .select("*")
+    .gte("match_date", `${year}-01-01`)
+    .lt("match_date", `${year + 1}-01-01`)
+    .order("match_date", { ascending: true })
+    .limit(500)
+
+  if (error) throw new Error(`Supabase fetch nrl.international_fixtures for ${year}: ${error.message}`)
+
+  return ((data ?? []) as unknown as RawRow[]).filter((row) => !round || text(row.round) === round)
+}
+
 async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: boolean, competition: LineupCompetition): Promise<RawRow[]> {
   const supabase = createServerSupabaseClient("nrl")
   const table = LINEUP_COMPETITION_TABLES[competition].lineups
   const rows: RawRow[] = []
   let start = 0
   const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
-  const selectColumns = competition === "origin" || stateCupCompetitionId != null
+  const selectColumns = usesMatchRows(competition)
     ? "*"
     : includeFantasyProjections
     ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
@@ -723,7 +743,7 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
   const table = LINEUP_COMPETITION_TABLES[competition].lineups
   const rows: RawRow[] = []
   const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
-  const selectColumns = competition === "origin" || stateCupCompetitionId != null
+  const selectColumns = usesMatchRows(competition)
     ? "*"
     : includeFantasyProjections
     ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
@@ -1057,7 +1077,7 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
     const draw2026DataPromise = competition === "nrl" && year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} })
     let matchesQuery = supabase
       .from(tables.matches)
-      .select(competition === "origin" || stateCupCompetitionId != null ? "*" : "round,round_number,match_date")
+      .select(usesMatchRows(competition) ? "*" : "round,round_number,match_date")
       .order("match_date", { ascending: true })
     if (stateCupCompetitionId != null) {
       matchesQuery = matchesQuery
@@ -1089,6 +1109,16 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
       if (!round || !matchDate) continue
       const roundNumber = roundSort(round) || numberOrNull(row.round_number) || 0
       addRoundOption(options, round, roundNumber, matchDate)
+    }
+
+    if (competition === "international") {
+      for (const row of await fetchInternationalFixtureRowsForYear(year).catch(() => [])) {
+        const round = text(row.round)
+        const matchDate = text(row.match_date).slice(0, 10)
+        if (!round || !matchDate) continue
+        const roundNumber = numberOrNull(row.round_number) ?? roundSort(round)
+        addRoundOption(options, round, roundNumber, matchDate)
+      }
     }
 
     for (const row of draw2026Data.rows) {
@@ -1131,13 +1161,13 @@ export async function fetchLineupYearOptions(competition: LineupCompetition = "n
 
     let matchesQuery = supabase
       .from(tables.matches)
-      .select(stateCupCompetitionId != null ? "season,match_date" : "match_date")
-      .order(stateCupCompetitionId != null ? "season" : "match_date", { ascending: false })
+      .select(usesMatchRows(competition) ? "season,match_date" : "match_date")
+      .order(usesMatchRows(competition) ? "season" : "match_date", { ascending: false })
       .limit(2000)
     let lineupsQuery = supabase
       .from(tables.lineups)
-      .select(stateCupCompetitionId != null ? "season,match_date" : "match_date")
-      .order(stateCupCompetitionId != null ? "season" : "match_date", { ascending: false })
+      .select(usesMatchRows(competition) ? "season,match_date" : "match_date")
+      .order(usesMatchRows(competition) ? "season" : "match_date", { ascending: false })
       .limit(2000)
 
     if (stateCupCompetitionId != null) {
@@ -1172,6 +1202,11 @@ export async function fetchLineupYearOptions(competition: LineupCompetition = "n
       if (season != null) {
         addYearOption(options, `${season}-01-01`)
       } else {
+        addYearOption(options, text(row.match_date))
+      }
+    }
+    if (competition === "international") {
+      for (const row of await fetchInternationalFixtureRowsForYear(getCurrentYearInBrisbane()).catch(() => [])) {
         addYearOption(options, text(row.match_date))
       }
     }
@@ -1819,7 +1854,7 @@ async function fetchHistoricalPlayerStatsForRound(round: string, year: number, c
   let query = supabase
     .from(table)
     .select(
-      competition === "origin" || stateCupId != null
+      usesMatchRows(competition)
         ? "*"
         : [
         "match_date",
@@ -2074,7 +2109,7 @@ export async function fetchLineupsForRound({
     let matchesQuery = supabase
       .from(table)
       .select(
-        competition === "origin" || stateCupId != null
+        usesMatchRows(competition)
           ? "*"
           : [
           "url",
@@ -2148,9 +2183,16 @@ export async function fetchLineupsForRound({
           LINEUPS_FETCH_TIMEOUT_MS,
           `Supabase fetch nrl.${table} round ${round}`
         )
+    const fixtureRowsPromise = competition === "international"
+      ? fetchInternationalFixtureRowsForYear(year, round).catch((error) => {
+          console.warn(`Unable to fetch nrl.international_fixtures round ${round}; using match/player rows where available.`, error)
+          return []
+        })
+      : Promise.resolve([])
 
-    const [{ data, error }, lineupRows, overrides, projectionOverrides, historicalPlayerStats, recentResults, draw2026Data] = await Promise.all([
+    const [{ data, error }, fixtureRows, lineupRows, overrides, projectionOverrides, historicalPlayerStats, recentResults, draw2026Data] = await Promise.all([
       matchRowsPromise,
+      fixtureRowsPromise,
       withTimeout(fetchLineupRowsForRound(round, year, includeFantasyProjections, competition), [], LINEUPS_FETCH_TIMEOUT_MS, `Supabase fetch nrl.${LINEUP_COMPETITION_TABLES[competition].lineups} round ${round}`),
       withTimeout(fetchSideOverrides(), new Map<string, LineupSide>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup side overrides"),
       includeFantasyProjections
@@ -2184,14 +2226,15 @@ export async function fetchLineupsForRound({
     const statsById: Record<string, LineupMatchStats> = {}
     const seenKeys = new Set<string>()
 
-    for (const row of (data ?? []) as unknown as RawRow[]) {
-      if (stateCupId != null) {
+    for (const row of [...((data ?? []) as unknown as RawRow[]), ...fixtureRows]) {
+      if (usesMatchRows(competition)) {
         const matchDate = text(row.match_date)
         const homeTeam = text(row.home_team)
         const awayTeam = text(row.away_team)
         if (!matchDate || !homeTeam || !awayTeam) continue
 
         const key = matchMergeKey(matchDate, homeTeam, awayTeam)
+        if (seenKeys.has(key)) continue
         const lineupMatch = lineupsByKey.get(key)
         const matchId = text(row.match_id) || lineupMatch?.matchId || key
         const homeFantasy = historicalPlayerStats.fantasyTotals.get(`${key}|${normaliseKey(homeTeam)}`) ?? null
@@ -2211,17 +2254,19 @@ export async function fetchLineupsForRound({
           awayScore: numberOrNull(row.away_score),
         })
 
-        statsById[matchId] = {
-          matchId,
-          homeTeam,
-          awayTeam,
-          scoringEvents: [
-            ...cupTryEvents(matchId, homeTeam, row.home_scoring, "home"),
-            ...cupTryEvents(matchId, awayTeam, row.away_scoring, "away"),
-          ].sort((a, b) => (a.matchMinute ?? 9999) - (b.matchMinute ?? 9999)),
-          playerStats: historicalPlayerStats.playerStatsByMatchKey.get(key) ?? {},
-          home: cupTeamStatsFromMatchRow(row, "home", homeFantasy),
-          away: cupTeamStatsFromMatchRow(row, "away", awayFantasy),
+        if (row.team_stats != null || row.home_score != null || row.away_score != null) {
+          statsById[matchId] = {
+            matchId,
+            homeTeam,
+            awayTeam,
+            scoringEvents: [
+              ...cupTryEvents(matchId, homeTeam, row.home_scoring, "home"),
+              ...cupTryEvents(matchId, awayTeam, row.away_scoring, "away"),
+            ].sort((a, b) => (a.matchMinute ?? 9999) - (b.matchMinute ?? 9999)),
+            playerStats: historicalPlayerStats.playerStatsByMatchKey.get(key) ?? {},
+            home: cupTeamStatsFromMatchRow(row, "home", homeFantasy),
+            away: cupTeamStatsFromMatchRow(row, "away", awayFantasy),
+          }
         }
         seenKeys.add(key)
         continue

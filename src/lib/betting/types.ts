@@ -7,7 +7,15 @@ export const BETTING_BOOKIE_COLUMNS = [
 ] as const;
 
 export type BettingBookie = (typeof BETTING_BOOKIE_COLUMNS)[number];
-export type BettingOddsTable = "NRL Odds" | "NRL Line Odds" | "NRL Margin Odds" | "NRL Total Odds" | "NRL Tryscorers";
+export type BettingOddsTable =
+  | "NRL Odds"
+  | "NRL Line Odds"
+  | "NRL Margin Odds"
+  | "NRL Total Odds"
+  | "NRL Tryscorers"
+  | "Rugby League Internationals Odds"
+  | "Rugby League Internationals Line Odds"
+  | "Rugby League Internationals Total Odds";
 export type BettingMarket = "H2H" | "Line" | "Margin" | "Total" | "Tryscorer";
 export type TrackedBetMarket = BettingMarket | "MOTM" | "Futures";
 

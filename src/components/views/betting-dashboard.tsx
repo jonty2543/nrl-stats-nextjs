@@ -351,32 +351,17 @@ const BETTING_TOUR_STEPS: Array<{
   },
 ];
 
-function countBestBetsByMarket(bets: BestBetCandidate[]): Record<BettingMarket, number> {
-  const counts: Record<BettingMarket, number> = {
-    H2H: 0,
-    Line: 0,
-    Margin: 0,
-    Total: 0,
-    Tryscorer: 0,
-  };
-  for (const bet of bets) {
-    counts[bet.market] += 1;
-  }
-  return counts;
-}
-
 function hasMarketOdds(groups: EventGroup[]): boolean {
   return groups.some((group) => group.outcomes.length > 0);
 }
 
 function orderMarketsByAvailability(
   markets: BettingMarket[],
-  groupsByMarket: Record<BettingMarket, EventGroup[]>,
-  bestBetCountsByMarket: Record<BettingMarket, number>
+  groupsByMarket: Record<BettingMarket, EventGroup[]>
 ): BettingMarket[] {
   return [...markets].sort((a, b) => {
-    const aUnavailable = !hasMarketOdds(groupsByMarket[a]) || bestBetCountsByMarket[a] === 0;
-    const bUnavailable = !hasMarketOdds(groupsByMarket[b]) || bestBetCountsByMarket[b] === 0;
+    const aUnavailable = !hasMarketOdds(groupsByMarket[a]);
+    const bUnavailable = !hasMarketOdds(groupsByMarket[b]);
     if (aUnavailable === bUnavailable) return markets.indexOf(a) - markets.indexOf(b);
     return aUnavailable ? 1 : -1;
   });
@@ -470,6 +455,7 @@ function areLookupTokensClose(a: string, b: string): boolean {
 function normaliseTeamMatchKey(value: string): string {
   const key = normaliseLookupKey(value);
   if (!key) return "";
+  if (key === "new zealand" || key === "nz" || key === "nz kiwis" || key === "kiwis" || key === "new zealand kiwis") return "new zealand";
   if (key.includes("broncos") || key === "brisbane") return "broncos";
   if (key.includes("raiders") || key === "canberra") return "raiders";
   if (key.includes("bulldogs") || key.includes("canterbury")) return "bulldogs";
@@ -479,7 +465,7 @@ function normaliseTeamMatchKey(value: string): string {
   if (key.includes("sea eagles") || key.includes("manly")) return "sea eagles";
   if (key.includes("storm") || key.includes("melbourne")) return "storm";
   if (key.includes("knights") || key.includes("newcastle")) return "knights";
-  if (key.includes("warriors") || key.includes("zealand")) return "warriors";
+  if (key.includes("warriors")) return "warriors";
   if (key.includes("cowboys") || key.includes("north queensland") || key.includes("north qld") || key.includes("nth queensland")) return "cowboys";
   if (key.includes("eels") || key.includes("parramatta")) return "eels";
   if (key.includes("panthers") || key.includes("penrith")) return "panthers";
@@ -593,6 +579,19 @@ const NRL_TEAM_LOGO_ALIAS_GROUPS: string[][] = [
   ["wests tigers", "west tigers", "tigers"],
 ];
 
+const INTERNATIONAL_TEAM_LOGOS: Record<string, string> = {
+  australia: "/images/international-logos/australia.svg",
+  "australia women": "/images/international-logos/australia.svg",
+  england: "/images/international-logos/england.png",
+  france: "/images/international-logos/france.svg",
+  "new zealand": "/images/international-logos/new-zealand.png",
+  "nz kiwis": "/images/international-logos/new-zealand.png",
+  kiwis: "/images/international-logos/new-zealand.png",
+  samoa: "/images/international-logos/samoa.svg",
+  "samoa women": "/images/international-logos/samoa.svg",
+  tonga: "/images/international-logos/tonga.svg",
+};
+
 function teamLogoAliasKeys(value: string | null | undefined): string[] {
   const key = normaliseLookupKey(stripSelectionLineSuffix(value ?? ""));
   if (!key) return [];
@@ -608,6 +607,9 @@ function teamLogoAliasKeys(value: string | null | undefined): string[] {
 function resolveTeamLogoUrl(teamName: string | null | undefined, teamLogos: Record<string, string>): string | null {
   const keys = teamLogoAliasKeys(teamName);
   if (keys.length === 0) return null;
+  for (const key of keys) {
+    if (INTERNATIONAL_TEAM_LOGOS[key]) return INTERNATIONAL_TEAM_LOGOS[key];
+  }
   for (const key of keys) {
     if (teamLogos[key]) return teamLogos[key];
   }
@@ -763,6 +765,7 @@ function shortTeamName(value: string | null): string {
     "sea eagles": "Sea Eagles",
     storm: "Storm",
     knights: "Knights",
+    "new zealand": "New Zealand",
     warriors: "Warriors",
     cowboys: "Cowboys",
     eels: "Eels",
@@ -2509,7 +2512,6 @@ export function BettingDashboard({
     }),
     [bankroll, h2hGroups, kellyScale, lineGroups, lineupPlayersByMatch, marginGroups, teamListStatusNowMs, todayIso, totalGroups, tryscorerGroups, tryscorerKickoffsByMatch]
   );
-  const bestBetCountsByMarket = useMemo(() => countBestBetsByMarket(bestBets), [bestBets]);
   const marketGroupsByMarket = useMemo<Record<BettingMarket, EventGroup[]>>(() => ({
     H2H: h2hGroups,
     Line: lineGroups,
@@ -2518,8 +2520,8 @@ export function BettingDashboard({
     Tryscorer: tryscorerGroups,
   }), [h2hGroups, lineGroups, marginGroups, totalGroups, tryscorerGroups]);
   const orderedMarkets = useMemo(
-    () => orderMarketsByAvailability(MARKET_TABS, marketGroupsByMarket, bestBetCountsByMarket),
-    [bestBetCountsByMarket, marketGroupsByMarket]
+    () => orderMarketsByAvailability(MARKET_TABS, marketGroupsByMarket),
+    [marketGroupsByMarket]
   );
   const arbitrageBets = useMemo(
     () => buildArbitrageBets({
@@ -2553,13 +2555,13 @@ export function BettingDashboard({
   useEffect(() => {
     let autoSelectTimeoutId: number | null = null;
     const firstAvailableMarket = orderedMarkets.find((market) =>
-      hasMarketOdds(marketGroupsByMarket[market]) && bestBetCountsByMarket[market] > 0
+      hasMarketOdds(marketGroupsByMarket[market])
     );
     if (
       !hasAutoSelectedMarketRef.current &&
       firstAvailableMarket &&
       firstAvailableMarket !== selectedMarket &&
-      (!hasMarketOdds(marketGroupsByMarket[selectedMarket]) || bestBetCountsByMarket[selectedMarket] === 0)
+      !hasMarketOdds(marketGroupsByMarket[selectedMarket])
     ) {
       hasAutoSelectedMarketRef.current = true;
       autoSelectTimeoutId = window.setTimeout(() => setSelectedMarket(firstAvailableMarket), 0);
@@ -2588,7 +2590,7 @@ export function BettingDashboard({
       if (autoSelectTimeoutId != null) window.clearTimeout(autoSelectTimeoutId);
       window.removeEventListener("hashchange", scrollToGameHash);
     };
-  }, [bestBetCountsByMarket, marketGroupsByMarket, orderedMarkets, selectedMarket, selectedMarketGroups]);
+  }, [marketGroupsByMarket, orderedMarkets, selectedMarket, selectedMarketGroups]);
 
   const handleStakingModeChange = (mode: StakingMode) => {
     if (!hasPremiumBettingAccess && mode === "kelly") {

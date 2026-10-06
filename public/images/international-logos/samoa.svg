@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Samoa rugby league badge">
+  <circle cx="64" cy="64" r="60" fill="#f7f9fc"/>
+  <circle cx="64" cy="64" r="56" fill="#c8102e"/>
+  <path d="M8 64a56 56 0 0 1 56-56v56Z" fill="#0032a0"/>
+  <g fill="#ffffff">
+    <path d="m31 23 3 8h8l-7 5 3 8-7-5-7 5 3-8-7-5h8Z"/>
+    <path d="m48 40 2 6h6l-5 4 2 6-5-4-5 4 2-6-5-4h6Z"/>
+    <path d="m23 51 2 5h5l-4 3 2 5-5-3-5 3 2-5-4-3h5Z"/>
+  </g>
+  <circle cx="64" cy="64" r="43" fill="none" stroke="#ffffff" stroke-width="6"/>
+  <path d="M37 78c13-21 40-21 54 0-6 13-14 20-27 20s-21-7-27-20Z" fill="#ffffff"/>
+  <path d="M45 78c11-11 27-11 38 0-4 7-10 11-19 11s-15-4-19-11Z" fill="#0032a0"/>
+  <text x="64" y="113" text-anchor="middle" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="800">SAMOA</text>
+</svg>

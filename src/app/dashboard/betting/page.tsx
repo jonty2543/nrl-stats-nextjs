@@ -74,6 +74,7 @@ function normalisePlayerKey(value: string): string {
 function normaliseTeamKey(value: string): string {
   const key = normalisePlayerKey(value);
   if (!key) return "";
+  if (key === "new zealand" || key === "nz" || key === "nz kiwis" || key === "kiwis" || key === "new zealand kiwis") return "new zealand";
   if (key.includes("broncos") || key === "brisbane") return "broncos";
   if (key.includes("raiders") || key === "canberra") return "raiders";
   if (key.includes("bulldogs") || key.includes("canterbury")) return "bulldogs";
@@ -83,7 +84,7 @@ function normaliseTeamKey(value: string): string {
   if (key.includes("sea eagles") || key.includes("manly")) return "sea eagles";
   if (key.includes("storm") || key.includes("melbourne")) return "storm";
   if (key.includes("knights") || key.includes("newcastle")) return "knights";
-  if (key.includes("warriors") || key.includes("zealand")) return "warriors";
+  if (key.includes("warriors")) return "warriors";
   if (key.includes("cowboys") || key.includes("north queensland")) return "cowboys";
   if (key.includes("eels") || key.includes("parramatta")) return "eels";
   if (key.includes("panthers") || key.includes("penrith")) return "panthers";

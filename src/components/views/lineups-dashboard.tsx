@@ -195,7 +195,7 @@ const STATS_SOURCES: { key: StatsSource; label: string }[] = [
 ]
 
 function competitionParam(competition: LineupCompetition): string | null {
-  return competition === "nrl" ? null : competition
+  return competition === "international" ? null : competition
 }
 
 function isAverageDisplayMode(mode: DisplayMode): mode is AverageStatKey {
@@ -347,6 +347,21 @@ const ORIGIN_TEAM_LOGOS: Record<string, string> = {
   "new south wales": "/nsw.png",
   nsw: "/nsw.png",
   "new south wales blues": "/nsw.png",
+}
+
+const INTERNATIONAL_TEAM_LOGOS: Record<string, string> = {
+  australia: "/images/international-logos/australia.svg",
+  "australia women": "/images/international-logos/australia.svg",
+  england: "/images/international-logos/england.png",
+  france: "/images/international-logos/france.svg",
+  "new zealand": "/images/international-logos/new-zealand.png",
+  "new zealand kiwis": "/images/international-logos/new-zealand.png",
+  nz: "/images/international-logos/new-zealand.png",
+  "nz kiwis": "/images/international-logos/new-zealand.png",
+  kiwis: "/images/international-logos/new-zealand.png",
+  samoa: "/images/international-logos/samoa.svg",
+  "samoa women": "/images/international-logos/samoa.svg",
+  tonga: "/images/international-logos/tonga.svg",
 }
 
 function teamAliases(value: string | null | undefined): string[] {
@@ -733,7 +748,7 @@ function resolveTeamLogo(teamName: string | null | undefined, teamLogos: Record<
   ]
   for (const candidate of candidates) {
     const key = normaliseKey(candidate)
-    const logo = ORIGIN_TEAM_LOGOS[key] ?? teamLogos[key]
+    const logo = INTERNATIONAL_TEAM_LOGOS[key] ?? ORIGIN_TEAM_LOGOS[key] ?? teamLogos[key]
     if (logo) return logo
   }
   return null
@@ -4634,8 +4649,8 @@ function LineupSelectors({
           }}
           className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
         >
-          <option value="nrl">NRL</option>
           <option value="international">International</option>
+          <option value="nrl">NRL</option>
           <option value="origin">Origin</option>
           <option value="qldCup">QLD Cup</option>
           <option value="nswCup">NSW Cup</option>

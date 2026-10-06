@@ -289,11 +289,12 @@ function enrichLineupMatchImages(match: LineupMatch, lookup: Map<string, PlayerI
 }
 
 function parseCompetition(value: string | undefined): LineupCompetition {
+  if (value === "nrl") return "nrl"
   if (value === "origin") return "origin"
   if (value === "international") return "international"
   if (value === "nswCup" || value === "nsw-cup") return "nswCup"
   if (value === "qldCup" || value === "qld-cup") return "qldCup"
-  return "nrl"
+  return "international"
 }
 
 function parseYear(value: string | undefined): number | null {

@@ -305,6 +305,17 @@ function parseYear(value: string | undefined): number | null {
   return Number.isInteger(year) && year >= 1908 && year <= 2100 ? year : null
 }
 
+function closestAvailableYear(requestedYear: number, options: LineupYearOption[]): number | null {
+  if (options.length === 0) return null
+  return options.reduce((closest, option) => {
+    const optionDistance = Math.abs(option.year - requestedYear)
+    const closestDistance = Math.abs(closest.year - requestedYear)
+    if (optionDistance < closestDistance) return option
+    if (optionDistance === closestDistance && option.year > closest.year) return option
+    return closest
+  }).year
+}
+
 export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const params = await searchParams
   const { userId } = await auth()
@@ -315,7 +326,12 @@ export default async function LineupsPage({ searchParams }: LineupsPageProps) {
   const currentYear = currentYearInBrisbane()
   const selectedCompetition = parseCompetition(params.competition)
   const fetchedYearOptions = await withFallback(fetchLineupYearOptions(selectedCompetition), [], "Lineups year options")
-  const selectedYear = parseYear(params.year) ?? (selectedCompetition === "nrl" ? currentYear : fetchedYearOptions[0]?.year) ?? currentYear
+  const requestedYear = parseYear(params.year)
+  const selectedYear = requestedYear == null
+    ? (selectedCompetition === "nrl" ? currentYear : fetchedYearOptions[0]?.year) ?? currentYear
+    : fetchedYearOptions.some((option) => option.year === requestedYear)
+      ? requestedYear
+      : closestAvailableYear(requestedYear, fetchedYearOptions) ?? requestedYear
   const yearOptions = mergeYearOptions(
     fetchedYearOptions,
     [{ value: String(selectedYear), label: String(selectedYear), year: selectedYear }],

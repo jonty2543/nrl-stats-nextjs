@@ -330,6 +330,31 @@ const LINEUP_SELECT_BASE = [
   "body_image",
 ] as const
 
+const INTERNATIONAL_PLAYER_SELECT_COLUMNS = [
+  ...LINEUP_SELECT_BASE.filter((column) => column !== "venue"),
+  "minutes_played",
+  "fantasy_points_total",
+  "points",
+  "tries",
+  "try_assists",
+  "line_breaks",
+  "line_break_assists",
+  "tackle_breaks",
+  "all_runs",
+  "all_run_metres",
+  "post_contact_metres",
+  "tackles_made",
+  "missed_tackles",
+  "ineffective_tackles",
+  "offloads",
+  "errors",
+  "penalties",
+  "kicks",
+  "kick_metres",
+  "receipts",
+  "passes",
+].join(",")
+
 interface FetchUpcomingLineupsOptions {
   includeFantasyProjections?: boolean
   competition?: LineupCompetition
@@ -701,7 +726,9 @@ async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: b
   let start = 0
   const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
   const selectColumns = usesMatchRows(competition)
-    ? "*"
+    ? competition === "international"
+      ? INTERNATIONAL_PLAYER_SELECT_COLUMNS
+      : "*"
     : includeFantasyProjections
     ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
@@ -1077,7 +1104,7 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
     const draw2026DataPromise = competition === "nrl" && year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} })
     let matchesQuery = supabase
       .from(tables.matches)
-      .select(usesMatchRows(competition) ? "*" : "round,round_number,match_date")
+      .select("round,round_number,match_date")
       .order("match_date", { ascending: true })
     if (stateCupCompetitionId != null) {
       matchesQuery = matchesQuery
@@ -1770,16 +1797,19 @@ async function fetchRecentMatchResults(year: number, competition: LineupCompetit
     const supabase = createServerSupabaseClient("nrl")
     const table = LINEUP_COMPETITION_TABLES[competition].matches
     const stateCupId = stateCupCompetitionId(competition)
+    const usesStructuredMatchRows = usesMatchRows(competition)
     const rows: RawRow[] = []
     for (let from = 0; ; from += PAGE_SIZE) {
       let query = supabase
         .from(table)
-        .select(stateCupId != null ? "*" : "match_date,round,team,opponent_team,score,opponent_score,is_home")
+        .select(usesStructuredMatchRows
+          ? "match_date,round,home_team,away_team,home_score,away_score"
+          : "match_date,round,team,opponent_team,score,opponent_score,is_home")
         .order("match_date", { ascending: false })
 
-      if (stateCupId != null) {
+      if (usesStructuredMatchRows) {
         query = query
-          .eq("competition_id", stateCupId)
+          .match(stateCupId != null ? { competition_id: stateCupId } : {})
           .lte("season", year)
           .not("home_score", "is", null)
           .not("away_score", "is", null)
@@ -1855,7 +1885,9 @@ async function fetchHistoricalPlayerStatsForRound(round: string, year: number, c
     .from(table)
     .select(
       usesMatchRows(competition)
-        ? "*"
+        ? competition === "international"
+          ? INTERNATIONAL_PLAYER_SELECT_COLUMNS
+          : "*"
         : [
         "match_date",
         "match",
@@ -1952,7 +1984,7 @@ function buildHistoricalPlayerStats(rows: RawRow[]): HistoricalRoundPlayerStats 
       errors: numberOrNull(row.errors),
       penalties: numberOrNull(row.penalties),
       kicks: numberOrNull(row.kicks),
-      kickMetres: numberOrNull(row.kicking_metres),
+      kickMetres: numberOrNull(row.kicking_metres ?? row.kick_metres),
       receipts: numberOrNull(row.receipts),
       passes: numberOrNull(row.passes),
       updatedAt: null,
@@ -2036,6 +2068,7 @@ export async function fetchLineupsForRound({
   competition?: LineupCompetition
 }): Promise<LineupRoundMatchesResult> {
   try {
+    const fetchTimeoutMs = competition === "international" ? 12000 : LINEUPS_FETCH_TIMEOUT_MS
     const supabase = createServerSupabaseClient("nrl")
     const table = LINEUP_COMPETITION_TABLES[competition].matches
     const stateCupId = stateCupCompetitionId(competition)
@@ -2109,7 +2142,9 @@ export async function fetchLineupsForRound({
     let matchesQuery = supabase
       .from(table)
       .select(
-        usesMatchRows(competition)
+        competition === "international"
+          ? "match_id,match_date,kickoff_utc,round,venue,match,match_url,home_team,away_team,home_score,away_score,team_stats,home_scoring,away_scoring"
+          : usesMatchRows(competition)
           ? "*"
           : [
           "url",
@@ -2170,6 +2205,14 @@ export async function fetchLineupsForRound({
         .lt("match_date", `${year + 1}-01-01`)
     }
 
+    const prefetchedInternationalLineupRows = competition === "international"
+      ? await withTimeout(
+          fetchLineupRowsForRound(round, year, includeFantasyProjections, competition),
+          [],
+          fetchTimeoutMs,
+          `Supabase fetch nrl.${LINEUP_COMPETITION_TABLES[competition].lineups} round ${round}`
+        )
+      : null
     const matchRowsPromise = stateCupId != null
       ? fetchStateCupMatchRowsForYear(year, competition, round)
         .then((data) => ({ data, error: null }))
@@ -2180,7 +2223,7 @@ export async function fetchLineupsForRound({
       : withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
           matchesQuery as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
           { data: null, error: null },
-          LINEUPS_FETCH_TIMEOUT_MS,
+          fetchTimeoutMs,
           `Supabase fetch nrl.${table} round ${round}`
         )
     const fixtureRowsPromise = competition === "international"
@@ -2189,30 +2232,41 @@ export async function fetchLineupsForRound({
           return []
         })
       : Promise.resolve([])
-
-    const [{ data, error }, fixtureRows, lineupRows, overrides, projectionOverrides, historicalPlayerStats, recentResults, draw2026Data] = await Promise.all([
+    const [{ data, error }, fixtureRows, lineupRows, overrides, projectionOverrides, fetchedHistoricalPlayerStats, recentResults, draw2026Data] = await Promise.all([
       matchRowsPromise,
       fixtureRowsPromise,
-      withTimeout(fetchLineupRowsForRound(round, year, includeFantasyProjections, competition), [], LINEUPS_FETCH_TIMEOUT_MS, `Supabase fetch nrl.${LINEUP_COMPETITION_TABLES[competition].lineups} round ${round}`),
-      withTimeout(fetchSideOverrides(), new Map<string, LineupSide>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup side overrides"),
+      prefetchedInternationalLineupRows ?? withTimeout(fetchLineupRowsForRound(round, year, includeFantasyProjections, competition), [], fetchTimeoutMs, `Supabase fetch nrl.${LINEUP_COMPETITION_TABLES[competition].lineups} round ${round}`),
+      competition === "international"
+        ? Promise.resolve(new Map<string, LineupSide>())
+        : withTimeout(fetchSideOverrides(), new Map<string, LineupSide>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup side overrides"),
       includeFantasyProjections
         ? withTimeout(fetchProjectionOverrides(), new Map<string, number>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup projection overrides")
         : Promise.resolve(new Map<string, number>()),
-      withTimeout(
-        fetchHistoricalPlayerStatsForRound(round, year, competition),
-        {
-          fantasyTotals: new Map<string, number>(),
-          playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
-        },
-        LINEUPS_FETCH_TIMEOUT_MS,
-        `Supabase fetch historical player stats for ${round}`
-      ),
-      withTimeout(fetchRecentMatchResults(year, competition), [], LINEUPS_FETCH_TIMEOUT_MS, `Supabase fetch recent match results for ${year}`),
+      competition === "international"
+        ? Promise.resolve({
+            fantasyTotals: new Map<string, number>(),
+            playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
+          })
+        : withTimeout(
+            fetchHistoricalPlayerStatsForRound(round, year, competition),
+            {
+              fantasyTotals: new Map<string, number>(),
+              playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
+            },
+            fetchTimeoutMs,
+            `Supabase fetch historical player stats for ${round}`
+          ),
+      competition === "international"
+        ? Promise.resolve([])
+        : withTimeout(fetchRecentMatchResults(year, competition), [], fetchTimeoutMs, `Supabase fetch recent match results for ${year}`),
       competition === "nrl" && year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} }),
     ])
 
     if (error) console.warn(`Unable to fetch nrl.${table} round ${round}; using lineup/draw fallback where available.`, error)
 
+    const historicalPlayerStats = competition === "international"
+      ? buildHistoricalPlayerStats(lineupRows)
+      : fetchedHistoricalPlayerStats
     const lineupMatches = buildMatchesFromLineupRows(lineupRows, overrides, projectionOverrides, includeFantasyProjections)
     const lineupsByKey = new Map<string, LineupMatch>()
     for (const match of lineupMatches) {

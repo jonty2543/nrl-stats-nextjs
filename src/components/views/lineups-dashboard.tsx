@@ -122,7 +122,7 @@ type AverageStatKey =
   | "Tackle Breaks"
   | "Offloads"
 
-const MATCH_DETAIL_CLIENT_TIMEOUT_MS = 8000
+const MATCH_DETAIL_CLIENT_TIMEOUT_MS = 18000
 
 function fallbackLineupMatchDetail(match: LineupMatch): LineupMatchDetailData {
   return {
@@ -352,13 +352,24 @@ const ORIGIN_TEAM_LOGOS: Record<string, string> = {
 const INTERNATIONAL_TEAM_LOGOS: Record<string, string> = {
   australia: "/images/international-logos/australia.svg",
   "australia women": "/images/international-logos/australia.svg",
+  "aus pm xiii": "/images/international-logos/australia.svg",
+  "australian prime minister s xiii": "/images/international-logos/australia.svg",
+  "cook islands": "/images/international-logos/cook-islands.svg",
+  "cook islands aitu": "/images/international-logos/cook-islands.svg",
+  fiji: "/images/international-logos/fiji.png",
+  "fiji bati": "/images/international-logos/fiji.png",
   england: "/images/international-logos/england.png",
   france: "/images/international-logos/france.svg",
+  lebanon: "/images/international-logos/lebanon.png",
+  "lebanon cedars": "/images/international-logos/lebanon.png",
   "new zealand": "/images/international-logos/new-zealand.png",
   "new zealand kiwis": "/images/international-logos/new-zealand.png",
   nz: "/images/international-logos/new-zealand.png",
   "nz kiwis": "/images/international-logos/new-zealand.png",
   kiwis: "/images/international-logos/new-zealand.png",
+  "papua new guinea": "/images/international-logos/papua-new-guinea.png",
+  "png pm xiii": "/images/international-logos/papua-new-guinea.png",
+  "papua new guinea prime minister s xiii": "/images/international-logos/papua-new-guinea.png",
   samoa: "/images/international-logos/samoa.svg",
   "samoa women": "/images/international-logos/samoa.svg",
   tonga: "/images/international-logos/tonga.svg",
@@ -4108,6 +4119,36 @@ function MatchRead({
   )
 }
 
+function InternationalMatchInformation({ match }: { match: LineupMatch }) {
+  return (
+    <section aria-label="Match information" className="mb-4 border-b border-white/10 px-2 pb-4 sm:px-3">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
+        <div>
+          <div className="font-black uppercase tracking-wider text-nrl-muted">Date</div>
+          <div className="mt-1 font-semibold text-nrl-text">{formatMatchDateHeader(matchDateKey(match))}</div>
+        </div>
+        <div>
+          <div className="font-black uppercase tracking-wider text-nrl-muted">Kickoff</div>
+          <div className="mt-1 font-semibold text-nrl-text">{formatKickoffTime(match.kickoffUtc)}</div>
+        </div>
+        <div>
+          <div className="font-black uppercase tracking-wider text-nrl-muted">Venue</div>
+          <div className="mt-1 font-semibold text-nrl-text">{match.venue ?? "TBC"}</div>
+        </div>
+        <div>
+          <div className="font-black uppercase tracking-wider text-nrl-muted">Round</div>
+          <div className="mt-1 font-semibold text-nrl-text">{match.round || "TBC"}</div>
+        </div>
+      </div>
+      {match.matchUrl ? (
+        <a href={match.matchUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-bold text-nrl-accent hover:underline">
+          Open match centre
+        </a>
+      ) : null}
+    </section>
+  )
+}
+
 function LineupCard({
   match,
   liveMatch,
@@ -4425,6 +4466,7 @@ function LineupCard({
         ) : (
           <>
         <LiveTryScorersStrip match={detailMatch} liveMatch={displayLiveMatch} />
+        {selectedCompetition === "international" ? <InternationalMatchInformation match={detailMatch} /> : null}
         {showPregameContent ? (
           <MatchRead
             match={detailMatch}

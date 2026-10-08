@@ -16,14 +16,15 @@ import type { LineupMatch, LineupMatchStats } from "@/lib/lineups/nrl-lineups"
 import type { LineupCompetition } from "@/lib/lineups/nrl-lineups"
 
 const MATCH_DETAIL_TIMEOUT_MS = 2500
+const INTERNATIONAL_MATCH_DETAIL_TIMEOUT_MS = 14000
 
-function withTimeout<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, fallback: T, label: string, timeoutMs = MATCH_DETAIL_TIMEOUT_MS): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null
   const timeoutPromise = new Promise<T>((resolve) => {
     timeout = setTimeout(() => {
       console.warn(`${label} timed out; using fallback.`)
       resolve(fallback)
-    }, MATCH_DETAIL_TIMEOUT_MS)
+    }, timeoutMs)
   })
 
   return Promise.race([
@@ -54,6 +55,7 @@ function parseCompetition(value: unknown): LineupCompetition {
   if (value === "origin") return "origin"
   if (value === "nswCup" || value === "nsw-cup") return "nswCup"
   if (value === "qldCup" || value === "qld-cup") return "qldCup"
+  if (value === "international") return "international"
   return "nrl"
 }
 
@@ -269,7 +271,8 @@ export async function POST(request: NextRequest) {
           competition,
         }),
         { matches: [], matchStats: {} },
-        "Lineup match detail round hydration"
+        "Lineup match detail round hydration",
+        competition === "international" ? INTERNATIONAL_MATCH_DETAIL_TIMEOUT_MS : MATCH_DETAIL_TIMEOUT_MS
       )
       hydratedMatch =
         roundLineups.matches.find((candidate) => candidate.matchId === matchId) ??
@@ -292,15 +295,17 @@ export async function POST(request: NextRequest) {
       ? {
           match: hydratedMatch ?? shellMatch,
           matchStats: hydratedMatchStats,
-          tryscorerOdds: await fallbackTryscorerOdds(hydratedMatch ?? shellMatch),
+          tryscorerOdds: competition === "international" ? {} : await fallbackTryscorerOdds(hydratedMatch ?? shellMatch),
           sportsbetOdds: {},
           casualtyWardOuts: {},
           playerAverages: {},
-          playerAverageSources: await withTimeout(
-            fetchLineupPlayerAverageSources(hydratedMatch ?? shellMatch),
-            {},
-            "Lineup match detail player average sources"
-          ),
+          playerAverageSources: competition === "international"
+            ? {}
+            : await withTimeout(
+                fetchLineupPlayerAverageSources(hydratedMatch ?? shellMatch),
+                {},
+                "Lineup match detail player average sources"
+              ),
           positionPpmBaselines: {},
           playerTryHistory: {},
       }

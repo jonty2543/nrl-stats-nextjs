@@ -17,7 +17,7 @@ import {
   type PostMatchModelMetricDistributions,
   type PostMatchTeamMetricWithRdr,
 } from "@/lib/data/post-match-team-metrics"
-import { generateMatchupInsights, type MatchupInsight, type PlayerTryHistory } from "@/lib/lineups/matchup-insights"
+import type { PlayerTryHistory } from "@/lib/lineups/matchup-insights"
 import { BETTING_BOOKIE_COLUMNS } from "@/lib/betting/types"
 import type { StatsinsiderTryChart } from "@/lib/supabase/queries"
 import type {
@@ -3911,77 +3911,6 @@ function MatchupTryCharts({
   )
 }
 
-function MatchupInsightCard({ insight, muted = false }: { insight: MatchupInsight; muted?: boolean }) {
-  return (
-    <div className={`min-w-0 rounded-md border border-white/10 bg-nrl-panel-2/65 px-1.5 py-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.18)] sm:px-2 sm:py-2 ${muted ? "opacity-75" : ""}`}>
-      <div className="min-w-0">
-        <div className="text-[9px] leading-snug text-white sm:text-[10px]">{insight.description}</div>
-      </div>
-    </div>
-  )
-}
-
-function MatchupInsightsPanel({
-  insights,
-  homeTeam,
-  awayTeam,
-  homeTryChart,
-  awayTryChart,
-  teamLogos,
-}: {
-  insights: MatchupInsight[]
-  homeTeam: LineupTeam | null
-  awayTeam: LineupTeam | null
-  homeTryChart: StatsinsiderTryChart | null
-  awayTryChart: StatsinsiderTryChart | null
-  teamLogos: Record<string, string>
-}) {
-  const hasTryCharts = Boolean(homeTryChart && awayTryChart)
-  const visibleInsights = insights.slice(0, 4)
-
-  return (
-    <details
-      className="group/insights mb-5 overflow-hidden rounded-md border border-transparent shadow-[0_16px_34px_rgba(0,0,0,0.26)]"
-      style={BLUE_GRADIENT_BORDER_STYLE}
-      open
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2.5 py-2 marker:hidden [&::-webkit-details-marker]:hidden">
-        <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-nrl-accent">Matchup Insights</span>
-        <span className="flex shrink-0 items-center gap-2">
-          <span className="text-[10px] font-semibold tabular-nums text-nrl-muted">{visibleInsights.length}</span>
-          <svg
-            viewBox="0 0 16 16"
-            className="h-4 w-4 text-nrl-muted transition-transform group-open/insights:rotate-180"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      </summary>
-
-      <div className="max-h-[34rem] overflow-y-auto border-t border-nrl-border p-2">
-        <div className="grid gap-2.5">
-          {visibleInsights.length > 0 ? (
-            <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5">
-              {visibleInsights.map((insight, insightIndex) => (
-                <MatchupInsightCard key={`${insight.category}-${insight.title}-${insightIndex}`} insight={insight} />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-md border border-white/10 bg-nrl-panel-2/55 px-2 py-1.5 text-[10px] text-nrl-muted shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
-              No strong matchup signals identified yet.
-            </div>
-          )}
-          {hasTryCharts ? (
-            <MatchupTryCharts homeTeam={homeTeam} awayTeam={awayTeam} homeChart={homeTryChart} awayChart={awayTryChart} teamLogos={teamLogos} />
-          ) : null}
-        </div>
-      </div>
-    </details>
-  )
-}
-
 function DisplayModeControl({
   displayMode,
   onDisplayModeChange,
@@ -4103,8 +4032,8 @@ function MatchRead({
   if (!hasMargin && !hasTotal && !observations.length && !market.some(Boolean)) return null
 
   return (
-    <section aria-label="Match read" className="mb-4 border-b border-white/10 px-2 pb-4 sm:px-3">
-      <h3 className="text-sm font-bold text-nrl-text">Match read</h3>
+    <section aria-label="Match Insights" className="mb-4 border-b border-white/10 px-2 pb-4 sm:px-3">
+      <h3 className="text-sm font-bold text-nrl-text">Match Insights</h3>
       {hasMargin || hasTotal ? (
         <p className="mt-2 break-words text-sm font-semibold text-nrl-text">
           {hasMargin ? margin === 0 ? "Model: level on points" : `Model: ${margin > 0 ? home : away} by ${formatRatingNumber(Math.abs(margin))}` : "Model"}
@@ -4282,14 +4211,6 @@ function LineupCard({
         }
       })()
     : null
-  const insights = isLive
-    ? []
-    : generateMatchupInsights({
-        match: detailMatch,
-        tryscorerOdds,
-        playerAverages,
-        playerTryHistory,
-      })
   const homeSummary = buildTeamFormSummary(
     teamDisplayName(detailMatch.homeTeam, "Home"),
     detailMatch.homeRecentResults ?? [],
@@ -4517,14 +4438,15 @@ function LineupCard({
               teamLogos={teamLogos}
               canAccessFantasyProjections={canAccessFantasyProjections}
             />
-            <MatchupInsightsPanel
-              insights={insights}
-              homeTeam={detailMatch.homeTeam}
-              awayTeam={detailMatch.awayTeam}
-              homeTryChart={homeTryChart}
-              awayTryChart={awayTryChart}
-              teamLogos={teamLogos}
-            />
+            {homeTryChart && awayTryChart ? (
+              <MatchupTryCharts
+                homeTeam={detailMatch.homeTeam}
+                awayTeam={detailMatch.awayTeam}
+                homeChart={homeTryChart}
+                awayChart={awayTryChart}
+                teamLogos={teamLogos}
+              />
+            ) : null}
           </div>
         ) : hasLineupData ? (
           <>

@@ -195,7 +195,13 @@ const STATS_SOURCES: { key: StatsSource; label: string }[] = [
 ]
 
 function competitionParam(competition: LineupCompetition): string | null {
-  return competition === "international" ? null : competition
+  if (competition === "international") return null
+  if (competition === "pacificChampionship") return "pacific-championship"
+  return competition
+}
+
+function isInternationalCompetition(competition: LineupCompetition): boolean {
+  return competition === "international" || competition === "pacificChampionship" || competition === "rlwc"
 }
 
 function isAverageDisplayMode(mode: DisplayMode): mode is AverageStatKey {
@@ -4475,7 +4481,7 @@ function LineupCard({
               showPostMatchModel={canAccessFantasyProjections && isPostMatch}
               teamLogos={teamLogos}
             />
-            {showPregameContent && selectedCompetition !== "international" ? (
+            {showPregameContent && !isInternationalCompetition(selectedCompetition) ? (
               <SeasonFormGuide match={detailMatch} homeSummary={homeSummary} awaySummary={awaySummary} />
             ) : null}
           </div>
@@ -4660,6 +4666,8 @@ function LineupSelectors({
           }}
           className="w-full rounded-full border border-blue-300/35 bg-nrl-panel/90 px-4 py-2 text-xs font-black uppercase tracking-wide text-nrl-text shadow-[0_14px_30px_rgba(0,0,0,0.24)] outline-none transition-colors hover:border-nrl-accent/60 focus:border-nrl-accent"
         >
+          <option value="pacificChampionship">Pacific Championship</option>
+          <option value="rlwc">RLWC</option>
           <option value="international">International</option>
           <option value="nrl">NRL</option>
           <option value="origin">Origin</option>
@@ -4689,7 +4697,7 @@ function LineupSelectors({
         </label>
       ) : null}
       {roundOptions.length > 0 ? (
-        <label className={`block ${selectedCompetition === "international" ? "w-64 sm:w-72" : "w-40 sm:w-48"}`}>
+        <label className="block w-40 sm:w-48">
           <span className="sr-only">Select round</span>
           <select
             value={selectedRound}
@@ -4754,7 +4762,7 @@ export function LineupsDashboard({
     : initialWeatherForecasts
 
   function loadMatchDetail(match: LineupMatch) {
-    const detailRound = selectedCompetition === "international" ? selectedRound : match.round || selectedRound
+    const detailRound = match.round || selectedRound
     const requestKey = `${selectedCompetition}:${year}:${detailRound}:${match.matchId}`
     if (requestedMatchDetailsRef.current.has(requestKey)) return
     const current = matchDetails[match.matchId]

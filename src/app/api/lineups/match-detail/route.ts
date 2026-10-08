@@ -56,7 +56,13 @@ function parseCompetition(value: unknown): LineupCompetition {
   if (value === "nswCup" || value === "nsw-cup") return "nswCup"
   if (value === "qldCup" || value === "qld-cup") return "qldCup"
   if (value === "international") return "international"
+  if (value === "pacificChampionship" || value === "pacific-championship") return "pacificChampionship"
+  if (value === "rlwc") return "rlwc"
   return "nrl"
+}
+
+function isInternationalCompetition(competition: LineupCompetition): boolean {
+  return competition === "international" || competition === "pacificChampionship" || competition === "rlwc"
 }
 
 function fallbackMatch(value: unknown, matchId: string): LineupMatch | null {
@@ -272,7 +278,7 @@ export async function POST(request: NextRequest) {
         }),
         { matches: [], matchStats: {} },
         "Lineup match detail round hydration",
-        competition === "international" ? INTERNATIONAL_MATCH_DETAIL_TIMEOUT_MS : MATCH_DETAIL_TIMEOUT_MS
+        isInternationalCompetition(competition) ? INTERNATIONAL_MATCH_DETAIL_TIMEOUT_MS : MATCH_DETAIL_TIMEOUT_MS
       )
       hydratedMatch =
         roundLineups.matches.find((candidate) => candidate.matchId === matchId) ??
@@ -295,11 +301,11 @@ export async function POST(request: NextRequest) {
       ? {
           match: hydratedMatch ?? shellMatch,
           matchStats: hydratedMatchStats,
-          tryscorerOdds: competition === "international" ? {} : await fallbackTryscorerOdds(hydratedMatch ?? shellMatch),
+          tryscorerOdds: isInternationalCompetition(competition) ? {} : await fallbackTryscorerOdds(hydratedMatch ?? shellMatch),
           sportsbetOdds: {},
           casualtyWardOuts: {},
           playerAverages: {},
-          playerAverageSources: competition === "international"
+          playerAverageSources: isInternationalCompetition(competition)
             ? {}
             : await withTimeout(
                 fetchLineupPlayerAverageSources(hydratedMatch ?? shellMatch),
@@ -329,7 +335,7 @@ export async function POST(request: NextRequest) {
         fetchLineupMatchHistory(responseDetail.match, year, competition),
         responseDetail.match,
         "Lineup match history",
-        competition === "international" ? INTERNATIONAL_MATCH_DETAIL_TIMEOUT_MS : MATCH_DETAIL_TIMEOUT_MS
+        isInternationalCompetition(competition) ? INTERNATIONAL_MATCH_DETAIL_TIMEOUT_MS : MATCH_DETAIL_TIMEOUT_MS
       )
       responseDetail = { ...responseDetail, match: matchWithHistory }
     }

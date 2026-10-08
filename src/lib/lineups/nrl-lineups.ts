@@ -7,7 +7,7 @@ import { unstable_cache } from "next/cache"
 const BETTING_BOOKIE_COLUMNS = ["Sportsbet", "Pointsbet", "Unibet", "Palmerbet", "Betright"] as const
 
 export type LineupSide = "left" | "right" | "middle" | "spine" | "bench" | "unknown"
-export type LineupCompetition = "nrl" | "origin" | "nswCup" | "qldCup" | "international"
+export type LineupCompetition = "nrl" | "origin" | "nswCup" | "qldCup" | "international" | "pacificChampionship" | "rlwc"
 
 export interface LineupPlayer {
   matchId: string
@@ -293,6 +293,8 @@ const LINEUP_COMPETITION_TABLES: Record<LineupCompetition, { lineups: string; ma
   nswCup: { lineups: "state_cup_player_stats", matches: "state_cup_matches", playerStats: "state_cup_player_stats" },
   qldCup: { lineups: "state_cup_player_stats", matches: "state_cup_matches", playerStats: "state_cup_player_stats" },
   international: { lineups: "international_player_stats", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
+  pacificChampionship: { lineups: "international_player_stats", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
+  rlwc: { lineups: "international_player_stats", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
 }
 
 const STATE_CUP_COMPETITION_IDS: Partial<Record<LineupCompetition, number>> = {
@@ -300,23 +302,18 @@ const STATE_CUP_COMPETITION_IDS: Partial<Record<LineupCompetition, number>> = {
   qldCup: 114,
 }
 
-const INTERNATIONAL_COMPETITION_LABELS: Record<number, string> = {
-  131: "Rugby League World Cup",
-  133: "Internationals",
+const INTERNATIONAL_COMPETITION_IDS: Partial<Record<LineupCompetition, number>> = {
+  international: 133,
+  pacificChampionship: 195,
+  rlwc: 131,
 }
 
-const INTERNATIONAL_ROUND_SEPARATOR = "::"
-
-function internationalRoundValue(competitionId: number, round: string): string {
-  return `${competitionId}${INTERNATIONAL_ROUND_SEPARATOR}${round}`
+function internationalCompetitionId(competition: LineupCompetition): number | null {
+  return INTERNATIONAL_COMPETITION_IDS[competition] ?? null
 }
 
-function parseInternationalRound(value: string): { competitionId: number | null; round: string } {
-  const separatorIndex = value.indexOf(INTERNATIONAL_ROUND_SEPARATOR)
-  if (separatorIndex < 0) return { competitionId: null, round: value }
-  const competitionId = numberOrNull(value.slice(0, separatorIndex))
-  const round = value.slice(separatorIndex + INTERNATIONAL_ROUND_SEPARATOR.length).trim()
-  return { competitionId, round: round || value }
+function isInternationalCompetition(competition: LineupCompetition): boolean {
+  return internationalCompetitionId(competition) != null
 }
 
 function stateCupCompetitionId(competition: LineupCompetition): number | null {
@@ -324,7 +321,7 @@ function stateCupCompetitionId(competition: LineupCompetition): number | null {
 }
 
 function usesMatchRows(competition: LineupCompetition): boolean {
-  return competition === "origin" || competition === "international" || stateCupCompetitionId(competition) != null
+  return competition === "origin" || isInternationalCompetition(competition) || stateCupCompetitionId(competition) != null
 }
 
 const LINEUP_SELECT_BASE = [
@@ -657,29 +654,6 @@ function addRoundOption(options: Map<string, LineupRoundOption>, round: string, 
   )
 }
 
-function addInternationalRoundOption(options: Map<string, LineupRoundOption>, row: RawRow) {
-  const competitionId = numberOrNull(row.competition_id)
-  const round = text(row.round)
-  const matchDate = text(row.match_date).slice(0, 10)
-  if (competitionId == null || !round || !matchDate) return
-  const value = internationalRoundValue(competitionId, round)
-  const competitionLabel = INTERNATIONAL_COMPETITION_LABELS[competitionId] ?? `International ${competitionId}`
-  const existing = options.get(value)
-  options.set(value, existing
-    ? {
-        ...existing,
-        startDate: matchDate < existing.startDate ? matchDate : existing.startDate,
-        endDate: matchDate > existing.endDate ? matchDate : existing.endDate,
-      }
-    : {
-        value,
-        label: `${competitionLabel} — ${round}`,
-        roundNumber: numberOrNull(row.round_number) ?? roundSort(round),
-        startDate: matchDate,
-        endDate: matchDate,
-      })
-}
-
 function addYearOption(options: Map<number, LineupYearOption>, matchDate: string) {
   const year = Number(matchDate.slice(0, 4))
   if (!Number.isFinite(year)) return
@@ -755,7 +729,7 @@ async function fetchStateCupMatchRowsForYear(
   )
 }
 
-async function fetchInternationalFixtureRowsForYear(year: number, round?: string): Promise<RawRow[]> {
+async function fetchInternationalFixtureRowsForYear(year: number, competition: LineupCompetition, round?: string): Promise<RawRow[]> {
   const supabase = createServerSupabaseClient("nrl")
   const { data, error } = await supabase
     .from("international_fixtures")
@@ -767,11 +741,26 @@ async function fetchInternationalFixtureRowsForYear(year: number, round?: string
 
   if (error) throw new Error(`Supabase fetch nrl.international_fixtures for ${year}: ${error.message}`)
 
-  const selection = round ? parseInternationalRound(round) : null
+  const competitionId = internationalCompetitionId(competition)
   return ((data ?? []) as unknown as RawRow[]).filter((row) =>
-    (!selection || text(row.round) === selection.round) &&
-    (selection?.competitionId == null || numberOrNull(row.competition_id) === selection.competitionId)
+    (!round || text(row.round) === round) &&
+    (competitionId == null || numberOrNull(row.competition_id) === competitionId)
   )
+}
+
+async function fetchInternationalFixtureYearRows(competition: LineupCompetition): Promise<RawRow[]> {
+  const competitionId = internationalCompetitionId(competition)
+  if (competitionId == null) return []
+  const supabase = createServerSupabaseClient("nrl")
+  const { data, error } = await supabase
+    .from("international_fixtures")
+    .select("season,match_date")
+    .eq("competition_id", competitionId)
+    .order("match_date", { ascending: false })
+    .limit(500)
+
+  if (error) throw new Error(`Supabase fetch nrl.international_fixtures year options: ${error.message}`)
+  return (data ?? []) as unknown as RawRow[]
 }
 
 async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: boolean, competition: LineupCompetition): Promise<RawRow[]> {
@@ -780,8 +769,9 @@ async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: b
   const rows: RawRow[] = []
   let start = 0
   const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
+  const internationalId = internationalCompetitionId(competition)
   const selectColumns = usesMatchRows(competition)
-    ? competition === "international"
+    ? isInternationalCompetition(competition)
       ? INTERNATIONAL_PLAYER_SELECT_COLUMNS
       : "*"
     : includeFantasyProjections
@@ -806,6 +796,7 @@ async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: b
     } else {
       query = query.gte("match_date", fromDate)
     }
+    if (internationalId != null) query = query.eq("competition_id", internationalId)
 
     const { data, error } = await query
       .range(start, end)
@@ -825,13 +816,12 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
   const table = LINEUP_COMPETITION_TABLES[competition].lineups
   const rows: RawRow[] = []
   const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
+  const internationalId = internationalCompetitionId(competition)
   const selectColumns = usesMatchRows(competition)
-    ? "*"
+    ? isInternationalCompetition(competition) ? INTERNATIONAL_PLAYER_SELECT_COLUMNS : "*"
     : includeFantasyProjections
     ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
-  const internationalSelection = competition === "international" ? parseInternationalRound(round) : null
-  const roundFilter = internationalSelection?.round ?? round
   let start = 0
 
   if (stateCupCompetitionId != null) {
@@ -868,7 +858,7 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
     let query = supabase
       .from(table)
       .select(selectColumns)
-      .eq("round", roundFilter)
+      .eq("round", round)
       .order("match_date", { ascending: true })
       .order("kickoff_utc", { ascending: true })
       .order("match_id", { ascending: true })
@@ -884,9 +874,7 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
     }
-    if (internationalSelection?.competitionId != null) {
-      query = query.eq("competition_id", internationalSelection.competitionId)
-    }
+    if (internationalId != null) query = query.eq("competition_id", internationalId)
 
     const { data, error } = await query
       .range(start, end)
@@ -1106,12 +1094,13 @@ async function fetchLineupRoundOptionRows(year: number, competition: LineupCompe
   const supabase = createServerSupabaseClient("nrl")
   const table = LINEUP_COMPETITION_TABLES[competition].lineups
   const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
+  const internationalId = internationalCompetitionId(competition)
   const rows: RawRow[] = []
 
   for (let start = 0; ; start += PAGE_SIZE) {
     let query = supabase
       .from(table)
-      .select(competition === "international" ? "competition_id,round,match_date" : "round,match_date")
+      .select("round,match_date")
       .order("match_date", { ascending: true })
 
     if (stateCupCompetitionId != null) {
@@ -1125,6 +1114,7 @@ async function fetchLineupRoundOptionRows(year: number, competition: LineupCompe
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
     }
+    if (internationalId != null) query = query.eq("competition_id", internationalId)
 
     const { data, error } = await withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
       query.range(start, start + PAGE_SIZE - 1) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
@@ -1161,10 +1151,11 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
 
     const supabase = createServerSupabaseClient("nrl")
     const tables = LINEUP_COMPETITION_TABLES[competition]
+    const internationalId = internationalCompetitionId(competition)
     const draw2026DataPromise = competition === "nrl" && year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} })
     let matchesQuery = supabase
       .from(tables.matches)
-      .select(competition === "international" ? "competition_id,round,round_number,match_date" : "round,round_number,match_date")
+      .select("round,round_number,match_date")
       .order("match_date", { ascending: true })
     if (stateCupCompetitionId != null) {
       matchesQuery = matchesQuery
@@ -1175,6 +1166,7 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
     }
+    if (internationalId != null) matchesQuery = matchesQuery.eq("competition_id", internationalId)
 
     const [{ data, error }, lineupData] = await Promise.all([
       withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
@@ -1191,10 +1183,6 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
 
     const options = new Map<string, LineupRoundOption>()
     for (const row of [...((data ?? []) as unknown as RawRow[]), ...lineupData]) {
-      if (competition === "international") {
-        addInternationalRoundOption(options, row)
-        continue
-      }
       const round = text(row.round)
       const matchDate = text(row.match_date).slice(0, 10)
       if (!round || !matchDate) continue
@@ -1202,9 +1190,12 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
       addRoundOption(options, round, roundNumber, matchDate)
     }
 
-    if (competition === "international") {
-      for (const row of await fetchInternationalFixtureRowsForYear(year).catch(() => [])) {
-        addInternationalRoundOption(options, row)
+    if (isInternationalCompetition(competition)) {
+      for (const row of await fetchInternationalFixtureRowsForYear(year, competition).catch(() => [])) {
+        const round = text(row.round)
+        const matchDate = text(row.match_date).slice(0, 10)
+        if (!round || !matchDate) continue
+        addRoundOption(options, round, numberOrNull(row.round_number) ?? roundSort(round), matchDate)
       }
     }
 
@@ -1225,6 +1216,7 @@ export async function fetchLineupYearOptions(competition: LineupCompetition = "n
     const supabase = createServerSupabaseClient("nrl")
     const tables = LINEUP_COMPETITION_TABLES[competition]
     const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
+    const internationalId = internationalCompetitionId(competition)
     if (stateCupCompetitionId != null) {
       const { data, error } = await supabase
         .from("state_cup_matches")
@@ -1245,7 +1237,14 @@ export async function fetchLineupYearOptions(competition: LineupCompetition = "n
       }
       return [...options.values()].sort((a, b) => b.year - a.year)
     }
-
+    if (internationalId != null) {
+      const options = new Map<number, LineupYearOption>()
+      for (const row of await fetchInternationalFixtureYearRows(competition)) {
+        const season = numberOrNull(row.season)
+        addYearOption(options, season != null ? `${season}-01-01` : text(row.match_date))
+      }
+      return [...options.values()].sort((a, b) => b.year - a.year)
+    }
     let matchesQuery = supabase
       .from(tables.matches)
       .select(usesMatchRows(competition) ? "season,match_date" : "match_date")
@@ -1264,7 +1263,6 @@ export async function fetchLineupYearOptions(competition: LineupCompetition = "n
         .eq("team_type", "Home")
         .eq("number", 1)
     }
-
     const [{ data, error }, { data: lineupData, error: lineupError }] = await Promise.all([
       withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
         matchesQuery as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
@@ -1289,11 +1287,6 @@ export async function fetchLineupYearOptions(competition: LineupCompetition = "n
       if (season != null) {
         addYearOption(options, `${season}-01-01`)
       } else {
-        addYearOption(options, text(row.match_date))
-      }
-    }
-    if (competition === "international") {
-      for (const row of await fetchInternationalFixtureRowsForYear(getCurrentYearInBrisbane()).catch(() => [])) {
         addYearOption(options, text(row.match_date))
       }
     }
@@ -1908,7 +1901,7 @@ export async function fetchLineupMatchHistory(
   competition: LineupCompetition = "nrl"
 ): Promise<LineupMatch> {
   const results = await fetchRecentMatchResults(year, competition)
-  return addRecentResults(match, results, competition === "international")
+  return addRecentResults(match, results, isInternationalCompetition(competition))
 }
 
 interface HistoricalRoundPlayerStats {
@@ -1920,8 +1913,7 @@ async function fetchHistoricalPlayerStatsForRound(round: string, year: number, c
   const supabase = createServerSupabaseClient("nrl")
   const table = LINEUP_COMPETITION_TABLES[competition].playerStats
   const stateCupId = stateCupCompetitionId(competition)
-  const internationalSelection = competition === "international" ? parseInternationalRound(round) : null
-  const roundFilter = internationalSelection?.round ?? round
+  const internationalId = internationalCompetitionId(competition)
   const empty = { fantasyTotals: new Map<string, number>(), playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>() }
   if (stateCupId != null) {
     const matchIds = (await fetchStateCupMatchRowsForYear(year, competition, round))
@@ -1947,7 +1939,7 @@ async function fetchHistoricalPlayerStatsForRound(round: string, year: number, c
     .from(table)
     .select(
       usesMatchRows(competition)
-        ? competition === "international"
+        ? isInternationalCompetition(competition)
           ? INTERNATIONAL_PLAYER_SELECT_COLUMNS
           : "*"
         : [
@@ -1981,7 +1973,7 @@ async function fetchHistoricalPlayerStatsForRound(round: string, year: number, c
         "total_points",
       ].join(",")
     )
-    .eq("round", roundFilter)
+    .eq("round", round)
 
   if (stateCupId != null) {
     query = query
@@ -1992,9 +1984,7 @@ async function fetchHistoricalPlayerStatsForRound(round: string, year: number, c
       .gte("match_date", `${year}-01-01`)
       .lt("match_date", `${year + 1}-01-01`)
   }
-  if (internationalSelection?.competitionId != null) {
-    query = query.eq("competition_id", internationalSelection.competitionId)
-  }
+  if (internationalId != null) query = query.eq("competition_id", internationalId)
 
   const { data, error } = await query
 
@@ -2133,9 +2123,9 @@ export async function fetchLineupsForRound({
   competition?: LineupCompetition
 }): Promise<LineupRoundMatchesResult> {
   try {
-    const fetchTimeoutMs = competition === "international" ? 12000 : LINEUPS_FETCH_TIMEOUT_MS
-    const internationalSelection = competition === "international" ? parseInternationalRound(round) : null
-    const roundFilter = internationalSelection?.round ?? round
+    const international = isInternationalCompetition(competition)
+    const internationalId = internationalCompetitionId(competition)
+    const fetchTimeoutMs = international ? 12000 : LINEUPS_FETCH_TIMEOUT_MS
     const supabase = createServerSupabaseClient("nrl")
     const table = LINEUP_COMPETITION_TABLES[competition].matches
     const stateCupId = stateCupCompetitionId(competition)
@@ -2209,7 +2199,7 @@ export async function fetchLineupsForRound({
     let matchesQuery = supabase
       .from(table)
       .select(
-        competition === "international"
+        international
           ? "match_id,match_date,kickoff_utc,round,venue,match,match_url,home_team,away_team,home_score,away_score,team_stats,home_scoring,away_scoring"
           : usesMatchRows(competition)
           ? "*"
@@ -2259,7 +2249,7 @@ export async function fetchLineupsForRound({
           "opponent_offloads",
         ].join(",")
       )
-      .eq("round", roundFilter)
+      .eq("round", round)
       .order("match_date", { ascending: true })
 
     if (stateCupId != null) {
@@ -2271,11 +2261,9 @@ export async function fetchLineupsForRound({
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
     }
-    if (internationalSelection?.competitionId != null) {
-      matchesQuery = matchesQuery.eq("competition_id", internationalSelection.competitionId)
-    }
+    if (internationalId != null) matchesQuery = matchesQuery.eq("competition_id", internationalId)
 
-    const prefetchedInternationalLineupRows = competition === "international"
+    const prefetchedInternationalLineupRows = international
       ? await withTimeout(
           fetchLineupRowsForRound(round, year, includeFantasyProjections, competition),
           [],
@@ -2296,8 +2284,8 @@ export async function fetchLineupsForRound({
           fetchTimeoutMs,
           `Supabase fetch nrl.${table} round ${round}`
         )
-    const fixtureRowsPromise = competition === "international"
-      ? fetchInternationalFixtureRowsForYear(year, round).catch((error) => {
+    const fixtureRowsPromise = international
+      ? fetchInternationalFixtureRowsForYear(year, competition, round).catch((error) => {
           console.warn(`Unable to fetch nrl.international_fixtures round ${round}; using match/player rows where available.`, error)
           return []
         })
@@ -2306,13 +2294,13 @@ export async function fetchLineupsForRound({
       matchRowsPromise,
       fixtureRowsPromise,
       prefetchedInternationalLineupRows ?? withTimeout(fetchLineupRowsForRound(round, year, includeFantasyProjections, competition), [], fetchTimeoutMs, `Supabase fetch nrl.${LINEUP_COMPETITION_TABLES[competition].lineups} round ${round}`),
-      competition === "international"
+      international
         ? Promise.resolve(new Map<string, LineupSide>())
         : withTimeout(fetchSideOverrides(), new Map<string, LineupSide>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup side overrides"),
       includeFantasyProjections
         ? withTimeout(fetchProjectionOverrides(), new Map<string, number>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup projection overrides")
         : Promise.resolve(new Map<string, number>()),
-      competition === "international"
+      international
         ? Promise.resolve({
             fantasyTotals: new Map<string, number>(),
             playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
@@ -2326,7 +2314,7 @@ export async function fetchLineupsForRound({
             fetchTimeoutMs,
             `Supabase fetch historical player stats for ${round}`
           ),
-      competition === "international"
+      international
         ? Promise.resolve([])
         : withTimeout(fetchRecentMatchResults(year, competition), [], fetchTimeoutMs, `Supabase fetch recent match results for ${year}`),
       competition === "nrl" && year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} }),
@@ -2334,7 +2322,7 @@ export async function fetchLineupsForRound({
 
     if (error) console.warn(`Unable to fetch nrl.${table} round ${round}; using lineup/draw fallback where available.`, error)
 
-    const historicalPlayerStats = competition === "international"
+    const historicalPlayerStats = international
       ? buildHistoricalPlayerStats(lineupRows)
       : fetchedHistoricalPlayerStats
     const lineupMatches = buildMatchesFromLineupRows(lineupRows, overrides, projectionOverrides, includeFantasyProjections)
@@ -2368,7 +2356,7 @@ export async function fetchLineupsForRound({
           matchId,
           matchDate,
           kickoffUtc: nullableText(row.kickoff_utc) ?? lineupMatch?.kickoffUtc ?? null,
-          round: text(row.round) || roundFilter,
+          round: text(row.round) || round,
           venue: nullableText(row.venue) ?? lineupMatch?.venue ?? null,
           match: text(row.match) || `${homeTeam} vs ${awayTeam}`,
           matchUrl: nullableText(row.match_url) ?? lineupMatch?.matchUrl ?? null,
@@ -2412,7 +2400,7 @@ export async function fetchLineupsForRound({
         matchId,
         matchDate,
         kickoffUtc: lineupMatch?.kickoffUtc ?? null,
-        round: text(row.round) || roundFilter,
+        round: text(row.round) || round,
         venue: lineupMatch?.venue ?? null,
         match: `${homeTeam} vs ${awayTeam}`,
         matchUrl: nullableText(row.url) ?? lineupMatch?.matchUrl ?? null,
@@ -2479,7 +2467,7 @@ export async function fetchLineupsForRound({
     }
 
     matches.sort((a, b) => a.matchDate.localeCompare(b.matchDate) || (a.kickoffUtc ?? "").localeCompare(b.kickoffUtc ?? ""))
-    return { matches: matches.map((match) => addRecentResults(match, recentResults, competition === "international")), matchStats: statsById }
+    return { matches: matches.map((match) => addRecentResults(match, recentResults, international)), matchStats: statsById }
   } catch (error) {
     console.warn(`Unable to fetch lineups for ${round}; using empty result.`, error)
     return { matches: [], matchStats: {} }

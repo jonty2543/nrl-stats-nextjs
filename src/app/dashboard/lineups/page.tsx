@@ -292,6 +292,8 @@ function parseCompetition(value: string | undefined): LineupCompetition {
   if (value === "nrl") return "nrl"
   if (value === "origin") return "origin"
   if (value === "international") return "international"
+  if (value === "pacificChampionship" || value === "pacific-championship") return "pacificChampionship"
+  if (value === "rlwc") return "rlwc"
   if (value === "nswCup" || value === "nsw-cup") return "nswCup"
   if (value === "qldCup" || value === "qld-cup") return "qldCup"
   return "international"

@@ -300,6 +300,25 @@ const STATE_CUP_COMPETITION_IDS: Partial<Record<LineupCompetition, number>> = {
   qldCup: 114,
 }
 
+const INTERNATIONAL_COMPETITION_LABELS: Record<number, string> = {
+  131: "Rugby League World Cup",
+  133: "Internationals",
+}
+
+const INTERNATIONAL_ROUND_SEPARATOR = "::"
+
+function internationalRoundValue(competitionId: number, round: string): string {
+  return `${competitionId}${INTERNATIONAL_ROUND_SEPARATOR}${round}`
+}
+
+function parseInternationalRound(value: string): { competitionId: number | null; round: string } {
+  const separatorIndex = value.indexOf(INTERNATIONAL_ROUND_SEPARATOR)
+  if (separatorIndex < 0) return { competitionId: null, round: value }
+  const competitionId = numberOrNull(value.slice(0, separatorIndex))
+  const round = value.slice(separatorIndex + INTERNATIONAL_ROUND_SEPARATOR.length).trim()
+  return { competitionId, round: round || value }
+}
+
 function stateCupCompetitionId(competition: LineupCompetition): number | null {
   return STATE_CUP_COMPETITION_IDS[competition] ?? null
 }
@@ -471,6 +490,14 @@ function normaliseKey(value: string | null | undefined): string {
 }
 
 const TEAM_ALIAS_GROUPS = [
+  ["australia", "kangaroos"],
+  ["cook islands", "cook islands aitu", "the cooks"],
+  ["fiji", "bati", "fiji bati"],
+  ["lebanon", "cedars"],
+  ["new zealand", "new zealand kiwis", "nz kiwis", "kiwis"],
+  ["papua new guinea", "png kumuls", "the kumuls"],
+  ["samoa", "toa samoa"],
+  ["tonga", "mate ma a", "mate ma a tonga"],
   ["broncos", "brisbane broncos"],
   ["bulldogs", "canterbury bankstown bulldogs", "canterbury bulldogs", "canterbury"],
   ["cowboys", "north queensland cowboys", "north qld cowboys", "north queensland", "nth queensland cowboys", "nth qld cowboys", "nth queensland"],
@@ -565,7 +592,7 @@ function resultBeforeMatch(result: LineupRecentResult, matchDate: string): boole
   return Boolean(resultDate && currentDate && resultDate < currentDate)
 }
 
-function addRecentResults(match: LineupMatch, results: LineupRecentResult[]): LineupMatch {
+function addRecentResults(match: LineupMatch, results: LineupRecentResult[], includePreviousSeasons = false): LineupMatch {
   const homeTeam = match.homeTeam?.team ?? match.match.split(/\s+vs\s+/i)[0]?.trim()
   const awayTeam = match.awayTeam?.team ?? match.match.split(/\s+vs\s+/i)[1]?.trim()
   if (!homeTeam || !awayTeam) return match
@@ -573,11 +600,12 @@ function addRecentResults(match: LineupMatch, results: LineupRecentResult[]): Li
   const previousResults = results.filter((result) => resultBeforeMatch(result, match.matchDate))
   const matchYear = match.matchDate.slice(0, 4)
   const seasonResults = previousResults.filter((result) => result.matchDate.slice(0, 4) === matchYear)
+  const formResults = includePreviousSeasons ? previousResults : seasonResults
   return {
     ...match,
     recentHeadToHead: previousResults.filter((result) => resultIncludesMatchup(result, homeTeam, awayTeam)).slice(0, 30),
-    homeRecentResults: seasonResults.filter((result) => resultIncludesTeam(result, homeTeam)).slice(0, 30),
-    awayRecentResults: seasonResults.filter((result) => resultIncludesTeam(result, awayTeam)).slice(0, 30),
+    homeRecentResults: formResults.filter((result) => resultIncludesTeam(result, homeTeam)).slice(0, 30),
+    awayRecentResults: formResults.filter((result) => resultIncludesTeam(result, awayTeam)).slice(0, 30),
   }
 }
 
@@ -627,6 +655,29 @@ function addRoundOption(options: Map<string, LineupRoundOption>, round: string, 
           endDate: matchDate,
         }
   )
+}
+
+function addInternationalRoundOption(options: Map<string, LineupRoundOption>, row: RawRow) {
+  const competitionId = numberOrNull(row.competition_id)
+  const round = text(row.round)
+  const matchDate = text(row.match_date).slice(0, 10)
+  if (competitionId == null || !round || !matchDate) return
+  const value = internationalRoundValue(competitionId, round)
+  const competitionLabel = INTERNATIONAL_COMPETITION_LABELS[competitionId] ?? `International ${competitionId}`
+  const existing = options.get(value)
+  options.set(value, existing
+    ? {
+        ...existing,
+        startDate: matchDate < existing.startDate ? matchDate : existing.startDate,
+        endDate: matchDate > existing.endDate ? matchDate : existing.endDate,
+      }
+    : {
+        value,
+        label: `${competitionLabel} — ${round}`,
+        roundNumber: numberOrNull(row.round_number) ?? roundSort(round),
+        startDate: matchDate,
+        endDate: matchDate,
+      })
 }
 
 function addYearOption(options: Map<number, LineupYearOption>, matchDate: string) {
@@ -716,7 +767,11 @@ async function fetchInternationalFixtureRowsForYear(year: number, round?: string
 
   if (error) throw new Error(`Supabase fetch nrl.international_fixtures for ${year}: ${error.message}`)
 
-  return ((data ?? []) as unknown as RawRow[]).filter((row) => !round || text(row.round) === round)
+  const selection = round ? parseInternationalRound(round) : null
+  return ((data ?? []) as unknown as RawRow[]).filter((row) =>
+    (!selection || text(row.round) === selection.round) &&
+    (selection?.competitionId == null || numberOrNull(row.competition_id) === selection.competitionId)
+  )
 }
 
 async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: boolean, competition: LineupCompetition): Promise<RawRow[]> {
@@ -775,6 +830,8 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
     : includeFantasyProjections
     ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
+  const internationalSelection = competition === "international" ? parseInternationalRound(round) : null
+  const roundFilter = internationalSelection?.round ?? round
   let start = 0
 
   if (stateCupCompetitionId != null) {
@@ -811,7 +868,7 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
     let query = supabase
       .from(table)
       .select(selectColumns)
-      .eq("round", round)
+      .eq("round", roundFilter)
       .order("match_date", { ascending: true })
       .order("kickoff_utc", { ascending: true })
       .order("match_id", { ascending: true })
@@ -826,6 +883,9 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
       query = query
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
+    }
+    if (internationalSelection?.competitionId != null) {
+      query = query.eq("competition_id", internationalSelection.competitionId)
     }
 
     const { data, error } = await query
@@ -1051,7 +1111,7 @@ async function fetchLineupRoundOptionRows(year: number, competition: LineupCompe
   for (let start = 0; ; start += PAGE_SIZE) {
     let query = supabase
       .from(table)
-      .select("round,match_date")
+      .select(competition === "international" ? "competition_id,round,match_date" : "round,match_date")
       .order("match_date", { ascending: true })
 
     if (stateCupCompetitionId != null) {
@@ -1104,7 +1164,7 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
     const draw2026DataPromise = competition === "nrl" && year === 2026 ? loadDraw2026Data().catch(() => ({ rows: [], teamLogos: {} })) : Promise.resolve({ rows: [], teamLogos: {} })
     let matchesQuery = supabase
       .from(tables.matches)
-      .select("round,round_number,match_date")
+      .select(competition === "international" ? "competition_id,round,round_number,match_date" : "round,round_number,match_date")
       .order("match_date", { ascending: true })
     if (stateCupCompetitionId != null) {
       matchesQuery = matchesQuery
@@ -1131,6 +1191,10 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
 
     const options = new Map<string, LineupRoundOption>()
     for (const row of [...((data ?? []) as unknown as RawRow[]), ...lineupData]) {
+      if (competition === "international") {
+        addInternationalRoundOption(options, row)
+        continue
+      }
       const round = text(row.round)
       const matchDate = text(row.match_date).slice(0, 10)
       if (!round || !matchDate) continue
@@ -1140,11 +1204,7 @@ export async function fetchLineupRoundOptions(year = getCurrentYearInBrisbane(),
 
     if (competition === "international") {
       for (const row of await fetchInternationalFixtureRowsForYear(year).catch(() => [])) {
-        const round = text(row.round)
-        const matchDate = text(row.match_date).slice(0, 10)
-        if (!round || !matchDate) continue
-        const roundNumber = numberOrNull(row.round_number) ?? roundSort(round)
-        addRoundOption(options, round, roundNumber, matchDate)
+        addInternationalRoundOption(options, row)
       }
     }
 
@@ -1848,7 +1908,7 @@ export async function fetchLineupMatchHistory(
   competition: LineupCompetition = "nrl"
 ): Promise<LineupMatch> {
   const results = await fetchRecentMatchResults(year, competition)
-  return addRecentResults(match, results)
+  return addRecentResults(match, results, competition === "international")
 }
 
 interface HistoricalRoundPlayerStats {
@@ -1860,6 +1920,8 @@ async function fetchHistoricalPlayerStatsForRound(round: string, year: number, c
   const supabase = createServerSupabaseClient("nrl")
   const table = LINEUP_COMPETITION_TABLES[competition].playerStats
   const stateCupId = stateCupCompetitionId(competition)
+  const internationalSelection = competition === "international" ? parseInternationalRound(round) : null
+  const roundFilter = internationalSelection?.round ?? round
   const empty = { fantasyTotals: new Map<string, number>(), playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>() }
   if (stateCupId != null) {
     const matchIds = (await fetchStateCupMatchRowsForYear(year, competition, round))
@@ -1919,7 +1981,7 @@ async function fetchHistoricalPlayerStatsForRound(round: string, year: number, c
         "total_points",
       ].join(",")
     )
-    .eq("round", round)
+    .eq("round", roundFilter)
 
   if (stateCupId != null) {
     query = query
@@ -1929,6 +1991,9 @@ async function fetchHistoricalPlayerStatsForRound(round: string, year: number, c
     query = query
       .gte("match_date", `${year}-01-01`)
       .lt("match_date", `${year + 1}-01-01`)
+  }
+  if (internationalSelection?.competitionId != null) {
+    query = query.eq("competition_id", internationalSelection.competitionId)
   }
 
   const { data, error } = await query
@@ -2069,6 +2134,8 @@ export async function fetchLineupsForRound({
 }): Promise<LineupRoundMatchesResult> {
   try {
     const fetchTimeoutMs = competition === "international" ? 12000 : LINEUPS_FETCH_TIMEOUT_MS
+    const internationalSelection = competition === "international" ? parseInternationalRound(round) : null
+    const roundFilter = internationalSelection?.round ?? round
     const supabase = createServerSupabaseClient("nrl")
     const table = LINEUP_COMPETITION_TABLES[competition].matches
     const stateCupId = stateCupCompetitionId(competition)
@@ -2192,7 +2259,7 @@ export async function fetchLineupsForRound({
           "opponent_offloads",
         ].join(",")
       )
-      .eq("round", round)
+      .eq("round", roundFilter)
       .order("match_date", { ascending: true })
 
     if (stateCupId != null) {
@@ -2203,6 +2270,9 @@ export async function fetchLineupsForRound({
       matchesQuery = matchesQuery
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
+    }
+    if (internationalSelection?.competitionId != null) {
+      matchesQuery = matchesQuery.eq("competition_id", internationalSelection.competitionId)
     }
 
     const prefetchedInternationalLineupRows = competition === "international"
@@ -2298,7 +2368,7 @@ export async function fetchLineupsForRound({
           matchId,
           matchDate,
           kickoffUtc: nullableText(row.kickoff_utc) ?? lineupMatch?.kickoffUtc ?? null,
-          round: text(row.round) || round,
+          round: text(row.round) || roundFilter,
           venue: nullableText(row.venue) ?? lineupMatch?.venue ?? null,
           match: text(row.match) || `${homeTeam} vs ${awayTeam}`,
           matchUrl: nullableText(row.match_url) ?? lineupMatch?.matchUrl ?? null,
@@ -2342,7 +2412,7 @@ export async function fetchLineupsForRound({
         matchId,
         matchDate,
         kickoffUtc: lineupMatch?.kickoffUtc ?? null,
-        round: text(row.round) || round,
+        round: text(row.round) || roundFilter,
         venue: lineupMatch?.venue ?? null,
         match: `${homeTeam} vs ${awayTeam}`,
         matchUrl: nullableText(row.url) ?? lineupMatch?.matchUrl ?? null,
@@ -2409,7 +2479,7 @@ export async function fetchLineupsForRound({
     }
 
     matches.sort((a, b) => a.matchDate.localeCompare(b.matchDate) || (a.kickoffUtc ?? "").localeCompare(b.kickoffUtc ?? ""))
-    return { matches: matches.map((match) => addRecentResults(match, recentResults)), matchStats: statsById }
+    return { matches: matches.map((match) => addRecentResults(match, recentResults, competition === "international")), matchStats: statsById }
   } catch (error) {
     console.warn(`Unable to fetch lineups for ${round}; using empty result.`, error)
     return { matches: [], matchStats: {} }

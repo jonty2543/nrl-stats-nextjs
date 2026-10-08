@@ -328,7 +328,8 @@ export async function POST(request: NextRequest) {
       const matchWithHistory = await withTimeout(
         fetchLineupMatchHistory(responseDetail.match, year, competition),
         responseDetail.match,
-        "Lineup match history"
+        "Lineup match history",
+        competition === "international" ? INTERNATIONAL_MATCH_DETAIL_TIMEOUT_MS : MATCH_DETAIL_TIMEOUT_MS
       )
       responseDetail = { ...responseDetail, match: matchWithHistory }
     }

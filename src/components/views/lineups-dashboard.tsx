@@ -4119,36 +4119,6 @@ function MatchRead({
   )
 }
 
-function InternationalMatchInformation({ match }: { match: LineupMatch }) {
-  return (
-    <section aria-label="Match information" className="mb-4 border-b border-white/10 px-2 pb-4 sm:px-3">
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
-        <div>
-          <div className="font-black uppercase tracking-wider text-nrl-muted">Date</div>
-          <div className="mt-1 font-semibold text-nrl-text">{formatMatchDateHeader(matchDateKey(match))}</div>
-        </div>
-        <div>
-          <div className="font-black uppercase tracking-wider text-nrl-muted">Kickoff</div>
-          <div className="mt-1 font-semibold text-nrl-text">{formatKickoffTime(match.kickoffUtc)}</div>
-        </div>
-        <div>
-          <div className="font-black uppercase tracking-wider text-nrl-muted">Venue</div>
-          <div className="mt-1 font-semibold text-nrl-text">{match.venue ?? "TBC"}</div>
-        </div>
-        <div>
-          <div className="font-black uppercase tracking-wider text-nrl-muted">Round</div>
-          <div className="mt-1 font-semibold text-nrl-text">{match.round || "TBC"}</div>
-        </div>
-      </div>
-      {match.matchUrl ? (
-        <a href={match.matchUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-bold text-nrl-accent hover:underline">
-          Open match centre
-        </a>
-      ) : null}
-    </section>
-  )
-}
-
 function LineupCard({
   match,
   liveMatch,
@@ -4466,7 +4436,6 @@ function LineupCard({
         ) : (
           <>
         <LiveTryScorersStrip match={detailMatch} liveMatch={displayLiveMatch} />
-        {selectedCompetition === "international" ? <InternationalMatchInformation match={detailMatch} /> : null}
         {showPregameContent ? (
           <MatchRead
             match={detailMatch}
@@ -4506,7 +4475,7 @@ function LineupCard({
               showPostMatchModel={canAccessFantasyProjections && isPostMatch}
               teamLogos={teamLogos}
             />
-            {showPregameContent ? (
+            {showPregameContent && selectedCompetition !== "international" ? (
               <SeasonFormGuide match={detailMatch} homeSummary={homeSummary} awaySummary={awaySummary} />
             ) : null}
           </div>
@@ -4720,7 +4689,7 @@ function LineupSelectors({
         </label>
       ) : null}
       {roundOptions.length > 0 ? (
-        <label className="block w-40 sm:w-48">
+        <label className={`block ${selectedCompetition === "international" ? "w-64 sm:w-72" : "w-40 sm:w-48"}`}>
           <span className="sr-only">Select round</span>
           <select
             value={selectedRound}
@@ -4785,7 +4754,8 @@ export function LineupsDashboard({
     : initialWeatherForecasts
 
   function loadMatchDetail(match: LineupMatch) {
-    const requestKey = `${selectedCompetition}:${year}:${match.round || selectedRound}:${match.matchId}`
+    const detailRound = selectedCompetition === "international" ? selectedRound : match.round || selectedRound
+    const requestKey = `${selectedCompetition}:${year}:${detailRound}:${match.matchId}`
     if (requestedMatchDetailsRef.current.has(requestKey)) return
     const current = matchDetails[match.matchId]
     if (current?.status === "loading" || current?.status === "loaded") return
@@ -4801,7 +4771,7 @@ export function LineupsDashboard({
     fetch("/api/lineups/match-detail", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ matchId: match.matchId, round: match.round || selectedRound, year, match, competition: selectedCompetition }),
+      body: JSON.stringify({ matchId: match.matchId, round: detailRound, year, match, competition: selectedCompetition }),
       signal: controller.signal,
     })
       .then((response) => response.ok ? response.json() : null)

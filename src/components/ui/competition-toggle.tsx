@@ -19,6 +19,8 @@ interface CompetitionToggleProps<T extends CompetitionToggleValue> {
 export function CompetitionToggle<T extends CompetitionToggleValue>({ value, onChange, canAccessCup, showInternational = false, showOrigin = false, hideLabel = false, fullWidth = false, size = "default", className = "" }: CompetitionToggleProps<T>) {
   const large = size === "large";
   const options = (["nrl", "cup", ...(showOrigin ? ["origin" as const] : []), ...(showInternational ? ["international" as const] : [])]) as T[];
+  const compactTabs = options.length === 4;
+  const logoSize = large ? (compactTabs ? 22 : 24) : (compactTabs ? 18 : 20);
 
   return (
     <div className={`flex shrink-0 flex-col items-start gap-0.5 ${fullWidth ? "w-full" : "pl-2"} ${className}`}>
@@ -40,7 +42,7 @@ export function CompetitionToggle<T extends CompetitionToggleValue>({ value, onC
               aria-pressed={active}
               title={locked ? `${competitionLabel} stats require Pro or Premium access` : undefined}
               onClick={() => onChange(option)}
-              className={`relative inline-flex min-w-12 items-center justify-center gap-1.5 rounded-t-md border-b-[3px] border-transparent px-1 pb-1.5 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? "text-[11px]" : "text-[9px]"} ${
+              className={`relative inline-flex min-w-12 items-center justify-center gap-1.5 rounded-t-md border-b-[3px] border-transparent px-1 pb-1.5 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? compactTabs ? "text-[10px]" : "text-[11px]" : compactTabs ? "text-[8px]" : "text-[9px]"} ${
                 active
                   ? "text-nrl-accent"
                   : "text-nrl-muted hover:bg-nrl-panel-2/60 hover:text-nrl-text"
@@ -60,8 +62,8 @@ export function CompetitionToggle<T extends CompetitionToggleValue>({ value, onC
                     key={logo}
                     src={logo}
                     alt=""
-                    width={large ? 24 : 20}
-                    height={large ? 24 : 20}
+                    width={logoSize}
+                    height={logoSize}
                     className="shrink-0 object-contain"
                   />
                 ))}

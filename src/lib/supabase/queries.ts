@@ -1842,6 +1842,42 @@ function enrichCupPlayerStatsRows(rows: Record<string, unknown>[]): Record<strin
   }));
 }
 
+function competitionPlayerImageKey(player: unknown, team?: unknown): string {
+  const normalise = (value: unknown) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return `${normalise(team)}|${normalise(player)}`;
+}
+
+async function enrichOriginPlayerStatsRowsWithImages(
+  rows: Record<string, unknown>[],
+  years?: string[]
+): Promise<Record<string, unknown>[]> {
+  try {
+    const imageRows = await fetchAllRows<Record<string, unknown>>("origin_lineups", {
+      years,
+      columns: "match_date,player,team,head_image,body_image",
+      orderBy: ["match_date"],
+    });
+    const images = new Map<string, { headImage: string | null; bodyImage: string | null }>();
+    for (const row of imageRows) {
+      const image = {
+        headImage: playerImageUrlOrNull(row.head_image),
+        bodyImage: playerImageUrlOrNull(row.body_image),
+      };
+      if (!image.headImage && !image.bodyImage) continue;
+      images.set(competitionPlayerImageKey(row.player, row.team), image);
+      images.set(competitionPlayerImageKey(row.player), image);
+    }
+    return rows.map((row) => {
+      const image = images.get(competitionPlayerImageKey(row.player, row.team))
+        ?? images.get(competitionPlayerImageKey(row.player));
+      return image ? { ...row, head_image: image.headImage, body_image: image.bodyImage } : row;
+    });
+  } catch (error) {
+    console.warn("Unable to enrich Origin player stats with Origin images; using NRL player images.", error);
+    return rows;
+  }
+}
+
 function normalizePlayerStatsRowsForCompetition(
   rows: Record<string, unknown>[],
   competition?: StatsCompetition
@@ -1941,8 +1977,11 @@ export async function fetchPlayerStatsFromSupabase(
       })
     : await fetchMatchRows();
   const rawPlayers = await fetchPlayerStatsRowsFromSupabase(years, competition);
+  const playerRows = isOriginCompetition(competition)
+    ? await enrichOriginPlayerStatsRowsWithImages(rawPlayers, years)
+    : rawPlayers;
   return buildPlayerStatsRows(
-    isCupCompetition(competition) ? enrichCupPlayerStatsRows(rawPlayers) : rawPlayers,
+    isCupCompetition(competition) ? enrichCupPlayerStatsRows(playerRows) : playerRows,
     isStructuredCompetition(competition) ? cupMatchRowsForOpponentLookup(rawMatches) : rawMatches
   );
 }
@@ -1972,7 +2011,7 @@ export async function fetchPlayerStats(
   if (isOriginCompetition(competition)) {
     const fetchOrigin = async () => fetchPlayerStatsFromSupabase(normalizedArg, competition);
     if (process.env.NODE_ENV !== "production") return fetchOrigin();
-    return unstable_cache(fetchOrigin, ["origin-player-stats-v1", key], {
+    return unstable_cache(fetchOrigin, ["origin-player-stats-v2", key], {
       revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
     })();
   }

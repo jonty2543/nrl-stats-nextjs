@@ -1099,6 +1099,18 @@ function normalisePlayerName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function playerTeamImageKey(player: string, team: string): string {
+  return `${normalisePlayerName(team)}|${normalisePlayerName(player)}`;
+}
+
+function competitionImageUrl(row: PlayerStat): string | null {
+  const candidates = [row.head_image, row.body_image];
+  const source = candidates.find((value): value is string =>
+    typeof value === "string" && value.trim().length > 0 && !value.toLowerCase().includes("fallback")
+  );
+  return source ? encodeURI(source.trim().replace(/^http:\/\//, "https://")).replace(/'/g, "%27") : null;
+}
+
 function roundNumber(value: string | number | null | undefined): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (!value) return null;
@@ -1356,6 +1368,22 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const currentPlayerRows = useMemo(
     () => forSelectedRound(selectedPlayerSeasonRows, round, (row) => row.Round),
     [round, selectedPlayerSeasonRows]
+  );
+  const competitionPlayerFaceImages = useMemo(() => {
+    if (competition !== "origin" && competition !== "international") return {};
+    const images: Record<string, string> = {};
+    for (const row of selectedPlayerSeasonRows) {
+      const image = competitionImageUrl(row);
+      if (!image) continue;
+      const player = canonicalPlayerName(row.Name);
+      images[normalisePlayerName(player)] = image;
+      images[playerTeamImageKey(player, String(row.Team ?? ""))] = image;
+    }
+    return images;
+  }, [competition, selectedPlayerSeasonRows]);
+  const activePlayerFaceImages = useMemo(
+    () => ({ ...playerFaceImages, ...competitionPlayerFaceImages }),
+    [competitionPlayerFaceImages, playerFaceImages]
   );
   const currentTeamShareRows = useMemo(
     () => forSelectedRound(
@@ -1770,28 +1798,29 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   })), [isPlayerGameMode, playerDefenceData, year]);
   const playerPointImages = useMemo(() => Object.fromEntries(
     [...playerAttackData, ...playerAttackComparisonData, ...playerDefenceData].flatMap((point) => {
-      const image = playerFaceImages[normalisePlayerName(point.player)];
+      const image = competitionPlayerFaceImages[playerTeamImageKey(point.player, point.team)]
+        ?? activePlayerFaceImages[normalisePlayerName(point.player)];
       return image ? [[point.id, image]] : [];
     })
-  ), [playerAttackComparisonData, playerAttackData, playerDefenceData, playerFaceImages]);
+  ), [activePlayerFaceImages, competitionPlayerFaceImages, playerAttackComparisonData, playerAttackData, playerDefenceData]);
   const playerVsTeamPointImages = useMemo(() => Object.fromEntries(
     playerVsTeamPoints.flatMap((point) => {
-      const image = playerFaceImages[normalisePlayerName(point.team)];
+      const image = activePlayerFaceImages[normalisePlayerName(point.team)];
       return image ? [[point.id, image]] : [];
     })
-  ), [playerFaceImages, playerVsTeamPoints]);
+  ), [activePlayerFaceImages, playerVsTeamPoints]);
   const playerVariancePointImages = useMemo(() => Object.fromEntries(
     playerVariancePoints.flatMap((point) => {
-      const image = playerFaceImages[normalisePlayerName(point.team)];
+      const image = activePlayerFaceImages[normalisePlayerName(point.team)];
       return image ? [[point.id, image]] : [];
     })
-  ), [playerFaceImages, playerVariancePoints]);
+  ), [activePlayerFaceImages, playerVariancePoints]);
   const playerFormPointImages = useMemo(() => Object.fromEntries(
     playerFormPoints.flatMap((point) => {
-      const image = playerFaceImages[normalisePlayerName(point.team)];
+      const image = activePlayerFaceImages[normalisePlayerName(point.team)];
       return image ? [[point.id, image]] : [];
     })
-  ), [playerFaceImages, playerFormPoints]);
+  ), [activePlayerFaceImages, playerFormPoints]);
   const teamFormPoints = useMemo(
     () => entity === "Teams" && isTeamForm
       ? buildTeamFormPoints(currentRows, teamFormStat, teamFormPerStat, formWindow, minPriorGames, year)
@@ -2769,7 +2798,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                     <span aria-label="Loading season" role="status" className="h-10 w-10 animate-spin rounded-full border-[3px] border-nrl-accent/25 border-t-nrl-accent" />
                   </div>
                 ) : null}
-                <HalvesPairingBars pairings={halvesPairings} stat={halvesPairingStat} playerFaceImages={playerFaceImages} minimumGames={playerMinimumGames} />
+                <HalvesPairingBars pairings={halvesPairings} stat={halvesPairingStat} playerFaceImages={activePlayerFaceImages} minimumGames={playerMinimumGames} />
               </div>
               {playerInfoOpen ? (
                 <div id="player-plot-info" className="grid gap-3 border-t border-nrl-border bg-nrl-panel-2 px-4 py-4 text-[10px] leading-relaxed text-nrl-muted md:grid-cols-3">

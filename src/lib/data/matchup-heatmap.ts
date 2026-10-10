@@ -57,7 +57,7 @@ export const MATCHUP_METRICS = {
   "Send offs": "Send Offs",
 } as const satisfies Record<string, keyof PlayerStat>;
 export type MatchupMetric = keyof typeof MATCHUP_METRICS;
-export type MatchupValueMode = "Average" | "Percentage";
+export type MatchupValueMode = "Average" | "Total" | "Percentage";
 export type MatchupDirection = "attack" | "defense";
 export const GROUPED_MATCHUP_POSITIONS = ["Outside Backs", ...PLAYER_ATTACK_POSITIONS.filter((position) => !["Fullbacks", "Wingers", "Centres"].includes(position))] as const;
 export type MatchupPosition = (typeof GROUPED_MATCHUP_POSITIONS)[number];
@@ -125,7 +125,15 @@ export function buildMatchupHeatmap(rows: PlayerStat[], metric: MatchupMetric, g
           return { position, games: available.length, value: baseTotal > 0 ? positionTotal / baseTotal : null };
         }
         const teamTotal = selected.reduce((sum, game) => sum + game.total, 0);
-        return { position, games: available.length, value: valueMode === "Percentage" ? teamTotal === 0 ? null : (positionTotal / teamTotal) * 100 : positionTotal / Math.max(selected.length, 1) };
+        return {
+          position,
+          games: available.length,
+          value: valueMode === "Percentage"
+            ? teamTotal === 0 ? null : (positionTotal / teamTotal) * 100
+            : valueMode === "Total"
+              ? positionTotal
+              : positionTotal / Math.max(selected.length, 1),
+        };
       }),
     };
   }).sort((a, b) => a.team.localeCompare(b.team));

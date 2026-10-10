@@ -23,6 +23,7 @@ import { CompetitionToggle } from "@/components/ui/competition-toggle";
 import { PillRadio } from "@/components/ui/pill-radio";
 import { Select } from "@/components/ui/select";
 import { FINALS_MAP } from "@/lib/data/constants";
+import { isUsablePlayerImageUrl, normalisePlayerImageUrl } from "@/lib/data/player-images";
 
 type PlotCompetition = "nrl" | "cup" | "international" | "origin";
 type PlayerPositionFilter = PlayerAttackPosition | "All positions";
@@ -1105,10 +1106,8 @@ function playerTeamImageKey(player: string, team: string): string {
 
 function competitionImageUrl(row: PlayerStat): string | null {
   const candidates = [row.head_image, row.body_image];
-  const source = candidates.find((value): value is string =>
-    typeof value === "string" && value.trim().length > 0 && !value.toLowerCase().includes("fallback")
-  );
-  return source ? encodeURI(source.trim().replace(/^http:\/\//, "https://")).replace(/'/g, "%27") : null;
+  const source = candidates.find(isUsablePlayerImageUrl);
+  return source ? normalisePlayerImageUrl(source) : null;
 }
 
 function roundNumber(value: string | number | null | undefined): number | null {

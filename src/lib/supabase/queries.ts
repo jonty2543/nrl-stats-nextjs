@@ -49,12 +49,13 @@ const DIRECT_PLAYER_STATS_TIMEOUT_MS = 2000;
 const DIRECT_CUP_PLAYER_STATS_TIMEOUT_MS = 8000;
 const FALLBACK_CUP_AVAILABLE_YEARS = ["2026", "2025", "2024", "2023"];
 const FALLBACK_INTERNATIONAL_AVAILABLE_YEARS = ["2025"];
+const FALLBACK_ORIGIN_AVAILABLE_YEARS = ["2026"];
 const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
 const BETTING_SUMMARY_SNAPSHOT_REQUEST_TIMEOUT_MS = 20_000;
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
 
-export type StatsCompetition = "nrl" | "cup" | "international";
+export type StatsCompetition = "nrl" | "cup" | "international" | "origin";
 
 function isCupCompetition(competition?: StatsCompetition): boolean {
   return competition === "cup";
@@ -64,6 +65,10 @@ function isInternationalCompetition(competition?: StatsCompetition): boolean {
   return competition === "international";
 }
 
+function isOriginCompetition(competition?: StatsCompetition): boolean {
+  return competition === "origin";
+}
+
 function isStructuredCompetition(competition?: StatsCompetition): boolean {
   return isCupCompetition(competition) || isInternationalCompetition(competition);
 }
@@ -71,12 +76,14 @@ function isStructuredCompetition(competition?: StatsCompetition): boolean {
 function playerStatsTable(competition: StatsCompetition): string {
   if (isCupCompetition(competition)) return "state_cup_player_stats";
   if (isInternationalCompetition(competition)) return "international_player_stats";
+  if (isOriginCompetition(competition)) return "origin_player_stats";
   return "player_stats";
 }
 
 function matchesTable(competition: StatsCompetition): string {
   if (isCupCompetition(competition)) return "state_cup_matches";
   if (isInternationalCompetition(competition)) return "international_matches";
+  if (isOriginCompetition(competition)) return "origin_matches";
   return "matches";
 }
 
@@ -1962,6 +1969,13 @@ export async function fetchPlayerStats(
       revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
     })();
   }
+  if (isOriginCompetition(competition)) {
+    const fetchOrigin = async () => fetchPlayerStatsFromSupabase(normalizedArg, competition);
+    if (process.env.NODE_ENV !== "production") return fetchOrigin();
+    return unstable_cache(fetchOrigin, ["origin-player-stats-v1", key], {
+      revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
+    })();
+  }
   const serverCache =
     process.env.NODE_ENV !== "production" || hasLiveSeason
       ? null
@@ -2265,6 +2279,13 @@ export async function fetchTeamStats(
     const fetchInternational = async () => fetchTeamStatsFromSupabase(normalizedArg, competition);
     if (process.env.NODE_ENV !== "production") return fetchInternational();
     return unstable_cache(fetchInternational, ["international-team-stats-v1", key], {
+      revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
+    })();
+  }
+  if (isOriginCompetition(competition)) {
+    const fetchOrigin = async () => fetchTeamStatsFromSupabase(normalizedArg, competition);
+    if (process.env.NODE_ENV !== "production") return fetchOrigin();
+    return unstable_cache(fetchOrigin, ["origin-team-stats-v1", key], {
       revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
     })();
   }
@@ -2733,17 +2754,19 @@ export async function fetchFantasyPlayerStatsAllYears(
 export async function fetchAvailableYearsFromSupabase(competition: StatsCompetition = "nrl"): Promise<string[]> {
   // International match rows can include future fixtures before player stats exist,
   // so use the player table there to avoid offering an empty season.
-  const availableYearsTable = isInternationalCompetition(competition)
+  const usesPlayerStatsForYears = isInternationalCompetition(competition) || isOriginCompetition(competition);
+  const minutesColumn = isOriginCompetition(competition) ? "mins_played" : "minutes_played";
+  const availableYearsTable = usesPlayerStatsForYears
     ? playerStatsTable(competition)
     : matchesTable(competition);
   const rawMatches = await fetchAllRows<Record<string, unknown>>(
     availableYearsTable,
     {
-    columns: isInternationalCompetition(competition) ? "match_date,minutes_played" : "match_date",
+    columns: usesPlayerStatsForYears ? `match_date,${minutesColumn}` : "match_date",
     }
   );
-  const rowsWithStats = isInternationalCompetition(competition)
-    ? rawMatches.filter((row) => timeToFloat(row.minutes_played) > 0)
+  const rowsWithStats = usesPlayerStatsForYears
+    ? rawMatches.filter((row) => timeToFloat(row[minutesColumn]) > 0)
     : rawMatches;
   if (rowsWithStats.length === 0) return [];
 
@@ -2794,6 +2817,19 @@ export async function fetchAvailableYears(competition: StatsCompetition = "nrl")
     } catch (error) {
       console.warn("Unable to fetch International available years; using fallback years.", error);
       return FALLBACK_INTERNATIONAL_AVAILABLE_YEARS;
+    }
+  }
+  if (isOriginCompetition(competition)) {
+    try {
+      if (process.env.NODE_ENV !== "production") return await fetchAvailableYearsFromSupabase(competition);
+      return await unstable_cache(
+        async (): Promise<string[]> => fetchAvailableYearsFromSupabase(competition),
+        ["origin-available-years-v1"],
+        { revalidate: DAILY_REVALIDATE_SECONDS }
+      )();
+    } catch (error) {
+      console.warn("Unable to fetch Origin available years; using fallback years.", error);
+      return FALLBACK_ORIGIN_AVAILABLE_YEARS;
     }
   }
   const serverCacheMeta =

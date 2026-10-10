@@ -19,11 +19,11 @@ export async function GET(request: NextRequest) {
     const isTeamShareContext = searchParams.get("scope") === "team-share";
     const fresh = searchParams.get("fresh") === "1";
     const requestedCompetition = searchParams.get("competition");
-    const competition = requestedCompetition === "cup" || requestedCompetition === "international"
+    const competition = requestedCompetition === "cup" || requestedCompetition === "international" || requestedCompetition === "origin"
       ? requestedCompetition
       : "nrl";
-    if (competition === "cup" && !canAccessProSeason) {
-      return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
+    if (competition !== "nrl" && !canAccessProSeason) {
+      return NextResponse.json({ error: "These competition stats require Pro or Premium access" }, { status: 403 });
     }
     const requestedYears = yearsParam
       ? yearsParam

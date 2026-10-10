@@ -56,10 +56,15 @@ export default async function PlotsPage() {
       ? withOptionalContextTimeout("Cup plot seasons", fetchAvailableYears("cup"), [])
       : Promise.resolve([])
   );
-  const internationalAvailableYearsPromise = withOptionalContextTimeout(
-    "International plot seasons",
-    fetchAvailableYears("international"),
-    ["2025"]
+  const internationalAvailableYearsPromise = proAccessPromise.then((canAccess) =>
+    canAccess
+      ? withOptionalContextTimeout("International plot seasons", fetchAvailableYears("international"), ["2025"])
+      : Promise.resolve([])
+  );
+  const originAvailableYearsPromise = proAccessPromise.then((canAccess) =>
+    canAccess
+      ? withOptionalContextTimeout("Origin plot seasons", fetchAvailableYears("origin"), ["2026"])
+      : Promise.resolve([])
   );
   const teamLogosPromise = withOptionalContextTimeout("plot team logos", fetchTeamLogos(), {});
   const playerImagesPromise = withOptionalContextTimeout("plot player images", fetchPlayerImages(), []);
@@ -70,14 +75,16 @@ export default async function PlotsPage() {
   const yearOptions = unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1);
   const initialYear = yearOptions[0] ?? "";
   const initialPlayerDataPromise = initialYear ? fetchPlayerStats([initialYear]) : Promise.resolve([]);
-  const [teamLogos, playerImages, initialPlayerData, cupAvailableYears, internationalAvailableYears] = await Promise.all([
+  const [teamLogos, playerImages, initialPlayerData, cupAvailableYears, internationalAvailableYears, originAvailableYears] = await Promise.all([
     teamLogosPromise,
     playerImagesPromise,
     initialPlayerDataPromise,
     cupAvailableYearsPromise,
     internationalAvailableYearsPromise,
+    originAvailableYearsPromise,
   ]);
-  const internationalYearOptions = internationalAvailableYears.length > 0 ? internationalAvailableYears : ["2025"];
+  const internationalYearOptions = canAccessProSeason && internationalAvailableYears.length === 0 ? ["2025"] : internationalAvailableYears;
+  const originYearOptions = canAccessProSeason && originAvailableYears.length === 0 ? ["2026"] : originAvailableYears;
 
-  return <PlotsDashboard initialPlayerData={initialPlayerData} availableYears={yearOptions} cupAvailableYears={cupAvailableYears} internationalAvailableYears={internationalYearOptions} initialYear={initialYear} teamLogos={teamLogos} playerFaceImages={buildPlayerFaceImages(playerImages)} canAccessModelPlots={canAccessProSeason} canAccessCup={canAccessProSeason} />;
+  return <PlotsDashboard initialPlayerData={initialPlayerData} availableYears={yearOptions} cupAvailableYears={cupAvailableYears} internationalAvailableYears={internationalYearOptions} originAvailableYears={originYearOptions} initialYear={initialYear} teamLogos={teamLogos} playerFaceImages={buildPlayerFaceImages(playerImages)} canAccessModelPlots={canAccessProSeason} canAccessCup={canAccessProSeason} />;
 }

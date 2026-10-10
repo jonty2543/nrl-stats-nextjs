@@ -12,11 +12,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const yearsParam = searchParams.get("years");
     const requestedCompetition = searchParams.get("competition");
-    const competition = requestedCompetition === "cup" || requestedCompetition === "international"
+    const competition = requestedCompetition === "cup" || requestedCompetition === "international" || requestedCompetition === "origin"
       ? requestedCompetition
       : "nrl";
-    if (competition === "cup" && !canAccessProSeason) {
-      return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
+    if (competition !== "nrl" && !canAccessProSeason) {
+      return NextResponse.json({ error: "These competition stats require Pro or Premium access" }, { status: 403 });
     }
     const requestedYears = yearsParam
       ? yearsParam

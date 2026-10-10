@@ -83,7 +83,7 @@ function maxRoundFromOptions(options: { value: string; label: string }[]): numbe
 }
 
 export function MatchupHeatmap({ year, competition, round, roundOptions, gameWindow, teamLogos, initialRows, direction = "defense", efficiency = false, onRoundChange, onDirectionChange }: {
-  teamLogos: Record<string, string>; year: string; competition: "nrl" | "cup" | "international"; round: string; roundOptions: { value: string; label: string }[]; gameWindow: number | null; initialRows?: PlayerStat[]; direction?: MatchupDirection; efficiency?: boolean; onRoundChange: (round: string) => void; onDirectionChange: (direction: MatchupDirection) => void;
+  teamLogos: Record<string, string>; year: string; competition: "nrl" | "cup" | "international" | "origin"; round: string; roundOptions: { value: string; label: string }[]; gameWindow: number | null; initialRows?: PlayerStat[]; direction?: MatchupDirection; efficiency?: boolean; onRoundChange: (round: string) => void; onDirectionChange: (direction: MatchupDirection) => void;
 }) {
   const [metric, setMetric] = useState<MatchupMetric>("Run metres");
   const [efficiencyBaseMetric, setEfficiencyBaseMetric] = useState<TeamAttackEfficiencyBaseStat>("Runs");

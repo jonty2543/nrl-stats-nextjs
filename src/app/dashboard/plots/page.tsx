@@ -56,6 +56,11 @@ export default async function PlotsPage() {
       ? withOptionalContextTimeout("Cup plot seasons", fetchAvailableYears("cup"), [])
       : Promise.resolve([])
   );
+  const internationalAvailableYearsPromise = withOptionalContextTimeout(
+    "International plot seasons",
+    fetchAvailableYears("international"),
+    ["2025"]
+  );
   const teamLogosPromise = withOptionalContextTimeout("plot team logos", fetchTeamLogos(), {});
   const playerImagesPromise = withOptionalContextTimeout("plot player images", fetchPlayerImages(), []);
   const [canAccessProSeason, availableYears] = await Promise.all([proAccessPromise, availableYearsPromise]);
@@ -65,12 +70,14 @@ export default async function PlotsPage() {
   const yearOptions = unlockedYears.length > 0 ? unlockedYears : availableYears.slice(0, 1);
   const initialYear = yearOptions[0] ?? "";
   const initialPlayerDataPromise = initialYear ? fetchPlayerStats([initialYear]) : Promise.resolve([]);
-  const [teamLogos, playerImages, initialPlayerData, cupAvailableYears] = await Promise.all([
+  const [teamLogos, playerImages, initialPlayerData, cupAvailableYears, internationalAvailableYears] = await Promise.all([
     teamLogosPromise,
     playerImagesPromise,
     initialPlayerDataPromise,
     cupAvailableYearsPromise,
+    internationalAvailableYearsPromise,
   ]);
+  const internationalYearOptions = internationalAvailableYears.length > 0 ? internationalAvailableYears : ["2025"];
 
-  return <PlotsDashboard initialPlayerData={initialPlayerData} availableYears={yearOptions} cupAvailableYears={cupAvailableYears} initialYear={initialYear} teamLogos={teamLogos} playerFaceImages={buildPlayerFaceImages(playerImages)} canAccessModelPlots={canAccessProSeason} canAccessCup={canAccessProSeason} />;
+  return <PlotsDashboard initialPlayerData={initialPlayerData} availableYears={yearOptions} cupAvailableYears={cupAvailableYears} internationalAvailableYears={internationalYearOptions} initialYear={initialYear} teamLogos={teamLogos} playerFaceImages={buildPlayerFaceImages(playerImages)} canAccessModelPlots={canAccessProSeason} canAccessCup={canAccessProSeason} />;
 }

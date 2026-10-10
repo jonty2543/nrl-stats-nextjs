@@ -31,7 +31,7 @@ export type TeamShareSourceRow = Pick<
   | "Offloads"
   | "Passes"
   | "Tackles Made"
->;
+> & { competition_id?: string | number | null };
 
 export interface TeamShareSeries {
   team: string;
@@ -41,6 +41,7 @@ export interface TeamShareSeries {
 
 export function selectTeamShareSourceRows(rows: PlayerStat[]): TeamShareSourceRow[] {
   return rows.map((row) => ({
+    competition_id: row.competition_id,
     Team: row.Team,
     Year: row.Year,
     Round: row.Round,

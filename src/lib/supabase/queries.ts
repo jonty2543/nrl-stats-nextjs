@@ -48,15 +48,36 @@ const LIVE_SEASON_STATS_REVALIDATE_SECONDS = 300;
 const DIRECT_PLAYER_STATS_TIMEOUT_MS = 2000;
 const DIRECT_CUP_PLAYER_STATS_TIMEOUT_MS = 8000;
 const FALLBACK_CUP_AVAILABLE_YEARS = ["2026", "2025", "2024", "2023"];
+const FALLBACK_INTERNATIONAL_AVAILABLE_YEARS = ["2025"];
 const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
 const BETTING_SUMMARY_SNAPSHOT_REQUEST_TIMEOUT_MS = 20_000;
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
 
-export type StatsCompetition = "nrl" | "cup";
+export type StatsCompetition = "nrl" | "cup" | "international";
 
 function isCupCompetition(competition?: StatsCompetition): boolean {
   return competition === "cup";
+}
+
+function isInternationalCompetition(competition?: StatsCompetition): boolean {
+  return competition === "international";
+}
+
+function isStructuredCompetition(competition?: StatsCompetition): boolean {
+  return isCupCompetition(competition) || isInternationalCompetition(competition);
+}
+
+function playerStatsTable(competition: StatsCompetition): string {
+  if (isCupCompetition(competition)) return "state_cup_player_stats";
+  if (isInternationalCompetition(competition)) return "international_player_stats";
+  return "player_stats";
+}
+
+function matchesTable(competition: StatsCompetition): string {
+  if (isCupCompetition(competition)) return "state_cup_matches";
+  if (isInternationalCompetition(competition)) return "international_matches";
+  return "matches";
 }
 
 function currentBrisbaneYear(): string {
@@ -594,7 +615,7 @@ async function fetchPlayerStatsRowsForPlayerFromSupabase(
   const supabase = createServerSupabaseClient();
   const allRows: Record<string, unknown>[] = [];
   let start = 0;
-  const table = isCupCompetition(competition) ? "state_cup_player_stats" : "player_stats";
+  const table = playerStatsTable(competition);
 
   while (true) {
     const end = start + PAGE_SIZE - 1;
@@ -1736,7 +1757,7 @@ function buildPlayerStatsRows(
     if ((cleaned["Mins Played"] as number) <= 0) continue;
 
     // Deduplicate
-    const dedupeKey = `${cleaned["Name"]}|${cleaned["Round"]}|${cleaned["Year"]}`;
+    const dedupeKey = `${cleaned["Name"]}|${cleaned["Round"]}|${cleaned["Year"]}|${raw.competition_id ?? ""}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
@@ -1818,7 +1839,7 @@ function normalizePlayerStatsRowsForCompetition(
   rows: Record<string, unknown>[],
   competition?: StatsCompetition
 ): Record<string, unknown>[] {
-  return isCupCompetition(competition) ? rows.map(normalizeCupPlayerStatsRow) : rows;
+  return isStructuredCompetition(competition) ? rows.map(normalizeCupPlayerStatsRow) : rows;
 }
 
 function cupMatchRowsForOpponentLookup(rawMatches: Record<string, unknown>[]): Record<string, unknown>[] {
@@ -1854,10 +1875,12 @@ async function fetchPlayerStatsRowsFromSupabase(
   competition: StatsCompetition = "nrl"
 ): Promise<Record<string, unknown>[]> {
   const normalizedYears = normalizeYearFilters(years);
-  const table = isCupCompetition(competition) ? "state_cup_player_stats" : "player_stats";
+  const table = playerStatsTable(competition);
   const orderBy = isCupCompetition(competition)
     ? ["match_date", "team", "player", "scraped_at"]
-    : ["match_date", "team", "player", "created_at"];
+    : isInternationalCompetition(competition)
+      ? ["match_date"]
+      : ["match_date", "team", "player", "created_at"];
   if (normalizedYears.length === 0) {
     const rows = await fetchAllRows<Record<string, unknown>>(table, { orderBy });
     return normalizePlayerStatsRowsForCompetition(rows, competition);
@@ -1895,19 +1918,25 @@ export async function fetchPlayerStatsFromSupabase(
   competition: StatsCompetition = "nrl"
 ): Promise<PlayerStat[]> {
   const opts = years && years.length > 0 ? { years } : undefined;
-  const rawMatches = await fetchAllRows<Record<string, unknown>>(
-    isCupCompetition(competition) ? "state_cup_matches" : "matches",
-    {
-    ...opts,
-    columns: isCupCompetition(competition)
-      ? "match_date,home_team,away_team"
-      : "match_date,team,opponent_team,is_home",
-    }
-  );
+  const fetchMatchRows = () => fetchAllRows<Record<string, unknown>>(
+      matchesTable(competition),
+      {
+      ...opts,
+      columns: isStructuredCompetition(competition)
+        ? "match_date,home_team,away_team,competition_id"
+        : "match_date,team,opponent_team,is_home",
+      }
+    );
+  const rawMatches = isInternationalCompetition(competition)
+    ? await fetchMatchRows().catch((error) => {
+        console.warn("Unable to enrich International player stats with match opponents; continuing with player rows.", error);
+        return [];
+      })
+    : await fetchMatchRows();
   const rawPlayers = await fetchPlayerStatsRowsFromSupabase(years, competition);
   return buildPlayerStatsRows(
     isCupCompetition(competition) ? enrichCupPlayerStatsRows(rawPlayers) : rawPlayers,
-    isCupCompetition(competition) ? cupMatchRowsForOpponentLookup(rawMatches) : rawMatches
+    isStructuredCompetition(competition) ? cupMatchRowsForOpponentLookup(rawMatches) : rawMatches
   );
 }
 
@@ -1923,6 +1952,13 @@ export async function fetchPlayerStats(
     const fetchCup = async () => fetchPlayerStatsFromSupabase(normalizedArg, competition);
     if (process.env.NODE_ENV !== "production") return fetchCup();
     return unstable_cache(fetchCup, ["cup-player-stats-v1", key], {
+      revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
+    })();
+  }
+  if (isInternationalCompetition(competition)) {
+    const fetchInternational = async () => fetchPlayerStatsFromSupabase(normalizedArg, competition);
+    if (process.env.NODE_ENV !== "production") return fetchInternational();
+    return unstable_cache(fetchInternational, ["international-player-stats-v2", key], {
       revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
     })();
   }
@@ -1972,6 +2008,7 @@ function buildTeamStatsRowsFromMatches(rawMatches: Record<string, unknown>[]): T
 
     return {
       Team: team as TeamStat["Team"],
+      competition_id: Number(raw.competition_id ?? 0),
       Year: year,
       Round: round,
       Date: matchDate,
@@ -2108,6 +2145,7 @@ function buildCupTeamMatchRows(rawMatches: Record<string, unknown>[]): Record<st
       const row: Record<string, unknown> = {
         match_date: raw.match_date,
         round: raw.round,
+        competition_id: raw.competition_id,
         ...base,
         tries: 0,
         conversions_made: 0,
@@ -2133,10 +2171,11 @@ export async function fetchTeamStatsFromSupabase(
   competition: StatsCompetition = "nrl"
 ): Promise<TeamStat[]> {
   const rawMatches = await fetchAllRows<Record<string, unknown>>(
-    isCupCompetition(competition) ? "state_cup_matches" : "matches",
+    matchesTable(competition),
     {
     years,
-    columns: isCupCompetition(competition) ? [
+    columns: isStructuredCompetition(competition) ? [
+      "competition_id",
       "match_date",
       "round",
       "home_team",
@@ -2197,7 +2236,7 @@ export async function fetchTeamStatsFromSupabase(
 
   if (rawMatches.length === 0) return [];
 
-  const matchRows = isCupCompetition(competition) ? buildCupTeamMatchRows(rawMatches) : rawMatches;
+  const matchRows = isStructuredCompetition(competition) ? buildCupTeamMatchRows(rawMatches) : rawMatches;
   return buildTeamStatsRowsFromMatches(matchRows)
     .filter((row) => row.Team && row.Year)
     .sort((a, b) => {
@@ -2219,6 +2258,13 @@ export async function fetchTeamStats(
     const fetchCup = async () => fetchTeamStatsFromSupabase(normalizedArg, competition);
     if (process.env.NODE_ENV !== "production") return fetchCup();
     return unstable_cache(fetchCup, ["cup-team-stats-v1", key], {
+      revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
+    })();
+  }
+  if (isInternationalCompetition(competition)) {
+    const fetchInternational = async () => fetchTeamStatsFromSupabase(normalizedArg, competition);
+    if (process.env.NODE_ENV !== "production") return fetchInternational();
+    return unstable_cache(fetchInternational, ["international-team-stats-v1", key], {
       revalidate: hasLiveSeason ? LIVE_SEASON_STATS_REVALIDATE_SECONDS : DAILY_REVALIDATE_SECONDS,
     })();
   }
@@ -2685,19 +2731,25 @@ export async function fetchFantasyPlayerStatsAllYears(
 // fetchAvailableYears — lightweight query for year list
 // ---------------------------------------------------------------------------
 export async function fetchAvailableYearsFromSupabase(competition: StatsCompetition = "nrl"): Promise<string[]> {
-  // Avoid expensive min/max scans on the large player_stats table.
-  // matches is much smaller and still covers the available season range.
+  // International match rows can include future fixtures before player stats exist,
+  // so use the player table there to avoid offering an empty season.
+  const availableYearsTable = isInternationalCompetition(competition)
+    ? playerStatsTable(competition)
+    : matchesTable(competition);
   const rawMatches = await fetchAllRows<Record<string, unknown>>(
-    isCupCompetition(competition) ? "state_cup_matches" : "matches",
+    availableYearsTable,
     {
-    columns: "match_date",
+    columns: isInternationalCompetition(competition) ? "match_date,minutes_played" : "match_date",
     }
   );
-  if (rawMatches.length === 0) return [];
+  const rowsWithStats = isInternationalCompetition(competition)
+    ? rawMatches.filter((row) => timeToFloat(row.minutes_played) > 0)
+    : rawMatches;
+  if (rowsWithStats.length === 0) return [];
 
   const years = Array.from(
     new Set(
-      rawMatches
+      rowsWithStats
         .map((row) => {
           const value = String(row.match_date ?? "");
           if (!value) return null;
@@ -2729,6 +2781,19 @@ export async function fetchAvailableYears(competition: StatsCompetition = "nrl")
     } catch (error) {
       console.warn("Unable to fetch Cup available years; using fallback years.", error);
       return FALLBACK_CUP_AVAILABLE_YEARS;
+    }
+  }
+  if (isInternationalCompetition(competition)) {
+    try {
+      if (process.env.NODE_ENV !== "production") return await fetchAvailableYearsFromSupabase(competition);
+      return await unstable_cache(
+        async (): Promise<string[]> => fetchAvailableYearsFromSupabase(competition),
+        ["international-available-years-v2"],
+        { revalidate: DAILY_REVALIDATE_SECONDS }
+      )();
+    } catch (error) {
+      console.warn("Unable to fetch International available years; using fallback years.", error);
+      return FALLBACK_INTERNATIONAL_AVAILABLE_YEARS;
     }
   }
   const serverCacheMeta =

@@ -18,7 +18,10 @@ export async function GET(request: NextRequest) {
     const isFantasyContext = searchParams.get("context") === "fantasy";
     const isTeamShareContext = searchParams.get("scope") === "team-share";
     const fresh = searchParams.get("fresh") === "1";
-    const competition = searchParams.get("competition") === "cup" ? "cup" : "nrl";
+    const requestedCompetition = searchParams.get("competition");
+    const competition = requestedCompetition === "cup" || requestedCompetition === "international"
+      ? requestedCompetition
+      : "nrl";
     if (competition === "cup" && !canAccessProSeason) {
       return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
     }

@@ -11,7 +11,10 @@ export async function GET(request: NextRequest) {
     const canAccessProSeason = await getServerProPlotAccess(userId);
     const { searchParams } = request.nextUrl;
     const yearsParam = searchParams.get("years");
-    const competition = searchParams.get("competition") === "cup" ? "cup" : "nrl";
+    const requestedCompetition = searchParams.get("competition");
+    const competition = requestedCompetition === "cup" || requestedCompetition === "international"
+      ? requestedCompetition
+      : "nrl";
     if (competition === "cup" && !canAccessProSeason) {
       return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
     }

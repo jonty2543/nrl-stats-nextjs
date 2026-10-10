@@ -2,18 +2,22 @@
 
 import Image from "next/image";
 
-interface CompetitionToggleProps {
-  value: "nrl" | "cup";
-  onChange: (value: "nrl" | "cup") => void;
+export type CompetitionToggleValue = "nrl" | "cup" | "international";
+
+interface CompetitionToggleProps<T extends CompetitionToggleValue> {
+  value: T;
+  onChange: (value: T) => void;
   canAccessCup: boolean;
+  showInternational?: boolean;
   hideLabel?: boolean;
   fullWidth?: boolean;
   size?: "default" | "large";
   className?: string;
 }
 
-export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = false, fullWidth = false, size = "default", className = "" }: CompetitionToggleProps) {
+export function CompetitionToggle<T extends CompetitionToggleValue>({ value, onChange, canAccessCup, showInternational = false, hideLabel = false, fullWidth = false, size = "default", className = "" }: CompetitionToggleProps<T>) {
   const large = size === "large";
+  const options = (showInternational ? ["nrl", "cup", "international"] : ["nrl", "cup"]) as T[];
 
   return (
     <div className={`flex shrink-0 flex-col items-start gap-0.5 ${fullWidth ? "w-full" : "pl-2"} ${className}`}>
@@ -21,9 +25,9 @@ export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = f
       <div
         role="group"
         aria-label="Competition"
-        className={`${fullWidth ? "grid w-full grid-cols-2" : "inline-flex w-fit gap-6"} items-stretch border-b border-nrl-border/70 ${large ? "h-10" : "h-8"}`}
+        className={`${fullWidth ? `grid w-full ${showInternational ? "grid-cols-3" : "grid-cols-2"}` : "inline-flex w-fit gap-6"} items-stretch border-b border-nrl-border/70 ${large ? "h-10" : "h-8"}`}
       >
-        {(["nrl", "cup"] as const).map((option) => {
+        {options.map((option) => {
           const locked = option === "cup" && !canAccessCup;
           const active = value === option;
           return (
@@ -42,10 +46,15 @@ export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = f
             >
               {active ? <span aria-hidden="true" className="pointer-events-none absolute inset-x-[10%] -bottom-[3px] h-[3px] bg-nrl-accent" /> : null}
               <span className="inline-flex shrink-0 items-center gap-0.5" aria-hidden="true">
-                {(option === "nrl" ? ["nrl"] : ["nsw-cup", "qld-cup"]).map((logo) => (
+                {(option === "nrl"
+                  ? ["/images/competitions/nrl.png"]
+                  : option === "cup"
+                    ? ["/images/competitions/nsw-cup.png", "/images/competitions/qld-cup.png"]
+                    : ["/images/international-logos/new-zealand.png", "/images/international-logos/australia.svg"]
+                ).map((logo) => (
                   <Image
                     key={logo}
-                    src={`/images/competitions/${logo}.png`}
+                    src={logo}
                     alt=""
                     width={large ? 24 : 20}
                     height={large ? 24 : 20}
@@ -53,7 +62,7 @@ export function CompetitionToggle({ value, onChange, canAccessCup, hideLabel = f
                   />
                 ))}
               </span>
-              <span>{option === "nrl" ? "NRL" : "Cup"}</span>
+              <span>{option === "nrl" ? "NRL" : option === "cup" ? "Cup" : "Int"}</span>
               {locked ? (
                 <span
                   aria-hidden="true"

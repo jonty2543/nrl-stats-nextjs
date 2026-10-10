@@ -8,7 +8,7 @@ import type { PlayerStat } from "@/lib/data/types";
 const rowsCache = new Map<string, RoundRow[]>();
 
 export function RoundByRound({ entity, competition, year, years, initialRows, onYearChange }: {
-  entity: "Players" | "Teams"; competition: "nrl" | "cup"; year: string; years: string[]; initialRows?: RoundRow[]; onYearChange: (year: string) => void;
+  entity: "Players" | "Teams"; competition: "nrl" | "cup" | "international"; year: string; years: string[]; initialRows?: RoundRow[]; onYearChange: (year: string) => void;
 }) {
   const [stat, setStat] = useState<RoundStat>("Run metres");
   const [selected, setSelected] = useState("");

@@ -83,7 +83,7 @@ function maxRoundFromOptions(options: { value: string; label: string }[]): numbe
 }
 
 export function MatchupHeatmap({ year, competition, round, roundOptions, gameWindow, teamLogos, initialRows, direction = "defense", efficiency = false, onRoundChange, onDirectionChange }: {
-  teamLogos: Record<string, string>; year: string; competition: "nrl" | "cup"; round: string; roundOptions: { value: string; label: string }[]; gameWindow: number | null; initialRows?: PlayerStat[]; direction?: MatchupDirection; efficiency?: boolean; onRoundChange: (round: string) => void; onDirectionChange: (direction: MatchupDirection) => void;
+  teamLogos: Record<string, string>; year: string; competition: "nrl" | "cup" | "international"; round: string; roundOptions: { value: string; label: string }[]; gameWindow: number | null; initialRows?: PlayerStat[]; direction?: MatchupDirection; efficiency?: boolean; onRoundChange: (round: string) => void; onDirectionChange: (direction: MatchupDirection) => void;
 }) {
   const [metric, setMetric] = useState<MatchupMetric>("Run metres");
   const [efficiencyBaseMetric, setEfficiencyBaseMetric] = useState<TeamAttackEfficiencyBaseStat>("Runs");
@@ -114,7 +114,7 @@ export function MatchupHeatmap({ year, competition, round, roundOptions, gameWin
     if (!shouldFetchRows) return;
     const controller = new AbortController();
     const fresh = immediateRows ? "&fresh=1" : "";
-    fetch(`/api/player-stats?years=${encodeURIComponent(year)}${competition === "cup" ? "&competition=cup" : ""}${fresh}`, { signal: controller.signal })
+    fetch(`/api/player-stats?years=${encodeURIComponent(year)}${competition === "nrl" ? "" : `&competition=${competition}`}${fresh}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Unable to load matchup data.");
         const rows = await response.json() as PlayerStat[];

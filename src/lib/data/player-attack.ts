@@ -292,7 +292,7 @@ export function positionFromRow(row: PlayerStat): PlayerAttackPosition | null {
   if (["PR", "PROP", "LK", "LOCK", "MID", "MIDDLE"].includes(position)) return "Middles";
   if (["INT", "INTERCHANGE", "BENCH", "RESERVE", "REPLACEMENT"].includes(position)) return "Interchange";
 
-  return position && !["UNKNOWN"].includes(position) ? null : positionFromNumber(row.Number);
+  return positionFromNumber(row.Number);
 }
 
 function halfRoleFromRow(row: PlayerStat): 6 | 7 | null {

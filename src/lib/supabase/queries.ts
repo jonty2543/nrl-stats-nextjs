@@ -4821,12 +4821,53 @@ export async function fetchTeamLogosFromSupabase(): Promise<Record<string, strin
     console.warn("Unable to fetch state_cup_team_logos; using NRL team logos only for those teams.", error);
   }
 
+  try {
+    const internationalMatches = await fetchAllRows<Record<string, unknown>>("international_matches", {
+      columns: "home_team,home_team_name,away_team,away_team_name,raw_match",
+      orderBy: ["match_date"],
+    });
+    for (const row of internationalMatches) {
+      const rawMatch = row.raw_match && typeof row.raw_match === "object"
+        ? row.raw_match as Record<string, unknown>
+        : null;
+      for (const side of ["home", "away"] as const) {
+        const rawTeam = rawMatch?.[`${side}Team`];
+        if (!rawTeam || typeof rawTeam !== "object") continue;
+        const team = rawTeam as Record<string, unknown>;
+        const theme = team.theme && typeof team.theme === "object"
+          ? team.theme as Record<string, unknown>
+          : null;
+        const themeLogos = theme?.logos && typeof theme.logos === "object"
+          ? theme.logos as Record<string, unknown>
+          : null;
+        const themeKey = textOrNull(theme?.key);
+        const svgRevision = textOrNull(themeLogos?.["badge.svg"]);
+        const pngRevision = textOrNull(themeLogos?.["badge.png"]);
+        const badgeFile = svgRevision ? "badge.svg" : pngRevision ? "badge.png" : null;
+        const revision = svgRevision ?? pngRevision;
+        if (!themeKey || !badgeFile || !revision) continue;
+        const logoUrl = `https://www.nrl.com/.theme/${encodeURIComponent(themeKey)}/${badgeFile}?bust=${encodeURIComponent(revision)}`;
+        const teamNames = [
+          row[`${side}_team`],
+          row[`${side}_team_name`],
+          team.nickName,
+          themeKey,
+        ];
+        for (const teamName of teamNames) {
+          for (const key of teamLogoAliasKeys(teamName)) logos.set(key, logoUrl);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("Unable to build international team logos; using existing team logos only.", error);
+  }
+
   return Object.fromEntries(logos);
 }
 
 const fetchTeamLogosCached = unstable_cache(
   async (): Promise<Record<string, string>> => fetchTeamLogosFromSupabase(),
-  ["team-logos-v2"],
+  ["team-logos-v3"],
   { revalidate: 3600 }
 );
 

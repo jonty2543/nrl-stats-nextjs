@@ -67,7 +67,7 @@ export function RoundByRound({ entity, competition, year, years, initialRows, on
       <div className="w-32"><Select label="Stat" compact value={stat} options={Object.keys(ROUND_BY_ROUND_STATS)} onChange={(value) => setStat(value as RoundStat)} /></div>
       <div className="w-20"><Select label="Season" compact value={year} options={years} onChange={onYearChange} /></div>
     </div>
-    <h2 className="text-sm font-bold">Round by Round · {effectiveSelected} · {stat} {effectiveDirection.toLowerCase()}</h2>
+    <h2 className="text-sm font-bold">Round by Round · {effectiveSelected} · {stat} {effectiveDirection.toLowerCase()} {year}</h2>
     {selectedPoint ? (
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-nrl-border bg-nrl-panel-2 px-3 py-2 text-[11px] text-nrl-muted">
         <span className="font-black text-nrl-text">{selectedPoint.label}</span>

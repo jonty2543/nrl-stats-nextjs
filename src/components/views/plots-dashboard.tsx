@@ -2657,9 +2657,9 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
               ? activeTeamXDisplayName
               : `${activeTeamXDisplayName} vs ${activeTeamYDisplayName}`
             : "Contact vs line defense rating";
-  const playerPlotDisplayTitle = `${playerPlotTitle}${gameWindow !== null && !isPlayerForm ? ` · L${gameWindow}` : ""}`;
-  const teamPlotDisplayTitle = `${teamPlotTitle}${gameWindow !== null && !isTeamForm ? ` · L${gameWindow}` : ""}`;
-  const proPlotDisplayTitle = `${activeProPlot.title}${proGameWindow !== null ? ` · L${proGameWindow}` : ""}`;
+  const playerPlotDisplayTitle = `${playerPlotTitle} ${year}${gameWindow !== null && !isPlayerForm ? ` · L${gameWindow}` : ""}`;
+  const teamPlotDisplayTitle = `${teamPlotTitle} ${year}${gameWindow !== null && !isTeamForm ? ` · L${gameWindow}` : ""}`;
+  const proPlotDisplayTitle = `${activeProPlot.title} ${proYear}${proGameWindow !== null ? ` · L${proGameWindow}` : ""}`;
 
   return (
     <div className="space-y-4">

@@ -151,6 +151,12 @@ export interface HalvesPairingPoint {
 }
 
 const BACK_POSITIONS = new Set<PlayerAttackPosition>(PLAYER_BACK_POSITIONS);
+const MINIMUM_BACK_SAMPLE_MINUTES = 60;
+
+function hasMinimumBackSampleMinutes(rows: PlayerStat[], position: PlayerAttackPosition): boolean {
+  return !BACK_POSITIONS.has(position) ||
+    rows.reduce((sum, row) => sum + finite(row["Mins Played"]), 0) >= MINIMUM_BACK_SAMPLE_MINUTES;
+}
 
 const PLAYER_NAME_ALIASES: Record<string, string> = {
   "nicholas hynes": "Nicho Hynes",
@@ -360,6 +366,7 @@ export function buildPlayerAttackPoints(
       : positionRows.filter((row) => finite(row["Mins Played"]) >= usualMinutes * 0.6);
     const qualifyingRows = latestQualifyingRows(positionQualifyingRows, gameWindow);
     if (qualifyingRows.length < (minimumGamesOverride ?? minimumQualifyingGames(gameWindow))) continue;
+    if (!hasMinimumBackSampleMinutes(qualifyingRows, position)) continue;
 
     const baseField = EFFICIENCY_BASE_FIELDS[baseMetric];
     const outputField = EFFICIENCY_OUTPUT_FIELDS[outputMetric];
@@ -457,6 +464,7 @@ export function buildPlayerAttackComparisonPoints(
     if (qualifyingRows.length < (minimumGamesOverride ?? minimumQualifyingGames(gameWindow))) continue;
 
     const isPer80 = BACK_POSITIONS.has(position);
+    if (!hasMinimumBackSampleMinutes(qualifyingRows, position)) continue;
     const comparisonXTotal = qualifyingRows.reduce((sum, row) => {
       const value = attackComparisonValue(row, xStat);
       return sum + (isPer80 && !xIsRate ? value * (80 / finite(row["Mins Played"])) : value);
@@ -650,6 +658,7 @@ export function buildPlayerDefencePoints(
       : positionRows.filter((row) => finite(row["Mins Played"]) >= usualMinutes * 0.6);
     const qualifyingRows = latestQualifyingRows(positionQualifyingRows, gameWindow);
     if (qualifyingRows.length < (minimumGamesOverride ?? minimumQualifyingGames(gameWindow))) continue;
+    if (!hasMinimumBackSampleMinutes(qualifyingRows, position)) continue;
 
     if (plotMode === "games") {
       for (const row of qualifyingRows) {

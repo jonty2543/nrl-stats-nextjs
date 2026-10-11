@@ -65,9 +65,12 @@ export async function GET(request: NextRequest) {
     const dataset = searchParams.get("dataset");
     const { userId } = await auth();
     const canAccessProSeason = await getServerProPlotAccess(userId);
-    const competition = searchParams.get("competition") === "cup" ? "cup" : "nrl";
-    if (competition === "cup" && !canAccessProSeason) {
-      return NextResponse.json({ error: "Cup stats require Pro or Premium access" }, { status: 403 });
+    const requestedCompetition = searchParams.get("competition");
+    const competition = requestedCompetition === "cup" || requestedCompetition === "international" || requestedCompetition === "origin"
+      ? requestedCompetition
+      : "nrl";
+    if (competition !== "nrl" && !canAccessProSeason) {
+      return NextResponse.json({ error: "These competition stats require Pro or Premium access" }, { status: 403 });
     }
     const allowedYears = await allowedYearsForRequest(request, canAccessProSeason);
     const includesLiveSeason = allowedYears.includes(currentBrisbaneYear());

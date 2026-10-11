@@ -99,13 +99,16 @@ export default async function PlayerGameLogPage({ params, searchParams }: Player
     auth(),
   ]);
   const decodedSlug = decodeURIComponent(playerSlug);
-  let competition: "nrl" | "cup" = resolvedSearchParams.competition === "cup" ? "cup" : "nrl";
+  let competition: "nrl" | "cup" | "international" | "origin" =
+    resolvedSearchParams.competition === "cup" || resolvedSearchParams.competition === "international" || resolvedSearchParams.competition === "origin"
+      ? resolvedSearchParams.competition
+      : "nrl";
   const canAccessLoginSeason = Boolean(userId);
   const [canBypassPlotGate, initialAvailableYears] = await Promise.all([
     getServerProPlotAccess(userId),
     fetchAvailableYears(competition),
   ]);
-  if (competition === "cup" && !canBypassPlotGate) {
+  if (competition !== "nrl" && !canBypassPlotGate) {
     notFound();
   }
 
@@ -161,7 +164,10 @@ export default async function PlayerGameLogPage({ params, searchParams }: Player
 
   const team = latestTeam(rows);
   const position = latestPosition(rows);
-  const imageSources = playerImageSources(playerName, team, playerImages);
+  const imageSources = [...new Set([
+    ...rows.flatMap((row) => [row.body_image, row.head_image]).filter((source): source is string => typeof source === "string" && source.length > 0),
+    ...playerImageSources(playerName, team, playerImages),
+  ])];
   const shownGameLogStats = GAME_LOG_STATS.filter((stat) => PLAYER_STATS.includes(stat));
 
   return (

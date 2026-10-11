@@ -19,6 +19,8 @@ interface RankingsDashboardProps {
   teamLogos: Record<string, string>
   availableYears: string[]
   cupAvailableYears: string[]
+  internationalAvailableYears: string[]
+  originAvailableYears: string[]
   canAccessCup: boolean
 }
 
@@ -30,8 +32,9 @@ interface CompetitionRows {
 type ValueMode = "average" | "total"
 type RankingView = "players" | "teams"
 type RankingSection = "rankings" | "form"
-type FormWindow = 3 | 5
+type FormWindow = 1 | 3 | 5
 type SortDirection = "asc" | "desc"
+type RankingCompetition = "nrl" | "cup" | "international" | "origin"
 
 interface StatOption {
   key: string
@@ -72,6 +75,18 @@ interface RankingDiscoveryOption {
 
 const POSITION_ORDER = ["Fullback", "Winger", "Centre", "Half", "Edge", "Middle", "Hooker"]
 const POSITION_FILTERS = ["All Positions", ...POSITION_ORDER]
+
+const INTERNATIONAL_COMPETITIONS = [
+  { value: "All Internationals", label: "All", id: null },
+  { value: "Pacific Championships", label: "Pacific Champs", id: 195 },
+  { value: "RLWC", label: "RLWC", id: 131 },
+  { value: "International", label: "International", id: 133 },
+] as const
+
+function matchesInternationalCompetition(row: PlayerStat | TeamStat, selection: string): boolean {
+  const option = INTERNATIONAL_COMPETITIONS.find((item) => item.value === selection)
+  return option?.id == null || Number(row.competition_id) === option.id
+}
 
 const RANKING_EXCLUDED_STAT_KEYS = new Set([
   "Average Play The Ball Speed",
@@ -497,7 +512,7 @@ function buildPlayerRankings(
   formWindow: FormWindow | null,
   minPriorGames: number
 ): RankingEntry[] {
-  const byPlayer = new Map<string, { team: string; games: RankingGame[]; total: number; perTotal: number; latestRound: number }>()
+  const byPlayer = new Map<string, { team: string; games: RankingGame[]; total: number; perTotal: number; latestRound: number; imageSources: string[] }>()
 
   for (const row of rows) {
     const name = typeof row.Name === "string" ? row.Name.trim() : ""
@@ -516,11 +531,17 @@ function buildPlayerRankings(
       total: 0,
       perTotal: 0,
       latestRound: 0,
+      imageSources: [],
     }
 
     current.games.push({ round: toFiniteNumber(row.Round) ?? 0, value, perValue })
     current.total += value
     current.perTotal += perValue ?? 0
+    current.imageSources.push(
+      ...[row.cached_head_image, row.head_image, row.cached_body_image, row.body_image].flatMap((source) =>
+        normaliseRemoteImageCandidates(typeof source === "string" ? source : null)
+      )
+    )
 
     const round = toFiniteNumber(row.Round) ?? 0
     if (round >= current.latestRound) {
@@ -571,7 +592,7 @@ function buildPlayerRankings(
         seasonValue,
         priorValue,
         recentValue,
-        imageSources: buildPlayerImageSources(name, aggregate.team, images),
+        imageSources: [...new Set([...aggregate.imageSources, ...buildPlayerImageSources(name, aggregate.team, images)])],
       }
     })
     .filter((entry): entry is RankingEntry => entry !== null)
@@ -653,8 +674,8 @@ function buildTeamRankings(
     .sort(compareRankingEntries(sortDirection))
 }
 
-export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerImages, teamLogos, availableYears, cupAvailableYears, canAccessCup }: RankingsDashboardProps) {
-  const [competition, setCompetition] = useState<"nrl" | "cup">("nrl")
+export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerImages, teamLogos, availableYears, cupAvailableYears, internationalAvailableYears, originAvailableYears, canAccessCup }: RankingsDashboardProps) {
+  const [competition, setCompetition] = useState<RankingCompetition>("nrl")
   const [activeYear, setActiveYear] = useState(selectedYear)
   const [activePlayerRows, setActivePlayerRows] = useState<PlayerStat[]>(playerRows)
   const [activeTeamRows, setActiveTeamRows] = useState<TeamStat[]>(teamRows)
@@ -670,10 +691,11 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   const [minPriorGames, setMinPriorGames] = useState(5)
   const [statKey, setStatKey] = useState("All Run Metres")
   const [perStatKey, setPerStatKey] = useState("")
-  const [minGames, setMinGames] = useState(5)
+  const [minGames, setMinGames] = useState(4)
   const [minMinutes, setMinMinutes] = useState(40)
   const [positionFilter, setPositionFilter] = useState("All Positions")
   const [cupLeague, setCupLeague] = useState("All Cup")
+  const [internationalCompetition, setInternationalCompetition] = useState("All Internationals")
   const [valueSortDirection, setValueSortDirection] = useState<SortDirection>("desc")
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [rankingFinderOpen, setRankingFinderOpen] = useState(false)
@@ -687,7 +709,14 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   const effectiveMode = section === "form" ? "average" : mode
   const rankingFinderSuggestions = useMemo(() => buildRankingSuggestions(rankingFinderQuery), [rankingFinderQuery])
 
-  const loadCompetitionRows = useCallback((nextCompetition: "nrl" | "cup", nextYear: string, targetView: RankingView) => {
+  const yearsForCompetition = useCallback((nextCompetition: RankingCompetition) => {
+    if (nextCompetition === "cup") return cupAvailableYears
+    if (nextCompetition === "international") return internationalAvailableYears
+    if (nextCompetition === "origin") return originAvailableYears
+    return availableYears
+  }, [availableYears, cupAvailableYears, internationalAvailableYears, originAvailableYears])
+
+  const loadCompetitionRows = useCallback((nextCompetition: RankingCompetition, nextYear: string, targetView: RankingView) => {
     const key = `${nextCompetition}:${nextYear}`
     const cachedRows = competitionRowsRef.current.get(key)
     const needsPlayerRows = targetView === "players" && !cachedRows?.playerRows
@@ -730,14 +759,19 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
     if (cupYear) void loadCompetitionRows("cup", cupYear, "players")
   }, [canAccessCup, cupAvailableYears, loadCompetitionRows, selectedYear])
 
-  const changeCompetition = async (nextCompetition: "nrl" | "cup") => {
+  const changeCompetition = async (nextCompetition: RankingCompetition) => {
     if (competitionLoading) return
     if (nextCompetition === competition) return
     if (nextCompetition === "cup" && !canAccessCup) return
-    const yearOptions = nextCompetition === "cup" ? cupAvailableYears : availableYears
-    const nextYear = yearOptions.includes(selectedYear) ? selectedYear : yearOptions[0] ?? selectedYear
+    const yearOptions = yearsForCompetition(nextCompetition)
+    const preferredYear = nextCompetition === "international" ? "2025" : selectedYear
+    const nextYear = yearOptions.includes(preferredYear) ? preferredYear : yearOptions[0] ?? preferredYear
     setCompetition(nextCompetition)
     setActiveYear(nextYear)
+    const shortCompetition = nextCompetition === "international" || nextCompetition === "origin"
+    setMinGames(shortCompetition ? 1 : 4)
+    setMinPriorGames(shortCompetition ? 1 : 5)
+    setFormWindow(shortCompetition ? 1 : 3)
     const cachedRows = competitionRowsRef.current.get(`${nextCompetition}:${nextYear}`)
     if ((view === "players" && cachedRows?.playerRows) || (view === "teams" && cachedRows?.teamRows)) {
       setActivePlayerRows(cachedRows.playerRows ?? [])
@@ -797,20 +831,29 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
   }, [rankingFinderOpen])
 
   const filteredPlayerRows = useMemo(() => {
+    if (competition === "international") {
+      return activePlayerRows.filter((row) => matchesInternationalCompetition(row, internationalCompetition))
+    }
     if (competition !== "cup") return activePlayerRows
     return activePlayerRows.filter((row) => {
       const league = String(row.cup_competition ?? "").toLowerCase()
       const matchesLeague = cupLeague === "All Cup" || league.includes(cupLeague === "NSW Cup" ? "nsw" : "qld")
       return matchesLeague
     })
-  }, [activePlayerRows, competition, cupLeague])
+  }, [activePlayerRows, competition, cupLeague, internationalCompetition])
+  const filteredTeamRows = useMemo(
+    () => competition === "international"
+      ? activeTeamRows.filter((row) => matchesInternationalCompetition(row, internationalCompetition))
+      : activeTeamRows,
+    [activeTeamRows, competition, internationalCompetition]
+  )
   const playerRankings = useMemo(
     () => buildPlayerRankings(filteredPlayerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames),
     [filteredPlayerRows, playerImages, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, minMinutes, positionFilter, valueSortDirection, activeFormWindow, minPriorGames]
   )
   const teamRankings = useMemo(
-    () => buildTeamRankings(activeTeamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames),
-    [activeTeamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames]
+    () => buildTeamRankings(filteredTeamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames),
+    [filteredTeamRows, teamLogos, effectiveMode, effectiveStatKey, effectivePerStatKey, minGames, valueSortDirection, activeFormWindow, minPriorGames]
   )
   const statHeading = effectivePerStatKey
     ? `${statInitials(effectiveStatKey, activeStatOptions)} / ${statInitials(effectivePerStatKey, activeStatOptions)}`
@@ -826,7 +869,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
       : playerRankings.length > 0
   const ratioRanking = Boolean(effectivePerStatKey)
   const rankingTitle = `${statLabel(effectiveStatKey, activeStatOptions)}${effectivePerStatKey ? ` per ${perStatUnitLabel(effectivePerStatKey, activeStatOptions)}` : ""} — ${view === "teams" ? "Teams" : positionFilter === "All Positions" ? "All players" : positionFilter}${section === "form" ? ` · L${formWindow} form` : ""}`
-  const loadingLabel = competition === "cup" ? "Loading Cup rankings" : "Loading NRL rankings"
+  const loadingLabel = `Loading ${competition === "nrl" ? "NRL" : competition === "cup" ? "Cup" : competition === "origin" ? "Origin" : "International"} rankings`
   const changeView = (value: string) => {
     const [nextView, nextSection] = value.split("_") as [RankingView, RankingSection]
     setView(nextView)
@@ -855,6 +898,8 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
             value={competition}
             onChange={(value) => void changeCompetition(value)}
             canAccessCup={canAccessCup}
+            showInternational
+            showOrigin
             hideLabel
             fullWidth
             className="w-full"
@@ -920,13 +965,16 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
           {competition === "cup" && view === "players" ? (
             <div className="w-24 shrink-0"><Select label="Cup" compact value={cupLeague} options={["All Cup", "NSW Cup", "QLD Cup"]} onChange={setCupLeague} /></div>
           ) : null}
+          {competition === "international" ? (
+            <div className="w-32 shrink-0"><Select label="Competition" compact value={internationalCompetition} options={INTERNATIONAL_COMPETITIONS.map((option) => ({ value: option.value, label: option.label }))} onChange={setInternationalCompetition} /></div>
+          ) : null}
           <div className="flex shrink-0 flex-col gap-0.5">
             <span className="text-[8px] font-semibold uppercase tracking-wide text-nrl-muted">{section === "form" ? "Form sample" : "Values"}</span>
             <PillRadio
               variant="outline"
-              options={section === "form" ? ["L3", "L5"] : ["Average", "Total"]}
+              options={section === "form" ? competition === "international" || competition === "origin" ? ["L1", "L3"] : ["L3", "L5"] : ["Average", "Total"]}
               value={section === "form" ? `L${formWindow}` : mode === "average" ? "Average" : "Total"}
-              onChange={(value) => section === "form" ? setFormWindow(value === "L5" ? 5 : 3) : setMode(value === "Total" ? "total" : "average")}
+              onChange={(value) => section === "form" ? setFormWindow(value === "L1" ? 1 : value === "L5" ? 5 : 3) : setMode(value === "Total" ? "total" : "average")}
             />
           </div>
         </div>
@@ -1073,7 +1121,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
                         </div>
                         <div className="min-w-0">
                           <Link
-                            href={`/dashboard/players/${playerSlug(entry.name)}${competition === "cup" ? "?competition=cup" : ""}`}
+                            href={`/dashboard/players/${playerSlug(entry.name)}${competition !== "nrl" ? `?competition=${competition}` : ""}`}
                             className="block truncate text-[12px] font-black text-nrl-text transition-colors hover:text-nrl-accent sm:text-xs"
                             title={entry.name}
                           >

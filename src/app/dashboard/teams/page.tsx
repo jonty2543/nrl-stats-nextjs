@@ -15,9 +15,13 @@ export default async function TeamsPage() {
   const canAccessLoginSeason = Boolean(userId);
   const canBypassPlotGate = await getServerProPlotAccess(userId);
   const cupAvailableYearsPromise = canBypassPlotGate ? fetchAvailableYears("cup") : Promise.resolve([]);
-  const [availableYears, cupAvailableYears, teamLogos] = await Promise.all([
+  const internationalAvailableYearsPromise = canBypassPlotGate ? fetchAvailableYears("international") : Promise.resolve([]);
+  const originAvailableYearsPromise = canBypassPlotGate ? fetchAvailableYears("origin") : Promise.resolve([]);
+  const [availableYears, cupAvailableYears, internationalAvailableYears, originAvailableYears, teamLogos] = await Promise.all([
     fetchAvailableYears(),
     cupAvailableYearsPromise,
+    internationalAvailableYearsPromise,
+    originAvailableYearsPromise,
     fetchTeamLogos(),
   ]);
   const unlockedYears = availableYears.filter((year) =>
@@ -33,6 +37,8 @@ export default async function TeamsPage() {
       initialData={initialData}
       availableYears={availableYears}
       cupAvailableYears={cupAvailableYears}
+      internationalAvailableYears={internationalAvailableYears.length > 0 ? internationalAvailableYears : ["2025"]}
+      originAvailableYears={originAvailableYears.length > 0 ? originAvailableYears : ["2026"]}
       defaultYears={initialYears}
       teamLogos={teamLogos}
       canBypassPlotGate={canBypassPlotGate}

@@ -4,7 +4,7 @@ export const PLAYER_ATTACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halv
 
 export type PlayerAttackPosition = (typeof PLAYER_ATTACK_POSITIONS)[number];
 export const PLAYER_BACK_POSITIONS = ["Fullbacks", "Wingers", "Centres", "Halves"] as const satisfies readonly PlayerAttackPosition[];
-export const PLAYER_EFFICIENCY_BASE_METRICS = ["Minutes", "Receipts", "Runs", "Passes"] as const;
+export const PLAYER_EFFICIENCY_BASE_METRICS = ["Minutes", "Receipts", "Runs", "Passes", "Team receipts", "Team runs"] as const;
 export const PLAYER_EFFICIENCY_OUTPUT_METRICS = [
   "Runs",
   "Passes",
@@ -169,7 +169,7 @@ export function canonicalPlayerName(value: unknown): string {
   return PLAYER_NAME_ALIASES[key] ?? name;
 }
 
-const EFFICIENCY_BASE_FIELDS: Record<PlayerEfficiencyBaseMetric, keyof PlayerStat> = {
+const EFFICIENCY_BASE_FIELDS: Partial<Record<PlayerEfficiencyBaseMetric, keyof PlayerStat>> = {
   Minutes: "Mins Played",
   Receipts: "Receipts",
   Runs: "All Runs",
@@ -326,7 +326,7 @@ function mostCommonTeam(rows: PlayerStat[]): string {
 }
 
 function teamGameKey(row: PlayerStat): string {
-  return [row.Year, String(row.Round_Label || row.Round), String(row.Team ?? "").trim().toLowerCase()].join("|");
+  return [row.Year, String(row.Round_Label || row.Round), String(row.Team ?? "").trim().toLowerCase(), String(row.competition_id ?? "")].join("|");
 }
 
 function latestQualifyingRows(rows: PlayerStat[], gameWindow: PlayerGameWindow): PlayerStat[] {
@@ -348,8 +348,14 @@ export function buildPlayerAttackPoints(
   plotMode: PlayerPlotMode = "players",
   minimumGamesOverride?: number
 ): PlayerAttackPoint[] {
+  const teamBaseField = baseMetric === "Team receipts" ? "Receipts" : baseMetric === "Team runs" ? "All Runs" : null;
+  const teamGameBaseTotals = new Map<string, number>();
   const players = new Map<string, PlayerStat[]>();
   for (const row of rows) {
+    if (teamBaseField && String(row.Team ?? "").trim()) {
+      const key = teamGameKey(row);
+      teamGameBaseTotals.set(key, (teamGameBaseTotals.get(key) ?? 0) + finite(row[teamBaseField]));
+    }
     if (positionFromRow(row) !== position || finite(row["Mins Played"]) <= 0) continue;
     const player = canonicalPlayerName(row.Name);
     if (!player) continue;
@@ -357,7 +363,10 @@ export function buildPlayerAttackPoints(
   }
 
   const isPer80 = BACK_POSITIONS.has(position);
-  const normaliseVolumePer80 = isPer80 && baseMetric !== "Minutes";
+  const normaliseVolumePer80 = isPer80 && baseMetric !== "Minutes" && !teamBaseField;
+  const baseValue = (row: PlayerStat) => teamBaseField
+    ? teamGameBaseTotals.get(teamGameKey(row)) ?? 0
+    : finite(row[EFFICIENCY_BASE_FIELDS[baseMetric] as keyof PlayerStat]);
   const points: PlayerAttackPoint[] = [];
   for (const [player, positionRows] of players) {
     const usualMinutes = median(positionRows.map((row) => finite(row["Mins Played"])));
@@ -368,11 +377,10 @@ export function buildPlayerAttackPoints(
     if (qualifyingRows.length < (minimumGamesOverride ?? minimumQualifyingGames(gameWindow))) continue;
     if (!hasMinimumBackSampleMinutes(qualifyingRows, position)) continue;
 
-    const baseField = EFFICIENCY_BASE_FIELDS[baseMetric];
     const outputField = EFFICIENCY_OUTPUT_FIELDS[outputMetric];
     if (plotMode === "games") {
       for (const row of qualifyingRows) {
-        const base = finite(row[baseField]);
+        const base = baseValue(row);
         if (base <= 0) continue;
         const minutes = finite(row["Mins Played"]);
         points.push({
@@ -392,11 +400,11 @@ export function buildPlayerAttackPoints(
       }
       continue;
     }
-    const totalBase = qualifyingRows.reduce((sum, row) => sum + finite(row[baseField]), 0);
+    const totalBase = qualifyingRows.reduce((sum, row) => sum + baseValue(row), 0);
     if (totalBase <= 0) continue;
     const totalOutput = qualifyingRows.reduce((sum, row) => sum + finite(row[outputField]), 0);
     const volumeValue = qualifyingRows.reduce((sum, row) => {
-      const value = finite(row[baseField]);
+      const value = baseValue(row);
       return sum + (normaliseVolumePer80 ? value * (80 / finite(row["Mins Played"])) : value);
     }, 0) / qualifyingRows.length;
 

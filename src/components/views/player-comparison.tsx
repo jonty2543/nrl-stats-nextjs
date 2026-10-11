@@ -47,6 +47,8 @@ interface PlayerComparisonProps {
   teamLogos: Record<string, string>;
   availableYears: string[];
   cupAvailableYears: string[];
+  internationalAvailableYears: string[];
+  originAvailableYears: string[];
   defaultYears: string[];
   initialCanAccessLoginSeason?: boolean;
   canBypassPlotGate?: boolean;
@@ -139,7 +141,7 @@ function statsTableQueryKey({
   team: string;
   position: string;
   minGames: string;
-  competition?: "nrl" | "cup";
+  competition?: StatsCompetition;
 }): string {
   const params = new URLSearchParams({
     dataset: "player",
@@ -149,7 +151,7 @@ function statsTableQueryKey({
     position,
     minGames: String(minGamesValue(minGames)),
   });
-  if (competition === "cup") params.set("competition", "cup");
+  if (competition && competition !== "nrl") params.set("competition", competition);
   return params.toString();
 }
 
@@ -165,6 +167,19 @@ const MINUTES_FILTER_OPTIONS = [
   "80 Mins",
 ] as const;
 const FINALS_MODE_OPTIONS = ["Yes", "No"] as const;
+type StatsCompetition = "nrl" | "cup" | "international" | "origin";
+
+const INTERNATIONAL_COMPETITIONS = [
+  { value: "All Internationals", label: "All", id: null },
+  { value: "Pacific Championships", label: "Pacific Champs", id: 195 },
+  { value: "RLWC", label: "RLWC", id: 131 },
+  { value: "International", label: "International", id: 133 },
+] as const;
+
+function matchesInternationalCompetition(row: PlayerStat, selection: string): boolean {
+  const option = INTERNATIONAL_COMPETITIONS.find((item) => item.value === selection);
+  return option?.id == null || Number(row.competition_id) === option.id;
+}
 
 interface PersistedPlayerComparisonState {
   version: 1;
@@ -899,6 +914,8 @@ export function PlayerComparison({
   teamLogos,
   availableYears,
   cupAvailableYears,
+  internationalAvailableYears,
+  originAvailableYears,
   defaultYears,
   initialCanAccessLoginSeason = false,
   canBypassPlotGate = false,
@@ -914,8 +931,9 @@ export function PlayerComparison({
   const hasClientProPlotAccess =
     canBypassPlotGate || hasProPlotAccess(userId, user?.publicMetadata);
   const hasClientCupAccess = canAccessCup;
-  const [competition, setCompetition] = useState<"nrl" | "cup">("nrl");
-  const activeAvailableYears = competition === "cup" ? cupAvailableYears : availableYears;
+  const [competition, setCompetition] = useState<StatsCompetition>("nrl");
+  const activeAvailableYears = competition === "cup" ? cupAvailableYears : competition === "international" ? internationalAvailableYears : competition === "origin" ? originAvailableYears : availableYears;
+  const [internationalCompetition, setInternationalCompetition] = useState("All Internationals");
 
   const [allData, setAllData] = useState<PlayerStat[]>(initialData);
   const unlockedYears = useMemo(
@@ -979,7 +997,7 @@ export function PlayerComparison({
     setLoading(true);
     try {
       const params = new URLSearchParams({ years: validYears.join(",") });
-      if (competition === "cup") params.set("competition", "cup");
+      if (competition !== "nrl") params.set("competition", competition);
       const res = await fetch(`/api/player-stats?${params.toString()}`);
       if (res.ok) {
         const data = (await res.json()) as PlayerStat[];
@@ -1002,17 +1020,19 @@ export function PlayerComparison({
     const validYears = ensureAtLeastOneUnlockedYear(filterUnlockedYears(years));
     setStatsTableYears(validYears);
   }, [ensureAtLeastOneUnlockedYear, filterUnlockedYears]);
-  const handleCompetitionChange = useCallback(async (nextCompetition: "nrl" | "cup") => {
+  const handleCompetitionChange = useCallback(async (nextCompetition: StatsCompetition) => {
     if (nextCompetition === competition) return;
     if (nextCompetition === "cup" && !hasClientCupAccess) return;
-    const yearOptions = nextCompetition === "cup" ? cupAvailableYears : availableYears;
+    const yearOptions = nextCompetition === "cup" ? cupAvailableYears : nextCompetition === "international" ? internationalAvailableYears : nextCompetition === "origin" ? originAvailableYears : availableYears;
     const nextUnlockedYears = yearOptions.filter((year) =>
       isAccessibleSeason(year, canAccessLoginSeason, "stats", hasClientProPlotAccess)
     );
-    const preferredYears = yearOptions.includes(DEFAULT_STATS_TABLE_YEAR)
-      ? [DEFAULT_STATS_TABLE_YEAR]
+    const preferredYear = nextCompetition === "international" ? "2025" : DEFAULT_STATS_TABLE_YEAR;
+    const preferredYears = yearOptions.includes(preferredYear)
+      ? [preferredYear]
       : defaultYears;
-    const nextYears = preferredYears.filter((year) => nextUnlockedYears.includes(year));
+    const matchingYears = preferredYears.filter((year) => nextUnlockedYears.includes(year));
+    const nextYears = matchingYears.length > 0 ? matchingYears : nextUnlockedYears.slice(0, 1);
     setCompetition(nextCompetition);
     setSelectedYears(nextYears);
     setStatsTableYears(nextYears);
@@ -1029,31 +1049,55 @@ export function PlayerComparison({
     setLoading(true);
     try {
       const params = new URLSearchParams({ years: nextYears.join(",") });
-      if (nextCompetition === "cup") params.set("competition", "cup");
+      if (nextCompetition !== "nrl") params.set("competition", nextCompetition);
       const res = await fetch(`/api/player-stats?${params.toString()}`);
       if (res.ok) setAllData((await res.json()) as PlayerStat[]);
     } finally {
       setLoading(false);
     }
-  }, [availableYears, canAccessLoginSeason, competition, cupAvailableYears, defaultYears, hasClientCupAccess, hasClientProPlotAccess, initialData, initialYears]);
+  }, [availableYears, canAccessLoginSeason, competition, cupAvailableYears, defaultYears, hasClientCupAccess, hasClientProPlotAccess, initialData, initialYears, internationalAvailableYears, originAvailableYears]);
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any");
   const [minutesUnderFilter, setMinutesUnderFilter] = useState<string>("Any");
   const [analysisFiltersOpen, setAnalysisFiltersOpen] = useState(false);
   const [percentileScope, setPercentileScope] = useState<PercentileScope>("Position");
 
+  const competitionData = useMemo(
+    () => competition === "international" ? allData.filter((row) => matchesInternationalCompetition(row, internationalCompetition)) : allData,
+    [allData, competition, internationalCompetition]
+  );
+  const activePlayerImages = useMemo<PlayerImageRecord[]>(() => [
+    ...competitionData.flatMap((row) => {
+      const headImage = typeof row.head_image === "string" ? row.head_image : null;
+      const bodyImage = typeof row.body_image === "string" ? row.body_image : null;
+      if (!headImage && !bodyImage) return [];
+      return [{
+        player: row.Name,
+        team: typeof row.Team === "string" ? row.Team : null,
+        number: row.Number == null ? null : String(row.Number),
+        position: typeof row.Position === "string" ? row.Position : null,
+        cached_head_image: null,
+        cached_body_image: null,
+        head_image: headImage,
+        body_image: bodyImage,
+        last_seen_match_date: typeof row.match_date === "string" ? row.match_date : null,
+      }];
+    }),
+    ...playerImages,
+  ], [competitionData, playerImages]);
+
   // Filter pipeline
   const dfYear = useMemo(
-    () => filterByYear(allData, selectedYears),
-    [allData, selectedYears]
+    () => filterByYear(competitionData, selectedYears),
+    [competitionData, selectedYears]
   );
   const dfYearFinals = useMemo(
     () => filterByFinals(dfYear, finalsMode as "Yes" | "No"),
     [dfYear, finalsMode]
   );
   const plotDfYear = useMemo(
-    () => filterByYear(allData, selectedYears),
-    [allData, selectedYears]
+    () => filterByYear(competitionData, selectedYears),
+    [competitionData, selectedYears]
   );
   const plotDfYearFinals = useMemo(
     () => filterByFinals(plotDfYear, finalsMode as "Yes" | "No"),
@@ -1088,7 +1132,7 @@ export function PlayerComparison({
     [dfYearFinals]
   );
 
-  const fantasyRank = useMemo(() => buildFantasyRank(allData), [allData]);
+  const fantasyRank = useMemo(() => buildFantasyRank(competitionData), [competitionData]);
 
   const statList = useMemo(
     () =>
@@ -1115,11 +1159,11 @@ export function PlayerComparison({
     return (name: string): PlayerImageRecord | null => {
       const cacheKey = normalisePersonName(name);
       if (imageCache.has(cacheKey)) return imageCache.get(cacheKey) ?? null;
-      const imageRow = resolvePlayerImage(name, null, playerImages);
+      const imageRow = resolvePlayerImage(name, null, activePlayerImages);
       imageCache.set(cacheKey, imageRow);
       return imageRow;
     };
-  }, [playerImages]);
+  }, [activePlayerImages]);
 
   useEffect(() => {
     if (statsTableYears.length === 0) {
@@ -1760,12 +1804,12 @@ export function PlayerComparison({
     [hasTwoPlayers, p2AllRows, selectedYears]
   );
   const p1CardImage = useMemo(
-    () => resolvePlayerImage(effectiveP1, p1CardTeam, playerImages),
-    [effectiveP1, p1CardTeam, playerImages]
+    () => resolvePlayerImage(effectiveP1, p1CardTeam, activePlayerImages),
+    [activePlayerImages, effectiveP1, p1CardTeam]
   );
   const p2CardImage = useMemo(
-    () => (hasTwoPlayers ? resolvePlayerImage(player2, p2CardTeam, playerImages) : null),
-    [hasTwoPlayers, player2, p2CardTeam, playerImages]
+    () => (hasTwoPlayers ? resolvePlayerImage(player2, p2CardTeam, activePlayerImages) : null),
+    [activePlayerImages, hasTwoPlayers, player2, p2CardTeam]
   );
 
   const percentileResults = useMemo(() => {
@@ -2127,8 +2171,11 @@ export function PlayerComparison({
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-3">
-        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} hideLabel fullWidth />
+        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} showInternational showOrigin hideLabel fullWidth />
       </div>
+      {competition === "international" ? (
+        <div className="w-40"><Select label="Competition" value={internationalCompetition} options={INTERNATIONAL_COMPETITIONS.map((option) => ({ value: option.value, label: option.label }))} onChange={setInternationalCompetition} /></div>
+      ) : null}
       {loading && (
         <div className="flex justify-center py-6 md:py-8">
           <span
@@ -2138,7 +2185,7 @@ export function PlayerComparison({
           />
         </div>
       )}
-      {!loading && allData.length === 0 && (
+      {!loading && competitionData.length === 0 && (
         <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-center text-nrl-muted">
           <div>No data available for the selected season.</div>
         </div>
@@ -2338,7 +2385,7 @@ export function PlayerComparison({
                         </td>
                         <td className={`w-44 min-w-44 max-w-44 px-2 py-1.5 text-sm font-black sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem] sm:px-2.5 sm:text-sm ${statsTableSort.column === "name" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "bg-nrl-panel text-nrl-text"}`}>
                         <Link
-                          href={`/dashboard/players/${playerSlug(row.name)}${competition === "cup" ? "?competition=cup" : ""}`}
+                          href={`/dashboard/players/${playerSlug(row.name)}${competition !== "nrl" ? `?competition=${competition}` : ""}`}
                           className="block min-w-0 truncate transition-colors hover:text-nrl-accent"
                           title={row.name}
                         >
@@ -2417,7 +2464,7 @@ export function PlayerComparison({
           />
         </div>
       </div>
-      {allData.length > 0 && (
+      {competitionData.length > 0 && (
         <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
@@ -2627,7 +2674,7 @@ export function PlayerComparison({
           </div>
         </div>
       )}
-      {allData.length > 0 && historyChartPanels.length > 0 && (
+      {competitionData.length > 0 && historyChartPanels.length > 0 && (
         <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-nrl-accent">
             Full History Plots

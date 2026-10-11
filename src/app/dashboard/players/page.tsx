@@ -32,6 +32,12 @@ export default async function PlayersPage() {
   const cupAvailableYearsPromise = proAccessPromise.then((canAccess) =>
     canAccess ? fetchAvailableYears("cup") : Promise.resolve([])
   );
+  const internationalAvailableYearsPromise = proAccessPromise.then((canAccess) =>
+    canAccess ? fetchAvailableYears("international") : Promise.resolve([])
+  );
+  const originAvailableYearsPromise = proAccessPromise.then((canAccess) =>
+    canAccess ? fetchAvailableYears("origin") : Promise.resolve([])
+  );
   const playerImagesPromise = fetchPlayerImages();
   const teamLogosPromise = fetchTeamLogos();
   const [canBypassPlotGate, availableYears] = await Promise.all([
@@ -46,11 +52,13 @@ export default async function PlayersPage() {
     ? [DEFAULT_STATS_TABLE_YEAR]
     : defaultRecentYears(yearPool);
   const initialDataPromise = initialYears.length > 0 ? fetchPlayerStats(initialYears) : Promise.resolve([]);
-  const [playerImages, teamLogos, initialData, cupAvailableYears] = await Promise.all([
+  const [playerImages, teamLogos, initialData, cupAvailableYears, internationalAvailableYears, originAvailableYears] = await Promise.all([
     playerImagesPromise,
     teamLogosPromise,
     initialDataPromise,
     cupAvailableYearsPromise,
+    internationalAvailableYearsPromise,
+    originAvailableYearsPromise,
   ]);
   const initialStatsTable =
     initialYears.length > 0
@@ -75,6 +83,8 @@ export default async function PlayersPage() {
       teamLogos={teamLogos}
       availableYears={availableYears}
       cupAvailableYears={cupAvailableYears}
+      internationalAvailableYears={internationalAvailableYears.length > 0 ? internationalAvailableYears : ["2025"]}
+      originAvailableYears={originAvailableYears.length > 0 ? originAvailableYears : ["2026"]}
       defaultYears={initialYears}
       initialCanAccessLoginSeason={canAccessLoginSeason}
       canBypassPlotGate={canBypassPlotGate}

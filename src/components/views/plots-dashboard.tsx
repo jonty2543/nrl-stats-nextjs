@@ -937,7 +937,7 @@ function findRequestedStat<T extends string>(query: string, stats: readonly T[])
 }
 
 function statUnit(stat: string) {
-  return stat === "Runs" ? "run" : stat === "Passes" ? "pass" : stat === "Receipts" ? "receipt" : stat.toLowerCase();
+  return stat === "Runs" ? "run" : stat === "Passes" ? "pass" : stat === "Receipts" ? "receipt" : stat === "Team runs" ? "team run" : stat === "Team receipts" ? "team receipt" : stat.toLowerCase();
 }
 
 function comparisonRequestParts(normalizedQuery: string) {
@@ -1166,6 +1166,8 @@ const EFFICIENCY_BASE_UNITS: Record<PlayerEfficiencyBaseMetric, string> = {
   Receipts: "receipt",
   Runs: "run",
   Passes: "pass",
+  "Team receipts": "team receipt",
+  "Team runs": "team run",
 };
 
 const TEAM_EFFICIENCY_BASE_TOTALS: Record<TeamAttackEfficiencyBaseStat, TeamAttackTotalStat> = {
@@ -1560,7 +1562,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
   const isPlayerVariance = playerSection === "Attack" && playerAttackPlot === "Variance";
   const isPlayerForm = playerSection === "Attack" && playerAttackPlot === "Form";
   const playerEfficiencyShowsVolume = isPlayerEfficiency && playerEfficiencyView === "Volume axis";
-  const playerEfficiencyUsesPer80 = playerUsesPer80 && playerEfficiencyBaseMetric !== "Minutes";
+  const playerEfficiencyUsesPer80 = playerUsesPer80 && playerEfficiencyBaseMetric !== "Minutes" && playerEfficiencyBaseMetric !== "Team receipts" && playerEfficiencyBaseMetric !== "Team runs";
   const isPlayerTeamProportion = playerAttackPlot === "Team Proportion";
   const isPlayerVsTeam = playerSection === "Attack" && playerAttackPlot === "Player vs Team";
   const isPlayerVsTeamSelected = isPlayerVsTeam && effectivePlayerVsTeamPlayer !== "All players";

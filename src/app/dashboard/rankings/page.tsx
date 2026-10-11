@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server"
 import { RankingsDashboard } from "@/components/views/rankings-dashboard"
 import { getServerProPlotAccess } from "@/lib/access/pro-access-server"
 import { isAccessibleSeason } from "@/lib/access/season-access"
-import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats } from "@/lib/supabase/queries"
+import { fetchAvailableYears, fetchPlayerImages, fetchPlayerStats, fetchTeamLogos } from "@/lib/supabase/queries"
 
 export const dynamic = "force-dynamic"
 
@@ -17,9 +17,23 @@ export default async function RankingsPage() {
         return []
       })
     : Promise.resolve([])
-  const [availableYears, cupAvailableYears] = await Promise.all([
+  const internationalAvailableYearsPromise = canBypassPlotGate
+    ? fetchAvailableYears("international").catch((error) => {
+        console.warn("Unable to load International ranking seasons.", error)
+        return ["2025"]
+      })
+    : Promise.resolve([])
+  const originAvailableYearsPromise = canBypassPlotGate
+    ? fetchAvailableYears("origin").catch((error) => {
+        console.warn("Unable to load Origin ranking seasons.", error)
+        return ["2026"]
+      })
+    : Promise.resolve([])
+  const [availableYears, cupAvailableYears, internationalAvailableYears, originAvailableYears] = await Promise.all([
     fetchAvailableYears(),
     cupAvailableYearsPromise,
+    internationalAvailableYearsPromise,
+    originAvailableYearsPromise,
   ])
 
   const unlockedYears = availableYears.filter((year) =>
@@ -30,9 +44,10 @@ export default async function RankingsPage() {
   const selectedYear = yearPool.includes(DEFAULT_RANKINGS_YEAR)
     ? DEFAULT_RANKINGS_YEAR
     : (sortedYears[0] ?? "")
-  const [playerRows, playerImages] = await Promise.all([
+  const [playerRows, playerImages, teamLogos] = await Promise.all([
     selectedYear ? fetchPlayerStats([selectedYear]) : Promise.resolve([]),
     fetchPlayerImages(),
+    fetchTeamLogos(),
   ])
 
   return (
@@ -41,9 +56,11 @@ export default async function RankingsPage() {
       playerRows={playerRows}
       teamRows={[]}
       playerImages={playerImages}
-      teamLogos={{}}
+      teamLogos={teamLogos}
       availableYears={yearPool}
       cupAvailableYears={cupAvailableYears}
+      internationalAvailableYears={internationalAvailableYears.length > 0 ? internationalAvailableYears : ["2025"]}
+      originAvailableYears={originAvailableYears.length > 0 ? originAvailableYears : ["2026"]}
       canAccessCup={canBypassPlotGate}
     />
   )

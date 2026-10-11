@@ -956,7 +956,7 @@ export function RankingsDashboard({ selectedYear, playerRows, teamRows, playerIm
       <section className="relative overflow-hidden rounded-2xl border border-nrl-border bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]" aria-busy={competitionLoading}>
         <div className="flex flex-wrap items-end gap-3 overflow-hidden border-b border-nrl-border px-4 py-3 sm:flex-nowrap sm:overflow-x-auto sm:[scrollbar-width:thin]">
           <div className="w-40 shrink-0">
-            <Select label="Primary stat" compact value={effectiveStatKey} options={activeStatOptions.map((option) => ({ value: option.key, label: option.label }))} onChange={setStatKey} />
+            <Select label="Stat 1" compact value={effectiveStatKey} options={activeStatOptions.map((option) => ({ value: option.key, label: option.label }))} onChange={setStatKey} />
           </div>
           <div className="w-40 shrink-0">
             <Select label="Per stat" compact value={effectivePerStatKey} options={[{ value: "", label: "Add per stat" }, ...activeStatOptions.map((option) => ({ value: option.key, label: option.label }))]} onChange={setPerStatKey} />

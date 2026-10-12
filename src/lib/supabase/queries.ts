@@ -3596,7 +3596,34 @@ export async function fetchBettingOddsSnapshotFromSummary(): Promise<BettingOdds
     tryscorer: mapBettingSnapshotRows(row.tryscorer, "Tryscorer"),
     generatedAt: toNullableString(row.generated_at) ?? toNullableString(row.updated_at) ?? new Date().toISOString(),
   };
-  return snapshot;
+  const [predictionRows, totalPredictionRows] = await Promise.all([
+    fetchPredictionModelRowsFromSupabase(snapshot.h2h).catch((error) => {
+      console.warn("Unable to enrich summary H2H odds with prediction rows; preserving snapshot model values.", error);
+      return [];
+    }),
+    fetchTotalPredictionRowsFromSupabase(snapshot.total).catch((error) => {
+      console.warn("Unable to enrich summary total odds with prediction rows; preserving snapshot model values.", error);
+      return [];
+    }),
+  ]);
+  const marginOverrideRows = await fetchMarginOverrideRowsFromSupabase(predictionRows).catch((error) => {
+    console.warn("Unable to fetch betting margin overrides for summary odds; using saved prediction margins.", error);
+    return [];
+  });
+  const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
+  const totalPredictionLookup = buildTotalPredictionLookup(totalPredictionRows);
+
+  return {
+    ...snapshot,
+    h2h: snapshot.h2h.map((oddsRow) => {
+      const enriched = applyPredictionModelToRow(oddsRow, predictionLookup);
+      return enriched.model == null && oddsRow.model != null ? oddsRow : enriched;
+    }),
+    total: snapshot.total.map((oddsRow) => {
+      const enriched = applyTotalPredictionModelToRow(oddsRow, totalPredictionLookup);
+      return enriched.model == null && oddsRow.model != null ? oddsRow : enriched;
+    }),
+  };
 }
 
 export async function fetchBettingOddsSnapshotFromRawTables(): Promise<BettingOddsSnapshot> {

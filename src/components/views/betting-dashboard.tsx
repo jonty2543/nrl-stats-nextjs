@@ -2033,8 +2033,7 @@ function kellyFraction(probability: number, price: number): number {
 
 function modelPercentToProbability(value: number | null): number | null {
   if (value == null || !Number.isFinite(value) || value <= 0) return null;
-  if (value <= 1) return clamp(value, 0.01, 0.99);
-  return clamp(value / 100, 0.01, 0.99);
+  return clamp(value / 100, 0, 1);
 }
 
 function bestBetSelectionMatches(

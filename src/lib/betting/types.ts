@@ -26,6 +26,7 @@ export interface BettingOddsRow {
   match: string;
   result: string;
   value: number | null;
+  /** Model probability expressed in percentage points (for example, 0.45 means 0.45%). */
   model: number | null;
   bestBookie: string | null;
   bestPrice: number | null;

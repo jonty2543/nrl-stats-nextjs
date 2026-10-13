@@ -296,7 +296,7 @@ function parseCompetition(value: string | undefined): LineupCompetition {
   if (value === "rlwc") return "rlwc"
   if (value === "nswCup" || value === "nsw-cup") return "nswCup"
   if (value === "qldCup" || value === "qld-cup") return "qldCup"
-  return "international"
+  return "rlwc"
 }
 
 function parseYear(value: string | undefined): number | null {

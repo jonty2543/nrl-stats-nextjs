@@ -292,9 +292,9 @@ const LINEUP_COMPETITION_TABLES: Record<LineupCompetition, { lineups: string; ma
   origin: { lineups: "origin_lineups", matches: "origin_matches", playerStats: "origin_player_stats" },
   nswCup: { lineups: "state_cup_player_stats", matches: "state_cup_matches", playerStats: "state_cup_player_stats" },
   qldCup: { lineups: "state_cup_player_stats", matches: "state_cup_matches", playerStats: "state_cup_player_stats" },
-  international: { lineups: "international_player_stats", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
-  pacificChampionship: { lineups: "international_player_stats", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
-  rlwc: { lineups: "international_player_stats", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
+  international: { lineups: "lineups", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
+  pacificChampionship: { lineups: "lineups", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
+  rlwc: { lineups: "lineups", matches: "international_matches", fixtures: "international_fixtures", playerStats: "international_player_stats" },
 }
 
 const STATE_CUP_COMPETITION_IDS: Partial<Record<LineupCompetition, number>> = {
@@ -306,6 +306,12 @@ const INTERNATIONAL_COMPETITION_IDS: Partial<Record<LineupCompetition, number>> 
   international: 133,
   pacificChampionship: 195,
   rlwc: 131,
+}
+
+const INTERNATIONAL_COMPETITION_MATCH_PATHS: Partial<Record<LineupCompetition, string>> = {
+  international: "internationals",
+  pacificChampionship: "pacific-championships",
+  rlwc: "rugby-league-world-cup",
 }
 
 function internationalCompetitionId(competition: LineupCompetition): number | null {
@@ -770,10 +776,9 @@ async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: b
   let start = 0
   const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
   const internationalId = internationalCompetitionId(competition)
+  const internationalMatchPath = INTERNATIONAL_COMPETITION_MATCH_PATHS[competition]
   const selectColumns = usesMatchRows(competition)
-    ? isInternationalCompetition(competition)
-      ? INTERNATIONAL_PLAYER_SELECT_COLUMNS
-      : "*"
+    ? isInternationalCompetition(competition) ? LINEUP_SELECT_BASE.join(",") : "*"
     : includeFantasyProjections
     ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
@@ -796,7 +801,9 @@ async function fetchAllLineupRows(fromDate: string, includeFantasyProjections: b
     } else {
       query = query.gte("match_date", fromDate)
     }
-    if (internationalId != null) query = query.eq("competition_id", internationalId)
+    if (internationalId != null && internationalMatchPath) {
+      query = query.ilike("match_url", `%/${internationalMatchPath}/%`)
+    }
 
     const { data, error } = await query
       .range(start, end)
@@ -817,8 +824,9 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
   const rows: RawRow[] = []
   const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
   const internationalId = internationalCompetitionId(competition)
+  const internationalMatchPath = INTERNATIONAL_COMPETITION_MATCH_PATHS[competition]
   const selectColumns = usesMatchRows(competition)
-    ? isInternationalCompetition(competition) ? INTERNATIONAL_PLAYER_SELECT_COLUMNS : "*"
+    ? isInternationalCompetition(competition) ? LINEUP_SELECT_BASE.join(",") : "*"
     : includeFantasyProjections
     ? [...LINEUP_SELECT_BASE, "model_projection"].join(",")
     : LINEUP_SELECT_BASE.join(",")
@@ -874,7 +882,9 @@ async function fetchLineupRowsForRound(round: string, year: number, includeFanta
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
     }
-    if (internationalId != null) query = query.eq("competition_id", internationalId)
+    if (internationalId != null && internationalMatchPath) {
+      query = query.ilike("match_url", `%/${internationalMatchPath}/%`)
+    }
 
     const { data, error } = await query
       .range(start, end)
@@ -1095,6 +1105,7 @@ async function fetchLineupRoundOptionRows(year: number, competition: LineupCompe
   const table = LINEUP_COMPETITION_TABLES[competition].lineups
   const stateCupCompetitionId = STATE_CUP_COMPETITION_IDS[competition]
   const internationalId = internationalCompetitionId(competition)
+  const internationalMatchPath = INTERNATIONAL_COMPETITION_MATCH_PATHS[competition]
   const rows: RawRow[] = []
 
   for (let start = 0; ; start += PAGE_SIZE) {
@@ -1114,7 +1125,9 @@ async function fetchLineupRoundOptionRows(year: number, competition: LineupCompe
         .gte("match_date", `${year}-01-01`)
         .lt("match_date", `${year + 1}-01-01`)
     }
-    if (internationalId != null) query = query.eq("competition_id", internationalId)
+    if (internationalId != null && internationalMatchPath) {
+      query = query.ilike("match_url", `%/${internationalMatchPath}/%`)
+    }
 
     const { data, error } = await withTimeout<{ data: RawRow[] | null; error: unknown | null }>(
       query.range(start, start + PAGE_SIZE - 1) as unknown as PromiseLike<{ data: RawRow[] | null; error: unknown | null }>,
@@ -2300,20 +2313,15 @@ export async function fetchLineupsForRound({
       includeFantasyProjections
         ? withTimeout(fetchProjectionOverrides(), new Map<string, number>(), LINEUPS_FETCH_TIMEOUT_MS, "Supabase fetch lineup projection overrides")
         : Promise.resolve(new Map<string, number>()),
-      international
-        ? Promise.resolve({
-            fantasyTotals: new Map<string, number>(),
-            playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
-          })
-        : withTimeout(
-            fetchHistoricalPlayerStatsForRound(round, year, competition),
-            {
-              fantasyTotals: new Map<string, number>(),
-              playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
-            },
-            fetchTimeoutMs,
-            `Supabase fetch historical player stats for ${round}`
-          ),
+      withTimeout(
+        fetchHistoricalPlayerStatsForRound(round, year, competition),
+        {
+          fantasyTotals: new Map<string, number>(),
+          playerStatsByMatchKey: new Map<string, Record<string, LineupLivePlayerStats>>(),
+        },
+        fetchTimeoutMs,
+        `Supabase fetch historical player stats for ${round}`
+      ),
       international
         ? Promise.resolve([])
         : withTimeout(fetchRecentMatchResults(year, competition), [], fetchTimeoutMs, `Supabase fetch recent match results for ${year}`),
@@ -2322,9 +2330,7 @@ export async function fetchLineupsForRound({
 
     if (error) console.warn(`Unable to fetch nrl.${table} round ${round}; using lineup/draw fallback where available.`, error)
 
-    const historicalPlayerStats = international
-      ? buildHistoricalPlayerStats(lineupRows)
-      : fetchedHistoricalPlayerStats
+    const historicalPlayerStats = fetchedHistoricalPlayerStats
     const lineupMatches = buildMatchesFromLineupRows(lineupRows, overrides, projectionOverrides, includeFantasyProjections)
     const lineupsByKey = new Map<string, LineupMatch>()
     for (const match of lineupMatches) {

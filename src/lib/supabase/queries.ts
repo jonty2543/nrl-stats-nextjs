@@ -2700,7 +2700,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   }
 }
 
-export async function fetchFantasyPlayerStatsForYears(
+async function fetchFantasyPlayerStatsForYearsUncached(
   fantasyName: string,
   years?: string[]
 ): Promise<PlayerStat[]> {
@@ -2748,7 +2748,25 @@ export async function fetchFantasyPlayerStatsForYears(
   }
 }
 
-export async function fetchPlayerStatsForPlayerName(
+export async function fetchFantasyPlayerStatsForYears(
+  fantasyName: string,
+  years?: string[]
+): Promise<PlayerStat[]> {
+  const name = fantasyName.trim();
+  if (!name) return [];
+  const normalizedYears = years?.filter(Boolean).sort();
+  if (process.env.NODE_ENV !== "production") {
+    return fetchFantasyPlayerStatsForYearsUncached(name, normalizedYears);
+  }
+
+  return unstable_cache(
+    async () => fetchFantasyPlayerStatsForYearsUncached(name, normalizedYears),
+    ["fantasy-player-stats-v1", normaliseNameForMatch(name), normalizedYears?.join(",") ?? "all"],
+    { revalidate: LIVE_SEASON_STATS_REVALIDATE_SECONDS }
+  )();
+}
+
+async function fetchPlayerStatsForPlayerNameUncached(
   playerName: string,
   years?: string[],
   competition: StatsCompetition = "nrl"
@@ -2776,6 +2794,25 @@ export async function fetchPlayerStatsForPlayerName(
   return filterPlayerStatsRowsByYears(serverCache.rows, normalizedYears).filter(
     (row) => normaliseNameForMatch(row.Name) === normalizedName
   );
+}
+
+export async function fetchPlayerStatsForPlayerName(
+  playerName: string,
+  years?: string[],
+  competition: StatsCompetition = "nrl"
+): Promise<PlayerStat[]> {
+  const name = playerName.trim();
+  if (!name) return [];
+  const normalizedYears = years?.filter(Boolean).sort();
+  if (process.env.NODE_ENV !== "production") {
+    return fetchPlayerStatsForPlayerNameUncached(name, normalizedYears, competition);
+  }
+
+  return unstable_cache(
+    async () => fetchPlayerStatsForPlayerNameUncached(name, normalizedYears, competition),
+    ["player-stats-by-name-v1", competition, normaliseNameForMatch(name), normalizedYears?.join(",") ?? "all"],
+    { revalidate: LIVE_SEASON_STATS_REVALIDATE_SECONDS }
+  )();
 }
 
 export async function fetchFantasyPlayerStatsAllYears(

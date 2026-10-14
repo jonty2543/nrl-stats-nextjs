@@ -2700,6 +2700,11 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
             hideLabel
             fullWidth
             className="w-full"
+            logoOverrides={{
+              cup: ["/images/competitions/nsw-cup.png"],
+              origin: ["/images/competitions/origin-transparent.png"],
+              international: ["/images/competitions/international.png"],
+            }}
           />
         </div>
         <div className="min-w-0 sm:col-start-1 sm:row-start-2">

@@ -14,9 +14,10 @@ interface CompetitionToggleProps<T extends CompetitionToggleValue> {
   fullWidth?: boolean;
   size?: "default" | "large";
   className?: string;
+  logoOverrides?: Partial<Record<CompetitionToggleValue, string[]>>;
 }
 
-export function CompetitionToggle<T extends CompetitionToggleValue>({ value, onChange, canAccessCup, showInternational = false, showOrigin = false, hideLabel = false, fullWidth = false, size = "default", className = "" }: CompetitionToggleProps<T>) {
+export function CompetitionToggle<T extends CompetitionToggleValue>({ value, onChange, canAccessCup, showInternational = false, showOrigin = false, hideLabel = false, fullWidth = false, size = "default", className = "", logoOverrides }: CompetitionToggleProps<T>) {
   const large = size === "large";
   const options = (["nrl", "cup", ...(showOrigin ? ["origin" as const] : []), ...(showInternational ? ["international" as const] : [])]) as T[];
   const compactTabs = options.length === 4;
@@ -50,14 +51,14 @@ export function CompetitionToggle<T extends CompetitionToggleValue>({ value, onC
             >
               {active ? <span aria-hidden="true" className="pointer-events-none absolute inset-x-[10%] -bottom-[3px] h-[3px] bg-nrl-accent" /> : null}
               <span className="inline-flex shrink-0 items-center gap-0.5" aria-hidden="true">
-                {(option === "nrl"
+                {(logoOverrides?.[option] ?? (option === "nrl"
                   ? ["/images/competitions/nrl.png"]
                   : option === "cup"
                     ? ["/images/competitions/nsw-cup.png", "/images/competitions/qld-cup.png"]
                     : option === "origin"
                       ? ["/nsw.png", "/qld.png"]
                     : ["/images/international-logos/new-zealand.png", "/images/international-logos/australia.svg"]
-                ).map((logo) => (
+                )).map((logo) => (
                   <Image
                     key={logo}
                     src={logo}

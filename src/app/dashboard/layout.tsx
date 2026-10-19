@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { AppHeader } from "@/components/layout/app-header";
 import { FeedbackPrompt } from "@/components/feedback/feedback-prompt";
+import "./dashboard-shell.css";
 
 export default async function DashboardLayout({
   children,
@@ -10,13 +11,12 @@ export default async function DashboardLayout({
   const { userId } = await auth();
 
   return (
-    <div className="relative overflow-hidden text-nrl-text">
+    <div className="shortside-dashboard relative min-h-screen overflow-hidden text-nrl-text">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col pb-16">
-        <AppHeader sticky showBillingNav />
-
-        <main className="min-h-0 flex-1 px-4 pb-5 pt-2 sm:px-6 sm:pb-6 sm:pt-3 lg:px-8 lg:pb-8 lg:pt-4">
+      <AppHeader sticky showBillingNav />
+      <div className="relative mx-auto flex min-h-[calc(100vh-84px)] w-full max-w-[1600px] flex-col pb-16">
+        <main className="min-h-0 flex-1 px-4 pb-5 pt-5 sm:px-6 sm:pb-6 sm:pt-7 lg:px-8 lg:pb-8 lg:pt-9">
           {children}
         </main>
         {userId ? <FeedbackPrompt /> : null}

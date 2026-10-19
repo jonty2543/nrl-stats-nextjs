@@ -2,6 +2,7 @@
 
 import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import type { PlayerStat } from "@/lib/data/types";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
@@ -57,7 +58,8 @@ interface PlayerComparisonProps {
 
 type PlayerStatsTableSortDirection = "asc" | "desc";
 type PlayerStatsTableValueMode = "Average" | "Total";
-const PLAYER_STATS_TABLE_ENABLED = false;
+const PLAYER_STATS_TABLE_ENABLED = true;
+type PlayersView = "stats" | "comparison";
 type PlayerStatsTableGroupBy = "Player" | "Year + Player" | "Team + Player" | "Position + Player";
 type PlayerStatsTableStatKey = (typeof PLAYER_STATS)[number];
 type PlayerStatsTableSortKey =
@@ -921,6 +923,8 @@ export function PlayerComparison({
   canBypassPlotGate = false,
   canAccessCup = false,
 }: PlayerComparisonProps) {
+  const router = useRouter();
+  const [playersView, setPlayersView] = useState<PlayersView>("stats");
   type TeammateMode = "both" | "with" | "without";
   type PercentileScope = "Position" | "All Players";
   const { isLoaded: isAuthLoaded, userId } = useAuth();
@@ -964,7 +968,6 @@ export function PlayerComparison({
   const [statsTableMinGames, setStatsTableMinGames] = useState("1+");
   const [statsTableGroupBy, setStatsTableGroupBy] = useState<PlayerStatsTableGroupBy>("Player");
   const [statsTableSearch, setStatsTableSearch] = useState("");
-  const [statsTableFiltersOpen, setStatsTableFiltersOpen] = useState(false);
   const [statsTableAggregateRows, setStatsTableAggregateRows] = useState<PlayerStatsTableRow[]>(
     () => (initialStatsTable?.rows ?? []).map((row) => ({ ...row, imageRow: null }))
   );
@@ -2168,14 +2171,115 @@ export function PlayerComparison({
     [chartPanels]
   );
 
+  const clearPlayerStatsFilters = useCallback(() => {
+    setStatsTableSearch("");
+    setStatsTableTeam("All Teams");
+    setStatsTablePosition("All Positions");
+    setStatsTableMinGames("1+");
+    setStatsTableGroupBy("Player");
+    setStatsTableValueMode("Average");
+    const defaultYear = unlockedYears.includes(DEFAULT_STATS_TABLE_YEAR)
+      ? DEFAULT_STATS_TABLE_YEAR
+      : unlockedYears[0];
+    if (defaultYear) void handleStatsTableYearsChange([defaultYear]);
+  }, [handleStatsTableYearsChange, unlockedYears]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-3">
-        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} showInternational showOrigin hideLabel fullWidth />
+        <CompetitionToggle
+          value={competition}
+          onChange={(value) => void handleCompetitionChange(value)}
+          canAccessCup={hasClientCupAccess}
+          showInternational
+          showOrigin
+          hideLabel
+          fullWidth
+          logoOverrides={{
+            cup: ["/images/competitions/nsw-cup.png"],
+            origin: ["/images/competitions/origin-transparent.png"],
+            international: ["/images/competitions/international.png"],
+          }}
+        />
       </div>
       {competition === "international" ? (
         <div className="w-40"><Select label="Competition" value={internationalCompetition} options={INTERNATIONAL_COMPETITIONS.map((option) => ({ value: option.value, label: option.label }))} onChange={setInternationalCompetition} /></div>
       ) : null}
+      <header className="border-b border-nrl-border pb-5 pt-4 sm:pb-7 sm:pt-7">
+        <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-nrl-accent">
+          Player database
+        </div>
+        <h1 className="mt-2 text-5xl leading-none text-nrl-text sm:text-6xl">
+          Player Stats
+        </h1>
+      </header>
+
+      {playersView === "stats" ? (
+        <section className="border-b border-nrl-border pb-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="min-w-0">
+              <span className="mb-1 block text-[8px] font-semibold text-nrl-muted">Search player</span>
+              <input
+                type="search"
+                value={statsTableSearch}
+                onChange={(event) => setStatsTableSearch(event.target.value)}
+                placeholder="Type a player name..."
+                className="h-11 w-full border border-nrl-border bg-nrl-panel-2 px-3 text-sm text-nrl-text outline-none placeholder:text-nrl-muted/70 focus:border-nrl-accent"
+              />
+            </label>
+            <Select
+              label="Season"
+              value={statsTableYears[0] ?? activeAvailableYears[0] ?? ""}
+              options={activeAvailableYears}
+              onChange={(value) => void handleStatsTableYearsChange([value])}
+            />
+            <Select
+              label="Team"
+              value={statsTableTeam}
+              options={statsTableTeamOptions}
+              onChange={setStatsTableTeam}
+            />
+            <Select
+              label="Position"
+              value={statsTablePosition}
+              options={statsTablePositionOptions}
+              onChange={setStatsTablePosition}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={clearPlayerStatsFilters}
+            className="mt-3 h-11 w-full border border-nrl-accent/45 bg-nrl-accent/10 px-5 text-[10px] font-black uppercase tracking-[0.12em] text-nrl-accent transition-colors hover:bg-nrl-accent hover:text-nrl-bg sm:w-64"
+          >
+            Clear filters
+          </button>
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 font-mono text-[9px] uppercase tracking-[0.13em] text-nrl-muted">
+            <span>{sortedStatsTableRows.length} players</span>
+            <span>Click a heading to sort · click a player to open their profile</span>
+          </div>
+        </section>
+      ) : null}
+
+      <div className="grid grid-cols-2 border border-nrl-border" role="tablist" aria-label="Players view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={playersView === "stats"}
+          onClick={() => setPlayersView("stats")}
+          className={`h-11 border-r border-nrl-border text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${playersView === "stats" ? "bg-nrl-accent text-nrl-bg" : "bg-nrl-panel text-nrl-muted hover:text-nrl-text"}`}
+        >
+          Player Stats
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={playersView === "comparison"}
+          onClick={() => setPlayersView("comparison")}
+          className={`h-11 text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${playersView === "comparison" ? "bg-nrl-accent text-nrl-bg" : "bg-nrl-panel text-nrl-muted hover:text-nrl-text"}`}
+        >
+          Player Comparison
+        </button>
+      </div>
       {loading && (
         <div className="flex justify-center py-6 md:py-8">
           <span
@@ -2190,7 +2294,7 @@ export function PlayerComparison({
           <div>No data available for the selected season.</div>
         </div>
       )}
-      {PLAYER_STATS_TABLE_ENABLED && allData.length > 0 && (
+      {playersView === "stats" && PLAYER_STATS_TABLE_ENABLED && allData.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
           <div className="flex min-h-[44px] items-center justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-5 py-1.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
@@ -2207,77 +2311,16 @@ export function PlayerComparison({
                   onChange={(value) => setStatsTableGroupBy(value as PlayerStatsTableGroupBy)}
                 />
               </div>
-              <input
-                type="search"
-                value={statsTableSearch}
-                onChange={(event) => setStatsTableSearch(event.target.value)}
-                placeholder="Search players"
-                className="h-9 min-w-0 max-w-xs flex-1 rounded-md border border-nrl-border bg-nrl-panel px-3 text-sm font-semibold text-nrl-text outline-none placeholder:text-nrl-muted focus:border-nrl-accent"
-              />
+              <div className="w-28 shrink-0">
+                <Select
+                  label="Min games"
+                  value={statsTableMinGames}
+                  options={[...STATS_TABLE_MIN_GAMES_OPTIONS]}
+                  onChange={setStatsTableMinGames}
+                />
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setStatsTableFiltersOpen((open) => !open)}
-              className={`relative inline-grid h-9 w-9 shrink-0 place-items-center rounded-full border transition-colors ${
-                statsTableFiltersOpen ||
-                statsTablePosition !== "All Positions" ||
-                statsTableTeam !== "All Teams" ||
-                statsTableMinGames !== "1+" ||
-                statsTableGroupBy !== "Player" ||
-                statsTableYears.length !== 1 ||
-                statsTableYears[0] !== DEFAULT_STATS_TABLE_YEAR
-                  ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
-                  : "border-nrl-border bg-nrl-panel text-nrl-muted hover:border-nrl-accent hover:text-nrl-accent"
-              }`}
-              aria-expanded={statsTableFiltersOpen}
-              aria-label="Filters"
-            >
-              <span className="flex flex-col gap-0.5" aria-hidden="true">
-                <span className="block h-0.5 w-5 rounded-full bg-current" />
-                <span className="block h-0.5 w-5 rounded-full bg-current" />
-                <span className="block h-0.5 w-5 rounded-full bg-current" />
-              </span>
-            </button>
           </div>
-          {statsTableFiltersOpen ? (
-            <div className="grid gap-3 border-b border-nrl-border bg-nrl-accent/10 px-3 py-3 md:grid-cols-[minmax(220px,320px)_150px_150px_130px]">
-              <FilterBar
-                years={activeAvailableYears}
-                selectedYears={statsTableYears}
-                onYearsChange={handleStatsTableYearsChange}
-                finalsMode="Yes"
-                onFinalsModeChange={() => {}}
-                minutesThreshold={0}
-                onMinutesThresholdChange={() => {}}
-                minutesMode="All"
-                onMinutesModeChange={() => {}}
-                showPosition={false}
-                showMinutes={false}
-                showPresets={false}
-                showFinals={false}
-                embedded
-                showYear
-              />
-              <Select
-                label="Position"
-                value={statsTablePosition}
-                options={statsTablePositionOptions}
-                onChange={setStatsTablePosition}
-              />
-              <Select
-                label="Team"
-                value={statsTableTeam}
-                options={statsTableTeamOptions}
-                onChange={setStatsTableTeam}
-              />
-              <Select
-                label="Min Games"
-                value={statsTableMinGames}
-                options={[...STATS_TABLE_MIN_GAMES_OPTIONS]}
-                onChange={setStatsTableMinGames}
-              />
-            </div>
-          ) : null}
           <div className="relative h-[396px] overflow-auto pb-3">
             {!statsTableRowsLoading && sortedStatsTableRows.length === 0 ? (
               <div className="pointer-events-none absolute left-0 right-0 top-12 z-[7] flex h-24 items-center justify-center px-4 text-center text-sm font-black text-nrl-accent sm:top-14">
@@ -2349,8 +2392,25 @@ export function PlayerComparison({
                       const pinnedGroupLabel = statsTablePinnedGroupLabel(row, statsTableGroupBy);
                       const teamLogoUrl = resolveTeamLogoUrl(row.team, teamLogos);
                       const showTeamGroupLogoOnly = statsTableGroupBy === "Team + Player" && pinnedGroupLabel;
+                      const profileHref = `/dashboard/players/${playerSlug(row.name)}${competition !== "nrl" ? `?competition=${competition}` : ""}`;
                       return (
-                      <tr key={row.key} className="h-16 border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60 sm:h-[4.5rem]">
+                      <tr
+                        key={row.key}
+                        role="link"
+                        tabIndex={0}
+                        aria-label={`Open ${row.name} profile`}
+                        onClick={(event) => {
+                          if ((event.target as HTMLElement).closest("a, button, input, select")) return;
+                          router.push(profileHref);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            router.push(profileHref);
+                          }
+                        }}
+                        className="h-16 cursor-pointer border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-nrl-accent sm:h-[4.5rem]"
+                      >
                         <td
                           className={`sticky left-0 z-[3] border-r border-nrl-border/70 bg-nrl-panel px-1.5 py-1 sm:px-2 ${
                             pinnedGroupLabel
@@ -2385,7 +2445,7 @@ export function PlayerComparison({
                         </td>
                         <td className={`w-44 min-w-44 max-w-44 px-2 py-1.5 text-sm font-black sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem] sm:px-2.5 sm:text-sm ${statsTableSort.column === "name" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "bg-nrl-panel text-nrl-text"}`}>
                         <Link
-                          href={`/dashboard/players/${playerSlug(row.name)}${competition !== "nrl" ? `?competition=${competition}` : ""}`}
+                          href={profileHref}
                           className="block min-w-0 truncate transition-colors hover:text-nrl-accent"
                           title={row.name}
                         >
@@ -2435,6 +2495,8 @@ export function PlayerComparison({
           </div>
         </section>
       )}
+      {playersView === "comparison" ? (
+        <>
       <div className="rounded-lg border border-nrl-border bg-nrl-panel p-4">
         <div className="mb-4 text-xs font-bold uppercase tracking-wide text-nrl-accent">Player Comparison</div>
         <div className="grid grid-cols-2 gap-4">
@@ -2685,6 +2747,8 @@ export function PlayerComparison({
           <ChartPanelGrid panels={historyChartPanels} unlockAll={hasClientProPlotAccess} />
         </div>
       )}
+        </>
+      ) : null}
     </div>
   );
 }

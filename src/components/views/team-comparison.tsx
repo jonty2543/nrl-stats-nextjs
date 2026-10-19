@@ -789,7 +789,20 @@ export function TeamComparison({
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-3">
-        <CompetitionToggle value={competition} onChange={(value) => void handleCompetitionChange(value)} canAccessCup={hasClientCupAccess} showInternational showOrigin hideLabel fullWidth />
+        <CompetitionToggle
+          value={competition}
+          onChange={(value) => void handleCompetitionChange(value)}
+          canAccessCup={hasClientCupAccess}
+          showInternational
+          showOrigin
+          hideLabel
+          fullWidth
+          logoOverrides={{
+            cup: ["/images/competitions/nsw-cup.png"],
+            origin: ["/images/competitions/origin-transparent.png"],
+            international: ["/images/competitions/international.png"],
+          }}
+        />
       </div>
       {competition === "international" ? (
         <div className="w-40"><Select label="Competition" value={internationalCompetition} options={INTERNATIONAL_COMPETITIONS.map((option) => ({ value: option.value, label: option.label }))} onChange={setInternationalCompetition} /></div>

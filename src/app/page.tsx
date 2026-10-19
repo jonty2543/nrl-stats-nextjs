@@ -1,195 +1,143 @@
+import Image from "next/image"
 import Link from "next/link"
 import type { CSSProperties } from "react"
-import { LandingHeroScrollShell } from "@/components/views/landing-hero-scroll-shell"
-import { LandingPlayerImage } from "@/components/views/landing-player-image"
 import { AppHeader } from "@/components/layout/app-header"
+import { LandingHeroScrollShell } from "@/components/views/landing-hero-scroll-shell"
+import styles from "./landing-page.module.css"
 
 export const dynamic = "force-static"
 
-function LiveBroadcastIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    >
-      <circle cx="10" cy="10" r="1.7" fill="currentColor" stroke="none" />
-      <path d="M6.7 6.8a4.7 4.7 0 0 0 0 6.4" />
-      <path d="M13.3 6.8a4.7 4.7 0 0 1 0 6.4" />
-      <path d="M4.1 4.4a8.1 8.1 0 0 0 0 11.2" />
-      <path d="M15.9 4.4a8.1 8.1 0 0 1 0 11.2" />
-    </svg>
-  )
-}
+const features = [
+  { number: "01", eyebrow: "Betting", title: "See where the market might have it wrong", description: "Compare bookie prices against model predictions across H2H, line, total and tryscorer markets, then calculate your stake and track every bet", href: "/dashboard/betting", graphic: "board" },
+  { number: "02", eyebrow: "Stats", title: "Know who's in form — and why", description: "See who is getting through the work, breaking the line and producing when it matters, then compare players, teams, recent form, rankings and archetypes", href: "/dashboard/players", graphic: "bars" },
+  { number: "03", eyebrow: "Fantasy", title: "Make the trade with the full picture", description: "Check price, breakeven, projection, recent form and game logs before you buy, hold or sell, with five-star trade ratings bringing it all together", href: "/dashboard/fantasy", graphic: "signal" },
+  { number: "04", eyebrow: "Matches", title: "Read the team sheet before kickoff", description: "Once teams are named, see who lines up left, middle and right, where each side scores and concedes, and how the matchup shapes up", href: "/dashboard/lineups", graphic: "field" },
+]
 
-function SectionEyebrow({ children }: { children: React.ReactNode }) {
-  return <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">{children}</div>
-}
+const plans = [
+  { name: "Free", price: "$0", suffix: "", description: "Get around Short Side and see what it can do", features: ["Core app access", "Standard dashboards", "Current free stats access"], href: "/sign-up", cta: "Create free account" },
+  { name: "Pro", price: "$5", suffix: "/month", description: "For fantasy coaches and fans who love the numbers", features: ["Fantasy projections and breakevens", "All Fantasy and Stats plots", "Trade ratings and advanced models"], href: "/dashboard/billing", cta: "Choose Pro", featured: true },
+  { name: "Premium", price: "$40", suffix: "/month", description: "For punters who want the full picture before kickoff", features: ["Everything in Pro", "H2H, line, total and tryscorer models", "Bet tracker and full matchup insights"], href: "/dashboard/billing", cta: "Choose Premium" },
+]
 
-function FeatureSection({
-  eyebrow,
-  title,
-  description,
-  bullets,
-  ctaHref,
-  ctaLabel,
-  live = false,
-  children,
-}: {
-  eyebrow: string
-  title: string
-  description: string
-  bullets: string[]
-  ctaHref: string
-  ctaLabel: string
-  live?: boolean
-  children?: React.ReactNode
-}) {
-  return (
-    <section
-      data-landing-feature
-      style={{
-        "--feature-accent": ({
-          Betting: "#6ee7b7",
-          Stats: "#7dd3fc",
-          Fantasy: "#c4b5fd",
-          Matches: "#5eead4",
-        } as Record<string, string>)[eyebrow] ?? "#6ee7b7",
-      } as CSSProperties}
-      className="flex h-full flex-col overflow-hidden rounded-lg border border-white/8 bg-white/[0.02] p-5 sm:p-7 lg:p-8"
-    >
-      <div className="flex min-w-0 flex-1 flex-col px-1 sm:px-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <SectionEyebrow>{eyebrow}</SectionEyebrow>
-          {live ? (
-            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/18 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
-              <LiveBroadcastIcon />
-              Live
-            </span>
-          ) : null}
-        </div>
-        <h3 className="mt-3 text-xl font-bold text-white sm:text-2xl">{title}</h3>
-        <div className="mt-4 grid gap-5">
-          <p className="max-w-2xl text-sm leading-6 text-white/58 sm:leading-7">{description}</p>
-          <div className="grid gap-x-5 gap-y-2 md:grid-cols-2">
-            {bullets.map((bullet) => (
-              <div key={bullet} className="flex min-w-0 items-start gap-2 text-sm text-white/78">
-                <span className="mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full bg-nrl-accent" />
-                <span className="min-w-0">{bullet}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <Link
-          href={ctaHref}
-          className="mt-5 inline-flex w-fit items-center gap-2 rounded-full border border-white/12 bg-white/5 px-4 py-2 text-sm font-semibold text-white/85 transition-colors hover:border-white/22 hover:text-white sm:mt-6 lg:mt-auto lg:translate-y-3"
-        >
-          {ctaLabel}
-          <span aria-hidden="true">→</span>
-        </Link>
-      </div>
-      {children ? <div className="h-full min-w-0 px-1 sm:px-2">{children}</div> : null}
-    </section>
+function FeatureGraphic({ type }: { type: string }) {
+  if (type === "board") return (
+    <div className={styles.miniBoard} aria-hidden="true">
+      <div className={styles.miniBoardTop}><span>ROUND MATCHUP</span><span>● LIVE MODEL</span></div>
+      <div className={styles.miniTeams}><strong>HOME</strong><span>V</span><strong>AWAY</strong></div>
+      <div className={styles.miniStats}><span><i>EDGE</i><b>+4.5</b></span><span><i>FORM</i><b>72</b></span><span><i>VALUE</i><b>63%</b></span></div>
+    </div>
   )
+  if (type === "bars") {
+    const heights = [34, 47, 42, 61, 75, 68, 91]
+    return <div className={styles.trendBars} aria-hidden="true">{heights.map((height, index) => <i key={index} style={{ "--bar-height": `${height}%` } as CSSProperties} />)}</div>
+  }
+  if (type === "field") return <div className={styles.fieldGraphic} aria-hidden="true"><span /><span /><span /><b>R</b><b>M</b><b>L</b></div>
+  return <div className={styles.signalGraphic} aria-hidden="true"><span /><span /><span /><b>5★</b></div>
 }
 
 export default function Home() {
   return (
-    <div className="relative overflow-x-clip text-nrl-text">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+    <div className={styles.page}>
+      <div className={styles.noise} aria-hidden="true" />
+      <AppHeader sticky showBillingNav />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-16 sm:px-6 lg:px-8">
-        <AppHeader sticky showBillingNav className="-mx-4 sm:-mx-6 lg:-mx-8" />
-
+      <main>
         <LandingHeroScrollShell>
-          <section className="-mx-4 grid gap-6 px-4 pb-0 pt-8 sm:-mx-6 sm:gap-8 sm:px-6 sm:pb-12 sm:pt-10 lg:-mx-8 lg:mt-6 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:px-8 lg:pb-0 lg:pt-14">
-            <div data-landing-reveal className="max-w-2xl lg:pb-10">
-              <div className="inline-flex items-center rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
-                NRL Analysis Platform
+          <section className={styles.hero}>
+            <div className={styles.heroCopy} data-landing-reveal>
+              <h1>Smarter Analysis for<br /><em>Rugby League</em></h1>
+              <p className={styles.heroLede}>The stats, form and matchup context behind every round — for fans who want to know why, not just what happened</p>
+              <div className={styles.heroActions}>
+                <Link href="/sign-up" className={styles.primaryButton}>Create free account <span>↗</span></Link>
+                <a href="#tools" className={styles.textLink}>See every tool <span>↓</span></a>
               </div>
-              <h1 className="mt-5 pb-2 text-[2.85rem] font-black leading-[0.98] tracking-tight text-white sm:text-6xl">
-                Smarter Analysis for
-                {" "}
-                <span className="bg-[linear-gradient(135deg,#ffffff_0%,#ae94ff_44%,#53ffd0_100%)] bg-clip-text text-transparent">
-                  Rugby League
-                </span>
-              </h1>
-              <p className="mt-4 max-w-xl text-sm leading-6 text-white/62 sm:text-base sm:leading-7">
-                Short Side combines the tools every fantasy player and bettor needs to see the game from a data driven perspective.
-              </p>
-
+              <p className={styles.ctaNote}>Start on the Free plan, then upgrade when you want deeper stats, fantasy or betting tools</p>
+              <div className={styles.heroProof} aria-label="Product benefits">
+                <div><strong>$0</strong><span>Free plan</span></div><div><strong>17</strong><span>NRL clubs covered</span></div><div><strong>4</strong><span>Core toolkits</span></div>
+              </div>
             </div>
 
-            <LandingPlayerImage />
+            <div className={styles.heroVisual} data-landing-reveal>
+              <div className={styles.heroImageWrap}><Image src="/nrl_players.jpg" alt="NRL players on the field" fill priority sizes="(min-width: 1024px) 58vw, 100vw" className={styles.heroImage} /></div>
+              <div className={styles.fieldLines} aria-hidden="true" />
+              <Link className={styles.floatingBoard} href="#tools">
+                <span>Short Side NRL</span>
+                <strong>4 toolkits</strong>
+                <small>Betting · stats · fantasy · matches</small>
+                <b>See every tool ↗</b>
+              </Link>
+            </div>
+            <div className={styles.scrollNote} aria-hidden="true"><span /> Scroll to read the game</div>
           </section>
 
+          <div className={styles.ticker} aria-label="Short Side NRL principles"><div>
+              {["Form matters", "Win the middle", "Know the role", "Read the matchup", "Every carry counts", "Form matters"].map((item, index) => <span key={`${item}-${index}`}>{item} <i>◆</i></span>)}
+          </div></div>
 
-        <section className="space-y-6 border-t border-white/8 px-4 py-10 sm:px-6 lg:px-8">
-          <div className="px-1 sm:px-2">
-            <SectionEyebrow>Built For Weekly Decisions</SectionEyebrow>
-            <h2 className="mt-2 text-2xl font-bold text-white">What does Short Side offer?</h2>
-          </div>
+          <section className={styles.manifesto} id="edge">
+            <div className={styles.sectionIndex}>01 — THE EDGE</div>
+            <div className={styles.manifestoCopy} data-landing-reveal>
+              <p className={styles.kicker}>The footy behind the numbers</p>
+              <h2>Stats mean more<br />when you know the <em>context</em></h2>
+              <p>A stat never tells the whole story on its own, so Short Side brings form, role, matchups and market data together to show who is playing well, why it is happening and whether it can hold up</p>
+            </div>
+            <div className={styles.orbitGraphic} data-landing-reveal aria-hidden="true">
+              <Image src="/logo-mark.svg" alt="" width={90} height={90} />
+              <span className={styles.orbit}><i>FORM</i></span><span className={`${styles.orbit} ${styles.orbitTwo}`}><i>MATCHUP</i></span><span className={`${styles.orbit} ${styles.orbitThree}`}><i>VALUE</i></span>
+            </div>
+          </section>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            {[
-              {
-                eyebrow: "Betting",
-                title: "Best bets, model edge, odds comparison, and tracker tools",
-                description: "Betting uses our Machine Learning models along with market context to find the best bets across H2H, Line, Margin, Total and Tryscorer markets",
-                bullets: ["Today's Best Bets", "Tryscorer odds and player form", "Odds comparison across 5 bookmakers", "Personal bet tracker and staking calculator"],
-                ctaHref: "/dashboard/betting",
-                ctaLabel: "Betting",
-              },
-              {
-                eyebrow: "Stats",
-                title: "Player rankings, Team rankings, Player archetypes",
-                description: "Use the stats section to compare players and teams directly, inspect plot comparisons, profile archetypes, and track player and team rankings across the season.",
-                bullets: ["Player archetype profiles", "Player comparison and filtered charts", "Percentile ranks and recent form", "Player and team rankings"],
-                ctaHref: "/dashboard/players",
-                ctaLabel: "Stats",
-              },
-              {
-                eyebrow: "Fantasy",
-                title: "See top movers, player game logs and more",
-                description: "Use Fantasy to see player stats, info and game logs, and upgrade to pro to see projections, breakevens, and our unique Trade Ratings",
-                bullets: ["Five-star trade rating system", "Full game logs and filters", "Projections, breakevens, plots", "Draft / H2H odds tools"],
-                ctaHref: "/dashboard/fantasy",
-                ctaLabel: "Fantasy",
-              },
-              {
-                eyebrow: "Matches",
-                title: "Team lists with lane insights, matchup history, and try scorer prices",
-                description: "Use Matches after teams are named to check who has been named, compare left, middle, and right scoring lanes, and check the AI generated match insights",
-                bullets: ["Interactive field view", "Left / middle / right insights", "Scored vs conceded lane chart", "AI Generated match insights"],
-                ctaHref: "/dashboard/lineups",
-                ctaLabel: "Matches",
-              },
-              /* Archived: restore this card when NRL AI is ready to return.
-              {
-                eyebrow: "NRL AI",
-                title: "A personal AI that knows every NRL stat at your fingertips",
-                description: "Ask NRL AI for rankings, player trends, betting context, and follow-up questions across our vast NRL dataset.",
-                bullets: ["Player and team stat queries", "Fantasy screenshot analysis", "Follow-up questions in context", "Betting market summaries"],
-                ctaHref: "/dashboard/ai",
-                ctaLabel: "NRL AI",
-              },
-              */
-            ].map((feature) => (
-              <div
-                key={feature.eyebrow}
-                data-landing-reveal={feature.eyebrow === "Betting" ? undefined : ""}
-              >
-                <FeatureSection {...feature} />
-              </div>
-            ))}
-          </div>
-        </section>
+          <section className={styles.features} id="tools">
+            <div className={styles.featuresHeading} data-landing-reveal>
+              <div><div className={`${styles.sectionIndex} ${styles.light}`}>02 — THE TOOLS</div><p className={`${styles.kicker} ${styles.lightKicker}`}>From team lists to full-time</p></div>
+              <h2>See the game<br />from every angle</h2>
+            </div>
+            <div className={styles.featureGrid}>
+              {features.map((feature) => <article className={styles.feature} key={feature.eyebrow} data-landing-reveal>
+                <div className={styles.featureNumber}>{feature.number}</div><FeatureGraphic type={feature.graphic} />
+                <div className={styles.featureCopy}><p>{feature.eyebrow}</p><h3>{feature.title}</h3><span>{feature.description}</span><Link href={feature.href}>Open {feature.eyebrow} <b>↗</b></Link></div>
+              </article>)}
+            </div>
+          </section>
+
+          <section className={styles.pricing} id="pricing">
+            <div className={styles.pricingHeading} data-landing-reveal>
+              <div><div className={styles.sectionIndex}>03 — PLANS</div><p className={styles.kicker}>Choose what suits your footy</p></div>
+              <div><h2>Start free<br /><em>Go deeper when ready</em></h2><p>Get around the core app for free, then step up to Pro for fantasy and advanced stats or Premium for the complete betting toolkit</p></div>
+            </div>
+            <div className={styles.pricingGrid}>
+              {plans.map((plan) => <article key={plan.name} className={`${styles.planCard} ${plan.featured ? styles.featuredPlan : ""}`} data-landing-reveal>
+                {plan.featured ? <div className={styles.planBadge}>Best for fantasy + stats</div> : null}
+                <div><p className={styles.planName}>{plan.name}</p><div className={styles.planPrice}>{plan.price}<span>{plan.suffix}</span></div><p className={styles.planDescription}>{plan.description}</p></div>
+                <ul>{plan.features.map((feature) => <li key={feature}><span>✓</span>{feature}</li>)}</ul>
+                <Link href={plan.href}>{plan.cta} <span>↗</span></Link>
+              </article>)}
+            </div>
+          </section>
+
+          <section className={styles.statement} id="about">
+            <div className={styles.statementMark} aria-hidden="true">“</div>
+            <blockquote data-landing-reveal>The numbers don&apos;t replace the footy<br /><em>They help you read it</em></blockquote>
+            <p data-landing-reveal>Short Side is built for the fan who looks past the scoreboard — the fantasy coach, the punter and the rugby league tragic who wants the full picture before making the call</p>
+          </section>
+
+          <section className={styles.join}>
+            <div className={styles.joinCopy} data-landing-reveal>
+              <p className={`${styles.eyebrow} ${styles.centered}`}><span /> Start with free access</p>
+              <h2>Go into the round<br /><em>with the full picture</em></h2>
+              <p>Create an account and get around the core app, then upgrade when you want projections, advanced stats or betting models</p>
+              <Link href="/sign-up" className={styles.joinButton}>Create free account <span>↗</span></Link>
+            </div>
+            <div className={styles.joinBall} aria-hidden="true" />
+          </section>
         </LandingHeroScrollShell>
-      </div>
+      </main>
+
+      <footer className={styles.footer}>
+        <Link href="/" className={styles.brand}><Image src="/logo-mark.svg" alt="" width={42} height={42} /><span><b>Short Side</b><strong>NRL</strong></span></Link>
+        <p>Built for the game behind the game</p><p>© 2026 Short Side NRL</p>
+      </footer>
     </div>
   )
 }

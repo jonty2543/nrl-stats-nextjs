@@ -1,0 +1,68 @@
+.shortside-dashboard {
+  --dashboard-display: var(--font-landing-display), sans-serif;
+  --dashboard-rule: color-mix(in srgb, var(--color-nrl-text) 16%, transparent);
+  background: #111733;
+}
+
+.shortside-dashboard :where(h1, h2, h3) {
+  font-family: var(--dashboard-display);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.shortside-dashboard :where(h1, h2) {
+  text-transform: uppercase;
+}
+
+.shortside-dashboard :where(label, legend, th) {
+  font-family: var(--font-geist-mono), monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shortside-dashboard :where(input, select, textarea) {
+  border-radius: 0 !important;
+  border-color: var(--dashboard-rule) !important;
+  background-color: var(--color-nrl-panel-2);
+}
+
+.shortside-dashboard :where(button, [role="button"]) {
+  font-weight: 800;
+}
+
+.shortside-dashboard :where(
+  [class*="rounded-2xl"],
+  [class*="rounded-xl"],
+  [class*="rounded-lg"],
+  [class*="rounded-md"]
+) {
+  border-radius: 0 !important;
+}
+
+.shortside-dashboard :where(section, article)[class*="border"] {
+  box-shadow: none !important;
+}
+
+.shortside-dashboard .animate-pulse {
+  border-radius: 0 !important;
+}
+
+.shortside-dashboard :where(table) {
+  border-collapse: collapse;
+}
+
+.shortside-dashboard :where(thead) {
+  font-family: var(--font-geist-mono), monospace;
+  text-transform: uppercase;
+}
+
+.shortside-dashboard :where(input, select, textarea, button):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-nrl-accent) 72%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 639px) {
+  .shortside-dashboard :where(h1) {
+    line-height: 0.94;
+  }
+}

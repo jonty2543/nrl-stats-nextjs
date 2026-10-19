@@ -52,7 +52,7 @@ function StatsMenuLinks({ pathname, onNavigate }: { pathname: string; onNavigate
                   prefetch
                   aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
-                  className={`block rounded-lg px-2.5 py-2 text-xs font-bold transition-colors ${active ? "bg-nrl-accent/12 text-nrl-accent" : "text-white/70 hover:bg-white/5 hover:text-white"}`}
+                  className={`block px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.1em] transition-colors ${active ? "bg-[#00f58a]/10 text-[#00f58a]" : "text-[#f2f3e9]/65 hover:bg-white/5 hover:text-[#f2f3e9]"}`}
                 >
                   {item.label}
                 </Link>
@@ -117,9 +117,9 @@ export function ToolNav({ className }: ToolNavProps) {
   return (
     <div ref={navRootRef} className="relative">
       <nav
-        className={`-mx-1 flex w-full justify-start overflow-x-auto pb-1 [scrollbar-width:none] lg:justify-center lg:overflow-visible [&::-webkit-scrollbar]:hidden sm:mx-0 ${className ?? ""}`}
+        className={`flex w-full justify-start overflow-x-auto [scrollbar-width:none] lg:h-[84px] lg:justify-center lg:overflow-visible [&::-webkit-scrollbar]:hidden ${className ?? ""}`}
       >
-        <div className="flex w-full min-w-max items-center justify-between gap-x-1 rounded-full border border-white/10 bg-[#151c3a]/92 p-1 backdrop-blur sm:gap-x-2 lg:min-w-0 lg:gap-x-0">
+        <div className="flex min-w-max items-stretch gap-x-5 sm:gap-x-7 lg:h-full lg:gap-x-9">
           {tools.map((tool) => {
             const active = tool.href === "/"
               ? pathname === "/"
@@ -140,13 +140,13 @@ export function ToolNav({ className }: ToolNavProps) {
                     aria-expanded={statsMenuOpen}
                     aria-haspopup="true"
                     onClick={toggleStatsMenu}
-                    className={`whitespace-nowrap rounded-full px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors sm:px-4 sm:text-xs sm:tracking-[0.18em] ${active ? "bg-nrl-accent/14 text-nrl-accent" : "text-white/55 hover:text-white"}`}
+                    className={`h-12 whitespace-nowrap border-b-[3px] px-0 text-center text-[10px] font-extrabold uppercase tracking-[0.12em] transition-colors lg:h-[84px] ${active ? "border-[#00f58a] text-[#00f58a]" : "border-transparent text-[#f2f3e9]/72 hover:text-[#f2f3e9]"}`}
                   >
                     Stats
                   </button>
 
                   <div className={`absolute left-1/2 top-full z-50 hidden w-44 -translate-x-1/2 pt-2 transition-opacity lg:block ${statsMenuOpen ? "opacity-100" : "pointer-events-none invisible opacity-0"}`}>
-                    <div className="rounded-xl border border-white/10 bg-[#111831]/98 p-2 shadow-[0_18px_45px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+                    <div className="border border-white/10 bg-[#111733]/98 p-2 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-xl">
                       <StatsMenuLinks pathname={pathname} onNavigate={() => setStatsMenuOpen(false)} />
                     </div>
                   </div>
@@ -161,10 +161,10 @@ export function ToolNav({ className }: ToolNavProps) {
                 prefetch={false}
                 aria-current={active ? "page" : undefined}
                 onClick={() => setStatsMenuOpen(false)}
-                className={`relative whitespace-nowrap rounded-full px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors sm:flex-none sm:px-4 sm:text-xs sm:tracking-[0.18em] ${
+                className={`relative flex h-12 items-center whitespace-nowrap border-b-[3px] px-0 text-center text-[10px] font-extrabold uppercase tracking-[0.12em] transition-colors sm:flex-none lg:h-[84px] ${
                   active
-                    ? "bg-nrl-accent/14 text-nrl-accent"
-                    : "text-white/55 hover:text-white"
+                    ? "border-[#00f58a] text-[#00f58a]"
+                    : "border-transparent text-[#f2f3e9]/72 hover:text-[#f2f3e9]"
                 }`}
               >
                 {tool.label}
@@ -174,7 +174,7 @@ export function ToolNav({ className }: ToolNavProps) {
         </div>
       </nav>
       {statsMenuOpen ? (
-        <div style={{ left: mobileStatsMenuLeft }} className="absolute top-full z-50 mt-2 w-44 -translate-x-1/2 rounded-xl border border-white/10 bg-[#111831]/98 p-2 shadow-[0_14px_32px_rgba(0,0,0,0.4)] backdrop-blur lg:hidden">
+        <div style={{ left: mobileStatsMenuLeft }} className="absolute top-full z-50 mt-2 w-44 -translate-x-1/2 border border-white/10 bg-[#111733]/98 p-2 shadow-[0_14px_32px_rgba(0,0,0,0.35)] backdrop-blur lg:hidden">
           <StatsMenuLinks pathname={pathname} onNavigate={() => setStatsMenuOpen(false)} />
         </div>
       ) : null}

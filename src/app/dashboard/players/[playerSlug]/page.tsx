@@ -27,7 +27,6 @@ interface PlayerGameLogPageProps {
   }>;
 }
 
-const SUMMARY_STATS = ["Mins Played", "All Run Metres", "Tackles Made", "Tackle Breaks"] as const;
 const GAME_LOG_STATS = [
   "Mins Played",
   "All Run Metres",
@@ -41,25 +40,6 @@ const GAME_LOG_STATS = [
   "Offloads",
   "Kicking Metres",
 ] as const;
-
-function average(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function numeric(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function formatNumber(value: number | null): string {
-  if (value == null) return "-";
-  if (Math.abs(value) >= 10) return Math.round(value).toString();
-  return value.toFixed(1).replace(/\.0$/, "");
-}
-
-function statAverage(rows: PlayerStat[], stat: string): number | null {
-  return average(rows.map((row) => numeric(row[stat])).filter((value): value is number => value != null));
-}
 
 function latestTeam(rows: PlayerStat[]): string | null {
   return rows[0]?.Team ?? null;
@@ -169,23 +149,20 @@ export default async function PlayerGameLogPage({ params, searchParams }: Player
     ...playerImageSources(playerName, team, playerImages),
   ])];
   const shownGameLogStats = GAME_LOG_STATS.filter((stat) => PLAYER_STATS.includes(stat));
+  const teammateRows = competition === "nrl" ? await fetchTeammateLookupRows(yearPool) : [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <Link
         href="/dashboard/players"
-        aria-label="Back to Players"
-        title="Back to Players"
-        className="inline-grid h-9 w-9 place-items-center rounded-lg border border-nrl-border bg-nrl-panel text-lg font-semibold text-nrl-muted transition-colors hover:border-nrl-accent hover:text-nrl-accent"
+        className="inline-flex border-b border-nrl-accent pb-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-nrl-text transition-colors hover:text-nrl-accent"
       >
-        <span aria-hidden="true">←</span>
+        ← Back to player stats
       </Link>
 
-      <section className="relative overflow-hidden rounded-xl border border-nrl-border bg-[#111832] p-3 sm:p-4">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_28%,rgba(71,255,182,0.13),transparent_32%),radial-gradient(circle_at_82%_76%,rgba(129,92,255,0.14),transparent_36%)]" />
-        <div className="relative z-[1] space-y-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel sm:h-16 sm:w-16">
+      <section className="border-b border-nrl-border pb-8">
+        <div className="flex min-w-0 items-center gap-4 sm:gap-6">
+            <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden border border-nrl-border bg-nrl-panel sm:h-28 sm:w-28">
               <ImageWithFallback
                 sources={imageSources}
                 alt={playerName}
@@ -195,31 +172,23 @@ export default async function PlayerGameLogPage({ params, searchParams }: Player
               />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-black tracking-tight text-nrl-text sm:text-2xl">{playerName}</h1>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-semibold text-nrl-muted sm:text-xs">
-                {team ? <span>{team}</span> : null}
-                {position ? (
-                  <span className="rounded-md border border-nrl-border bg-[#0f162d] px-1.5 py-0.5">{position}</span>
-                ) : null}
-                <span className="rounded-md border border-nrl-accent/30 bg-nrl-accent/10 px-1.5 py-0.5 text-nrl-accent">
-                  {rows.length} games
-                </span>
+              <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-nrl-accent">
+                {[team, position, "Stats profile"].filter(Boolean).join(" · ")}
+              </div>
+              <h1 className="mt-2 truncate text-4xl leading-none text-nrl-text sm:text-7xl">{playerName}</h1>
+              <div className="mt-3 inline-flex border border-nrl-border bg-nrl-panel-2 px-3 py-1.5 font-mono text-[8px] font-semibold uppercase tracking-[0.12em] text-nrl-text">
+                {yearPool.join(" · ")} season · {rows.length} games
               </div>
             </div>
-          </div>
-
-          <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-            {SUMMARY_STATS.map((stat) => (
-              <div key={stat} className="min-w-0 rounded-lg border border-nrl-border bg-white/[0.035] px-3 py-2.5">
-                <div className="truncate text-[8px] font-black uppercase tracking-wide text-nrl-muted">{stat}</div>
-                <div className="mt-1 text-lg font-black text-nrl-text sm:text-xl">{formatNumber(statAverage(rows, stat))}</div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
-      <PlayerGameLogTable rows={rows} statKeys={shownGameLogStats} />
+      <PlayerGameLogTable
+        rows={rows}
+        statKeys={shownGameLogStats}
+        playerName={playerName}
+        teammateRows={teammateRows}
+      />
     </div>
   );
 }

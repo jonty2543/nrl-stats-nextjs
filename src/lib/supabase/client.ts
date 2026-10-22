@@ -10,9 +10,9 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = SUPABASE_REQUEST_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), SUPABASE_REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   const signal = init?.signal;
 
   if (signal?.aborted) controller.abort();
@@ -21,12 +21,12 @@ function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise
   return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
 }
 
-export function createServerSupabaseClient(schema = "nrl") {
+export function createServerSupabaseClient(schema = "nrl", requestTimeoutMs = SUPABASE_REQUEST_TIMEOUT_MS) {
   const url = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
   const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
   return createClient(url, key, {
     db: { schema },
-    global: { fetch: fetchWithTimeout },
+    global: { fetch: (input, init) => fetchWithTimeout(input, init, requestTimeoutMs) },
   });
 }
 

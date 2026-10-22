@@ -15,8 +15,8 @@ export default async function DashboardLayout({
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
       <AppHeader sticky showBillingNav />
-      <div className="relative mx-auto flex min-h-[calc(100vh-84px)] w-full max-w-[1600px] flex-col pb-16">
-        <main className="min-h-0 flex-1 px-4 pb-5 pt-5 sm:px-6 sm:pb-6 sm:pt-7 lg:px-8 lg:pb-8 lg:pt-9">
+      <div className="relative mx-auto flex min-h-[calc(100vh-84px)] w-full max-w-7xl flex-col pb-16">
+        <main className="min-h-0 flex-1 px-4 pb-5 pt-2 sm:px-6 sm:pb-6 sm:pt-3 lg:px-8 lg:pb-8 lg:pt-4">
           {children}
         </main>
         {userId ? <FeedbackPrompt /> : null}

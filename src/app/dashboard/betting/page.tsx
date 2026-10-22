@@ -5,6 +5,7 @@ import { getServerPremiumAccess } from "@/lib/access/pro-access-server";
 import { fetchBettingOddsSnapshot, fetchBettingOddsSnapshotFromRawTables, fetchBettingPageSummary, fetchPlayerImages, fetchTeamLogos } from "@/lib/supabase/queries";
 import type { BettingOddsRow, BettingOddsSnapshot } from "@/lib/betting/types";
 import type { BettingPageSummary, BettingSummaryGame } from "@/lib/supabase/queries";
+import { selectBettingMatchContext } from "@/lib/betting/page-context";
 
 export const dynamic = "force-dynamic";
 
@@ -341,13 +342,13 @@ function buildTeamFormByMatchKey(games: BettingSummaryGame[]): Record<string, st
 
 export default async function BettingPage() {
   const { userId } = await auth();
-  const snapshot = await withOptionalContextTimeout(
-    "betting odds snapshot",
-    fetchBettingOddsSnapshot(),
-    emptyBettingOddsSnapshot(),
-    BETTING_PAGE_SNAPSHOT_TIMEOUT_MS
-  );
-  const [canAccessPremium, bettingSummary, playerImages, teamLogos, localhostRequest] = await Promise.all([
+  const [snapshot, canAccessPremium, bettingSummary, playerImages, teamLogos, localhostRequest] = await Promise.all([
+    withOptionalContextTimeout(
+      "betting odds snapshot",
+      fetchBettingOddsSnapshot(),
+      emptyBettingOddsSnapshot(),
+      BETTING_PAGE_SNAPSHOT_TIMEOUT_MS
+    ),
     getServerPremiumAccess(userId),
     withOptionalContextTimeout("betting summary", fetchBettingPageSummary(), emptyBettingPageSummary(), BETTING_PAGE_SUMMARY_TIMEOUT_MS),
     withOptionalContextTimeout("player images", fetchPlayerImages(), []),
@@ -355,7 +356,7 @@ export default async function BettingPage() {
     isLocalhostRequest(),
   ]);
   const lineupsFilteredSnapshot = filterTryscorersToLineups(
-    localhostRequest
+    localhostRequest && process.env.BETTING_LOCAL_RAW_ODDS === "1"
       ? await withOptionalContextTimeout(
           "raw betting odds for localhost screenshot mode",
           fetchBettingOddsSnapshotFromRawTables(),
@@ -371,6 +372,9 @@ export default async function BettingPage() {
     ? localhostScreenshotWindowSnapshot(lineupsFilteredSnapshot)
     : null;
   const visibleSnapshot = localhostSnapshot?.snapshot ?? releasedSnapshot;
+  const visibleDates = new Set(bettingSnapshotDates(visibleSnapshot));
+  const visibleGames = bettingSummary.games.filter((game) => visibleDates.has(game.matchDate));
+  const visiblePlayers = new Set(visibleSnapshot.tryscorer.map((row) => normalisePlayerKey(row.result)));
 
   return (
     <BettingDashboard
@@ -378,15 +382,15 @@ export default async function BettingPage() {
       canAccessPremium={canAccessPremium}
       displayTodayIso={localhostSnapshot?.displayTodayIso ?? undefined}
       showPastMarkets={localhostSnapshot?.showPastMarkets ?? false}
-      playerImages={playerImages}
+      playerImages={playerImages.filter((row) => visiblePlayers.has(normalisePlayerKey(row.player)))}
       playerTeamsByName={bettingSummary.playerTeamsByName}
       teamLogos={{ ...teamLogos, ...bettingSummary.teamLogos }}
       tryscorerFormByPlayer={bettingSummary.tryscorerFormByPlayer}
-      tryscorerLastFiveVsOpponentByMatch={bettingSummary.tryscorerLastFiveVsOpponentByMatch}
-      tryscorerKickoffsByMatch={bettingSummary.tryscorerKickoffsByMatch}
-      lineupPlayersByMatch={bettingSummary.lineupPlayersByMatch}
-      lineupLinksByMatchKey={buildLineupLinksByMatchKey(bettingSummary.games)}
-      teamFormByMatchKey={{ ...bettingSummary.teamLastFiveByMatch, ...buildTeamFormByMatchKey(bettingSummary.games) }}
+      tryscorerLastFiveVsOpponentByMatch={selectBettingMatchContext(bettingSummary.tryscorerLastFiveVsOpponentByMatch, visibleDates)}
+      tryscorerKickoffsByMatch={selectBettingMatchContext(bettingSummary.tryscorerKickoffsByMatch, visibleDates)}
+      lineupPlayersByMatch={selectBettingMatchContext(bettingSummary.lineupPlayersByMatch, visibleDates)}
+      lineupLinksByMatchKey={buildLineupLinksByMatchKey(visibleGames)}
+      teamFormByMatchKey={{ ...selectBettingMatchContext(bettingSummary.teamLastFiveByMatch, visibleDates), ...buildTeamFormByMatchKey(visibleGames) }}
     />
   );
 }

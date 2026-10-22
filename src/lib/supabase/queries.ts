@@ -54,6 +54,7 @@ const FALLBACK_INTERNATIONAL_AVAILABLE_YEARS: string[] = [];
 const FALLBACK_ORIGIN_AVAILABLE_YEARS = ["2026"];
 const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
 const BETTING_SUMMARY_SNAPSHOT_REQUEST_TIMEOUT_MS = 20_000;
+const BETTING_MODEL_ENRICHMENT_TIMEOUT_MS = 2000;
 const FALLBACK_LINE_MARGIN_SIGMA = 16.85;
 const FALLBACK_TOTAL_POINTS_SIGMA = 16.85;
 
@@ -3114,11 +3115,11 @@ function enrichDiscreteMarketRows(
   return rows.map((row) => applyDiscreteProbabilityToRow(row, lookup));
 }
 
-async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[]): Promise<PredictionModelRow[]> {
+async function fetchPredictionModelRowsFromSupabase(rows: BettingOddsRow[], requestTimeoutMs?: number): Promise<PredictionModelRow[]> {
   const dateRange = bettingOddsDateRange(rows);
   if (!dateRange) return [];
 
-  const supabase = createServerSupabaseClient("nrl");
+  const supabase = createServerSupabaseClient("nrl", requestTimeoutMs);
   const allRows: PredictionModelRow[] = [];
   let start = 0;
   let select = "url,match_date,match,team,win_prob,pred_margin,pred_margin_model,pred_margin_pre_manual,pred_total,updated_at";
@@ -3285,11 +3286,11 @@ export async function fetchLineupsMatchPredictions(matches: LineupMatch[]): Prom
   return predictions;
 }
 
-async function fetchTotalPredictionRowsFromSupabase(rows: BettingOddsRow[]): Promise<TotalPredictionRow[]> {
+async function fetchTotalPredictionRowsFromSupabase(rows: BettingOddsRow[], requestTimeoutMs?: number): Promise<TotalPredictionRow[]> {
   const dateRange = bettingOddsDateRange(rows);
   if (!dateRange) return [];
 
-  const supabase = createServerSupabaseClient("nrl");
+  const supabase = createServerSupabaseClient("nrl", requestTimeoutMs);
   const allRows: TotalPredictionRow[] = [];
   let start = 0;
 
@@ -3316,7 +3317,7 @@ async function fetchTotalPredictionRowsFromSupabase(rows: BettingOddsRow[]): Pro
   return allRows;
 }
 
-async function fetchMarginOverrideRowsFromSupabase(rows: PredictionModelRow[]): Promise<MarginOverrideRow[]> {
+async function fetchMarginOverrideRowsFromSupabase(rows: PredictionModelRow[], requestTimeoutMs?: number): Promise<MarginOverrideRow[]> {
   const urls = Array.from(
     new Set(
       rows
@@ -3326,7 +3327,7 @@ async function fetchMarginOverrideRowsFromSupabase(rows: PredictionModelRow[]): 
   );
   if (urls.length === 0) return [];
 
-  const supabase = createServerSupabaseClient("nrl");
+  const supabase = createServerSupabaseClient("nrl", requestTimeoutMs);
   const allRows: MarginOverrideRow[] = [];
   for (let start = 0; start < urls.length; start += PAGE_SIZE) {
     const chunk = urls.slice(start, start + PAGE_SIZE);
@@ -3679,36 +3680,42 @@ export async function fetchBettingOddsSnapshotFromSummary(): Promise<BettingOdds
   const row = await fetchBettingOddsSnapshotSummaryRowFromRest();
   const summaryHasMargin = Object.prototype.hasOwnProperty.call(row, "margin");
   const summaryMargin = summaryHasMargin ? mapBettingSnapshotRows(row.margin, "Margin") : [];
-  const margin = summaryMargin.length > 0
-    ? summaryMargin
-    : await fetchBettingOddsTableOrEmpty("NRL Margin Odds");
+  const marginPromise = summaryMargin.length > 0
+    ? Promise.resolve(summaryMargin)
+    : fetchBettingOddsTableOrEmpty("NRL Margin Odds");
   const snapshot = {
     h2h: mapBettingSnapshotRows(row.h2h, "H2H"),
     line: mapBettingSnapshotRows(row.line, "Line"),
-    margin,
+    margin: summaryMargin,
     total: mapBettingSnapshotRows(row.total, "Total"),
     tryscorer: mapBettingSnapshotRows(row.tryscorer, "Tryscorer"),
     generatedAt: toNullableString(row.generated_at) ?? toNullableString(row.updated_at) ?? new Date().toISOString(),
   };
-  const [predictionRows, totalPredictionRows] = await Promise.all([
-    fetchPredictionModelRowsFromSupabase(snapshot.h2h).catch((error) => {
-      console.warn("Unable to enrich summary H2H odds with prediction rows; preserving snapshot model values.", error);
-      return [];
-    }),
-    fetchTotalPredictionRowsFromSupabase(snapshot.total).catch((error) => {
-      console.warn("Unable to enrich summary total odds with prediction rows; preserving snapshot model values.", error);
-      return [];
-    }),
-  ]);
-  const marginOverrideRows = await fetchMarginOverrideRowsFromSupabase(predictionRows).catch((error) => {
+  const predictionRowsPromise = fetchPredictionModelRowsFromSupabase(snapshot.h2h, BETTING_MODEL_ENRICHMENT_TIMEOUT_MS).catch((error) => {
+    console.warn("Unable to enrich summary H2H odds with prediction rows; preserving snapshot model values.", error);
+    return [];
+  });
+  const marginOverridesPromise = predictionRowsPromise.then((predictionRows) =>
+    fetchMarginOverrideRowsFromSupabase(predictionRows, BETTING_MODEL_ENRICHMENT_TIMEOUT_MS)
+  ).catch((error) => {
     console.warn("Unable to fetch betting margin overrides for summary odds; using saved prediction margins.", error);
     return [];
   });
+  const [margin, predictionRows, totalPredictionRows, marginOverrideRows] = await Promise.all([
+    marginPromise,
+    predictionRowsPromise,
+    fetchTotalPredictionRowsFromSupabase(snapshot.total, BETTING_MODEL_ENRICHMENT_TIMEOUT_MS).catch((error) => {
+      console.warn("Unable to enrich summary total odds with prediction rows; preserving snapshot model values.", error);
+      return [];
+    }),
+    marginOverridesPromise,
+  ]);
   const predictionLookup = buildPredictionLookup(predictionRows, marginOverrideRows);
   const totalPredictionLookup = buildTotalPredictionLookup(totalPredictionRows);
 
   return {
     ...snapshot,
+    margin,
     h2h: snapshot.h2h.map((oddsRow) => {
       const enriched = applyPredictionModelToRow(oddsRow, predictionLookup);
       return enriched.model == null && oddsRow.model != null ? oddsRow : enriched;

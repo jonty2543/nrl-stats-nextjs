@@ -31,7 +31,7 @@ export function AppHeader({
   return (
     <header data-blend-background={blendBackground || undefined} className={`${sticky ? "sticky top-0 z-50" : ""} relative w-full isolate ${className}`.trim()}>
       <div className="relative z-10 border-b border-white/10 bg-nrl-bg/95 text-[#f2f3e9] backdrop-blur-xl">
-        <div className="mx-auto max-w-[1480px] px-5 sm:px-[4vw]">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid h-[72px] grid-cols-[1fr_auto] items-center gap-4 lg:h-[84px] lg:grid-cols-[1fr_auto_1fr]">
             <Link href="/" className="relative z-10 inline-flex w-max min-w-0 items-center gap-[11px]">
               <Image src="/logo-mark.svg" alt="" width={42} height={42} priority className="h-[36px] w-[36px] min-[681px]:h-[42px] min-[681px]:w-[42px]" />

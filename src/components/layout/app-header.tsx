@@ -30,14 +30,14 @@ export function AppHeader({
 
   return (
     <header data-blend-background={blendBackground || undefined} className={`${sticky ? "sticky top-0 z-50" : ""} relative w-full isolate ${className}`.trim()}>
-      <div className="relative z-10 border-b border-white/10 bg-[#111733]/95 text-[#f2f3e9] backdrop-blur-xl">
+      <div className="relative z-10 border-b border-white/10 bg-nrl-bg/95 text-[#f2f3e9] backdrop-blur-xl">
         <div className="mx-auto max-w-[1480px] px-5 sm:px-[4vw]">
           <div className="grid h-[72px] grid-cols-[1fr_auto] items-center gap-4 lg:h-[84px] lg:grid-cols-[1fr_auto_1fr]">
-            <Link href="/" className="relative z-10 inline-flex w-max min-w-0 items-center gap-2.5">
-              <Image src="/logo-mark.svg" alt="" width={42} height={42} priority className="h-9 w-9 lg:h-[42px] lg:w-[42px]" />
-              <span className="flex flex-col font-[family-name:var(--font-landing-display)] font-black uppercase leading-[0.77]">
-                <span className="text-sm tracking-[-0.02em] lg:text-base">Short Side</span>
-                <strong className="text-[21px] tracking-[0.08em] text-[#00f58a] lg:text-2xl">NRL</strong>
+            <Link href="/" className="relative z-10 inline-flex w-max min-w-0 items-center gap-[11px]">
+              <Image src="/logo-mark.svg" alt="" width={42} height={42} priority className="h-[36px] w-[36px] min-[681px]:h-[42px] min-[681px]:w-[42px]" />
+              <span className="flex flex-col font-[family-name:var(--font-landing-display)] uppercase">
+                <span className="text-[14px] font-extrabold leading-[0.77] min-[681px]:text-[16px]">Short Side</span>
+                <strong className="text-[21px] font-bold leading-[0.77] tracking-[0.08em] text-[#00f58a] min-[681px]:text-[24px]">NRL</strong>
               </span>
             </Link>
 

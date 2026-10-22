@@ -1,0 +1,79 @@
+.player-stats-page > header {
+  padding-top: 14px;
+  padding-bottom: 18px;
+}
+
+.player-stats-page > header h1 {
+  font-size: 38px;
+}
+
+.player-stats-page > [role="tablist"] > button {
+  height: 34px;
+  font-size: 9px;
+}
+
+.player-stats-filters .grid {
+  gap: 10px;
+}
+
+.player-stats-filters input,
+.player-stats-filters select {
+  height: 30px;
+  padding-left: 9px;
+  font-size: 10px;
+}
+
+.player-stats-filters button {
+  height: 34px;
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+.player-stats-table table {
+  min-width: 1850px;
+}
+
+.player-stats-table thead th {
+  height: 36px;
+  padding: 0 10px;
+  font-size: 9px;
+  letter-spacing: .07em;
+}
+
+.player-stats-table tbody tr {
+  height: 48px;
+}
+
+.player-stats-table td {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
+.player-stats-table th:first-child,
+.player-stats-table td:first-child {
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+}
+
+.player-stats-table td:first-child a {
+  gap: 10px;
+}
+
+.player-stats-table td:first-child a > div:first-child {
+  width: 30px;
+}
+
+.player-stats-table td:first-child a > div:first-child > div {
+  width: 28px;
+  height: 28px;
+}
+
+.player-stats-table td:first-child a > div:last-child > div:first-child {
+  font-size: 12px;
+}
+
+.player-stats-table td:first-child a > div:last-child > div:last-child {
+  margin-top: 4px;
+  font-size: 7px;
+}

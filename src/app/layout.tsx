@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed, Geist, Geist_Mono } from "next/font/google";
+import { Barlow_Condensed, DM_Mono, Geist, Geist_Mono, Manrope } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { Analytics } from "@vercel/analytics/next";
@@ -16,10 +16,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const tableSans = Manrope({
+  variable: "--font-table-sans",
+  subsets: ["latin"],
+  weight: ["700"],
+});
+
+const tableMono = DM_Mono({
+  variable: "--font-table-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
+});
+
 const barlowCondensed = Barlow_Condensed({
   variable: "--font-landing-display",
   subsets: ["latin"],
-  weight: ["800", "900"],
+  weight: ["700", "800", "900"],
   style: ["normal", "italic"],
 });
 
@@ -77,7 +89,7 @@ export default function RootLayout({
           </head>
         ) : null}
         <body
-          className={`${geistSans.variable} ${geistMono.variable} ${barlowCondensed.variable} antialiased`}
+          className={`${geistSans.variable} ${geistMono.variable} ${barlowCondensed.variable} ${tableSans.variable} ${tableMono.variable} antialiased`}
         >
           <Providers>{children}</Providers>
           <Analytics />

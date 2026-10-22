@@ -1,5 +1,7 @@
 import { createServerSupabaseClient } from "./client";
 import { unstable_cache } from "next/cache";
+import { cacheDevelopmentQuery } from "@/lib/data/development-query-cache";
+import { readStatsSnapshot, readStatsSnapshotMetadata, readPlayerStatsSnapshot, readTeammateSnapshot, readStatsAssetsSnapshot, snapshotCoversYears } from "@/lib/data/stats-snapshot";
 import { request as httpsRequest } from "node:https";
 import {
   COLUMN_RENAME_MAP,
@@ -48,7 +50,7 @@ const LIVE_SEASON_STATS_REVALIDATE_SECONDS = 300;
 const DIRECT_PLAYER_STATS_TIMEOUT_MS = 2000;
 const DIRECT_CUP_PLAYER_STATS_TIMEOUT_MS = 8000;
 const FALLBACK_CUP_AVAILABLE_YEARS = ["2026", "2025", "2024", "2023"];
-const FALLBACK_INTERNATIONAL_AVAILABLE_YEARS = ["2025"];
+const FALLBACK_INTERNATIONAL_AVAILABLE_YEARS: string[] = [];
 const FALLBACK_ORIGIN_AVAILABLE_YEARS = ["2026"];
 const SUPABASE_FETCH_RETRY_DELAYS_MS = [500, 1500];
 const BETTING_SUMMARY_SNAPSHOT_REQUEST_TIMEOUT_MS = 20_000;
@@ -1990,6 +1992,20 @@ export async function fetchPlayerStats(
   years?: string[],
   competition: StatsCompetition = "nrl"
 ): Promise<PlayerStat[]> {
+  const snapshot = await readStatsSnapshot(competition, years);
+  if (snapshot && snapshotCoversYears(snapshot, years)) {
+    return filterPlayerStatsRowsByYears(snapshot.playerRows, years);
+  }
+  return cacheDevelopmentQuery(
+    JSON.stringify(["player-stats", competition, [...new Set(years?.filter(Boolean))].sort()]),
+    () => loadPlayerStats(years, competition),
+  );
+}
+
+async function loadPlayerStats(
+  years?: string[],
+  competition: StatsCompetition = "nrl"
+): Promise<PlayerStat[]> {
   const normalizedYears = (years ?? []).filter(Boolean).sort();
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
@@ -2303,6 +2319,21 @@ export async function fetchTeamStats(
   years?: string[],
   competition: StatsCompetition = "nrl"
 ): Promise<TeamStat[]> {
+  const snapshot = await readStatsSnapshot(competition, years);
+  if (snapshot && snapshotCoversYears(snapshot, years)) {
+    const allowedYears = years?.length ? new Set(years) : null;
+    return snapshot.teamRows.filter((row) => !allowedYears || allowedYears.has(row.Year));
+  }
+  return cacheDevelopmentQuery(
+    JSON.stringify(["team-stats", competition, [...new Set(years?.filter(Boolean))].sort()]),
+    () => loadTeamStats(years, competition),
+  );
+}
+
+async function loadTeamStats(
+  years?: string[],
+  competition: StatsCompetition = "nrl"
+): Promise<TeamStat[]> {
   const normalizedYears = (years ?? []).filter(Boolean).sort()
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all"
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined
@@ -2588,6 +2619,17 @@ export async function fetchTeammateLookupRowsFromSupabase(
 export async function fetchTeammateLookupRows(
   years?: string[]
 ): Promise<TeammateLookupRow[]> {
+  const snapshot = await readTeammateSnapshot(years);
+  if (snapshot) return snapshot;
+  return cacheDevelopmentQuery(
+    JSON.stringify(["teammates", [...new Set(years?.filter(Boolean))].sort()]),
+    () => loadTeammateLookupRows(years),
+  );
+}
+
+async function loadTeammateLookupRows(
+  years?: string[]
+): Promise<TeammateLookupRow[]> {
   const normalizedYears = (years ?? []).filter(Boolean).sort();
   const key = normalizedYears.length > 0 ? normalizedYears.join(",") : "all";
   const normalizedArg = normalizedYears.length > 0 ? normalizedYears : undefined;
@@ -2803,9 +2845,14 @@ export async function fetchPlayerStatsForPlayerName(
 ): Promise<PlayerStat[]> {
   const name = playerName.trim();
   if (!name) return [];
+  const snapshot = await readPlayerStatsSnapshot(name, competition, years);
+  if (snapshot) return snapshot;
   const normalizedYears = years?.filter(Boolean).sort();
   if (process.env.NODE_ENV !== "production") {
-    return fetchPlayerStatsForPlayerNameUncached(name, normalizedYears, competition);
+    return cacheDevelopmentQuery(
+      JSON.stringify(["player-by-name", competition, name, normalizedYears]),
+      () => fetchPlayerStatsForPlayerNameUncached(name, normalizedYears, competition),
+    );
   }
 
   return unstable_cache(
@@ -2869,6 +2916,16 @@ const fetchAvailableYearsCached = unstable_cache(
 );
 
 export async function fetchAvailableYears(competition: StatsCompetition = "nrl"): Promise<string[]> {
+  const snapshot = await readStatsSnapshotMetadata(competition);
+  if (snapshot) return [...snapshot.years];
+  return cacheDevelopmentQuery(
+    `available-years:${competition}`,
+    () => loadAvailableYears(competition),
+    300_000,
+  );
+}
+
+async function loadAvailableYears(competition: StatsCompetition): Promise<string[]> {
   if (isCupCompetition(competition)) {
     try {
       if (process.env.NODE_ENV !== "production") return await fetchAvailableYearsFromSupabase(competition);
@@ -4726,9 +4783,11 @@ const fetchPlayerImagesCached = unstable_cache(
 );
 
 export async function fetchPlayerImages(): Promise<PlayerImageRecord[]> {
+  const snapshot = await readStatsAssetsSnapshot();
+  if (snapshot) return snapshot.playerImages;
   try {
     if (process.env.NODE_ENV !== "production") {
-      return await fetchPlayerImagesFromSupabase();
+      return await cacheDevelopmentQuery("player-images", fetchPlayerImagesFromSupabase, 3_600_000);
     }
     return await fetchPlayerImagesCached();
   } catch (error) {
@@ -4743,6 +4802,10 @@ export async function fetchPlayerImagesForPlayer(
 ): Promise<PlayerImageRecord[]> {
   const player = playerName.trim();
   if (!player) return [];
+  const snapshot = await readStatsAssetsSnapshot();
+  if (snapshot) return snapshot.playerImages.filter(
+    (row) => normaliseNameForMatch(row.player) === normaliseNameForMatch(player)
+  );
 
   try {
     const supabase = createServerSupabaseClient();
@@ -4936,9 +4999,11 @@ const fetchTeamLogosCached = unstable_cache(
 );
 
 export async function fetchTeamLogos(): Promise<Record<string, string>> {
+  const snapshot = await readStatsAssetsSnapshot();
+  if (snapshot) return snapshot.teamLogos;
   try {
     if (process.env.NODE_ENV !== "production") {
-      return await fetchTeamLogosFromSupabase();
+      return await cacheDevelopmentQuery("team-logos", fetchTeamLogosFromSupabase, 3_600_000);
     }
     return await fetchTeamLogosCached();
   } catch (error) {

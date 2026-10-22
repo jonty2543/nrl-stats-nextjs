@@ -19,6 +19,7 @@ const statsSections = [
   {
     label: "Explore",
     items: [
+      { label: "Players", href: "/dashboard/players" },
       { label: "Plots", href: "/dashboard/plots" },
       { label: "Archetypes", href: "/dashboard/archetypes" },
       { label: "Rankings", href: "/dashboard/rankings" },
@@ -27,7 +28,6 @@ const statsSections = [
   {
     label: "Browse",
     items: [
-      { label: "Players", href: "/dashboard/players" },
       { label: "Teams", href: "/dashboard/teams" },
     ],
   },

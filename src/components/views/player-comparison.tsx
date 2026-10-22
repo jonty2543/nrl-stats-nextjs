@@ -4,6 +4,7 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useCallback, useEffect } from "react";
+import "./player-stats-page.css";
 import type { PlayerStat } from "@/lib/data/types";
 import type { PlayerImageRecord } from "@/lib/supabase/queries";
 import type { PlayerStatsTableAggregateRow, StatsTableApiResponse } from "@/lib/data/stats-table-cache-types";
@@ -330,10 +331,6 @@ function parsePersonName(value: string): { first: string; last: string } {
 }
 
 const preferredImageIndexByCandidatesKey = new Map<string, number>();
-
-function playerLastName(name: string): string {
-  return parsePersonName(name).last || name;
-}
 
 function buildPlayerImageCandidates(imageRow: PlayerImageRecord | null): string[] {
   const seen = new Set<string>();
@@ -877,8 +874,8 @@ function PlayerStatsTableThumbnail({
   const imageUrl = imageCandidates[imageIndex] ?? null;
 
   return (
-    <div className="flex w-20 flex-col items-center gap-0.5 sm:w-16 sm:gap-1">
-      <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border bg-nrl-panel-2 text-[10px] font-black text-nrl-text sm:h-10 sm:w-10">
+    <div className="flex w-10 shrink-0 items-center justify-center">
+      <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-nrl-border/70 bg-nrl-panel-2 text-[10px] font-black text-nrl-text">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -901,9 +898,6 @@ function PlayerStatsTableThumbnail({
           <img src={PLAYER_SILHOUETTE_SRC} alt={`${name} player silhouette`} className="h-full w-full object-cover" />
         )}
       </div>
-      <div className="w-full truncate text-center text-[7px] font-black uppercase leading-none tracking-[0.08em] text-nrl-text sm:text-[8px]">
-        {playerLastName(name)}
-      </div>
     </div>
   );
 }
@@ -913,7 +907,6 @@ export function PlayerComparison({
   initialStatsTable,
   initialStatsTableQueryKey,
   playerImages,
-  teamLogos,
   availableYears,
   cupAvailableYears,
   internationalAvailableYears,
@@ -968,6 +961,7 @@ export function PlayerComparison({
   const [statsTableMinGames, setStatsTableMinGames] = useState("1+");
   const [statsTableGroupBy, setStatsTableGroupBy] = useState<PlayerStatsTableGroupBy>("Player");
   const [statsTableSearch, setStatsTableSearch] = useState("");
+  const [showMoreStatsFilters, setShowMoreStatsFilters] = useState(false);
   const [statsTableAggregateRows, setStatsTableAggregateRows] = useState<PlayerStatsTableRow[]>(
     () => (initialStatsTable?.rows ?? []).map((row) => ({ ...row, imageRow: null }))
   );
@@ -982,7 +976,7 @@ export function PlayerComparison({
   }>({ column: "stat:Fantasy", direction: "desc" });
   const [statsTableValueMode, setStatsTableValueMode] = useState<PlayerStatsTableValueMode>("Average");
   const [loading, setLoading] = useState(
-    initialData.length === 0 && initialYears.length > 0
+    !initialStatsTable && initialData.length === 0 && initialYears.length > 0
   );
   const filterUnlockedYears = useCallback(
     (years: string[]) => years.filter((year) => unlockedYears.includes(year)),
@@ -1041,6 +1035,10 @@ export function PlayerComparison({
     setStatsTableYears(nextYears);
     setStatsTablePosition("All Positions");
     setStatsTableTeam("All Teams");
+    if (playersView === "stats") {
+      setAllData([]);
+      return;
+    }
     if (nextCompetition === "nrl" && nextYears.every((year) => initialYears.includes(year))) {
       setAllData(initialData);
       return;
@@ -1058,7 +1056,7 @@ export function PlayerComparison({
     } finally {
       setLoading(false);
     }
-  }, [availableYears, canAccessLoginSeason, competition, cupAvailableYears, defaultYears, hasClientCupAccess, hasClientProPlotAccess, initialData, initialYears, internationalAvailableYears, originAvailableYears]);
+  }, [availableYears, canAccessLoginSeason, competition, cupAvailableYears, defaultYears, hasClientCupAccess, hasClientProPlotAccess, initialData, initialYears, internationalAvailableYears, originAvailableYears, playersView]);
   const [finalsMode, setFinalsMode] = useState("Yes");
   const [minutesOverFilter, setMinutesOverFilter] = useState<string>("Any");
   const [minutesUnderFilter, setMinutesUnderFilter] = useState<string>("Any");
@@ -1156,7 +1154,7 @@ export function PlayerComparison({
     });
   }, [statsTableAggregateRows, statsTableSearch]);
 
-  const statsTableBaseColumns = PLAYER_STATS_TABLE_BASE_COLUMNS;
+  const statsTableBaseColumns = PLAYER_STATS_TABLE_BASE_COLUMNS.filter((column) => column.key === "name" || column.key === "games");
   const resolveStatsTablePlayerImage = useMemo(() => {
     const imageCache = new Map<string, PlayerImageRecord | null>();
     return (name: string): PlayerImageRecord | null => {
@@ -1262,13 +1260,8 @@ export function PlayerComparison({
     });
   }, [statsTableRows, statsTableSort, statsTableValueMode]);
 
-  const statsTableColumnCount = statsTableBaseColumns.length + PLAYER_STATS_TABLE_COLUMNS.length + 1;
-  const statsTableActiveColumnPinClass =
-    statsTableGroupBy === "Player"
-      ? "sticky left-28 sm:left-auto sm:right-0"
-      : statsTableGroupBy === "Team + Player"
-        ? "sticky left-36 sm:left-auto sm:right-0"
-        : "sticky left-44 sm:left-auto sm:right-0";
+  const statsTableColumnCount = statsTableBaseColumns.length + PLAYER_STATS_TABLE_COLUMNS.length;
+  const statsTableActiveColumnPinClass = "";
 
   const toggleStatsTableSort = useCallback((column: PlayerStatsTableSortKey) => {
     setStatsTableSort((current) => ({
@@ -1512,11 +1505,12 @@ export function PlayerComparison({
   }, [statsTableYears.length, unlockedYears]);
 
   useEffect(() => {
+    if (playersView !== "comparison") return;
     const neededYears = [...new Set(selectedYears)];
     const missingSelectedYears = neededYears.filter((year) => !loadedYears.has(year));
     if (missingSelectedYears.length === 0) return;
     void loadYears(missingSelectedYears);
-  }, [loadYears, loadedYears, selectedYears]);
+  }, [loadYears, loadedYears, selectedYears, playersView]);
 
   useEffect(() => {
     const validYears = selectedYears.filter((year) => unlockedYears.includes(year));
@@ -2185,7 +2179,7 @@ export function PlayerComparison({
   }, [handleStatsTableYearsChange, unlockedYears]);
 
   return (
-    <div className="space-y-4">
+    <div className="player-stats-page space-y-4">
       <div className="flex items-end gap-3">
         <CompetitionToggle
           value={competition}
@@ -2206,17 +2200,35 @@ export function PlayerComparison({
         <div className="w-40"><Select label="Competition" value={internationalCompetition} options={INTERNATIONAL_COMPETITIONS.map((option) => ({ value: option.value, label: option.label }))} onChange={setInternationalCompetition} /></div>
       ) : null}
       <header className="border-b border-nrl-border pb-5 pt-4 sm:pb-7 sm:pt-7">
-        <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-nrl-accent">
-          Player database
-        </div>
-        <h1 className="mt-2 text-5xl leading-none text-nrl-text sm:text-6xl">
+        <h1 className="text-5xl leading-none text-nrl-text sm:text-6xl">
           Player Stats
         </h1>
       </header>
 
+      <div className="grid grid-cols-2 border border-nrl-border" role="tablist" aria-label="Players view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={playersView === "stats"}
+          onClick={() => setPlayersView("stats")}
+          className={`h-11 border-r border-nrl-border text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${playersView === "stats" ? "bg-transparent text-nrl-accent shadow-[inset_0_0_0_1px_var(--color-nrl-accent)]" : "bg-nrl-panel text-nrl-muted hover:text-nrl-text"}`}
+        >
+          Player Stats
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={playersView === "comparison"}
+          onClick={() => setPlayersView("comparison")}
+          className={`h-11 text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${playersView === "comparison" ? "bg-transparent text-nrl-accent shadow-[inset_0_0_0_1px_var(--color-nrl-accent)]" : "bg-nrl-panel text-nrl-muted hover:text-nrl-text"}`}
+        >
+          Player Comparison
+        </button>
+      </div>
+
       {playersView === "stats" ? (
-        <section className="border-b border-nrl-border pb-5">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="player-stats-filters border-b border-nrl-border pb-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <label className="min-w-0">
               <span className="mb-1 block text-[8px] font-semibold text-nrl-muted">Search player</span>
               <input
@@ -2246,41 +2258,50 @@ export function PlayerComparison({
               onChange={setStatsTablePosition}
             />
           </div>
+          {showMoreStatsFilters && (
+            <div id="player-stats-more-filters" className="mt-3 grid grid-cols-2 items-end gap-3 lg:grid-cols-4">
+              <div className="col-span-2">
+                <PillRadio
+                  options={["Average", "Total"]}
+                  value={statsTableValueMode}
+                  onChange={(value) => setStatsTableValueMode(value as PlayerStatsTableValueMode)}
+                />
+              </div>
+              <Select
+                label="Group"
+                value={statsTableGroupBy}
+                options={[...PLAYER_STATS_TABLE_GROUP_OPTIONS]}
+                onChange={(value) => setStatsTableGroupBy(value as PlayerStatsTableGroupBy)}
+              />
+              <Select
+                label="Min games"
+                value={statsTableMinGames}
+                options={[...STATS_TABLE_MIN_GAMES_OPTIONS]}
+                onChange={setStatsTableMinGames}
+              />
+            </div>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:flex">
           <button
             type="button"
             onClick={clearPlayerStatsFilters}
-            className="mt-3 h-11 w-full border border-nrl-accent/45 bg-nrl-accent/10 px-5 text-[10px] font-black uppercase tracking-[0.12em] text-nrl-accent transition-colors hover:bg-nrl-accent hover:text-nrl-bg sm:w-64"
+            className="h-11 border border-nrl-accent/45 bg-nrl-accent/10 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-nrl-accent transition-colors hover:bg-nrl-accent hover:text-nrl-bg sm:w-64"
           >
             Clear filters
           </button>
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 font-mono text-[9px] uppercase tracking-[0.13em] text-nrl-muted">
-            <span>{sortedStatsTableRows.length} players</span>
-            <span>Click a heading to sort · click a player to open their profile</span>
+          <button
+            type="button"
+            aria-expanded={showMoreStatsFilters}
+            aria-controls="player-stats-more-filters"
+            onClick={() => setShowMoreStatsFilters((open) => !open)}
+            className="h-11 border border-nrl-border bg-nrl-panel px-3 text-[10px] font-black uppercase tracking-[0.12em] text-nrl-text transition-colors hover:bg-nrl-panel-2 sm:w-64"
+          >
+            {showMoreStatsFilters ? "Show fewer filters" : "Show more filters"}
+          </button>
           </div>
         </section>
       ) : null}
-
-      <div className="grid grid-cols-2 border border-nrl-border" role="tablist" aria-label="Players view">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={playersView === "stats"}
-          onClick={() => setPlayersView("stats")}
-          className={`h-11 border-r border-nrl-border text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${playersView === "stats" ? "bg-nrl-accent text-nrl-bg" : "bg-nrl-panel text-nrl-muted hover:text-nrl-text"}`}
-        >
-          Player Stats
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={playersView === "comparison"}
-          onClick={() => setPlayersView("comparison")}
-          className={`h-11 text-[10px] font-black uppercase tracking-[0.12em] transition-colors ${playersView === "comparison" ? "bg-nrl-accent text-nrl-bg" : "bg-nrl-panel text-nrl-muted hover:text-nrl-text"}`}
-        >
-          Player Comparison
-        </button>
-      </div>
-      {loading && (
+      {playersView === "comparison" && loading && (
         <div className="flex justify-center py-6 md:py-8">
           <span
             aria-label="Loading"
@@ -2289,38 +2310,13 @@ export function PlayerComparison({
           />
         </div>
       )}
-      {!loading && competitionData.length === 0 && (
+      {playersView === "comparison" && !loading && competitionData.length === 0 && (
         <div className="rounded-lg border border-nrl-border bg-nrl-panel p-6 text-center text-nrl-muted">
           <div>No data available for the selected season.</div>
         </div>
       )}
-      {playersView === "stats" && PLAYER_STATS_TABLE_ENABLED && allData.length > 0 && (
-        <section className="overflow-hidden rounded-2xl border border-nrl-border/90 bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
-          <div className="flex min-h-[44px] items-center justify-between gap-3 border-b border-nrl-border/70 bg-nrl-panel-2 px-5 py-1.5">
-            <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
-              <PillRadio
-                options={["Average", "Total"]}
-                value={statsTableValueMode}
-                onChange={(value) => setStatsTableValueMode(value as PlayerStatsTableValueMode)}
-              />
-              <div className="w-36 shrink-0">
-                <Select
-                  label="Group"
-                  value={statsTableGroupBy}
-                  options={[...PLAYER_STATS_TABLE_GROUP_OPTIONS]}
-                  onChange={(value) => setStatsTableGroupBy(value as PlayerStatsTableGroupBy)}
-                />
-              </div>
-              <div className="w-28 shrink-0">
-                <Select
-                  label="Min games"
-                  value={statsTableMinGames}
-                  options={[...STATS_TABLE_MIN_GAMES_OPTIONS]}
-                  onChange={setStatsTableMinGames}
-                />
-              </div>
-            </div>
-          </div>
+      {playersView === "stats" && PLAYER_STATS_TABLE_ENABLED && (
+        <section className="player-stats-table overflow-hidden border border-nrl-border bg-nrl-panel shadow-[0_18px_42px_rgba(0,0,0,0.18)]">
           <div className="relative h-[396px] overflow-auto pb-3">
             {!statsTableRowsLoading && sortedStatsTableRows.length === 0 ? (
               <div className="pointer-events-none absolute left-0 right-0 top-12 z-[7] flex h-24 items-center justify-center px-4 text-center text-sm font-black text-nrl-accent sm:top-14">
@@ -2330,22 +2326,12 @@ export function PlayerComparison({
             <table className="min-w-[2200px] border-collapse text-left text-xs sm:min-w-[2400px]">
               <thead>
                 <tr>
-                  <th
-                    aria-label="Player photo"
-                    className={`sticky left-0 top-0 z-[5] border-b border-r border-nrl-border/70 bg-nrl-panel px-1.5 py-1.5 sm:px-2 sm:py-2 ${
-                      statsTableGroupBy === "Player"
-                        ? "w-28 min-w-28 max-w-28"
-                        : statsTableGroupBy === "Team + Player"
-                          ? "w-36 min-w-36 max-w-36"
-                          : "w-44 min-w-44 max-w-44"
-                    }`}
-                  />
                   {statsTableBaseColumns.map((column) => {
                     const active = statsTableSort.column === column.key;
                     return (
                       <th
                         key={column.key}
-                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-2.5 sm:text-[9px] sm:tracking-[0.16em] ${active ? `z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)] ${statsTableActiveColumnPinClass}` : "z-[2] text-nrl-text"} ${column.key === "year" ? "w-20 min-w-20 max-w-20 sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem]" : ""} ${column.key === "name" ? "w-44 min-w-44 max-w-44 sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem]" : ""} ${column.key === "position" ? "w-28 min-w-28 max-w-28 sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem]" : ""} ${column.key === "games" ? "w-16 min-w-16 max-w-16 sm:w-[5rem] sm:min-w-[5rem] sm:max-w-[5rem]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
+                        className={`sticky top-0 border-b border-r border-nrl-border bg-nrl-inset h-[46px] px-[14px] py-0 font-[family-name:var(--font-table-mono)] text-[9px] font-medium uppercase leading-none tracking-[0.07em] last:border-r-0 ${active ? `z-[6] bg-nrl-inset text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)] ${statsTableActiveColumnPinClass}` : "z-[2] text-nrl-text"} ${column.key === "year" ? "w-20 min-w-20 max-w-20 sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem]" : ""} ${column.key === "name" ? "left-0 !z-[8] w-60 min-w-60 max-w-60 sm:w-72 sm:min-w-72 sm:max-w-72" : ""} ${column.key === "position" ? "w-28 min-w-28 max-w-28 sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem]" : ""} ${column.key === "games" ? "w-16 min-w-16 max-w-16 sm:w-[5rem] sm:min-w-[5rem] sm:max-w-[5rem]" : ""} ${column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : "text-left"}`}
                       >
                         <button
                           type="button"
@@ -2354,7 +2340,9 @@ export function PlayerComparison({
                           title={`Sort by ${column.label}`}
                         >
                           <span>{column.label}</span>
-                          {active ? <span>{statsTableSort.direction === "asc" ? "↑" : "↓"}</span> : null}
+                          <span aria-hidden="true" className={active ? "text-nrl-accent" : "text-nrl-muted/70"}>
+                            {active ? (statsTableSort.direction === "asc" ? "↑" : "↓") : "↕"}
+                          </span>
                         </button>
                       </th>
                     );
@@ -2365,7 +2353,7 @@ export function PlayerComparison({
                     return (
                       <th
                         key={stat}
-                        className={`sticky top-0 border-b border-nrl-border/70 bg-nrl-panel px-2 py-1.5 text-center text-[9px] font-black uppercase tracking-[0.14em] last:border-r-0 sm:px-2.5 sm:text-[9px] sm:tracking-[0.16em] ${active ? `z-[6] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)] ${statsTableActiveColumnPinClass}` : "z-[2] text-nrl-text"}`}
+                        className={`sticky top-0 border-b border-r border-nrl-border bg-nrl-inset px-3 py-3 text-center text-[10px] font-black uppercase tracking-[0.16em] last:border-r-0 sm:px-4 sm:text-[11px] ${active ? `z-[6] bg-nrl-inset text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.26)] ${statsTableActiveColumnPinClass}` : "z-[2] text-nrl-text"}`}
                       >
                         <button
                           type="button"
@@ -2374,7 +2362,9 @@ export function PlayerComparison({
                           title={`Sort by ${stat}`}
                         >
                           <span>{stat}</span>
-                          {active ? <span>{statsTableSort.direction === "asc" ? "↑" : "↓"}</span> : null}
+                          <span aria-hidden="true" className={active ? "text-nrl-accent" : "text-nrl-muted/70"}>
+                            {active ? (statsTableSort.direction === "asc" ? "↑" : "↓") : "↕"}
+                          </span>
                         </button>
                       </th>
                     );
@@ -2390,8 +2380,6 @@ export function PlayerComparison({
                   <>
                     {sortedStatsTableRows.map((row, index) => {
                       const pinnedGroupLabel = statsTablePinnedGroupLabel(row, statsTableGroupBy);
-                      const teamLogoUrl = resolveTeamLogoUrl(row.team, teamLogos);
-                      const showTeamGroupLogoOnly = statsTableGroupBy === "Team + Player" && pinnedGroupLabel;
                       const profileHref = `/dashboard/players/${playerSlug(row.name)}${competition !== "nrl" ? `?competition=${competition}` : ""}`;
                       return (
                       <tr
@@ -2409,67 +2397,22 @@ export function PlayerComparison({
                             router.push(profileHref);
                           }
                         }}
-                        className="h-16 cursor-pointer border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-nrl-accent sm:h-[4.5rem]"
+                        className="h-[56px] cursor-pointer border-b border-nrl-border/70 transition-colors hover:bg-nrl-panel-2/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-nrl-accent"
                       >
                         <td
-                          className={`sticky left-0 z-[3] border-r border-nrl-border/70 bg-nrl-panel px-1.5 py-1 sm:px-2 ${
-                            pinnedGroupLabel
-                              ? showTeamGroupLogoOnly
-                                ? "w-36 min-w-36 max-w-36"
-                                : "w-44 min-w-44 max-w-44"
-                              : "w-28 min-w-28 max-w-28"
-                          }`}
+                          className="sticky left-0 z-[3] w-60 min-w-60 max-w-60 border-r border-nrl-border bg-nrl-panel px-3 py-2 sm:w-72 sm:min-w-72 sm:max-w-72"
                         >
-                          <div className="flex h-[3.75rem] items-center gap-1.5 sm:h-[4.25rem]">
-                            <div className="w-5 text-center text-xs font-black text-nrl-text sm:w-6 sm:text-sm">
-                              {index + 1}
-                            </div>
+                          <Link href={profileHref} title={row.name} className="flex min-w-0 items-center gap-3 hover:text-nrl-accent">
                             <PlayerStatsTableThumbnail name={row.name} imageRow={row.imageRow} priority={index < 24} />
-                            {showTeamGroupLogoOnly ? (
-                              <div
-                                className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-nrl-border bg-nrl-panel-2 p-1"
-                                title={pinnedGroupLabel}
-                                aria-label={pinnedGroupLabel}
-                              >
-                                {teamLogoUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={teamLogoUrl} alt="" aria-hidden="true" className="h-full w-full object-contain" />
-                                ) : null}
+                            <div className="min-w-0">
+                              <div className="truncate font-[family-name:var(--font-table-sans)] text-[14px] font-bold leading-none">{row.name}</div>
+                              <div className="mt-[5px] truncate font-[family-name:var(--font-table-mono)] text-[8px] font-normal uppercase leading-none tracking-[0.06em] text-nrl-muted">
+                                {row.team ?? "-"} · {row.position ?? "-"}{statsTableGroupBy === "Year + Player" && pinnedGroupLabel ? ` · ${pinnedGroupLabel}` : ""}
                               </div>
-                            ) : pinnedGroupLabel ? (
-                              <div className="min-w-0 rounded-md border border-nrl-border bg-nrl-panel-2 px-1.5 py-1 text-[10px] font-black uppercase tracking-wide text-nrl-text sm:text-xs">
-                                <span className="block max-w-20 truncate">{pinnedGroupLabel}</span>
-                              </div>
-                            ) : null}
-                          </div>
+                            </div>
+                          </Link>
                         </td>
-                        <td className={`w-44 min-w-44 max-w-44 px-2 py-1.5 text-sm font-black sm:w-[12.5rem] sm:min-w-[12.5rem] sm:max-w-[12.5rem] sm:px-2.5 sm:text-sm ${statsTableSort.column === "name" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "bg-nrl-panel text-nrl-text"}`}>
-                        <Link
-                          href={profileHref}
-                          className="block min-w-0 truncate transition-colors hover:text-nrl-accent"
-                          title={row.name}
-                        >
-                          {row.name}
-                        </Link>
-                      </td>
-                      <td className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "team" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}>
-                        <span className="inline-flex min-w-0 items-center justify-center gap-2">
-                          {teamLogoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={teamLogoUrl}
-                              alt=""
-                              aria-hidden="true"
-                              className="h-5 w-5 shrink-0 object-contain"
-                            />
-                          ) : null}
-                          <span className="truncate">{row.team ?? "-"}</span>
-                        </span>
-                      </td>
-                      <td className={`w-28 min-w-28 max-w-28 px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap sm:w-[5.5rem] sm:min-w-[5.5rem] sm:max-w-[5.5rem] sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "position" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}>
-                        {row.position ?? "-"}
-                      </td>
-                      <td className={`w-16 min-w-16 max-w-16 px-2 py-1.5 text-center text-xs font-black whitespace-nowrap sm:w-[5rem] sm:min-w-[5rem] sm:max-w-[5rem] sm:px-2.5 sm:text-[13px] ${statsTableSort.column === "games" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}>
+                      <td className={`w-16 min-w-16 max-w-16 border-r border-nrl-border/60 px-3 py-2 text-right font-[family-name:var(--font-table-mono)] text-[12px] font-medium leading-none tabular-nums whitespace-nowrap sm:w-[5rem] sm:min-w-[5rem] sm:max-w-[5rem] sm:px-4 ${statsTableSort.column === "games" ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}>
                         {row.games}
                       </td>
                       {PLAYER_STATS_TABLE_COLUMNS.map((stat) => {
@@ -2477,7 +2420,7 @@ export function PlayerComparison({
                         return (
                           <td
                             key={`${row.key}-${stat}`}
-                            className={`px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap last:border-r-0 sm:px-2.5 sm:text-[13px] ${active ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}
+                            className={`border-r border-nrl-border/60 px-3 py-2 text-right font-[family-name:var(--font-table-mono)] text-[12px] font-medium leading-none tabular-nums whitespace-nowrap last:border-r-0 sm:px-4 ${active ? `z-[4] bg-nrl-panel-2 text-nrl-accent shadow-[-10px_0_18px_rgba(0,0,0,0.22)] ${statsTableActiveColumnPinClass}` : "text-[#cfd6e8]"}`}
                           >
                             {formatTableNumber(
                               playerStatsTableValue(row, stat, statsTableValueMode)
@@ -2732,7 +2675,7 @@ export function PlayerComparison({
                 <RecentForm results={recentFormResults} single={!hasTwoPlayers} />
               </div>
             </div>
-            <ChartPanelGrid panels={filteredChartPanels} unlockAll={hasClientProPlotAccess} />
+            <ChartPanelGrid panels={filteredChartPanels} unlockAll />
           </div>
         </div>
       )}
@@ -2744,7 +2687,7 @@ export function PlayerComparison({
           <div className="mt-4 text-xs text-nrl-muted">
             Rolling average and avg vs opponent use the selected year range.
           </div>
-          <ChartPanelGrid panels={historyChartPanels} unlockAll={hasClientProPlotAccess} />
+          <ChartPanelGrid panels={historyChartPanels} unlockAll />
         </div>
       )}
         </>

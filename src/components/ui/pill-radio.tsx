@@ -28,10 +28,10 @@ export function PillRadio({ options, value, onChange, disabled = false, variant 
             className={`rounded-md font-bold uppercase tracking-wide transition-all ${outlined ? "border px-3 py-1.5 text-[10px]" : "px-2 py-1 text-[9px]"} ${
               outlined
                 ? active
-                  ? "border-nrl-accent/60 bg-nrl-accent/10 text-nrl-accent"
+                  ? "border-nrl-accent bg-transparent text-nrl-accent"
                   : "border-nrl-border text-nrl-muted hover:text-nrl-text"
                 : active
-                  ? "bg-gradient-to-br from-nrl-accent to-nrl-accent text-black font-extrabold"
+                  ? "bg-transparent text-nrl-accent shadow-[inset_0_0_0_1px_var(--color-nrl-accent)] font-extrabold"
                   : "text-nrl-muted hover:bg-nrl-panel-2 hover:text-nrl-text"
             }`}
           >

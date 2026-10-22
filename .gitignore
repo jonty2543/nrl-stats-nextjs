@@ -42,3 +42,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 data/cache/
+data/snapshots/*.json
+data/snapshots/*.json.gz
+data/snapshots/*.tmp
+
+# clerk configuration (can include secrets)
+/.clerk/

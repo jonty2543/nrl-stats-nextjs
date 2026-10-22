@@ -76,7 +76,7 @@ export default async function PlayersPage() {
 
   return (
     <PlayerComparison
-      initialData={initialData}
+      initialData={[]}
       initialStatsTable={initialStatsTable}
       initialStatsTableQueryKey={statsTableQueryKey(initialYears)}
       playerImages={playerImages}

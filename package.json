@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "snapshot:stats": "node --conditions=react-server --import tsx scripts/rebuild-stats-snapshots.mts",
     "rebuild:betting-odds-snapshot": "node scripts/rebuild-betting-odds-snapshot.mjs",
     "rebuild:fantasy-card-summary": "node scripts/rebuild-fantasy-player-card-summary.mjs",
     "sync:player-images": "node scripts/sync-player-images.mjs"
@@ -36,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

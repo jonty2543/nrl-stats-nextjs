@@ -7288,7 +7288,7 @@ export function FantasyDashboard({
                     onFocus={() => prefetchPlayerRoute(row.player.name)}
                     onMouseEnter={() => schedulePlayerRoutePrefetch(row.player.name)}
                     onMouseLeave={cancelPlayerRoutePrefetch}
-                    className="block w-full rounded-lg border border-nrl-border bg-[#111832] p-3 text-left transition-colors hover:border-white/25 hover:bg-[#17213d]"
+                    className="block w-full rounded-lg border border-nrl-border bg-nrl-panel-2 p-3 text-left transition-colors hover:border-white/25 hover:bg-[#1d3052]"
                     style={{ contentVisibility: "auto", containIntrinsicSize: "128px" } as CSSProperties}
                   >
 	                    <div className="flex w-full items-start justify-between gap-3">

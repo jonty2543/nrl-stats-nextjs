@@ -24,12 +24,12 @@ export function CompetitionToggle<T extends CompetitionToggleValue>({ value, onC
   const logoSize = large ? (compactTabs ? 22 : 24) : (compactTabs ? 18 : 20);
 
   return (
-    <div className={`flex shrink-0 flex-col items-start gap-0.5 ${fullWidth ? "w-full" : "pl-2"} ${className}`}>
+    <div className={`flex shrink-0 flex-col items-start ${fullWidth ? "w-full" : "gap-0.5 pl-2"} ${className}`}>
       <span className={hideLabel ? "sr-only" : "text-[8px] font-semibold uppercase tracking-wide text-nrl-muted"}>Competition</span>
       <div
         role="group"
         aria-label="Competition"
-        className={`${fullWidth ? `grid w-full ${options.length === 4 ? "grid-cols-4" : options.length === 3 ? "grid-cols-3" : "grid-cols-2"}` : "inline-flex w-fit gap-6"} items-stretch border-b border-nrl-border/70 ${large ? "h-10" : "h-8"}`}
+        className={`${fullWidth ? "flex h-[52px] w-full overflow-x-auto border-t" : `inline-flex w-fit gap-6 ${large ? "h-10" : "h-8"}`} items-stretch border-b border-nrl-border/70`}
       >
         {options.map((option) => {
           const locked = option !== "nrl" && !canAccessCup;
@@ -43,13 +43,12 @@ export function CompetitionToggle<T extends CompetitionToggleValue>({ value, onC
               aria-pressed={active}
               title={locked ? `${competitionLabel} stats require Pro or Premium access` : undefined}
               onClick={() => onChange(option)}
-              className={`relative inline-flex min-w-12 items-center justify-center gap-1.5 rounded-t-md border-b-[3px] border-transparent px-1 pb-1.5 font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${large ? compactTabs ? "text-[10px]" : "text-[11px]" : compactTabs ? "text-[8px]" : "text-[9px]"} ${
+              className={`relative inline-flex shrink-0 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${fullWidth ? "gap-1.5 px-[14px] font-[family-name:var(--font-table-sans)] text-[9px] font-bold uppercase tracking-[0.1em] sm:px-[18px]" : `min-w-12 gap-1.5 px-1 font-black uppercase tracking-wide ${large ? compactTabs ? "text-[10px]" : "text-[11px]" : compactTabs ? "text-[8px]" : "text-[9px]"}`} ${
                 active
-                  ? "text-nrl-accent"
+                  ? "bg-nrl-inset text-white"
                   : "text-nrl-muted hover:bg-nrl-panel-2/60 hover:text-nrl-text"
               }`}
             >
-              {active ? <span aria-hidden="true" className="pointer-events-none absolute inset-x-[10%] -bottom-[3px] h-[3px] bg-nrl-accent" /> : null}
               <span className="inline-flex shrink-0 items-center gap-0.5" aria-hidden="true">
                 {(logoOverrides?.[option] ?? (option === "nrl"
                   ? ["/images/competitions/nrl.png"]

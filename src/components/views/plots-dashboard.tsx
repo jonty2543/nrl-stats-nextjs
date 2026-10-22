@@ -83,7 +83,7 @@ function GameWindowButtons({ value, onChange, disabled = false }: { value: Playe
             disabled={disabled}
             aria-pressed={value === option.value}
             onClick={() => onChange(option.value)}
-            className={`rounded px-2 py-1 text-[9px] font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed ${value === option.value ? "bg-nrl-accent text-[#07111f]" : "text-nrl-muted hover:text-nrl-text"}`}
+            className={`rounded px-2 py-1 text-[9px] font-black uppercase tracking-wide transition-colors disabled:cursor-not-allowed ${value === option.value ? "bg-transparent text-nrl-accent shadow-[inset_0_0_0_1px_var(--color-nrl-accent)]" : "text-nrl-muted hover:text-nrl-text"}`}
           >
             {option.label}
           </button>
@@ -2171,11 +2171,7 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
     if (nextCompetition !== "nrl" && !canAccessCup) return;
     const nextYears = nextCompetition === "cup" ? cupAvailableYears : nextCompetition === "international" ? internationalAvailableYears : nextCompetition === "origin" ? originAvailableYears : availableYears;
     const usesShortSeriesDefaults = nextCompetition === "international" || nextCompetition === "origin";
-    const nextYear = nextCompetition === "international" && nextYears.includes("2025")
-      ? "2025"
-      : nextCompetition === "origin"
-        ? nextYears[0] ?? year
-      : nextYears.includes(year) ? year : nextYears[0] ?? year;
+    const nextYear = nextYears[0] ?? "";
     setCompetition(nextCompetition);
     setMinimumGames(usesShortSeriesDefaults ? 1 : 4);
     setFormWindow(usesShortSeriesDefaults ? 1 : 5);
@@ -2707,7 +2703,24 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
             }}
           />
         </div>
-        <div className="min-w-0 sm:col-start-1 sm:row-start-2">
+        <header className="border-b border-nrl-border pb-[18px] pt-[14px] sm:col-span-2">
+          <h1 className="text-[38px] leading-none text-nrl-text">Plots</h1>
+        </header>
+        <div className="grid grid-cols-2 border border-nrl-border sm:col-span-2" role="tablist" aria-label="Plot sections">
+          {["Players", "Teams"].map((section) => (
+            <button
+              key={section}
+              type="button"
+              role="tab"
+              aria-selected={entity === section}
+              onClick={() => changePlotView(section === "Players" ? "player_attack_stats" : "team_attack_stats")}
+              className={`h-[34px] text-[9px] font-black uppercase tracking-[0.12em] transition-colors first:border-r first:border-nrl-border ${entity === section ? "bg-transparent text-nrl-accent shadow-[inset_0_0_0_1px_var(--color-nrl-accent)]" : "bg-nrl-panel text-nrl-muted hover:text-nrl-text"}`}
+            >
+              {section}
+            </button>
+          ))}
+        </div>
+        <div className="min-w-0 sm:col-start-1 sm:row-start-4">
           <Select
             label="View"
             hideLabel
@@ -2743,11 +2756,11 @@ export function PlotsDashboard({ initialPlayerData, availableYears, cupAvailable
                 { value: "team_context_for_against", label: "For vs against" },
                 { value: "team_context_position_share", label: "Share by starting position" },
               ] },
-            ]}
+            ].filter((group) => entity === "Players" ? group.label.startsWith("Player") : !group.label.startsWith("Player"))}
             onChange={changePlotView}
           />
         </div>
-        <div ref={plotFinderRef} className="relative min-w-0 sm:col-start-2 sm:row-start-2">
+        <div ref={plotFinderRef} className="relative min-w-0 sm:col-start-2 sm:row-start-4">
           <label htmlFor="plot-finder-input" className="sr-only">Find a plot</label>
           <input
             ref={plotFinderInputRef}

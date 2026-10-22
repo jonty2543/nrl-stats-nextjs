@@ -1,7 +1,7 @@
 .shortside-dashboard {
   --dashboard-display: var(--font-landing-display), sans-serif;
   --dashboard-rule: color-mix(in srgb, var(--color-nrl-text) 16%, transparent);
-  background: #111733;
+  background: var(--color-nrl-bg);
 }
 
 .shortside-dashboard :where(h1, h2, h3) {

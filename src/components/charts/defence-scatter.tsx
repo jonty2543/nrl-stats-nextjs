@@ -570,7 +570,7 @@ export function TeamQuadrantScatter({
             <stop offset="100%" stopColor={heatHighColor} />
           </linearGradient>
         </defs>
-        <rect x={xPlotLeft} y={margin.top} width={xPlotWidth} height={plotHeight} rx="8" fill="var(--color-nrl-bg)" />
+        <rect x={xPlotLeft} y={margin.top} width={xPlotWidth} height={plotHeight} rx="8" fill="transparent" />
 
         {xTicks.map((tick) => {
           const x = xScale(tick);

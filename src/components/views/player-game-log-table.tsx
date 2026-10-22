@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { PlayerStat, TeammateLookupRow } from "@/lib/data/types";
 import { filterByTeammate } from "@/lib/data/transform";
+import "./player-game-log.css";
 
 interface PlayerGameLogTableProps {
   rows: PlayerStat[];
@@ -71,18 +72,12 @@ export function PlayerGameLogTable({ rows, statKeys, playerName, teammateRows }:
   const visibleRows = isExpanded ? filteredRows : filteredRows.slice(0, INITIAL_ROW_COUNT);
 
   return (
-    <section className="overflow-hidden border border-nrl-border bg-[#111832]">
-      <div className="border-b border-nrl-border px-4 py-6 sm:px-5 sm:py-8">
-        <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-nrl-accent">
-          Regular season game log
-        </div>
-        <h2 className="mt-2 text-5xl leading-none text-nrl-text sm:text-6xl">Game Log</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-nrl-muted sm:text-base">
-          Filter every available match by opponent, venue, minutes and who took the field alongside {playerName}
-        </p>
+    <section className="player-game-log overflow-hidden">
+      <div className="player-game-log-heading">
+        <h2 className="text-nrl-text">Game Log</h2>
       </div>
 
-        <div className="grid gap-3 border-b border-nrl-border px-4 py-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="player-game-log-filters grid grid-cols-2 lg:grid-cols-4">
           <label className="min-w-0">
             <span className="mb-1 block text-[8px] font-black tracking-wide text-nrl-muted">Opponent</span>
             <select
@@ -154,16 +149,14 @@ export function PlayerGameLogTable({ rows, statKeys, playerName, teammateRows }:
               <option value="without">Played without</option>
             </select>
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="min-w-0">
-              <span className="mb-1 block text-[8px] font-black tracking-wide text-nrl-muted">Min mins</span>
-              <input type="number" min="0" max="80" value={minimumMinutes} onChange={(event) => setMinimumMinutes(event.target.value)} placeholder="Any" className="h-11 w-full border border-nrl-border bg-nrl-panel px-3 text-xs text-nrl-text outline-none focus:border-nrl-accent" />
-            </label>
-            <label className="min-w-0">
-              <span className="mb-1 block text-[8px] font-black tracking-wide text-nrl-muted">Max mins</span>
-              <input type="number" min="0" max="120" value={maximumMinutes} onChange={(event) => setMaximumMinutes(event.target.value)} placeholder="Any" className="h-11 w-full border border-nrl-border bg-nrl-panel px-3 text-xs text-nrl-text outline-none focus:border-nrl-accent" />
-            </label>
-          </div>
+          <label className="min-w-0">
+            <span className="mb-1 block text-[8px] font-black tracking-wide text-nrl-muted">Min mins</span>
+            <input type="number" min="0" max="80" value={minimumMinutes} onChange={(event) => setMinimumMinutes(event.target.value)} placeholder="Any" className="h-11 w-full border border-nrl-border bg-nrl-panel px-3 text-xs text-nrl-text outline-none focus:border-nrl-accent" />
+          </label>
+          <label className="min-w-0">
+            <span className="mb-1 block text-[8px] font-black tracking-wide text-nrl-muted">Max mins</span>
+            <input type="number" min="0" max="120" value={maximumMinutes} onChange={(event) => setMaximumMinutes(event.target.value)} placeholder="Any" className="h-11 w-full border border-nrl-border bg-nrl-panel px-3 text-xs text-nrl-text outline-none focus:border-nrl-accent" />
+          </label>
           <button
             type="button"
             onClick={() => {
@@ -176,23 +169,33 @@ export function PlayerGameLogTable({ rows, statKeys, playerName, teammateRows }:
               setMaximumMinutes("");
               setIsExpanded(false);
             }}
-            className="h-11 border border-nrl-accent/45 bg-nrl-accent/10 px-4 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-accent transition-colors hover:bg-nrl-accent hover:text-nrl-bg"
+            className="h-11 self-end border border-nrl-accent/45 bg-nrl-accent/10 px-4 text-[9px] font-black uppercase tracking-[0.12em] text-nrl-accent transition-colors hover:bg-nrl-accent hover:text-nrl-bg"
           >
             Clear filters
           </button>
-          <div className="flex items-end pb-1 font-mono text-[9px] uppercase tracking-[0.12em] text-nrl-muted">
+          <div className="col-span-2 flex items-end pb-1 font-mono text-[9px] uppercase tracking-[0.12em] text-nrl-muted lg:col-span-1">
             {filteredRows.length} games{filtersActive ? " · filtered" : ""}
           </div>
         </div>
 
-      <div className="grid grid-cols-2 border-b border-nrl-border sm:grid-cols-4">
+      <div className="player-game-log-summary flex overflow-x-auto overscroll-x-contain border-y border-nrl-border">
         {[
           ["Games", filteredRows.length.toString()],
           ["Minutes", formatNumber(average(filteredRows, "Mins Played"))],
           ["Run metres", formatNumber(average(filteredRows, "All Run Metres"))],
           ["Tackles", formatNumber(average(filteredRows, "Tackles Made"))],
+          ["Points", formatNumber(average(filteredRows, "Points"))],
+          ["Tries", formatNumber(average(filteredRows, "Tries"))],
+          ["Try assists", formatNumber(average(filteredRows, "Try Assists"))],
+          ["Tackle breaks", formatNumber(average(filteredRows, "Tackle Breaks"))],
+          ["Line breaks", formatNumber(average(filteredRows, "Line Breaks"))],
+          ["Post contact metres", formatNumber(average(filteredRows, "Post Contact Metres"))],
+          ["Offloads", formatNumber(average(filteredRows, "Offloads"))],
+          ["Missed tackles", formatNumber(average(filteredRows, "Missed Tackles"))],
+          ["Kicking metres", formatNumber(average(filteredRows, "Kicking Metres"))],
+          ["Fantasy", formatNumber(average(filteredRows, "Fantasy"))],
         ].map(([label, value]) => (
-          <div key={label} className="border-b border-r border-nrl-border px-4 py-4 last:border-r-0 sm:border-b-0">
+          <div key={label} className="min-w-36 flex-1 shrink-0 border-r border-nrl-border px-4 py-4 last:border-r-0">
             <div className="font-mono text-[8px] uppercase tracking-[0.12em] text-nrl-muted">{label}</div>
             <div className="mt-2 font-[family-name:var(--font-landing-display)] text-3xl font-black text-nrl-text">{value}</div>
           </div>
@@ -200,13 +203,18 @@ export function PlayerGameLogTable({ rows, statKeys, playerName, teammateRows }:
       </div>
 
       <div className="relative overflow-x-auto">
-        <table className="min-w-[980px] border-collapse text-left text-xs">
-          <thead>
+        <table className="w-max min-w-full border-separate border-spacing-0 text-left">
+          <thead className="sticky top-0 z-20">
             <tr>
-              {["Season", "Rnd", "Opponent", "Position", ...statKeys, "Team"].map((label) => (
+              <th className="sticky left-0 z-30 min-w-60 border-b border-r border-nrl-border bg-[#0b1024] px-4 py-4 shadow-[10px_0_18px_rgba(0,0,0,0.18)]">
+                <span className="font-mono text-[9px] font-black uppercase tracking-[0.16em] text-nrl-muted">
+                  Match
+                </span>
+              </th>
+              {statKeys.map((label) => (
                 <th
                   key={label}
-                  className="border-b border-r border-nrl-border bg-nrl-panel-2 px-2.5 py-2 text-[10px] font-semibold tracking-wide text-nrl-muted last:border-r-0"
+                  className="min-w-24 border-b border-r border-nrl-border bg-[#151d37] px-3 py-4 text-center font-mono text-[9px] font-black uppercase tracking-[0.14em] text-nrl-muted last:border-r-0"
                 >
                   {label}
                 </th>
@@ -216,25 +224,42 @@ export function PlayerGameLogTable({ rows, statKeys, playerName, teammateRows }:
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={statKeys.length + 5} className="px-3 py-6 text-center text-sm text-nrl-muted">
+                <td colSpan={statKeys.length + 1} className="bg-nrl-panel px-3 py-10 text-center text-sm text-nrl-muted">
                   No games match the selected filters.
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row) => (
-                <tr key={`${row.Year}-${row.Round}-${row.Team}`} className="border-b border-nrl-border/60 hover:bg-nrl-panel-2/60">
-                  <td className="border-r border-nrl-border px-2.5 py-2 font-semibold text-nrl-text">{row.Year}</td>
-                  <td className="border-r border-nrl-border px-2.5 py-2 text-nrl-muted">{row.Round_Label || `R${row.Round}`}</td>
-                  <td className="border-r border-nrl-border px-2.5 py-2 text-nrl-muted">{row.Opponent ?? "-"}</td>
-                  <td className="border-r border-nrl-border px-2.5 py-2 text-nrl-muted">{row.Position || "-"}</td>
-                  {statKeys.map((stat) => (
-                    <td key={stat} className="border-r border-nrl-border px-2.5 py-2 text-right text-nrl-text last:border-r-0">
-                      {formatNumber(numeric(row[stat]))}
-                    </td>
-                  ))}
-                  <td className="px-2.5 py-2 text-nrl-muted">{row.Team}</td>
-                </tr>
-              ))
+              visibleRows.map((row) => {
+                const venue = row["Home Team"] === row.Team ? "Home" : row["Away Team"] === row.Team ? "Away" : null;
+                const opponentPrefix = venue === "Away" ? "@" : "vs";
+
+                return (
+                  <tr key={`${row.Year}-${row.Round}-${row.Team}`} className="group">
+                    <th
+                      scope="row"
+                      className="sticky left-0 z-10 min-w-60 border-b border-r border-nrl-border bg-nrl-panel px-4 py-3.5 text-left shadow-[10px_0_18px_rgba(0,0,0,0.12)] transition-colors group-hover:bg-nrl-panel-2"
+                    >
+                      <div className="truncate text-sm font-black text-nrl-text">
+                        {opponentPrefix} {row.Opponent ?? "Unknown opponent"}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-x-2 font-mono text-[8px] font-semibold uppercase tracking-[0.12em] text-nrl-muted">
+                        <span>{row.Year}</span>
+                        <span>{row.Round_Label || `R${row.Round}`}</span>
+                        <span>{row.Team}</span>
+                        {row.Position ? <span>{row.Position}</span> : null}
+                      </div>
+                    </th>
+                    {statKeys.map((stat) => (
+                      <td
+                        key={stat}
+                        className="min-w-24 border-b border-r border-nrl-border bg-nrl-panel px-3 py-3.5 text-center font-mono text-[13px] font-bold tabular-nums text-nrl-text transition-colors last:border-r-0 group-hover:bg-nrl-panel-2/80"
+                      >
+                        {formatNumber(numeric(row[stat]))}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
